@@ -75,25 +75,167 @@ async function changeView(next){
   if(next==='admin')await admin();
  }catch(error){view.innerHTML=empty('!', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
 }
+
+function chartNumber(value){const n=Number(value);return Number.isFinite(n)&&n>0?Math.round(n):0;}
+function shortPeriodLabel(item,granularity){
+ const value=new Date(String(item.date||'')+'T12:00:00');
+ if(Number.isNaN(value.getTime()))return '';
+ if(granularity==='day')return value.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
+ return value.toLocaleDateString('pt-BR',{month:'short'});
+}
+function renderActivityGraph(data){
+ const items=Array.isArray(data?.points)?data.points:[];
+ if(!items.length)return '<div class="neo-empty-recent">Nenhuma atividade disponível.</div>';
+ const x0=10,x1=733,y0=20,y1=169;
+ const all=items.flatMap(p=>[chartNumber(p.inbound),chartNumber(p.outbound)]);
+ const max=Math.max(1,...all);
+ const xy=(p,i,key)=>[x0+(x1-x0)*(items.length<=1?.5:i/(items.length-1)),y1-chartNumber(p[key])/max*(y1-y0)];
+ const positions=(key)=>items.map((p,i)=>xy(p,i,key));
+ const inbound=positions('inbound'),outbound=positions('outbound');
+ const plot=pts=>pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+ const grid=[0,.25,.5,.75,1].map(r=>{
+  const y=(y1-r*(y1-y0)).toFixed(1);
+  const n=Math.round(max*r);
+  return '<line class="chart-grid" x1="8" x2="738" y1="'+y+'" y2="'+y+'"/>'+
+   '<text x="748" y="'+(Number(y)+3)+'" font-size="10" fill="#816a59">'+n+'</text>';
+ }).join('');
+ const fill=plot(inbound)+' L '+inbound[inbound.length-1][0].toFixed(1)+','+y1+' L '+inbound[0][0].toFixed(1)+','+y1+' Z';
+ const markers=items.map((item,i)=>{
+  const ins=inbound[i],outs=outbound[i],period=shortPeriodLabel(item,data.granularity);
+  if(items.length>12 && i%3!==0 && i!==items.length-1)return '';
+  return '<circle class="chart-node" cx="'+ins[0]+'" cy="'+ins[1]+'" r="3"><title>'+e(period+': '+chartNumber(item.inbound)+' recebidas')+'</title></circle>'+
+   '<circle class="chart-node-green" cx="'+outs[0]+'" cy="'+outs[1]+'" r="2.3"><title>'+e(period+': '+chartNumber(item.outbound)+' enviadas')+'</title></circle>';
+ }).join('');
+ return '<svg role="img" aria-label="Atividade real do atendimento da empresa no período escolhido: mensagens recebidas em laranja e enviadas em verde" viewBox="0 0 795 190" preserveAspectRatio="none">'+
+  '<defs><linearGradient id="neoOrangeFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ed7a33" stop-opacity=".25"/><stop offset="100%" stop-color="#ed7a33" stop-opacity="0"/></linearGradient></defs>'+
+  grid+'<path d="'+fill+'" fill="url(#neoOrangeFill)"/>'+
+  '<path class="chart-orange" d="'+plot(inbound)+'"/>'+
+  '<path class="chart-green" d="'+plot(outbound)+'"/>'+markers+'</svg>';
+}
+function activityTicks(data){
+ const points=Array.isArray(data?.points)?data.points:[];
+ if(!points.length)return '';
+ const stops=[0,.25,.5,.75,1].map(x=>Math.min(points.length-1,Math.round(x*(points.length-1))));
+ return [...new Set(stops)].map(i=>'<span>'+e(shortPeriodLabel(points[i],data.granularity))+'</span>').join('');
+}
+function dashboardBars(data){
+ const points=Array.isArray(data?.points)?data.points:[];
+ if(!points.length)return '<div class="neo-empty-recent">Ainda não há registros no período.</div>';
+ const totals=points.map(p=>chartNumber(p.inbound)+chartNumber(p.outbound));
+ const max=Math.max(1,...totals),maxIndex=totals.indexOf(Math.max(...totals));
+ return points.map((p,i)=>{
+  const v=totals[i],height=v===0?3:Math.max(6,Math.round(v/max*108));
+  return '<div class="neo-bar-column'+(i===maxIndex&&v>0?' is-highlight':'')+'"><span class="neo-bar-value">'+e(v)+'</span>'+
+   '<span class="neo-bar-shape" style="height:'+height+'px" title="'+e(v+' mensagens no mês')+'"></span>'+
+   '<span class="neo-bar-label">'+e(shortPeriodLabel(p,'month'))+'</span></div>';
+ }).join('');
+}
 async function overview(){
- const d=await api('/api/dashboard'),ag=await api('/api/agent');
+ const [d,ag,trend,months,recent]=await Promise.all([
+  api('/api/dashboard'),api('/api/agent'),
+  api('/api/dashboard/activity?range=12m'),
+  api('/api/dashboard/activity?range=6m'),
+  api('/api/inbox')
+ ]);
  state.dashboard=d;
- const stepDone=[d.channels>0,d.products>0,d.imports>=10,!!ag.instructions,!!ag.enabled];
- const checklist=[
-  ['Cadastre seu primeiro WhatsApp','Configure o número da sua empresa antes de ativar o canal.','channels'],
-  ['Monte seu catálogo','Preços oficiais, serviços e informações comerciais.','products'],
-  ['Importe 10 a 20 conversas','Use conversas que levaram a boas vendas.','training'],
-  ['Personalize seu Sócio','Escolha nome, tom e regras de atendimento.','agent'],
-  ['Prepare o agente para ativação','Teste respostas antes de integrar o WhatsApp real.','agent']
- ];
- const metric=(n,label,icon)=>'<div class="card metric"><div class="metric-head"><span class="metric-name">'+e(label)+'</span><span class="metric-icon">'+icon+'</span></div><strong>'+e(n)+'</strong><small>Dados da sua empresa</small></div>';
- view.innerHTML=heading('BOM TER VOCÊ POR AQUI','Seu espaço de trabalho.','Tudo o que seu Sócio precisa para atender cada vez melhor.')+
- '<section class="card welcome-card"><div class="content"><span class="eyebrow">SEU SÓCIO DIGITAL</span><h2>Seu negócio tem muito a dizer.<br>Seu Sócio aprende a dizer como você.</h2><p>Comece pelas conversas que já deram certo. A gente cuida da organização e prepara a inteligência para atender com o jeito da sua empresa.</p><button class="btn primary" data-go="training">Começar treinamento <span>↗</span></button></div><div class="welcome-orb">s<span>.</span></div></section>'+
- '<div class="grid stats section-gap">'+metric(d.openConversations,'Conversas abertas','▤')+metric(d.channels,'WhatsApps cadastrados','◉')+metric(d.products,'Produtos ativos','▦')+metric(d.imports,'Conversas de referência','✳')+'</div>'+
- '<div class="grid cols2 section-gap">'+panel('Primeiros passos','Configure seu espaço de maneira simples.',
- '<div class="step-list">'+checklist.map((s,i)=>'<div class="step"><div class="step-num">'+String(i+1).padStart(2,'0')+'</div><div class="step-text"><strong>'+e(s[0])+'</strong><small>'+e(s[1])+'</small></div><span class="'+(stepDone[i]?'step-done':'step-pending')+'">'+(stepDone[i]?'✓ Feito':'Pendente')+'</span></div>').join('')+'</div>')+
- '<div class="callout"><div class="callout-head"><div class="callout-icon">✦</div><strong>Conhecimento que evolui com seu negócio.</strong></div><p>Você mantém controle sobre preços, produtos e orientações. As conversas importadas ajudam na linguagem, mas nunca substituem informações oficiais ou a supervisão da sua equipe.</p><div class="progress-track"><div class="progress-fill" style="width:'+((stepDone.filter(Boolean).length/stepDone.length)*100)+'%"></div></div><p>'+stepDone.filter(Boolean).length+' de '+stepDone.length+' etapas preparadas</p><button class="btn soft" data-go="agent">Personalizar meu Sócio →</button></div></div>';
+ const steps=[d.channels>0,d.products>0,d.imports>=10,!!ag.instructions,!!ag.enabled];
+ const done=steps.filter(Boolean).length;
+ const total=trend.points.reduce((sum,p)=>sum+chartNumber(p.inbound)+chartNumber(p.outbound),0);
+ const monthTotal=months.points.reduce((sum,p)=>sum+chartNumber(p.inbound)+chartNumber(p.outbound),0);
+ const latest=Array.isArray(recent)?recent.slice(0,3):[];
+ const recentRows=latest.map(item=>{
+  const initials=String(item.customer_name||item.customer_phone||'?').trim().slice(0,1).toUpperCase();
+  const status=item.status==='resolved'?'Resolvida':item.status==='human'?'Humano':'Aberta';
+  const time=item.last_message_at?date(item.last_message_at):'Sem data';
+  return '<button class="neo-recent-row" type="button" data-go="inbox" aria-label="Abrir conversas">'+
+   '<span class="neo-recent-icon'+(item.status==='open'?' green':'')+'">'+e(initials)+'</span>'+
+   '<span class="neo-recent-text"><strong>'+e(item.customer_name||item.customer_phone||'Cliente')+'</strong>'+
+   '<small>'+e(item.channel_label||'WhatsApp')+' · '+e(time)+'</small></span>'+
+   '<span class="neo-recent-status">'+e(status)+'</span></button>';
+ }).join('');
+ view.innerHTML=
+  '<div class="neo-dashboard">'+
+   '<div class="neo-left-col">'+
+    '<section class="neo-surface neo-chart-card" aria-label="Indicadores do atendimento">'+
+     '<div class="neo-card-head"><div><div class="neo-kicker">Atividade de atendimento</div>'+
+      '<div id="activitySummary" class="neo-big-number">'+e(total.toLocaleString('pt-BR'))+
+      ' <small>mensagens</small></div>'+
+      '<div id="activitySubtitle" class="neo-chart-sub">Mensagens recebidas e enviadas · últimos 12 meses</div></div>'+
+      '<div class="neo-range-list" role="group" aria-label="Período do gráfico">'+
+       '<button type="button" class="neo-range is-active" data-range="12m" aria-pressed="true">1 ano</button>'+
+       '<button type="button" class="neo-range" data-range="6m" aria-pressed="false">6 meses</button>'+
+       '<button type="button" class="neo-range" data-range="3m" aria-pressed="false">3 meses</button>'+
+       '<button type="button" class="neo-range" data-range="1m" aria-pressed="false">1 mês</button>'+
+      '</div></div>'+
+     '<div id="activityChart" class="neo-chart-canvas">'+renderActivityGraph(trend)+'</div>'+
+     '<div id="chartTicks" class="neo-month-ticks">'+activityTicks(trend)+'</div>'+
+     '<div class="neo-chart-footer"><div class="neo-chart-key">'+
+      '<span><i></i> Recebidas</span><span><i class="green"></i> Enviadas</span></div>'+
+      '<span class="neo-chart-footnote">Dados reais da empresa selecionada</span></div>'+
+    '</section>'+
+    '<div class="neo-bottom-grid">'+
+     '<section class="neo-surface neo-promo">'+
+      '<div class="neo-promo-content"><h2>Seu Sócio.<br>Sempre presente.</h2>'+
+       '<p>Atenda melhor, aprenda com suas conversas e faça cada contato valer mais.</p>'+
+       '<div class="neo-promo-bubbles"><span>S</span><span>C</span><span>✳</span></div>'+
+       '<div class="neo-progress-mini"><span style="width:'+(done/steps.length*100)+'%"></span></div>'+
+       '<p>'+done+' de '+steps.length+' etapas de preparação concluídas</p></div>'+
+       '<button class="neo-promo-action" type="button" data-go="training">Explorar inteligência artificial ↗</button>'+
+     '</section>'+
+     '<section class="neo-surface neo-bars">'+
+       '<div class="neo-card-titlebar"><div><h2>Movimento mensal</h2>'+
+        '<div class="neo-small-growth">'+e(monthTotal.toLocaleString('pt-BR'))+' mensagens</div>'+
+        '<p class="neo-small-desc">Evolução dos últimos 6 meses</p></div>'+
+        '<span class="neo-chart-footnote">Atendimentos</span></div>'+
+       '<div class="neo-bars-body">'+dashboardBars(months)+'</div>'+
+      '</section>'+
+    '</div>'+
+    '<div class="neo-trust-foot"><span>Seu negócio, seus dados, suas conversas.</span><b>Sócio · Consecom</b></div>'+
+   '</div>'+
+   '<div class="neo-right-col">'+
+    '<section class="neo-side-orange" aria-label="Resumo do seu espaço">'+
+     '<div class="neo-card-titlebar"><span class="neo-kicker">Seus canais</span>'+
+      '<button class="neo-top-actions" type="button" data-go="channels">+ Adicionar</button></div>'+
+     '<div class="neo-visual-stack">'+
+      '<div class="neo-preview-strip"><b>SÓCIO</b><small>'+e(d.products)+' produtos e serviços ativos</small></div>'+
+      '<div class="neo-preview-card">'+
+       '<div class="neo-brand">WhatsApp</div>'+
+       '<span class="neo-channel-label">Canais cadastrados</span>'+
+       '<div class="neo-channel-value">'+e(d.channels)+'</div>'+
+       '<div class="neo-channel-caption">● '+e(d.openConversations)+' conversas abertas</div>'+
+      '</div></div>'+
+     '<div class="neo-orange-buttons">'+
+      '<button type="button" data-go="channels">↗ WhatsApps</button>'+
+      '<button type="button" data-go="inbox">↗ Conversas</button></div>'+
+    '</section>'+
+    '<section class="neo-surface neo-recent">'+
+     '<div class="neo-recent-head"><h2>Conversas recentes</h2>'+
+      '<button type="button" class="neo-link" data-go="inbox">Ver todas ↗</button></div>'+
+     '<div class="neo-recent-items">'+(recentRows||
+       '<div class="neo-empty-recent">Suas conversas vão aparecer aqui assim que os canais receberem mensagens.</div>')+
+     '</div></section>'+
+   '</div>'+
+  '</div>';
  bindNavWithin();
+ view.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',async()=>{
+  const range=button.dataset.range;
+  if(!['12m','6m','3m','1m'].includes(range))return;
+  view.querySelectorAll('[data-range]').forEach(b=>{b.disabled=true;});
+  try{
+   const result=await api('/api/dashboard/activity?range='+range);
+   if(state.view!=='overview'||!$('#activityChart'))return;
+   const num=result.points.reduce((sum,p)=>sum+chartNumber(p.inbound)+chartNumber(p.outbound),0);
+   $('#activitySummary').innerHTML=e(num.toLocaleString('pt-BR'))+' <small>mensagens</small>';
+   $('#activitySubtitle').textContent='Mensagens recebidas e enviadas · últimos '+({'12m':'12 meses','6m':'6 meses','3m':'3 meses','1m':'30 dias'}[range]);
+   $('#activityChart').innerHTML=renderActivityGraph(result);
+   $('#chartTicks').innerHTML=activityTicks(result);
+   view.querySelectorAll('[data-range]').forEach(b=>{
+    const active=b.dataset.range===range;b.classList.toggle('is-active',active);
+    b.setAttribute('aria-pressed',String(active));
+   });
+  }catch(err){toast(errMsg(err),true);}
+  finally{if(state.view==='overview')view.querySelectorAll('[data-range]').forEach(b=>b.disabled=false);}
+ }));
 }
 function bindNavWithin(){view.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>changeView(b.dataset.go)));}
 async function channels(){
