@@ -11,11 +11,20 @@ SaaS multiempresa de atendimento e vendas. Projeto independente do Prospector: n
 - Cadastro de WhatsApps, produtos, descrições e preços oficiais.
 - Importação de múltiplas conversas do WhatsApp em `.txt`, `.md` ou ZIP de exportação sem mídia; ZIPs são extraídos em memória com limites de tamanho, sem armazenar o arquivo bruto.
 - Base Markdown anonimizada por empresa. Interlocutores ganham nomes genéricos; padrões de telefone, e-mail, links e documentos numéricos são mascarados.
+- Análise de conversas **já importadas** com progresso persistente, pausa, retomada, cancelamento, relatório de padrões e Markdown em rascunho, sujeito à aprovação humana.
 - Configuração de nome, tom e instruções do agente.
 - Simulador de atendimento com Groq (quando a chave estiver configurada). Nunca envia mensagens.
 - Webhook verificado por assinatura SHA256 para receber mensagens de texto da WhatsApp Business Platform; o vínculo do identificador do número à empresa é restrito ao administrador da Consecom.
 - Caixa de entrada, histórico, classificação e notas internas.
 - Testes automatizados com PostgreSQL efêmero no GitHub Actions.
+
+## Fundação Supabase — em preparação, não conectada à produção
+
+O projeto Wmagencia `svbdigkomsbugiyufdtc` recebeu migrations aditivas em `supabase/migrations/`, contendo 14 tabelas de tenant, canais, mensagens, produtos, mídias e análises com RLS e bucket privado `socio-media`. As contas do Sócio Railway **não foram migradas** e suas credenciais de login antigas não funcionam automaticamente no Supabase Auth. O banco principal continua sendo o PostgreSQL Railway até que a migração com validação, backup, mapeamento de usuários e teste de rollback seja concluída.
+
+## Análise de conversas
+
+Em Treinamento, após importar os exemplos, clique em **Analisar conversas**. O processamento opera sobre as amostras anonimizadas guardadas pelo próprio Sócio; não varre automaticamente mensagens das sessões do WA-AKG, ainda não conectadas ao SaaS. O progresso é por fonte processada, não por caracteres ou por conversas externas. Ao final, revise o relatório e o Markdown e use **Aprovar conhecimento** para substituir o conhecimento atual do agente. A aprovação não dispara mensagens externas. Expressões como “fechar pedido” não provam venda; precisamos de confirmação de vendas/CRM para analisar conversão real.
 
 ## Deploy Railway
 
@@ -29,7 +38,7 @@ SaaS multiempresa de atendimento e vendas. Projeto independente do Prospector: n
 
 ## Segurança e limites
 
-MVP para testes e pilotos supervisionados, ainda não preparado para venda irrestrita. Não oferece envios automáticos, conexão real de WhatsApp sem credenciais oficiais, cobrança Stripe, redefinição de senha, backups de restauração testados, exclusão/retensão LGPD, chamadas de voz, isolamento PostgreSQL RLS adicional. O campo de plano é administrativo e não efetua cobranças.
+MVP para testes e pilotos supervisionados, ainda não preparado para venda irrestrita. Não oferece envios automáticos, conexão real de WhatsApp sem credenciais oficiais, cobrança Stripe, redefinição de senha, backups de restauração testados, exclusão/retensão LGPD, chamadas de voz, isolamento RLS no PostgreSQL Railway (a base Supabase já está preparada, mas não é a base de produção). O campo de plano é administrativo e não efetua cobranças.
 
 Treine o agente somente com conversas cuja utilização esteja autorizada. A anonimização inicial trata padrões comuns, mas não garante remoção completa de todos os dados pessoais inseridos no texto; revise arquivos antes de importar.
 
