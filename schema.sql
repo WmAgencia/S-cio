@@ -148,7 +148,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS training_versions_one_approved_per_tenant ON t
 -- WA-AKG phase 2: read-only bindings; no gateway credential is stored here.
 -- Foreign keys include tenant_id so accidental cross-tenant association fails.
 -- Avoid taking an ACCESS EXCLUSIVE lock on every app restart.
-DO $
+DO $socio_provider_guard$
 BEGIN
  IF EXISTS(
   SELECT 1 FROM pg_constraint WHERE conrelid='channels'::regclass
@@ -158,7 +158,7 @@ BEGIN
   ALTER TABLE channels DROP CONSTRAINT channels_provider_check;
   ALTER TABLE channels ADD CONSTRAINT channels_provider_check CHECK(provider IN ('meta','manual','waakg'));
  END IF;
-END $;
+END $socio_provider_guard$;
 CREATE UNIQUE INDEX IF NOT EXISTS channels_tenant_id_unique ON channels(tenant_id,id);
 CREATE UNIQUE INDEX IF NOT EXISTS imports_tenant_id_unique ON imports(tenant_id,id);
 CREATE TABLE IF NOT EXISTS waakg_links (
