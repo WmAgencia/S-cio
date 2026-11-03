@@ -2,7 +2,7 @@
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null};
-const titles={overview:'Visão geral',inbox:'Conversas',channels:'WhatsApps',products:'Produtos e serviços',training:'Treinamento',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
+const titles={overview:'Visão geral',inbox:'Conversas',channels:'WhatsApps',products:'Produtos e serviços',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -359,7 +359,7 @@ async function training(){
   '<button class="btn soft" id="analysisCancel">Cancelar</button></div>':
   '<button class="btn primary" id="analysisStart" '+(list.length?'':'disabled')+'>Analisar '+list.length+' conversa(s) →</button>';
  const summary=latest?.report?.summary||'A análise é baseada somente nas conversas importadas nesta empresa. '+
-  'A coleta automática do histórico dos WhatsApps conectados ainda será disponibilizada.';
+  'Sincronize o histórico disponível dos WhatsApps autorizados acima ou importe arquivos antes de analisar.';
  const syncActive=waScans.some(j=>['queued','scanning','importing'].includes(j.status));
  const waCard='<section class="card card-pad section-gap"><div class="section-title">Analisar conversas dos WhatsApps conectados</div>'+
    '<p class="form-note">Importa texto das sessões autorizadas, sem mensagens automáticas. O WA-AKG atual lista no máximo 50 chats por sessão e até 400 mensagens por conversa; mídias e grupos são ignorados.</p>'+
@@ -394,7 +394,7 @@ async function training(){
   (published?'<p class="form-note">Última versão aprovada: '+e(published.version)+'. A publicação não ativa envios automáticos.</p>':'')+
   '</section>';
 
- view.innerHTML=heading('PERSONALIZAÇÃO','Aprenda com as boas conversas.','Envie 10 a 20 atendimentos que deram certo. O Sócio extrai exemplos de linguagem sem usar os dados para treinar um modelo compartilhado.')+
+ view.innerHTML=heading('INTELIGÊNCIA ARTIFICIAL','O Sócio aprende com as conversas.','Envie 10 a 20 atendimentos que deram certo. O Sócio extrai exemplos de linguagem sem usar os dados para treinar um modelo compartilhado.')+
  waCard+trainingCard+
  '<div class="two-pane train"><div class="card card-pad"><div class="section-title">Importar conversas de sucesso</div><div class="file-drop"><span class="file-icon">⇧</span><strong>Escolha conversas .txt, .md ou .zip</strong><small>Múltiplos arquivos · até 700 KB por texto ou 2 MB por ZIP</small><input type="file" id="importInput" accept=".txt,.md,.zip,text/plain,text/markdown,application/zip" multiple aria-label="Escolher conversas"></div><p class="form-note">No WhatsApp: abra a conversa → Exportar conversa → Sem mídia. Você também pode enviar o ZIP da exportação diretamente, sem extraí-lo.</p><div class="info-strip"><strong>Privacidade em primeiro lugar</strong>Utilize conversas que sua empresa está autorizada a tratar. Telefones, e-mails e documentos numéricos são mascarados; nomes de participantes são substituídos por identificadores genéricos.</div><div id="importFeedback" class="form-note"></div></div>'+
  '<div>'+panel('Base de experiência',list.length+' conversa(s) importada(s).',
