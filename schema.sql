@@ -98,3 +98,23 @@ CREATE TABLE IF NOT EXISTS audit (
  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
  created_at timestamptz NOT NULL DEFAULT now()
 );
+
+
+ALTER TABLE channels ADD COLUMN IF NOT EXISTS access_token_ciphertext text;
+ALTER TABLE channels ADD COLUMN IF NOT EXISTS auto_reply boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS reply_jobs (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ conversation_id uuid NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+ inbound_message_id uuid REFERENCES messages(id) ON DELETE CASCADE,
+ kind text NOT NULL CHECK(kind IN ('auto','manual')),
+ body text NOT NULL DEFAULT '',
+ status text NOT NULL DEFAULT 'awaiting_ai' CHECK(status IN ('awaiting_ai','generating','ready','sending','sent','failed','unknown','cancelled')),
+ error text,
+ provider_id text,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE (tenant_id,inbound_message_id,kind)
+);
+CREATE INDEX IF NOT EXISTS reply_jobs_status_idx ON reply_jobs(status,created_at);
+CREATE INDEX IF NOT EXISTS reply_jobs_thread_idx ON reply_jobs(tenant_id,conversation_id,created_at);
