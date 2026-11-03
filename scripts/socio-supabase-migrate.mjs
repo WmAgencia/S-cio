@@ -37,6 +37,13 @@ export async function migrate({sourceUrl,targetUrl,apply=false,logger=console.lo
   await source.query("SET LOCAL lock_timeout = '10s'");
   await target.query('BEGIN');
   await target.query('SET LOCAL search_path TO socio_app, public');
+  if(apply){
+   // Acquire the write barrier BEFORE taking the repeatable-read snapshot.
+   // Complete the cutover under application maintenance; these locks alone
+   // cannot protect writes made after this transaction releases them.
+   const locks=TABLES.map(x=>'public.'+qi(x)).join(', ');
+   await source.query('LOCK TABLE '+locks+' IN SHARE MODE');
+  }
   const origin=await source.query("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename=ANY($1::text[])",[TABLES]);
   const actual=new Set(origin.rows.map(x=>x.tablename));
   const missing=TABLES.filter(x=>!actual.has(x));
@@ -44,13 +51,6 @@ export async function migrate({sourceUrl,targetUrl,apply=false,logger=console.lo
   const structure=await target.query("SELECT tablename FROM pg_tables WHERE schemaname='socio_app' AND tablename=ANY($1::text[])",[TABLES]);
   if(structure.rows.length!==TABLES.length)throw new Error('Target private schema incomplete');
   const before={};
-  if(apply){
-   // Hold a write barrier until the destination snapshot has committed.
-   // Perform final cutover with the app in maintenance mode to prevent
-   // writes from resuming after these locks are released.
-   const locks=TABLES.map(x=>'public.'+qi(x)).join(', ');
-   await source.query('LOCK TABLE '+locks+' IN SHARE MODE');
-  }
   for(const table of TABLES){
    const size=await rowCount(source,'public',table);
    const destinationSize=await rowCount(target,'socio_app',table);
