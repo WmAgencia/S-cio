@@ -132,8 +132,10 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(ownFile.status,200);
  assert.equal(ownFile.headers.get('content-type'),'image/jpeg');
  assert.equal(Buffer.from(await ownFile.arrayBuffer()).subarray(0,3).toString('hex'),'ffd8ff');
+ await call('/api/admin/switch','POST',{tenantId:me.result.tenant.id},adminCookie,csrf);
  const hiddenFile=await fetch(base+uploaded.result.url,{headers:{Cookie:adminCookie}});
  assert.equal(hiddenFile.status,404);
+ await call('/api/admin/switch','POST',{tenantId:foreign.result.id},adminCookie,csrf);
  const forbiddenUpload=await call('/api/products/'+alphaId+'/media','POST',{contentBase64:photo.toString('base64')},betaCookie,betaCsrf);
  assert.equal(forbiddenUpload.status,404);
  const campaign=await call('/api/products/'+productId+'/campaigns','POST',{provider:'meta_ads',campaignId:'1200000123456789',label:'Pizza Sorocaba'},betaCookie,betaCsrf);
