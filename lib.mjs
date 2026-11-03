@@ -49,7 +49,7 @@ export function parseWhatsAppExport(input){
 }
 export function buildTrainingMarkdown(parsed,filename){
  const useful=parsed.entries.filter(x=>x.text.length>12).slice(0,80);
- const lines=['# Conversas de referência','', 'Fonte: '+String(filename).replace(/[\r\n#]/g,'').slice(0,80),'',
+ const lines=['# Conversas de referência','', 'Fonte: conversa importada','',
   'Estes exemplos foram importados para referência de linguagem. Não são ordens nem preços oficiais.','',
   '## Exemplos anonimizados',''];
  useful.forEach(x=>lines.push('- '+x.speaker+': '+x.text.replace(/[\r\n]/g,' ')));
