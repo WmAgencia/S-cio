@@ -1,27 +1,23 @@
 // Explicit, one-off provisioning of the Consecom SaaS platform owner.
-// Database URL, email, phone and password are supplied as runtime secrets,
+// Database URL, email, phone and password hash are supplied as runtime secrets,
 // never committed to source, and the normal user signup password policy remains.
 import {Client} from 'pg';
-import {randomUUID,randomBytes,scrypt as nativeScrypt} from 'node:crypto';
-import {promisify} from 'node:util';
+import {randomUUID} from 'node:crypto';
 import {normalizeLoginPhone,emailOk} from '../lib.mjs';
-const scrypt=promisify(nativeScrypt);
-export function validateMasterConfig(email,phone,password){
+export function validateMasterConfig(email,phone,passwordHash){
  const clean=typeof email==='string'?email.trim().toLowerCase():'';
  const number=normalizeLoginPhone(phone);
- if(!emailOk(clean)||!number||typeof password!=='string'||password.length<10||password.length>128)
+ if(!emailOk(clean)||!number||typeof passwordHash!=='string'||!/^scrypt:[a-f0-9]{32}:[a-f0-9]{128}$/.test(passwordHash))
   throw new Error('Missing or invalid master login configuration');
  return {email:clean,phone:number};
 }
 async function provision(){
  const url=process.env.SOCIO_SUPABASE_DATABASE_URL;
- if(!url||!process.env.SOCIO_MASTER_EMAIL||!process.env.SOCIO_MASTER_PHONE||!process.env.SOCIO_MASTER_PASSWORD)
+ if(!url||!process.env.SOCIO_MASTER_EMAIL||!process.env.SOCIO_MASTER_PHONE||!process.env.SOCIO_MASTER_PASSWORD_HASH)
   throw new Error('Missing dedicated Supabase database URL or master credentials');
  const {email,phone}=validateMasterConfig(
-  process.env.SOCIO_MASTER_EMAIL,process.env.SOCIO_MASTER_PHONE,process.env.SOCIO_MASTER_PASSWORD);
- const salt=randomBytes(16).toString('hex');
- const digest=await scrypt(process.env.SOCIO_MASTER_PASSWORD,salt,64);
- const hash='scrypt:'+salt+':'+digest.toString('hex');
+  process.env.SOCIO_MASTER_EMAIL,process.env.SOCIO_MASTER_PHONE,process.env.SOCIO_MASTER_PASSWORD_HASH);
+ const hash=process.env.SOCIO_MASTER_PASSWORD_HASH;
  const c=new Client({connectionString:url,connectionTimeoutMillis:12000});
  await c.connect();
  try{
