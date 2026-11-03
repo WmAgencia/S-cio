@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS training_jobs (
 );
 CREATE INDEX IF NOT EXISTS training_jobs_tenant_idx ON training_jobs(tenant_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS training_jobs_status_idx ON training_jobs(status,created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS training_jobs_one_open_per_tenant ON training_jobs(tenant_id) WHERE status IN ('queued','analyzing','paused');
 CREATE TABLE IF NOT EXISTS training_job_items (
  job_id uuid NOT NULL,
  tenant_id uuid NOT NULL,
@@ -141,3 +142,4 @@ CREATE TABLE IF NOT EXISTS training_versions (
  UNIQUE(tenant_id,version)
 );
 CREATE INDEX IF NOT EXISTS training_versions_tenant_idx ON training_versions(tenant_id,created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS training_versions_one_approved_per_tenant ON training_versions(tenant_id) WHERE status='approved';
