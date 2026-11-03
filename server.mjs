@@ -5,6 +5,7 @@ import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk} from './lib.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
+import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
 
 const PORT=Number(process.env.PORT||3000);
 const DATABASE_URL=process.env.DATABASE_URL;
@@ -186,6 +187,49 @@ async function handle(req,res){
   const r=await query('UPDATE agents SET name=$2,tone=$3,instructions=$4,enabled=$5,updated_at=now() WHERE tenant_id=$1 RETURNING name,tone,instructions,knowledge_md,enabled',[a.active_tenant_id,data.name.trim(),data.tone.trim(),data.instructions.trim(),data.enabled]);
   await audit(a,'agent.updated',{enabled:data.enabled});return json(res,200,r.rows[0]);
  }
+ if(method==='GET'&&pathname==='/api/training/jobs'){
+  const r=await query("SELECT id,status,total_items AS \"totalItems\",processed_items AS \"processedItems\",report_json AS report,created_at AS \"createdAt\",updated_at AS \"updatedAt\" FROM training_jobs WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 12",[a.active_tenant_id]);
+  return json(res,200,r.rows);
+ }
+ if(method==='POST'&&pathname==='/api/training/jobs'){
+  needRole(a,['owner','admin']);
+  const active=await query("SELECT id FROM training_jobs WHERE tenant_id=$1 AND status IN ('queued','analyzing','paused') LIMIT 1",[a.active_tenant_id]);
+  if(active.rowCount)throw fail(409,'Já existe uma análise em andamento. Finalize ou cancele a anterior.');
+  const job=await createTrainingAnalysis(pool,a.active_tenant_id);
+  await audit(a,'training.analysis.started',{jobId:job.id,source:'imported_whatsapp_exports'});
+  return json(res,201,{...job,source:'imports_only',note:'Ainda não analisa automaticamente históricos conectados ao WA-AKG.'});
+ }
+ const jobAction=pathname.match(/^\/api\/training\/jobs\/([0-9a-f-]{36})\/(pause|resume|cancel)$/);
+ if(jobAction&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const [jobId,action]=jobAction.slice(1),next=action==='pause'?'paused':action==='resume'?'queued':'cancelled';
+  const accepted=action==='pause'?['queued','analyzing']:action==='resume'?['paused']:['queued','analyzing','paused'];
+  const result=await query('UPDATE training_jobs SET status=$3,updated_at=now(),finished_at=CASE WHEN $3=$4 THEN now() ELSE finished_at END WHERE id=$1 AND tenant_id=$2 AND status=ANY($5::text[]) RETURNING id,status',
+   [jobId,a.active_tenant_id,next,'cancelled',accepted]);
+  if(!result.rowCount)throw fail(409,'Análise indisponível ou estado incompatível.');
+  await audit(a,'training.analysis.'+action,{jobId});
+  return json(res,200,result.rows[0]);
+ }
+ if(method==='GET'&&pathname==='/api/training/versions'){
+  const versions=await query('SELECT id,job_id AS "jobId",version,status,knowledge_md AS markdown,report_json AS report,created_at AS "createdAt",approved_at AS "approvedAt" FROM training_versions WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 15',[a.active_tenant_id]);
+  return json(res,200,versions.rows);
+ }
+ const knowledgeApprove=pathname.match(/^\/api\/training\/versions\/([0-9a-f-]{36})\/approve$/);
+ if(knowledgeApprove&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const c=await pool.connect();
+  try{
+   await c.query('BEGIN');
+   const version=await c.query("SELECT id,knowledge_md FROM training_versions WHERE tenant_id=$1 AND id=$2 AND status='draft' FOR UPDATE",[a.active_tenant_id,knowledgeApprove[1]]);
+   if(!version.rowCount)throw fail(409,'Versão não encontrada, já aprovada ou inválida.');
+   await c.query("UPDATE training_versions SET status='archived' WHERE tenant_id=$1 AND status='approved'",[a.active_tenant_id]);
+   await c.query("UPDATE training_versions SET status='approved',approved_at=now() WHERE tenant_id=$1 AND id=$2",[a.active_tenant_id,knowledgeApprove[1]]);
+   await c.query('UPDATE agents SET knowledge_md=$2,updated_at=now() WHERE tenant_id=$1',[a.active_tenant_id,version.rows[0].knowledge_md]);
+   await c.query('COMMIT');
+  }catch(error){await c.query('ROLLBACK');throw error;}finally{c.release();}
+  await audit(a,'training.version.approved',{versionId:knowledgeApprove[1]});
+  return json(res,200,{ok:true,versionId:knowledgeApprove[1],autoReply:false});
+ }
  if(method==='GET'&&pathname==='/api/imports'){
   const r=await query('SELECT id,filename,conversation_count,message_count,created_at FROM imports WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 100',[a.active_tenant_id]);return json(res,200,r.rows);
  }
@@ -358,6 +402,20 @@ async function receiveWhatsApp(req,res){
 async function main(){
  const schema=await readFile(new URL('./schema.sql',import.meta.url),'utf8');
  await query(schema);
+ // One active worker per Node instance; row locks serialize jobs across replicas.
+ // All results remain drafts until the tenant owner approves them.
+ let workerBusy=false,lastWorkerError=0;
+ const worker=setInterval(async()=>{
+  if(workerBusy)return;
+  workerBusy=true;
+  try{await processNextAnalysisJob(pool);}
+  catch(error){if(Date.now()-lastWorkerError>30000){
+   console.warn('[socio-training-worker]',String(error?.code||error?.message||'error').slice(0,100));
+   lastWorkerError=Date.now();
+  }}
+  finally{workerBusy=false;}
+ },750);
+ worker.unref();
  const server=http.createServer((req,res)=>Promise.resolve(handle(req,res)).catch(e=>{
   const code=e.code;
   if(code==='23505')return json(res,409,{error:'Este e-mail, telefone ou identificador já está cadastrado.'});
