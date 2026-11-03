@@ -42,7 +42,9 @@ export function validateCampaign(data){
 export function catalogPrompt(products){
  const lines=[];
  for(const product of products.slice(0,70)){
-  const status=product.active!==false&&(product.stock_quantity===null||Number(product.stock_quantity)>0)?'disponível para consulta':'indisponível';
+  const activeVariants=(product.variants||[]).filter(v=>v.active!==false);
+  const canSell=activeVariants.length?activeVariants.some(v=>v.stock_quantity===null||Number(v.stock_quantity)>0):product.stock_quantity===null||Number(product.stock_quantity)>0;
+  const status=product.active!==false&&canSell?'disponível para consulta':'indisponível';
   lines.push('- '+String(product.name).replace(/[\r\n]/g,' ').slice(0,120)+
    ' | preço base R$ '+(Number(product.price_cents)/100).toFixed(2)+
    ' | '+status+
