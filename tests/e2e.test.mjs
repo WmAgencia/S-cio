@@ -2,11 +2,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
+import {createHmac,randomUUID} from 'node:crypto';
+import {Pool} from 'pg';
 const enabled=!!process.env.DATABASE_URL;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 test('real PostgreSQL: login, tenant isolation, imports and webhook signature protections',{skip:!enabled,timeout:35000},async t=>{
  const port=38475;
- const child=spawn(process.execPath,['server.mjs'],{env:{...process.env,PORT:String(port),NODE_ENV:'test'},stdio:['ignore','pipe','pipe']});
+ const child=spawn(process.execPath,['server.mjs'],{env:{...process.env,PORT:String(port),NODE_ENV:'test',META_APP_SECRET:'test-app-secret'},stdio:['ignore','pipe','pipe']});
  let logs='';child.stderr.on('data',x=>logs+=x.toString());
  t.after(()=>{child.kill('SIGTERM');});
  const base='http://127.0.0.1:'+port;
@@ -58,8 +60,35 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(imported.status,201);
  const ag=await call('/api/agent','GET',undefined,betaCookie);
  assert.doesNotMatch(ag.result.knowledge_md,/Alice|15981142577/);
- const webhook=await call('/webhooks/whatsapp','POST',{object:'whatsapp_business_account'});
- assert.equal(webhook.status,503);
+ 
+ const invalidLink=await call('/api/channels','POST',{label:'Canal B',phone:'5515998114257',externalPhoneId:'1234567890123'},betaCookie,betaCsrf);
+ assert.equal(invalidLink.status,422);
+ const chan=await call('/api/channels','POST',{label:'Canal B',phone:'5515998114257'},betaCookie,betaCsrf);
+ assert.equal(chan.status,201);
+ const auto=await call('/api/channels/'+chan.result.id+'/auto','POST',{enabled:true},betaCookie,betaCsrf);
+ assert.equal(auto.status,409);
+ const sql=new Pool({connectionString:process.env.DATABASE_URL});
+ t.after(()=>sql.end());
+ // A provider-validated ID can only be provisioned after server-side Meta verification.
+ // This fixture simulates a channel already verified by Consecom.
+ await sql.query("UPDATE channels SET external_phone_id=$2 WHERE id=$1",[chan.result.id,'1234567890123']);
+ const payload={
+  object:'whatsapp_business_account',
+  entry:[{changes:[{value:{metadata:{phone_number_id:'1234567890123'},contacts:[{profile:{name:'Cliente teste'}}],messages:[{id:'wamid.inbound.1',from:'5515999999999',type:'text',text:{body:'Olá, quanto custa?'}}]}}]}]
+ };
+ const raw=JSON.stringify(payload),signature='sha256='+createHmac('sha256','test-app-secret').update(raw).digest('hex');
+ const send=async(sig)=>fetch(base+'/webhooks/whatsapp',{method:'POST',headers:{'Content-Type':'application/json','X-Hub-Signature-256':sig},body:raw});
+ assert.equal((await send('sha256=invalid')).status,403);
+ assert.equal((await send(signature)).status,200);
+ assert.equal((await send(signature)).status,200);
+ const received=await call('/api/inbox','GET',undefined,betaCookie);
+ assert.equal(received.result.length,1);
+ const thread=await call('/api/conversations/'+received.result[0].id+'/messages','GET',undefined,betaCookie);
+ assert.equal(thread.result.messages.length,1,'duplicate inbound deliveries must be idempotent');
+ assert.equal(thread.result.jobs.length,0,'AI starts off by default');
+ const rejectedReply=await call('/api/conversations/'+received.result[0].id+'/reply','POST',{text:'Olá, tudo bem?'},betaCookie,betaCsrf);
+ assert.equal(rejectedReply.status,409,'manual sending without verified access token must be blocked');
+
  const noAI=await call('/api/simulate','POST',{message:'Qual o preço?'},betaCookie,betaCsrf);
  assert.equal(noAI.status,503);
 });
