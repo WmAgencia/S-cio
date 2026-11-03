@@ -52,6 +52,8 @@ async function boot(){
    $('#workspaceName').textContent=me.tenant.name;
    $('#workspaceInitial').textContent=(me.tenant.name[0]||'S').toUpperCase();
    $('#userChip').textContent=me.user.name.split(/\s+/).slice(0,2).map(v=>v[0]).join('').toUpperCase();
+   $('#userName').textContent=me.user.name;
+   $('#userRole').textContent=me.user.platformOwner?'Administrador master':me.user.role==='owner'?'Proprietário':'Equipe da empresa';
    $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
    await changeView(state.view);
   }catch(error){state.me=null;state.csrf='';setupAuth(bootstrap.initialized);}
@@ -666,6 +668,67 @@ async function admin(){
  view.querySelectorAll('[data-switch]').forEach(b=>b.addEventListener('click',()=>action(async()=>{await api('/api/admin/switch','POST',{tenantId:b.dataset.switch});toast('Ambiente alterado.');state.view='overview';await boot();})));
 }
 async function action(fn){try{await fn();}catch(err){toast(errMsg(err),true);}}
+
+const sidebarIcons={
+ overview:'<rect x="3" y="3" width="8" height="8" rx="1.7"/><rect x="13" y="3" width="8" height="8" rx="1.7"/><rect x="3" y="13" width="8" height="8" rx="1.7"/><rect x="13" y="13" width="8" height="8" rx="1.7"/>',
+ inbox:'<path d="M4 4h16v12h-5l-3 3-3-3H4z"/><path d="M7 9h10M7 12h7"/>',
+ channels:'<path d="M6 18c-2-1.7-3-4.1-3-6.6C3 6.6 6.7 3 12 3s9 3.6 9 8.4c0 4.5-3.7 8.6-9 8.6-1.6 0-3.2-.3-4.4-1L3 21z"/><path d="M9 9c.4 2.6 2.4 4.7 5 5l1.4-1.5"/>',
+ products:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 10h18M10 3v18"/>',
+ training:'<path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8m8.6 8.6 2.8 2.8M2 12h4m12 0h4M4.9 19.1l2.8-2.8m8.6-8.6 2.8-2.8"/><circle cx="12" cy="12" r="3.4"/>',
+ agent:'<path d="m12 2 2.7 7.3L22 12l-7.3 2.7L12 22l-2.7-7.3L2 12l7.3-2.7z"/>',
+ team:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-1c0-3.6 2.5-5 6-5s6 1.4 6 5v1z"/><path d="M17 5a3 3 0 0 1 0 6m1 4c2 .5 3 1.8 3 4v1"/>',
+ admin:'<path d="M3 21V5l9-3 9 3v16M3 21h18M9 21v-5h6v5M7 9h2m6 0h2M7 13h2m6 0h2"/>',
+ logout:'<path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M14 7l5 5-5 5M9 12h10"/>'
+};
+function initSidebarIcons(){
+ $('.nav-item[data-view],#logoutBtn').forEach(b=>{
+  const kind=b.dataset.view||'logout';
+  const holder=b.querySelector('.nav-symbol');
+  if(!holder)return;
+  holder.innerHTML='<svg viewBox="0 0 24 24" role="img" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+(sidebarIcons[kind]||sidebarIcons.overview)+'</svg>';
+  b.title=kind==='logout'?'Sair':titles[kind]||'Sócio';
+  b.setAttribute('aria-label',b.title);
+ });
+}
+function renderCommandItems(){
+ const input=$('#commandSearch');
+ const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
+ const names=Object.entries(titles).filter(([key,label])=>
+  (key!=='admin'||state.me?.user.platformOwner)&&
+  (label.toLocaleLowerCase('pt-BR').includes(keyword)||key.includes(keyword)));
+ const list=$('#commandList');
+ list.innerHTML=names.length?names.map(([key,label])=>
+  '<button class="command-item" type="button" data-search-view="'+e(key)+'"><span class="command-item-icon">✳</span>'+
+  '<span>'+e(label)+'</span><span class="command-item-arrow">↗</span></button>').join(''):
+  '<div class="command-empty">Nenhuma seção encontrada.</div>';
+ list.querySelectorAll('[data-search-view]').forEach(b=>b.addEventListener('click',()=>{
+  closeCommand();changeView(b.dataset.searchView);
+ }));
+}
+function openCommand(){
+ if(!state.me)return;
+ $('#commandOverlay').classList.remove('hidden');
+ $('#commandSearch').value='';
+ renderCommandItems();$('#commandSearch').focus();
+}
+function closeCommand(){
+ $('#commandOverlay').classList.add('hidden');
+ $('#quickSearchBtn').focus();
+}
+$('#quickSearchBtn').addEventListener('click',openCommand);
+$('#commandClose').addEventListener('click',closeCommand);
+$('#commandSearch').addEventListener('input',renderCommandItems);
+$('#commandOverlay').addEventListener('click',event=>{
+ if(event.target===$('#commandOverlay'))closeCommand();
+});
+document.addEventListener('keydown',event=>{
+ if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){
+  event.preventDefault();if($('#commandOverlay').classList.contains('hidden'))openCommand();else closeCommand();
+ }
+ if(event.key==='Escape'&&!$('#commandOverlay').classList.contains('hidden'))closeCommand();
+});
+initSidebarIcons();
+
 $('#loginForm').addEventListener('submit',async ev=>{
  ev.preventDefault();$('#authError').textContent='';
  try{const data=await api('/api/login','POST',formValues(ev.currentTarget));state.csrf=data.csrf;await boot();}
