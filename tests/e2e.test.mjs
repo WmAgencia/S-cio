@@ -65,6 +65,8 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const list=await call('/api/imports','GET',undefined,betaCookie);
  assert.equal(list.result.length,3);
 
+ const beforeApproval=await call('/api/agent','GET',undefined,betaCookie);
+ assert.equal(beforeApproval.result.knowledge_md,'','Imported examples must not change active knowledge before approval');
  // The new training pipeline keeps results in DRAFT until explicit approval.
  const start=await call('/api/training/jobs','POST',{},betaCookie,betaCsrf);
  assert.equal(start.status,201,JSON.stringify(start.result));
