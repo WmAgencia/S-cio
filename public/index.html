@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1">
+ <meta name="theme-color" content="#202126">
+ <meta name="description" content="Sócio — seu atendimento trabalha com você. Uma plataforma Consecom Brasil.">
+ <title>Sócio — Sua empresa sempre presente</title>
+ <link rel="stylesheet" href="/app.css">
+ <script src="/app.js" defer></script>
+</head>
+<body>
+<div id="authScreen" class="auth-screen hidden">
+ <div class="auth-art">
+  <div class="brand-mark large">s<span>.</span></div>
+  <span class="eyebrow light">UM PRODUTO CONSECOM</span>
+  <h1>O melhor atendimento é aquele que não para.</h1>
+  <p>Uma equipe que conhece a sua empresa, entende os seus clientes e ajuda a vender — todos os dias.</p>
+  <div class="auth-bottom">SÓCIO <span>·</span> Inteligência a serviço do seu negócio</div>
+ </div>
+ <div class="auth-panel">
+  <div class="auth-box">
+   <div class="mobile-brand">s<span>.</span> <small>SÓCIO</small></div>
+   <div class="auth-heading">
+    <span class="eyebrow">BEM-VINDO AO SÓCIO</span>
+    <h2 id="authTitle">Entre na sua conta.</h2>
+    <p id="authDescription">Acesse o painel da sua empresa.</p>
+   </div>
+   <form id="loginForm" class="form-stack">
+    <label>E-mail comercial<input name="email" type="email" required autocomplete="username" placeholder="voce@empresa.com.br"></label>
+    <label>Senha<input name="password" type="password" required autocomplete="current-password" placeholder="Sua senha"></label>
+    <button class="btn primary wide" type="submit">Entrar no Sócio <span>→</span></button>
+   </form>
+   <form id="setupForm" class="form-stack hidden">
+    <div class="help-card">Configuração inicial exclusiva da Consecom. O token de instalação está nas variáveis seguras do Railway.</div>
+    <label>Token de instalação<input name="setupToken" type="password" required autocomplete="off" placeholder="SETUP_TOKEN"></label>
+    <label>Nome completo<input name="name" required maxlength="100" placeholder="Responsável"></label>
+    <label>Nome da empresa<input name="company" required maxlength="120" placeholder="Consecom Brasil"></label>
+    <label>E-mail de administrador<input name="email" type="email" required autocomplete="username" placeholder="contato@empresa.com.br"></label>
+    <label>Senha forte (mínimo 12 caracteres)<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="Crie sua senha"></label>
+    <button class="btn primary wide" type="submit">Criar conta principal <span>→</span></button>
+   </form>
+   <p id="authError" class="form-error" role="alert"></p>
+   <div class="auth-footer">Protegido por autenticação e ambientes isolados por empresa.</div>
+  </div>
+ </div>
+</div>
+
+<div id="appShell" class="app-shell hidden">
+ <aside class="sidebar">
+  <div class="sidebar-logo"><div class="brand-mark">s<span>.</span></div><div><strong>Sócio</strong><small>por Consecom</small></div></div>
+  <div class="workspace-box"><span class="workspace-circle" id="workspaceInitial">C</span><div class="workspace-label"><small>SEU ESPAÇO</small><strong id="workspaceName">Empresa</strong></div><span class="workspace-chevron">⌄</span></div>
+  <div class="sidebar-label">GERENCIAMENTO</div>
+  <nav class="nav" aria-label="Menu principal">
+   <button data-view="overview" class="nav-item selected"><span class="nav-symbol">◈</span> Visão geral</button>
+   <button data-view="inbox" class="nav-item"><span class="nav-symbol">▤</span> Conversas</button>
+   <button data-view="channels" class="nav-item"><span class="nav-symbol">◉</span> WhatsApps</button>
+   <button data-view="products" class="nav-item"><span class="nav-symbol">▦</span> Produtos e serviços</button>
+   <div class="sidebar-label inner">INTELIGÊNCIA</div>
+   <button data-view="training" class="nav-item"><span class="nav-symbol">✳</span> Treinamento</button>
+   <button data-view="agent" class="nav-item"><span class="nav-symbol">✦</span> Meu Sócio</button>
+   <div class="sidebar-label inner">ADMINISTRAÇÃO</div>
+   <button data-view="team" class="nav-item"><span class="nav-symbol">♙</span> Equipe</button>
+   <button data-view="admin" class="nav-item hidden" id="adminNav"><span class="nav-symbol">▧</span> Empresas</button>
+  </nav>
+  <div class="sidebar-bottom">
+   <div class="support-block"><span class="support-icon">✧</span><strong>Um agente feito para você.</strong><small>Seu jeito de vender, sempre presente.</small></div>
+   <button id="logoutBtn" class="nav-item logout"><span class="nav-symbol">↪</span> Sair da conta</button>
+  </div>
+ </aside>
+ <div class="app-main">
+  <header class="topbar">
+   <div class="breadcrumb">Workspace <span>/</span> <strong id="topTitle">Visão geral</strong></div>
+   <div class="top-right"><span class="top-pill"><i></i> Ambiente seguro</span><div class="user-chip" id="userChip">SC</div></div>
+  </header>
+  <main id="view" tabindex="-1"><div class="loading">Carregando seu espaço...</div></main>
+  <footer class="site-footer">Sócio by Consecom <span>·</span> Tecnologia a favor das pessoas.</footer>
+ </div>
+</div>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+</body>
+</html>
