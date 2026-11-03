@@ -6,6 +6,8 @@ import {Pool} from 'pg';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk} from './lib.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
 import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
+import {gatewayConfigured,getSessionStatus,validSessionId} from './waakg-adapter.mjs';
+import {processNextWaakgScan} from './waakg-history.mjs';
 
 const PORT=Number(process.env.PORT||3000);
 const DATABASE_URL=process.env.DATABASE_URL;
@@ -144,6 +146,88 @@ async function handle(req,res){
    query("SELECT count(*)::int AS n FROM messages WHERE tenant_id=$1 AND direction='inbound'",[a.active_tenant_id])
   ]);
   return json(res,200,{channels:ch.rows[0].n,products:prod.rows[0].n,imports:imp.rows[0].n,openConversations:conv.rows[0].n,inboundMessages:msg.rows[0].n});
+ }
+
+ // WA-AKG is a server-side, read-only integration. It does not expose the
+ // shared gateway key or allow tenants to claim arbitrary gateway sessions.
+ if(method==='GET'&&pathname==='/api/waakg/config'){
+  return json(res,200,{configured:gatewayConfigured(),mode:'read_only',selfService:false,
+   limitations:'Até 50 conversas retornadas pelo gateway por sessão; até 400 mensagens por conversa. Histórico antigo pode não estar disponível.'});
+ }
+ if(method==='GET'&&pathname==='/api/waakg/channels'){
+  const r=await query(
+   'SELECT l.channel_id AS id,ch.label,ch.phone,l.created_at FROM waakg_links l JOIN channels ch ON ch.id=l.channel_id AND ch.tenant_id=l.tenant_id WHERE l.tenant_id=$1 ORDER BY l.created_at DESC',
+   [a.active_tenant_id]);
+  return json(res,200,r.rows);
+ }
+ if(method==='POST'&&pathname==='/api/waakg/channels/link'){
+  needPlatform(a); // Shared gateway credentials are Consecom-only.
+  if(!gatewayConfigured())throw fail(503,'WA-AKG não configurado. Conecte um gateway dedicado ao Sócio.');
+  const {data}=await body(req);
+  const sessionId=trimmed(data.sessionId,64),phone=trimmed(data.phone,20).replace(/\D/g,'');
+  if(!validSessionId(sessionId)||!validText(data.label,90)||!/^\d{10,15}$/.test(phone))throw fail(422,'Informe sessão existente, nome e telefone internacional válido.');
+  const remote=await getSessionStatus(sessionId);
+  if(!remote.connected||!remote.connectedNumber||remote.connectedNumber!==phone)
+   throw fail(422,'O número informado não corresponde a uma sessão WA-AKG conectada e verificada.');
+  const channelId=id(),client=await pool.connect();
+  try{
+   await client.query('BEGIN');
+   await client.query("INSERT INTO channels(id,tenant_id,label,phone,provider,status) VALUES($1,$2,$3,$4,'waakg','connected')",
+    [channelId,a.active_tenant_id,data.label.trim(),phone]);
+   await client.query('INSERT INTO waakg_links(id,tenant_id,channel_id,session_id) VALUES($1,$2,$3,$4)',
+    [id(),a.active_tenant_id,channelId,sessionId]);
+   await client.query('COMMIT');
+  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  await audit(a,'waakg.channel.linked',{channelId});
+  return json(res,201,{id:channelId,label:data.label.trim(),phone,status:'connected'});
+ }
+ const linkStatus=pathname.match(/^\/api\/waakg\/channels\/([0-9a-f-]{36})\/status$/);
+ if(linkStatus&&method==='GET'){
+  const found=await query(
+   'SELECT l.session_id,ch.phone FROM waakg_links l JOIN channels ch ON ch.id=l.channel_id AND ch.tenant_id=l.tenant_id WHERE l.channel_id=$1 AND l.tenant_id=$2',
+   [linkStatus[1],a.active_tenant_id]);
+  if(!found.rowCount)throw fail(404,'Canal não encontrado nesta empresa.');
+  const remote=await getSessionStatus(found.rows[0].session_id);
+  return json(res,200,{connected:remote.connected&&remote.connectedNumber===found.rows[0].phone,
+   status:remote.status,phoneVerified:remote.connectedNumber===found.rows[0].phone});
+ }
+ if(method==='GET'&&pathname==='/api/waakg/scans'){
+  const r=await query(
+   'SELECT id,channel_id AS "channelId",status,total_chats AS "totalChats",processed_chats AS "processedChats",imported_chats AS "importedChats",imported_messages AS "importedMessages",partial_coverage AS "partialCoverage",truncated_chats AS "truncatedChats",error_code AS "errorCode",created_at AS "createdAt",updated_at AS "updatedAt" FROM waakg_scans WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 30',
+   [a.active_tenant_id]);
+  return json(res,200,r.rows);
+ }
+ if(method==='POST'&&pathname==='/api/waakg/scans'){
+  needRole(a,['owner','admin']);
+  if(!gatewayConfigured())throw fail(503,'WA-AKG ainda não configurado no servidor Sócio.');
+  if(!limiter(simulationAttempts,'waakg-start:'+a.active_tenant_id,60000,12))throw fail(429,'Muitas análises solicitadas.');
+  const {data}=await body(req);
+  const channelId=String(data.channelId||'');
+  if(!/^[0-9a-f-]{36}$/.test(channelId))throw fail(422,'Selecione um canal WA-AKG válido.');
+  const result=await query(
+   'SELECT l.session_id,ch.phone FROM waakg_links l JOIN channels ch ON ch.id=l.channel_id AND ch.tenant_id=l.tenant_id WHERE l.channel_id=$1 AND l.tenant_id=$2',
+   [channelId,a.active_tenant_id]);
+  if(!result.rowCount)throw fail(404,'O WhatsApp não está vinculado a esta empresa.');
+  const remote=await getSessionStatus(result.rows[0].session_id);
+  if(!remote.connected||remote.connectedNumber!==result.rows[0].phone)throw fail(409,'WhatsApp indisponível ou número não verificado.');
+  const jobId=id();
+  await query("INSERT INTO waakg_scans(id,tenant_id,channel_id,status) VALUES($1,$2,$3,'queued')",
+   [jobId,a.active_tenant_id,channelId]);
+  await audit(a,'waakg.history.requested',{channelId,jobId});
+  return json(res,201,{id:jobId,status:'queued',readOnly:true});
+ }
+ const scanAction=pathname.match(/^\/api\/waakg\/scans\/([0-9a-f-]{36})\/(pause|resume|cancel)$/);
+ if(scanAction&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const [jobId,action]=scanAction.slice(1);
+  const next=action==='pause'?'paused':action==='resume'?'queued':'cancelled';
+  const allowed=action==='pause'?['queued','scanning','importing']:action==='resume'?['paused','failed']:['queued','scanning','importing','paused','failed'];
+  const r=await query(
+   "UPDATE waakg_scans SET status=$3,error_code=NULL,lease_token=NULL,lease_until=NULL,updated_at=now(),finished_at=CASE WHEN $3='cancelled' THEN now() ELSE finished_at END WHERE id=$1 AND tenant_id=$2 AND status=ANY($4::text[]) RETURNING id,status",
+   [jobId,a.active_tenant_id,next,allowed]);
+  if(!r.rowCount)throw fail(409,'Análise indisponível ou estado incompatível.');
+  await audit(a,'waakg.history.'+action,{jobId});
+  return json(res,200,r.rows[0]);
  }
  if(method==='GET'&&pathname==='/api/channels'){
   const r=await query('SELECT id,label,phone,provider,external_phone_id,status,created_at FROM channels WHERE tenant_id=$1 ORDER BY created_at DESC',[a.active_tenant_id]);
@@ -402,6 +486,18 @@ async function main(){
  await query(schema);
  // One active worker per Node instance; row locks serialize jobs across replicas.
  // All results remain drafts until the tenant owner approves them.
+ let waBusy=false,waLastError=0;
+ const waWorker=setInterval(async()=>{
+  if(waBusy||!gatewayConfigured())return;
+  waBusy=true;
+  try{await processNextWaakgScan(pool);}
+  catch(err){if(Date.now()-waLastError>30000){
+    console.warn('[socio-waakg-worker]',String(err?.code||'worker-error').slice(0,70));
+    waLastError=Date.now();
+  }}
+  finally{waBusy=false;}
+ },2200);
+ waWorker.unref();
  let workerBusy=false,lastWorkerError=0;
  const worker=setInterval(async()=>{
   if(workerBusy)return;
