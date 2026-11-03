@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {zipStore} from './zip-helper.mjs';
+import sharp from 'sharp';
 const enabled=!!process.env.DATABASE_URL;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 test('real PostgreSQL: login, tenant isolation, imports and webhook signature protections',{skip:!enabled,timeout:65000},async t=>{
@@ -62,7 +63,8 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const child=spawn(process.execPath,['server.mjs'],{
   env:{...process.env,PORT:String(port),NODE_ENV:'test',
    WA_AKG_BASE_URL:'http://127.0.0.1:'+waPort,WA_AKG_API_KEY:waKey,
-   CHANNEL_ENCRYPTION_KEY:'0123456789abcdef0123456789abcdef0123456789abcdef'},
+   CHANNEL_ENCRYPTION_KEY:'0123456789abcdef0123456789abcdef0123456789abcdef',
+   SOCIO_STORAGE_DRIVER:'memory'},
   stdio:['ignore','pipe','pipe']
  });
  let logs='';child.stderr.on('data',x=>logs+=x.toString());
@@ -110,6 +112,44 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(valid.status,201);
  const my=await call('/api/products','GET',undefined,betaCookie);
  assert.equal(my.result.length,1);
+ // Tenant-isolated catalog: images, custom variants and campaign references.
+ const productId=valid.result.id;
+ const storage=await call('/api/products/storage','GET',undefined,betaCookie);
+ assert.equal(storage.status,200);
+ assert.equal(storage.result.configured,true);
+ const variantSave=await call('/api/products/'+productId+'/variants','PUT',{variants:[
+  {name:'Pequena',sku:'BET-P',priceCents:2990,stockQuantity:3,active:true},
+  {name:'Grande',sku:'BET-G',priceCents:4990,stockQuantity:0,active:true}
+ ]},betaCookie,betaCsrf);
+ assert.equal(variantSave.status,200,JSON.stringify(variantSave.result));
+ const variantsCrossTenant=await call('/api/products/'+alphaId+'/variants','PUT',{variants:[{name:'Invasão',priceCents:1}]},betaCookie,betaCsrf);
+ assert.equal(variantsCrossTenant.status,404);
+ const photo=await sharp({create:{width:96,height:96,channels:3,background:'#be8272'}}).png().toBuffer();
+ const uploaded=await call('/api/products/'+productId+'/media','POST',{contentBase64:photo.toString('base64'),alt:'Pizza'},betaCookie,betaCsrf);
+ assert.equal(uploaded.status,201,JSON.stringify(uploaded.result));
+ const mediaId=uploaded.result.id;
+ const ownFile=await fetch(base+uploaded.result.url,{headers:{Cookie:betaCookie}});
+ assert.equal(ownFile.status,200);
+ assert.equal(ownFile.headers.get('content-type'),'image/jpeg');
+ assert.equal(Buffer.from(await ownFile.arrayBuffer()).subarray(0,3).toString('hex'),'ffd8ff');
+ const hiddenFile=await fetch(base+uploaded.result.url,{headers:{Cookie:adminCookie}});
+ assert.equal(hiddenFile.status,404);
+ const forbiddenUpload=await call('/api/products/'+alphaId+'/media','POST',{contentBase64:photo.toString('base64')},betaCookie,betaCsrf);
+ assert.equal(forbiddenUpload.status,404);
+ const campaign=await call('/api/products/'+productId+'/campaigns','POST',{provider:'meta_ads',campaignId:'1200000123456789',label:'Pizza Sorocaba'},betaCookie,betaCsrf);
+ assert.equal(campaign.status,201);
+ assert.equal(campaign.result.verified,false);
+ const listCatalog=await call('/api/products','GET',undefined,betaCookie);
+ assert.equal(listCatalog.result[0].variants.length,2);
+ assert.equal(listCatalog.result[0].media.length,1);
+ assert.equal(listCatalog.result[0].campaigns.length,1);
+ const crossCampaign=await call('/api/products/'+alphaId+'/campaigns','POST',{provider:'meta_ads',campaignId:'12000012345'},betaCookie,betaCsrf);
+ assert.equal(crossCampaign.status,404);
+ const deleted=await call('/api/products/'+productId+'/media/'+mediaId,'DELETE',{},betaCookie,betaCsrf);
+ assert.equal(deleted.status,200);
+ const gone=await fetch(base+uploaded.result.url,{headers:{Cookie:betaCookie}});
+ assert.equal(gone.status,404);
+
  const malformed=await call('/api/imports','POST',{filename:'chat.txt',content:'texto que não é uma conversa'},betaCookie,betaCsrf);
  assert.equal(malformed.status,422);
  const imported=await call('/api/imports','POST',{filename:'chat.txt',content:'[03/11/2026, 11:01] Alice: Olá tudo bem\n[03/11/2026, 11:02] Atendente: Temos opções a partir de hoje\n[03/11/2026, 11:03] Alice: Pode enviar cardápio para 15981142577'},betaCookie,betaCsrf);
