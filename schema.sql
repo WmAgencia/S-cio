@@ -224,3 +224,60 @@ CREATE TABLE IF NOT EXISTS waakg_import_snapshots (
  FOREIGN KEY(tenant_id,import_id) REFERENCES imports(tenant_id,id) ON DELETE CASCADE,
  UNIQUE(tenant_id,channel_id,jid_hash,fingerprint)
 );
+
+
+-- Catalog phase: additive schema, existing products and prices remain unchanged.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS sku text;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_quantity integer;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS compare_at_price_cents integer;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+DO $product_catalog_constraints$
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conname='products_stock_quantity_valid' AND conrelid='products'::regclass)
+ THEN ALTER TABLE products ADD CONSTRAINT products_stock_quantity_valid CHECK(stock_quantity IS NULL OR stock_quantity>=0); END IF;
+ IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conname='products_compare_at_valid' AND conrelid='products'::regclass)
+ THEN ALTER TABLE products ADD CONSTRAINT products_compare_at_valid CHECK(compare_at_price_cents IS NULL OR compare_at_price_cents>=0); END IF;
+END $product_catalog_constraints$;
+CREATE UNIQUE INDEX IF NOT EXISTS products_tenant_id_fk ON products(tenant_id,id);
+CREATE UNIQUE INDEX IF NOT EXISTS products_tenant_sku_unique ON products(tenant_id,sku) WHERE sku IS NOT NULL AND sku<>'';
+CREATE TABLE IF NOT EXISTS product_variants(
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ product_id uuid NOT NULL,
+ name text NOT NULL CHECK(char_length(name) BETWEEN 1 AND 100),
+ sku text,
+ price_cents integer NOT NULL CHECK(price_cents>=0 AND price_cents<100000000),
+ stock_quantity integer CHECK(stock_quantity IS NULL OR stock_quantity>=0),
+ active boolean NOT NULL DEFAULT true,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(tenant_id,product_id) REFERENCES products(tenant_id,id) ON DELETE CASCADE,
+ UNIQUE(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS product_variants_tenant_product ON product_variants(tenant_id,product_id);
+CREATE UNIQUE INDEX IF NOT EXISTS product_variants_tenant_sku_unique ON product_variants(tenant_id,sku) WHERE sku IS NOT NULL AND sku<>'';
+CREATE TABLE IF NOT EXISTS product_media (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ product_id uuid NOT NULL,
+ object_key text NOT NULL,
+ content_type text NOT NULL CHECK(content_type='image/jpeg'),
+ bytes integer NOT NULL CHECK(bytes>0 AND bytes<=2200000),
+ alt text NOT NULL DEFAULT '' CHECK(char_length(alt)<=200),
+ created_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(tenant_id,product_id) REFERENCES products(tenant_id,id) ON DELETE CASCADE,
+ UNIQUE(tenant_id,object_key)
+);
+CREATE INDEX IF NOT EXISTS product_media_tenant_product ON product_media(tenant_id,product_id);
+CREATE TABLE IF NOT EXISTS product_campaign_links (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ product_id uuid NOT NULL,
+ provider text NOT NULL CHECK(provider IN ('meta_ads','google_ads')),
+ campaign_id text NOT NULL CHECK(char_length(campaign_id) BETWEEN 1 AND 150),
+ label text NOT NULL DEFAULT '' CHECK(char_length(label)<=120),
+ verified boolean NOT NULL DEFAULT false,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(tenant_id,product_id) REFERENCES products(tenant_id,id) ON DELETE CASCADE,
+ UNIQUE(tenant_id,product_id,provider,campaign_id)
+);
+CREATE INDEX IF NOT EXISTS product_campaign_links_tenant_product ON product_campaign_links(tenant_id,product_id);
