@@ -9,7 +9,7 @@ SaaS multiempresa de atendimento e vendas. Projeto independente do Prospector: n
 - Contas isoladas por empresa (tenant_id em todas as consultas de dados).
 - Login seguro com scrypt, sessões persistentes, cookie HttpOnly/SameSite e CSRF.
 - Cadastro de WhatsApps, produtos, descrições e preços oficiais.
-- Importação de conversas exportadas do WhatsApp em .txt ou .md. Para .zip, extrair o texto primeiro.
+- Importação de múltiplas conversas do WhatsApp em `.txt`, `.md` ou ZIP de exportação sem mídia; ZIPs são extraídos em memória com limites de tamanho, sem armazenar o arquivo bruto.
 - Base Markdown anonimizada por empresa. Interlocutores ganham nomes genéricos; padrões de telefone, e-mail, links e documentos numéricos são mascarados.
 - Configuração de nome, tom e instruções do agente.
 - Simulador de atendimento com Groq (quando a chave estiver configurada). Nunca envia mensagens.
@@ -29,7 +29,7 @@ SaaS multiempresa de atendimento e vendas. Projeto independente do Prospector: n
 
 ## Segurança e limites
 
-MVP para testes e pilotos supervisionados, ainda não preparado para venda irrestrita. Não oferece envios automáticos, conexão real de WhatsApp sem credenciais oficiais, cobrança Stripe, redefinição de senha, backups de restauração testados, exclusão/retensão LGPD, chamadas de voz, importação direta de ZIP ou isolamento PostgreSQL RLS adicional. O campo de plano é administrativo e não efetua cobranças.
+MVP para testes e pilotos supervisionados, ainda não preparado para venda irrestrita. Não oferece envios automáticos, conexão real de WhatsApp sem credenciais oficiais, cobrança Stripe, redefinição de senha, backups de restauração testados, exclusão/retensão LGPD, chamadas de voz, isolamento PostgreSQL RLS adicional. O campo de plano é administrativo e não efetua cobranças.
 
 Treine o agente somente com conversas cuja utilização esteja autorizada. A anonimização inicial trata padrões comuns, mas não garante remoção completa de todos os dados pessoais inseridos no texto; revise arquivos antes de importar.
 
@@ -40,5 +40,7 @@ A configuração do agente como "Preparado" nunca inicia atendimento real ou men
 Node.js 20+ e PostgreSQL.
 
 Comandos: npm install, npm test e npm start.
+
+Limites de importação: `.txt` e `.md` até 700 KB por arquivo; ZIP até 2 MB, contendo até 25 arquivos de conversa e no máximo 2,5 MB descompactados no total. Arquivos de mídia são ignorados. Conversas são anonimizadas por padrões antes de gerar a referência Markdown; nomes de arquivos não entram no prompt de IA. A anonimização automática não substitui uma revisão humana.
 
 O teste e2e requer DATABASE_URL apontando para um Postgres descartável. O GitHub Actions provisiona esse Postgres automaticamente; não use banco de produção para rodar o teste de instalação.
