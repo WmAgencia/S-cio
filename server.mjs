@@ -108,7 +108,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:!!process.env.GROQ_API_KEY});
  }
- if(method==='GET'&&['/','/index.html','/app.js','/app.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/app.js','/app.css','/neo-theme.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -189,6 +189,26 @@ async function handle(req,res){
   await query('DELETE FROM sessions WHERE token_hash=$1',[a.token_hash]);
   res.setHeader('Set-Cookie',sessionCookie('',true));
   return json(res,200,{ok:true});
+ }
+ // Real activity grouped by period for the dashboard visualizations.
+ // All counts are tenant-scoped; the chart never uses illustrative or invented data.
+ if(method==='GET'&&pathname==='/api/dashboard/activity'){
+  const requested=new URL(req.url,'http://local').searchParams.get('range')||'6m';
+  const ranges={'12m':{count:12,unit:'month'},'6m':{count:6,unit:'month'},'3m':{count:3,unit:'month'},'1m':{count:30,unit:'day'}};
+  const range=ranges[requested];
+  if(!range)throw fail(400,'Período inválido.');
+  const interval=range.unit==='day'?'1 day':'1 month';
+  const sql=`WITH buckets AS (
+   SELECT date_trunc('${range.unit}', now()) - step * interval '${interval}' AS bucket
+   FROM generate_series(${range.count-1},0,-1) AS series(step)
+  ) SELECT to_char(b.bucket,'YYYY-MM-DD') AS date,
+   COALESCE(count(m.id) FILTER (WHERE m.direction='inbound'),0)::int AS inbound,
+   COALESCE(count(m.id) FILTER (WHERE m.direction='outbound'),0)::int AS outbound
+   FROM buckets b LEFT JOIN messages m ON m.tenant_id=$1
+    AND m.created_at>=b.bucket AND m.created_at<b.bucket + interval '${interval}'
+   GROUP BY b.bucket ORDER BY b.bucket ASC`;
+  const results=await query(sql,[a.active_tenant_id]);
+  return json(res,200,{range:requested,granularity:range.unit,points:results.rows});
  }
  if(method==='GET'&&pathname==='/api/dashboard'){
   const [ch,prod,imp,conv,msg]=await Promise.all([

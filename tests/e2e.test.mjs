@@ -90,6 +90,18 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const adminCookie=setup.cookie.split(';')[0],csrf=setup.result.csrf;
  const me=await call('/api/me','GET',undefined,adminCookie);
  assert.equal(me.result.user.platformOwner,true);
+ const initialActivity=await call('/api/dashboard/activity?range=12m','GET',undefined,adminCookie);
+ assert.equal(initialActivity.status,200,JSON.stringify(initialActivity.result));
+ assert.equal(initialActivity.result.points.length,12,'Chart has 12 monthly buckets');
+ assert.ok(initialActivity.result.points.every(p=>Number.isInteger(p.inbound)&&Number.isInteger(p.outbound)));
+ const dailyActivity=await call('/api/dashboard/activity?range=1m','GET',undefined,adminCookie);
+ assert.equal(dailyActivity.status,200);
+ assert.equal(dailyActivity.result.points.length,30,'Last-month filter returns real daily buckets');
+ const badRange=await call('/api/dashboard/activity?range=decades','GET',undefined,adminCookie);
+ assert.equal(badRange.status,400,'User input cannot enter SQL date interval');
+ const anonymousActivity=await call('/api/dashboard/activity?range=6m');
+ assert.equal(anonymousActivity.status,401,'Analytics must require authentication');
+
  assert.equal(me.result.user.phone,null,'Existing accounts continue working without a phone');
  const noCsrf=await call('/api/me/phone','POST',{phone:'(15) 99999-9911',currentPassword:'SenhaMuitoForte2026!'},adminCookie);
  assert.equal(noCsrf.status,403,'Phone change requires CSRF');
@@ -117,6 +129,11 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(switchTenant.status,200);
  const betaProducts=await call('/api/products','GET',undefined,adminCookie);
  assert.equal(betaProducts.result.length,0);
+ const betaActivity=await call('/api/dashboard/activity?range=6m','GET',undefined,adminCookie);
+ assert.equal(betaActivity.status,200);
+ assert.equal(betaActivity.result.points.reduce((n,p)=>n+p.inbound+p.outbound,0),0,
+  'Fresh tenant cannot see messages in other company charts');
+
  const crossUpdate=await call('/api/products/'+alphaId,'PATCH',{name:'Produto atacado',description:'',priceCents:1,active:true},adminCookie,csrf);
  assert.equal(crossUpdate.status,404);
  const betaLogin=await call('/api/login','POST',{email:'beta@test.invalid',password:'SenhaBetaMuitoForte2026'});
