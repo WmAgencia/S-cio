@@ -57,7 +57,7 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(malformed.status,422);
  const imported=await call('/api/imports','POST',{filename:'chat.txt',content:'[03/11/2026, 11:01] Alice: Olá tudo bem\n[03/11/2026, 11:02] Atendente: Temos opções a partir de hoje\n[03/11/2026, 11:03] Alice: Pode enviar cardápio para 15981142577'},betaCookie,betaCsrf);
  assert.equal(imported.status,201);
- const exported='[03/11/2026, 12:01] Nome Comprador: Quero reservar a pizza de calabresa\\n[03/11/2026, 12:02] Vendas: Claro! Qual tamanho?\\n[03/11/2026, 12:03] Nome Comprador: A grande, por favor';
+ const exported='[03/11/2026, 12:01] Nome Comprador: Quero reservar a pizza de calabresa\n[03/11/2026, 12:02] Vendas: Claro! Qual tamanho?\n[03/11/2026, 12:03] Nome Comprador: A grande, por favor';
  const archive=zipStore([['cliente-1.txt',exported],['cliente-2.txt',exported],['foto.jpg','ignore media']]);
  const zipResult=await call('/api/imports/zip','POST',{filename:'exportacao.zip',contentBase64:archive},betaCookie,betaCsrf);
  assert.equal(zipResult.status,201,JSON.stringify(zipResult.result));
