@@ -9,7 +9,7 @@ const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'sho
 const val=(form,k)=>String(new FormData(form).get(k)||'').trim();
 const errMsg=error=>String(error?.message||'Não foi possível concluir a solicitação.');
 const view=$('#view');
-let toastTimer,trainingTimer;
+let toastTimer,trainingTimer,waQrTimer;
 
 function toast(message,error=false){
  const el=$('#toast');el.textContent=message;el.className='toast'+(error?' error':'');
@@ -58,7 +58,7 @@ async function boot(){
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
 async function changeView(next){
- clearTimeout(trainingTimer);
+ clearTimeout(trainingTimer);clearTimeout(waQrTimer);
  if(next==='admin'&&!state.me?.user.platformOwner)return;
  state.view=next;
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
@@ -105,20 +105,51 @@ async function channels(){
  if(!state.me.user.platformOwner) $('#channelForm').elements.externalPhoneId.disabled=true;
  $('#channelForm').addEventListener('submit',async ev=>{ev.preventDefault();const f=ev.currentTarget;const data=formValues(f);await action(async()=>{await api('/api/channels','POST',data);toast('Canal cadastrado. Ainda não conectado.');await channels();});});
  view.insertAdjacentHTML('beforeend',
-  '<div class="card card-pad section-gap"><div class="section-title">WA-AKG — histórico para treinamento</div>'+
-  '<p class="form-note">Conectamos sessões existentes com verificação do número. A leitura é somente para treinamento: não envia nem responde mensagens.</p>'+
+  '<div class="card card-pad section-gap"><div class="section-title">Conexão de WhatsApps por QR Code</div>'+
+  '<p class="form-note">Cada empresa conecta seus números por QR Code. O gateway exclusivo permanece em modo leitura: não envia nem responde mensagens.</p>'+
   '<p class="form-note">'+(waConfig.configured?'Gateway configurado no servidor.':'Gateway do Sócio ainda não configurado pela Consecom.')+'</p>'+
-  (linked.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>Sessão da empresa</th><th>Conexão</th></tr></thead><tbody>'+
-    linked.map(c=>'<tr><td><strong>'+e(c.label)+'</strong><div class="table-detail">'+e(c.phone)+'</div></td><td><button class="btn sm soft" data-wa-check="'+e(c.id)+'">Verificar</button><span class="form-note" data-wa-state="'+e(c.id)+'"></span></td></tr>').join('')+'</tbody></table></div>':
+  (linked.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>WhatsApp</th><th>Controles</th></tr></thead><tbody>'+
+    linked.map(c=>'<tr><td><strong>'+e(c.label)+'</strong><div class="table-detail">'+e(c.phone?.startsWith('pending-')?'Aguardando QR Code':c.phone)+'</div></td>'+
+    '<td class="row-actions"><button class="btn sm soft" data-wa-qr="'+e(c.id)+'">QR</button>'+
+    '<button class="btn sm soft" data-wa-check="'+e(c.id)+'">Verificar</button>'+
+    '<button class="btn sm soft" data-wa-control="start" data-wa-id="'+e(c.id)+'">Reiniciar</button>'+
+    '<button class="btn sm soft" data-wa-control="stop" data-wa-id="'+e(c.id)+'">Pausar</button>'+
+    '<button class="btn sm soft" data-wa-control="logout" data-wa-id="'+e(c.id)+'">Desconectar</button>'+
+    '<span class="form-note" data-wa-state="'+e(c.id)+'"></span></td></tr>').join('')+'</tbody></table></div>':
     '<p class="form-note">Nenhuma sessão WA-AKG vinculada a esta empresa.</p>')+
+  (waConfig.configured?'<form id="waakgSelfConnect" class="form-stack section-gap">'+
+   '<div class="section-title">Conectar novo número</div>'+
+   '<label>Nome do WhatsApp<input name="label" required maxlength="90" placeholder="Ex.: Loja Centro"></label>'+
+   '<p class="form-note">Ao criar, um QR Code aparecerá. Abra WhatsApp > Dispositivos conectados > Conectar dispositivo. A IA permanece desativada para envios.</p>'+
+   '<button class="btn primary">Gerar QR Code →</button></form>':'')+
   (state.me.user.platformOwner&&waConfig.configured?
     '<form id="waakgLinkForm" class="form-stack section-gap"><div class="section-title">Vincular sessão existente — Consecom</div>'+
     '<label>Nome comercial<input name="label" required maxlength="90" placeholder="Vendas 1"></label>'+
     '<label>Número conectado com DDI e DDD<input name="phone" required placeholder="5515999999999"></label>'+
     '<label>ID da sessão WA-AKG já conectada<input name="sessionId" required placeholder="Identificador da sessão"></label>'+
     '<button class="btn primary">Verificar número e vincular</button></form>':
-    '<p class="form-note">A associação inicial de uma sessão existente é realizada pela Consecom. Conexão automática por QR será adicionada após isolar as credenciais e desabilitar o bot nativo do gateway.</p>')+
+    '<p class="form-note">Conexão por QR está disponível para proprietários e administradores quando o gateway exclusivo estiver online.</p>')+
+  '<div id="waQrPanel" class="card card-pad section-gap hidden" style="max-width:430px"><div class="section-title">Conectar WhatsApp</div>'+
+   '<img id="waQrImage" width="280" height="280" alt="QR Code para conectar WhatsApp" style="display:none;max-width:100%;background:white;margin:16px auto">'+
+   '<p id="waQrHelp" class="form-note">Preparando QR Code...</p>'+
+   '<button class="btn soft" type="button" id="waQrClose">Fechar QR</button></div>'+
   '</div>');
+ $('#waakgSelfConnect')?.addEventListener('submit',async ev=>{
+  ev.preventDefault();const label=val(ev.currentTarget,'label');
+  await action(async()=>{const channel=await api('/api/waakg/channels/connect','POST',{label});
+   toast('WhatsApp preparado.');await channels();await showWaQr(channel.id);});
+ });
+ $('#waQrClose')?.addEventListener('click',()=>{clearTimeout(waQrTimer);$('#waQrPanel').classList.add('hidden');});
+ view.querySelectorAll('[data-wa-qr]').forEach(button=>button.addEventListener('click',()=>showWaQr(button.dataset.waQr)));
+ view.querySelectorAll('[data-wa-control]').forEach(button=>button.addEventListener('click',async()=>{
+  const id=button.dataset.waId,control=button.dataset.waControl;
+  if(control==='logout'&&!confirm('Desconectar este WhatsApp e apagar a autenticação da sessão no gateway?'))return;
+  await action(async()=>{await api('/api/waakg/channels/'+id+'/'+control,'POST',{});
+   toast(control==='logout'?'WhatsApp desconectado.':'Comando enviado ao gateway.');
+   await channels();
+   if(control==='start')await showWaQr(id);
+  });
+ }));
  $('#waakgLinkForm')?.addEventListener('submit',async ev=>{
   ev.preventDefault();const data=formValues(ev.currentTarget);
   await action(async()=>{await api('/api/waakg/channels/link','POST',data);toast('Sessão validada e vinculada.');await channels();});
@@ -129,6 +160,30 @@ async function channels(){
   catch(err){stateEl.textContent=errMsg(err);}
  }));
 }
+async function showWaQr(channelId){
+ clearTimeout(waQrTimer);
+ const panel=$('#waQrPanel'),image=$('#waQrImage'),help=$('#waQrHelp');
+ if(!panel||!image||!help)return;
+ panel.classList.remove('hidden');help.textContent='Preparando QR Code...';
+ image.style.display='none';panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+ async function poll(){
+  if(state.view!=='channels'||$('#waQrPanel')?.classList.contains('hidden'))return;
+  try{
+   const status=await api('/api/waakg/channels/'+channelId+'/status');
+   if(status.connected){
+    clearTimeout(waQrTimer);help.textContent='Conectado e número verificado. Nenhuma resposta automática foi ativada.';
+    image.style.display='none';toast('WhatsApp conectado com sucesso!');
+    return;
+   }
+   const qr=await api('/api/waakg/channels/'+channelId+'/qr');
+   if(qr.ready&&qr.image){image.src=qr.image;image.style.display='block';help.textContent='Escaneie o QR usando WhatsApp > Dispositivos conectados. O código pode mudar automaticamente.';}
+   else{image.style.display='none';help.textContent='Aguardando QR. Se não aparecer, use Reiniciar na lista de números.';}
+  }catch(error){help.textContent='Não foi possível buscar o QR: '+errMsg(error);}
+  waQrTimer=setTimeout(poll,3000);
+ }
+ await poll();
+}
+
 async function products(){
  const list=await api('/api/products');
  view.innerHTML=heading('CATÁLOGO','Produtos e serviços.','Informações oficiais que o Sócio utiliza ao conversar com seus clientes.')+
