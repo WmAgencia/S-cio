@@ -129,7 +129,7 @@ async function products(){
 async function training(){
  const [list,ag]=await Promise.all([api('/api/imports'),api('/api/agent')]);
  view.innerHTML=heading('PERSONALIZAÇÃO','Aprenda com as boas conversas.','Envie 10 a 20 atendimentos que deram certo. O Sócio extrai exemplos de linguagem sem usar os dados para treinar um modelo compartilhado.')+
- '<div class="two-pane train"><div class="card card-pad"><div class="section-title">Importar conversas de sucesso</div><div class="file-drop"><span class="file-icon">⇧</span><strong>Clique para escolher arquivos .txt ou .md</strong><small>Pode selecionar várias conversas de uma vez · até 700 KB por arquivo</small><input type="file" id="importInput" accept=".txt,.md,text/plain,text/markdown" multiple aria-label="Escolher conversas"></div><p class="form-note">No WhatsApp: abra a conversa → Exportar conversa → Sem mídia. Se receber um arquivo ZIP, extraia o .txt antes de importar.</p><div class="info-strip"><strong>Privacidade em primeiro lugar</strong>Utilize conversas que sua empresa está autorizada a tratar. Telefones, e-mails e documentos numéricos são mascarados; nomes de participantes são substituídos por identificadores genéricos.</div><div id="importFeedback" class="form-note"></div></div>'+
+ '<div class="two-pane train"><div class="card card-pad"><div class="section-title">Importar conversas de sucesso</div><div class="file-drop"><span class="file-icon">⇧</span><strong>Escolha conversas .txt, .md ou .zip</strong><small>Múltiplos arquivos · até 700 KB por texto ou 2 MB por ZIP</small><input type="file" id="importInput" accept=".txt,.md,.zip,text/plain,text/markdown,application/zip" multiple aria-label="Escolher conversas"></div><p class="form-note">No WhatsApp: abra a conversa → Exportar conversa → Sem mídia. Você também pode enviar o ZIP da exportação diretamente, sem extraí-lo.</p><div class="info-strip"><strong>Privacidade em primeiro lugar</strong>Utilize conversas que sua empresa está autorizada a tratar. Telefones, e-mails e documentos numéricos são mascarados; nomes de participantes são substituídos por identificadores genéricos.</div><div id="importFeedback" class="form-note"></div></div>'+
  '<div>'+panel('Base de experiência',list.length+' conversa(s) importada(s).',
  '<div class="card-pad"><div class="progress-track"><div class="progress-fill" style="width:'+Math.min(100,list.length*10)+'%"></div></div><p class="form-note">'+Math.min(list.length,10)+' de 10 referências sugeridas para o primeiro treinamento.</p></div>'+
  (list.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>Arquivo</th><th>Mensagens</th></tr></thead><tbody>'+list.map(x=>'<tr><td><strong>'+e(x.filename)+'</strong><div class="table-detail">'+date(x.created_at)+'</div></td><td>'+e(x.message_count)+'</td></tr>').join('')+'</tbody></table></div>':empty('✳','Ainda não há exemplos','Suas primeiras conversas de referência aparecerão aqui.')))+
@@ -137,11 +137,18 @@ async function training(){
  $('#importInput').addEventListener('change',async ev=>{
   const files=Array.from(ev.target.files||[]);
   const feedback=$('#importFeedback');if(!files.length)return;
-  if(files.some(f=>!/\.(txt|md)$/i.test(f.name)||f.size>700000))return toast('Selecione apenas .txt/.md até 700 KB.',true);
+  if(files.some(f=>!(/\.(txt|md|zip)$/i.test(f.name))||f.size>(/\.zip$/i.test(f.name)?2000000:700000)))return toast('Selecione textos até 700 KB ou ZIPs até 2 MB.',true);
   let okay=0;const errors=[];
   for(const file of files){
    feedback.textContent='Importando '+e(file.name)+'... ('+(okay+errors.length+1)+'/'+files.length+')';
-   try{await api('/api/imports','POST',{filename:file.name,content:await file.text()});okay++;}
+   try{
+    if(/\.zip$/i.test(file.name)){
+     const bytes=new Uint8Array(await file.arrayBuffer()),parts=[];
+     for(let i=0;i<bytes.length;i+=32768)parts.push(String.fromCharCode(...bytes.subarray(i,i+32768)));
+     const result=await api('/api/imports/zip','POST',{filename:file.name,contentBase64:btoa(parts.join(''))});
+     okay+=result.conversationCount;
+    }else{await api('/api/imports','POST',{filename:file.name,content:await file.text()});okay++;}
+   }
    catch(ex){errors.push(file.name+': '+errMsg(ex));}
   }
   toast(okay+' arquivo(s) importado(s).'+(errors.length?' '+errors.length+' falha(s).':'') ,!okay);
