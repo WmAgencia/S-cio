@@ -39,6 +39,18 @@ A ligação depende do WhatsApp do proprietário **escanear o QR**: isso não po
 
 **Limite e conformidade:** o modo atual usa uma integração não oficial baseada em WhatsApp Web, sujeita a incompatibilidades e eventuais restrições do WhatsApp. Para oferecer a operação em escala, há uma etapa futura de migração/alternativa para WhatsApp Business Platform oficial, conforme elegibilidade e requisitos. A importação de mensagens deve ser feita com autorização e política de retenção.
 
+## Catálogo comercial — produtos, fotos, variações e campanhas
+
+A guia **Produtos e serviços** permite criar e editar produtos com nome, descrição, SKU opcional, preço em centavos, preço anterior opcional, estoque e disponibilidade. É possível adicionar até **25 variações** com preço e estoque próprios e até **8 fotografias** por produto.
+
+As imagens passam por transcodificação no servidor (JPG otimizado, 1600 px, sem EXIF), ficam armazenadas no bucket privado Railway `socio-product-media` e são exibidas somente por rotas autenticadas com `tenant_id` confirmado. O cliente nunca recebe credenciais S3 nem um URL público do bucket. A aplicação usa variáveis de referência `SOCIO_S3_ENDPOINT`, `SOCIO_S3_BUCKET`, `SOCIO_S3_ACCESS_KEY`, `SOCIO_S3_SECRET_KEY` e `SOCIO_S3_REGION`. Este armazenamento é exclusivo para a versão Railway, sem alterar o Supabase preparado para migração futura.
+
+**Vincular campanhas** registra uma relação manual com um ID do Meta Ads ou Google Ads; ela aparece como **Não verificada**, sem consultar contas ou executar anúncios. A sincronização por OAuth e a execução de campanhas ficam para a etapa específica de marketing.
+
+O **laboratório de IA** inclui preços, opções e disponibilidade do catálogo oficial no prompt, e pode mostrar as fotos privadas de produtos cujo nome corresponda claramente ao texto perguntado. Isso **não envia fotos pelo WhatsApp** nem confirma automaticamente pedidos. Se `GROQ_API_KEY` não estiver configurada, o laboratório informa que precisa dessa configuração para gerar respostas. Produtos e variações com estoque zero são marcados como indisponíveis.
+
+Tamanhos e limites: foto original até 3 MB por requisição ao backend (o navegador otimiza fotos maiores antes do envio), conversão validada por Sharp, até 8 fotos por produto e até 500 produtos por empresa. Consulte o painel para administrar imagens e variações.
+
 ## WA-AKG: leitura de históricos sem disparos
 
 O aplicativo aceita um gateway WA-AKG próprio, usando variáveis secretas do Railway `WA_AKG_BASE_URL`, `WA_AKG_API_KEY` e `CHANNEL_ENCRYPTION_KEY` (mínimo 32 caracteres). Não reutilize credenciais do Prospector nem um gateway que misture contas de terceiros. Use HTTPS ou endereço privado `.railway.internal`.
