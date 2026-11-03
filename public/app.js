@@ -199,18 +199,30 @@ async function inbox(){
  view.querySelectorAll('[data-thread]').forEach(b=>b.addEventListener('click',()=>openThread(b.dataset.thread)));
  if(data.length)await openThread(data[0].id);
 }
+
 async function openThread(convId){
  const data=await api('/api/conversations/'+convId+'/messages');
  state.currentConversation=convId;
  view.querySelectorAll('[data-thread]').forEach(b=>b.classList.toggle('active',b.dataset.thread===convId));
  const c=data.conversation;
+ const pending=(data.jobs||[]).filter(j=>j.status!=='sent').slice(0,12);
+ const stateName={awaiting_ai:'IA preparando',generating:'Gerando resposta',ready:'Aguardando envio',sending:'Enviando',failed:'Falha confirmada',unknown:'Entrega não confirmada',cancelled:'Cancelada'};
+ const bubbles=data.messages.map(m=>'<div class="bubble '+(m.direction==='outbound'?'agent':m.direction==='note'?'note':'')+'">'+e(m.body)+'<div class="table-detail">'+e(m.direction==='note'?'Nota interna':m.direction==='outbound'?'Empresa':'Cliente')+' · '+date(m.created_at)+'</div></div>').join('');
+ const pendingHTML=pending.map(j=>'<div class="bubble note"><strong>'+e(stateName[j.status]||j.status)+'</strong><div>'+e(j.body||'Resposta aguardando processamento')+'</div><div class="table-detail">'+e(j.error||'')+'</div></div>').join('');
  $('#threadView').innerHTML='<div class="thread-toolbar"><div><strong>'+e(c.customer_name||c.customer_phone)+'</strong><div class="muted-label">'+e(c.customer_phone)+'</div></div><select id="threadStatus" aria-label="Status da conversa"><option value="open">Aberta</option><option value="human">Atendimento humano</option><option value="resolved">Resolvida</option></select></div>'+
- '<div class="messages-preview">'+(data.messages.length?data.messages.map(m=>'<div class="bubble '+(m.direction==='outbound'?'agent':m.direction==='note'?'note':'')+'">'+e(m.body)+'<div class="table-detail">'+e(m.direction==='note'?'Nota interna':m.direction==='outbound'?'Empresa':'Cliente')+' · '+date(m.created_at)+'</div></div>').join(''):empty('▤','Sem mensagens','Nenhuma mensagem neste histórico.'))+'</div>'+
- '<form id="noteForm" class="chat-compose"><input name="text" maxlength="3000" required placeholder="Escreva uma nota interna (não enviada ao WhatsApp)"><button class="btn primary" type="submit">Salvar nota</button></form>';
+ '<div class="messages-preview">'+(bubbles+pendingHTML||empty('▤','Sem mensagens','Nenhuma mensagem neste histórico.'))+'</div>'+
+ '<form id="replyForm" class="chat-compose"><input name="text" maxlength="1800" required placeholder="Responder pelo WhatsApp oficial (envio real)"><button class="btn primary" type="submit">Responder ↗</button></form>'+
+ '<form id="noteForm" class="chat-compose"><input name="text" maxlength="3000" required placeholder="Nota interna (nunca enviada)"><button class="btn soft" type="submit">Nota</button></form>';
  $('#threadStatus').value=c.status;
  $('#threadStatus').addEventListener('change',async ev=>{const status=ev.target.value;await action(async()=>{await api('/api/conversations/'+convId,'PATCH',{status});toast('Status atualizado.');});});
+ $('#replyForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();const txt=val(ev.currentTarget,'text');
+  if(!confirm('Confirma o envio desta mensagem real ao cliente pelo WhatsApp?'))return;
+  await action(async()=>{await api('/api/conversations/'+convId+'/reply','POST',{text:txt});toast('Mensagem colocada na fila. Confira o status, não é confirmação de entrega.');await openThread(convId);});
+ });
  $('#noteForm').addEventListener('submit',async ev=>{ev.preventDefault();const txt=val(ev.currentTarget,'text');await action(async()=>{await api('/api/conversations/'+convId+'/note','POST',{text:txt});await openThread(convId);toast('Nota interna registrada.');});});
 }
+
 async function team(){
  const data=await api('/api/team');
  view.innerHTML=heading('PESSOAS','Sua equipe.','Convide colaboradores com acesso apenas aos dados da sua empresa.')+
