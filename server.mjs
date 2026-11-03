@@ -4,11 +4,14 @@ import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk} from './lib.mjs';
+import {encryptToken,validateMetaPhone} from './meta.mjs';
+import {createReplyWorker} from './worker.mjs';
 
 const PORT=Number(process.env.PORT||3000);
 const DATABASE_URL=process.env.DATABASE_URL;
 if(!DATABASE_URL){console.error('DATABASE_URL não configurada');process.exit(1);}
 const pool=new Pool({connectionString:DATABASE_URL,max:10,connectionTimeoutMillis:8000,idleTimeoutMillis:30000});
+let replyWorker=null;
 const query=(sql,values=[])=>pool.query(sql,values);
 const json=(res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
 const fail=(status,message)=>Object.assign(new Error(message),{status});
@@ -70,7 +73,7 @@ async function handle(req,res){
  res.setHeader('Referrer-Policy','no-referrer');
  res.setHeader('X-Frame-Options','DENY');
  res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
- if(method==='GET'&&pathname==='/health')return json(res,200,{ok:true,app:'socio',database:'connected'});
+ if(method==='GET'&&pathname==='/health'){await query('SELECT 1');return json(res,200,{ok:true,app:'socio',database:'connected'});}
  if(method==='GET'&&pathname==='/api/bootstrap'){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:!!process.env.GROQ_API_KEY});
@@ -144,7 +147,7 @@ async function handle(req,res){
   return json(res,200,{channels:ch.rows[0].n,products:prod.rows[0].n,imports:imp.rows[0].n,openConversations:conv.rows[0].n,inboundMessages:msg.rows[0].n});
  }
  if(method==='GET'&&pathname==='/api/channels'){
-  const r=await query('SELECT id,label,phone,provider,external_phone_id,status,created_at FROM channels WHERE tenant_id=$1 ORDER BY created_at DESC',[a.active_tenant_id]);
+  const r=await query('SELECT id,label,phone,provider,external_phone_id,status,auto_reply,created_at FROM channels WHERE tenant_id=$1 ORDER BY created_at DESC',[a.active_tenant_id]);
   return json(res,200,r.rows);
  }
  if(method==='POST'&&pathname==='/api/channels'){
@@ -157,6 +160,34 @@ async function handle(req,res){
   await audit(a,'channel.created',{channelId:r.rows[0].id});
   return json(res,201,r.rows[0]);
  }
+ 
+ const channelMatch=pathname.match(/^\/api\/channels\/([a-f0-9-]{36})\/(link|auto)$/);
+ if(channelMatch&&method==='POST'){
+  const channel=await query('SELECT id,phone,status,access_token_ciphertext FROM channels WHERE id=$1 AND tenant_id=$2',[channelMatch[1],a.active_tenant_id]);
+  if(!channel.rowCount)throw fail(404,'Canal não encontrado.');
+  const {data}=await body(req);
+  if(channelMatch[2]==='link'){
+   needPlatform(a);
+   if(!process.env.CHANNEL_ENCRYPTION_KEY)throw fail(503,'Configure CHANNEL_ENCRYPTION_KEY no Railway.');
+   const info=await validateMetaPhone({phoneId:trimmed(data.phoneId,32),displayPhone:channel.rows[0].phone,accessToken:data.accessToken});
+   const token=encryptToken(data.accessToken,process.env.CHANNEL_ENCRYPTION_KEY);
+   const r=await query("UPDATE channels SET external_phone_id=$3,access_token_ciphertext=$4,status='connected',auto_reply=false WHERE id=$1 AND tenant_id=$2 RETURNING id,label,phone,external_phone_id,status,auto_reply",[channelMatch[1],a.active_tenant_id,info.phoneId,token]);
+   await audit(a,'channel.meta_linked',{channelId:r.rows[0].id});
+   return json(res,200,r.rows[0]);
+  }
+  needRole(a,['owner','admin']);
+  if(typeof data.enabled!=='boolean')throw fail(422,'Opção inválida.');
+  if(data.enabled){
+   if(channel.rows[0].status!=='connected'||!channel.rows[0].access_token_ciphertext)throw fail(409,'Valide o canal com a Consecom antes de ligar respostas automáticas.');
+   if(!process.env.GROQ_API_KEY||!process.env.META_APP_SECRET)throw fail(503,'Groq e webhook Meta devem estar configurados antes de ligar as respostas.');
+   const ag=await query('SELECT enabled FROM agents WHERE tenant_id=$1',[a.active_tenant_id]);
+   if(!ag.rows[0]?.enabled)throw fail(409,'Prepare e ative o agente primeiro.');
+  }
+  const q=await query('UPDATE channels SET auto_reply=$3 WHERE id=$1 AND tenant_id=$2 RETURNING id,auto_reply',[channelMatch[1],a.active_tenant_id,data.enabled]);
+  await audit(a,'channel.auto_reply',{channelId:channelMatch[1],enabled:data.enabled});
+  return json(res,200,q.rows[0]);
+ }
+
  if(method==='GET'&&pathname==='/api/products'){
   const r=await query('SELECT id,name,description,price_cents,active FROM products WHERE tenant_id=$1 ORDER BY created_at DESC',[a.active_tenant_id]);
   return json(res,200,r.rows);
@@ -244,14 +275,31 @@ async function handle(req,res){
   const r=await query("SELECT c.id,c.customer_name,c.customer_phone,c.status,c.last_message_at,ch.label AS channel_label,(SELECT m.body FROM messages m WHERE m.conversation_id=c.id AND m.tenant_id=$1 ORDER BY m.created_at DESC LIMIT 1) AS last_message FROM conversations c JOIN channels ch ON ch.id=c.channel_id WHERE c.tenant_id=$1 ORDER BY c.last_message_at DESC LIMIT 80",[a.active_tenant_id]);
   return json(res,200,r.rows);
  }
- const conversationMatch=pathname.match(/^\/api\/conversations\/([a-f0-9-]{36})(?:\/(messages|note))?$/);
+ const conversationMatch=pathname.match(/^\/api\/conversations\/([a-f0-9-]{36})(?:\/(messages|note|reply))?$/);
  if(conversationMatch){
   const conv=await query('SELECT id,status,customer_name,customer_phone FROM conversations WHERE id=$1 AND tenant_id=$2',[conversationMatch[1],a.active_tenant_id]);
   if(!conv.rowCount)throw fail(404,'Conversa não encontrada.');
   if(method==='GET'&&conversationMatch[2]==='messages'){
    const msgs=await query('SELECT id,direction,body,created_at FROM messages WHERE tenant_id=$1 AND conversation_id=$2 ORDER BY created_at DESC LIMIT 150',[a.active_tenant_id,conv.rows[0].id]);
-   return json(res,200,{conversation:conv.rows[0],messages:msgs.rows.reverse()});
+   const jobs=await query('SELECT id,kind,body,status,error,created_at FROM reply_jobs WHERE tenant_id=$1 AND conversation_id=$2 ORDER BY created_at DESC LIMIT 30',[a.active_tenant_id,conv.rows[0].id]);
+   return json(res,200,{conversation:conv.rows[0],messages:msgs.rows.reverse(),jobs:jobs.rows});
   }
+  
+  if(method==='POST'&&conversationMatch[2]==='reply'){
+   needRole(a,['owner','admin','agent']);
+   const {data}=await body(req);
+   if(!validText(data.text,1800))throw fail(422,'Mensagem deve ter até 1800 caracteres.');
+   const connected=await query('SELECT ch.status,ch.access_token_ciphertext,ch.external_phone_id,(SELECT max(created_at) FROM messages WHERE tenant_id=$2 AND conversation_id=$1 AND direction=$3) AS last_inbound FROM conversations c JOIN channels ch ON ch.id=c.channel_id WHERE c.id=$1 AND c.tenant_id=$2',[conv.rows[0].id,a.active_tenant_id,'inbound']);
+   const c=connected.rows[0];
+   if(c?.status!=='connected'||!c.access_token_ciphertext||!c.external_phone_id)throw fail(409,'Canal ainda não validado para envios.');
+   if(!c.last_inbound||Date.now()-new Date(c.last_inbound).getTime()>=23*3600000)throw fail(409,'Mensagem livre indisponível fora da janela de atendimento. Não enviamos modelos sem aprovação.');
+   const jid=id();
+   await query("INSERT INTO reply_jobs(id,tenant_id,conversation_id,kind,body,status) VALUES($1,$2,$3,'manual',$4,'ready')",[jid,a.active_tenant_id,conv.rows[0].id,data.text.trim()]);
+   await audit(a,'reply.queued',{conversationId:conv.rows[0].id,jobId:jid});
+   replyWorker?.drain();
+   return json(res,202,{queued:true,id:jid});
+  }
+
   if(method==='POST'&&conversationMatch[2]==='note'){
    const {data}=await body(req);if(!validText(data.text,3000))throw fail(422,'Nota inválida.');
    await query("INSERT INTO messages(id,tenant_id,conversation_id,direction,body) VALUES($1,$2,$3,'note',$4)",[id(),a.active_tenant_id,conv.rows[0].id,data.text.trim()]);
@@ -323,15 +371,21 @@ async function receiveWhatsApp(req,res){
   try{
    await c.query('BEGIN');
    const conv=await c.query("INSERT INTO conversations(id,tenant_id,channel_id,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5) ON CONFLICT(tenant_id,channel_id,customer_phone) DO UPDATE SET last_message_at=now(),customer_name=CASE WHEN conversations.customer_name='' THEN EXCLUDED.customer_name ELSE conversations.customer_name END RETURNING id",[id(),tenantId,channelId,item.name,item.from]);
-   await c.query("INSERT INTO messages(id,tenant_id,conversation_id,direction,body,provider_id) VALUES($1,$2,$3,'inbound',$4,$5) ON CONFLICT(tenant_id,provider_id) DO NOTHING",[id(),tenantId,conv.rows[0].id,item.body,item.messageId]);
+   const incomingId=id();
+   const saved=await c.query("INSERT INTO messages(id,tenant_id,conversation_id,direction,body,provider_id) VALUES($1,$2,$3,'inbound',$4,$5) ON CONFLICT(tenant_id,provider_id) DO NOTHING RETURNING id",[incomingId,tenantId,conv.rows[0].id,item.body,item.messageId]);
+   if(saved.rowCount){
+    await c.query("INSERT INTO reply_jobs(id,tenant_id,conversation_id,inbound_message_id,kind,status) SELECT $1,$2,$3,$4,'auto','awaiting_ai' WHERE EXISTS(SELECT 1 FROM channels WHERE id=$5 AND tenant_id=$2 AND auto_reply=true AND status='connected') AND EXISTS(SELECT 1 FROM agents WHERE tenant_id=$2 AND enabled=true) AND EXISTS(SELECT 1 FROM conversations WHERE id=$3 AND tenant_id=$2 AND status='open') ON CONFLICT(tenant_id,inbound_message_id,kind) DO NOTHING",[id(),tenantId,conv.rows[0].id,incomingId,channelId]);
+   }
    await c.query('COMMIT');
   }catch(err){await c.query('ROLLBACK');console.error('webhook persistence failed',err?.code||'db error');throw err;}finally{c.release();}
  }
+ replyWorker?.drain();
  return json(res,200,{ok:true});
 }
 async function main(){
  const schema=await readFile(new URL('./schema.sql',import.meta.url),'utf8');
  await query(schema);
+ replyWorker=createReplyWorker(pool,{encryptionKey:process.env.CHANNEL_ENCRYPTION_KEY,groqKey:process.env.GROQ_API_KEY,groqModel:process.env.GROQ_MODEL});
  const server=http.createServer((req,res)=>Promise.resolve(handle(req,res)).catch(e=>{
   const code=e.code;
   if(code==='23505')return json(res,409,{error:'Este e-mail, telefone ou identificador já está cadastrado.'});
@@ -341,6 +395,6 @@ async function main(){
   else res.end();
  }));
  server.listen(PORT,'0.0.0.0',()=>console.log('Socio listening on '+PORT));
- process.on('SIGTERM',()=>server.close(()=>pool.end().then(()=>process.exit(0))));
+ process.on('SIGTERM',()=>(replyWorker?.stop(),server.close(()=>pool.end().then(()=>process.exit(0)))));
 }
 main().catch(e=>{console.error('startup failed',e.message);process.exit(1);});
