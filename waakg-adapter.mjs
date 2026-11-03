@@ -38,6 +38,62 @@ export async function gatewayRead(path,{env=process.env,fetchImpl=fetch,timeoutM
   throw error(503,'Não foi possível consultar o gateway WA-AKG.');
  }finally{clearTimeout(timer);}
 }
+// Mutations are limited to gateway session lifecycle. No message sends.
+export async function gatewayControl(path,{method='POST',payload,env=process.env,fetchImpl=fetch,timeoutMs=16000}={}){
+ const base=gatewayBase(env);
+ if(!/^\/api\/sessions(?:\/[a-zA-Z0-9_-]{6,64}(?:\/(?:start|stop|restart|logout|bot-config))?)?$/.test(path))
+  throw error(400,'Rota de controle inválida.');
+ if(method!=='POST')throw error(400,'Método não permitido.');
+ const controller=new AbortController();
+ const timeout=setTimeout(()=>controller.abort(),Math.min(16000,Math.max(1500,timeoutMs)));
+ try{
+  const res=await fetchImpl(base+path,{method,headers:{'x-api-key':env.WA_AKG_API_KEY,'content-type':'application/json','accept':'application/json'},
+   body:JSON.stringify(payload||{}),signal:controller.signal});
+  const raw=await res.text();
+  if(raw.length>100000)throw error(503,'Resposta grande demais do gateway.');
+  if(!res.ok)throw error(res.status===404?404:503,'Não foi possível executar a operação no gateway.');
+  const data=JSON.parse(raw);
+  if(data?.status===false)throw error(503,'O gateway rejeitou a operação.');
+  return data;
+ }catch(e){if(e.status)throw e;throw error(503,'Gateway não respondeu à operação.');}
+ finally{clearTimeout(timeout);}
+}
+export async function ensureSessionProvisioned(sessionId,name,opts={}){
+ if(!validSessionId(sessionId))throw error(422,'Sessão inválida.');
+ const route='/api/sessions/'+pathPart(sessionId);
+ let exists=false;
+ try{await gatewayRead(route,opts);exists=true;}catch(e){if(e.status!==404)throw e;}
+ if(!exists){
+  const created=await gatewayControl('/api/sessions',{payload:{name:name.slice(0,80),sessionId},...opts});
+  if(created.data?.sessionId!==sessionId)throw error(503,'Gateway não confirmou a sessão solicitada.');
+ }
+ // Read-only requirement is asserted against upstream bot settings before starting.
+ await gatewayControl(route+'/bot-config',{payload:{
+  enabled:false,botName:'Sócio (leitura)',botMode:'OWNER',autoReplyMode:'OWNER',
+  autoRead:false,alwaysOnline:false,enablePing:false,enableUptime:false,
+  enableSticker:false,enableVideoSticker:false,antiSpamEnabled:false
+ },...opts});
+ const config=await gatewayRead(route+'/bot-config',opts);
+ if(config.data?.enabled!==false)throw error(503,'Gateway não confirmou o bloqueio do bot nativo.');
+ await gatewayControl(route+'/start',{payload:{},...opts});
+ return {created:!exists,started:true};
+}
+export async function getSessionQr(sessionId,opts={}){
+ if(!validSessionId(sessionId))throw error(422,'Sessão inválida.');
+ try{
+  const p=await gatewayRead('/api/sessions/'+pathPart(sessionId)+'/qr',opts);
+  const image=String(p.base64||'');
+  if(!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(image)||image.length>75000)
+   throw error(503,'Imagem QR inválida.');
+  return {ready:true,image};
+ }catch(e){if(e.status===404)return {ready:false,image:null};throw e;}
+}
+export async function sessionLifecycle(sessionId,action,opts={}){
+ if(!validSessionId(sessionId)||!['start','stop','restart','logout'].includes(action))
+  throw error(422,'Ação inválida.');
+ return gatewayControl('/api/sessions/'+pathPart(sessionId)+'/'+action,{payload:{},...opts});
+}
+
 export const validSessionId=x=>typeof x==='string'&&/^[A-Za-z0-9_-]{6,64}$/.test(x);
 export function privateJid(jid){
  return typeof jid==='string'&&/^[0-9]{5,24}@(s\.whatsapp\.net|lid)$/.test(jid);

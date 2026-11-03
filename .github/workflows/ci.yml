@@ -35,4 +35,5 @@ jobs:
           node-version: '22'
       - run: npm install --ignore-scripts --no-audit
       - run: node --check server.mjs && node --check lib.mjs && node --check public/app.js
+      - run: node --check waakg-socio/bootstrap.cjs && python3 -m py_compile waakg-socio/patch_readonly.py
       - run: npm test

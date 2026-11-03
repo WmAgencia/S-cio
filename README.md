@@ -27,6 +27,18 @@ O projeto Wmagencia `svbdigkomsbugiyufdtc` recebeu migrations aditivas em `supab
 
 Em Treinamento, após importar os exemplos, clique em **Analisar conversas**. O processamento opera sobre as amostras anonimizadas guardadas pelo próprio Sócio; permite importar pelo gateway os históricos disponíveis nas sessões WA-AKG previamente vinculadas; a sincronização e a análise de Markdown continuam duas ações separadas. O progresso é por fonte processada, não por caracteres ou por conversas externas. Ao final, revise o relatório e o Markdown e use **Aprovar conhecimento** para substituir o conhecimento atual do agente. Novos arquivos importados são armazenados como fontes e não modificam o prompt do agente até que uma versão da análise seja aprovada. A aprovação não dispara mensagens externas. Expressões como “fechar pedido” não provam venda; precisamos de confirmação de vendas/CRM para analisar conversão real.
 
+## Integração WA-AKG exclusiva do Sócio — conexão por QR Code
+
+O gateway WA-AKG e seu MySQL foram provisionados no mesmo projeto Railway `socio-consecom`, mas são serviços independentes do Prospector. O gateway é **privado** (`socio-waakg.railway.internal:3000`) e não recebe domínio público. Ele instala uma versão fixa de WA-AKG, cria uma única conta de integração por segredo de servidor e desliga as rotinas nativas de resposta e toda função de envio (`SOCIO_GATEWAY_READ_ONLY=true`).
+
+No painel, o proprietário ou administrador da empresa entra em **WhatsApps → Conectar novo número**, gera seu QR e escaneia no WhatsApp > Dispositivos conectados. A sessão possui identificador aleatório e vínculo exclusivo ao tenant. O QR aparece como imagem na interface, nunca a chave do gateway. Ao reconhecer o telefone conectado, o Sócio atualiza o canal com o número verificado. Controles disponíveis: verificar, reiniciar, pausar e desconectar. O mesmo número conectado não pode pertencer a duas empresas.
+
+O histórico já armazenado pelo WA-AKG pode ser sincronizado na guia Treinamento; imagens e vídeos ainda não são analisados automaticamente. O Markdown gerado exige aprovação antes de alterar a IA. Não se envia nenhuma mensagem nesta fase.
+
+A ligação depende do WhatsApp do proprietário **escanear o QR**: isso não pode ser feito automaticamente por quem administra a infraestrutura. O gateway não fica público, e suas variáveis (`WA_AKG_API_KEY`, `SOCIO_GATEWAY_ADMIN_PASSWORD`, `AUTH_SECRET`) ficam somente no Railway.
+
+**Limite e conformidade:** o modo atual usa uma integração não oficial baseada em WhatsApp Web, sujeita a incompatibilidades e eventuais restrições do WhatsApp. Para oferecer a operação em escala, há uma etapa futura de migração/alternativa para WhatsApp Business Platform oficial, conforme elegibilidade e requisitos. A importação de mensagens deve ser feita com autorização e política de retenção.
+
 ## WA-AKG: leitura de históricos sem disparos
 
 O aplicativo aceita um gateway WA-AKG próprio, usando variáveis secretas do Railway `WA_AKG_BASE_URL`, `WA_AKG_API_KEY` e `CHANNEL_ENCRYPTION_KEY` (mínimo 32 caracteres). Não reutilize credenciais do Prospector nem um gateway que misture contas de terceiros. Use HTTPS ou endereço privado `.railway.internal`.
@@ -39,7 +51,7 @@ Em **Treinamento**, a empresa pode iniciar a sincronização das sessões vincul
 
 IDs de conversas são criptografados em repouso com AES-GCM e vinculados ao tenant. O sistema guarda amostras sanitizadas e hashes para evitar duplicações. A anonimização por padrões não remove necessariamente nomes próprios mencionados no corpo; use apenas dados autorizados e revise os exemplos.
 
-O Sócio **não cria sessões nem oferece QR automaticamente nesta fase**, nem envia mensagens pelo WA-AKG. A configuração do bot nativo do gateway deve ser auditada antes de conectar clientes reais. Na conta `paidogame` ainda precisam ser configuradas as variáveis de gateway para utilizar essa integração.
+O Sócio agora pode criar sessões e mostrar QR por meio do gateway exclusivo, mas ainda não envia mensagens pelo WA-AKG. A configuração do bot nativo do gateway deve ser auditada antes de conectar clientes reais. As variáveis do gateway dedicado devem ser configuradas no Railway sem expor seus valores.
 
 ## Deploy Railway
 

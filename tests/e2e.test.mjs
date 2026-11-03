@@ -8,12 +8,44 @@ const enabled=!!process.env.DATABASE_URL;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 test('real PostgreSQL: login, tenant isolation, imports and webhook signature protections',{skip:!enabled,timeout:65000},async t=>{
  const port=38475,waPort=38476,waKey='mock-readonly-waakg-key',waSession='socioFixture123',waPhone='5515999999999',waJid=waPhone+'@s.whatsapp.net';
- const gatewayRequests=[];
- const fakeGateway=createServer((req,res)=>{
+ const gatewayRequests=[],dynamicSessions=new Map(),dynamicPhone='5515888888888';
+ const fakeGateway=createServer(async(req,res)=>{
   const url=new URL(req.url||'/', 'http://localhost'),path=url.pathname;
   gatewayRequests.push({path,method:req.method});
   const send=(status,data)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(data));};
   if(req.headers['x-api-key']!==waKey)return send(401,{status:false});
+
+  if(req.method==='POST'&&path==='/api/sessions'){
+   const parts=[];for await(const part of req)parts.push(part);
+   const payload=JSON.parse(Buffer.concat(parts).toString('utf8'));
+   if(!/^socio_[0-9a-f]{40}$/.test(payload.sessionId))return send(422,{status:false});
+   dynamicSessions.set(payload.sessionId,{connected:false,started:false,botDisabled:false,name:payload.name});
+   return send(200,{status:true,data:{sessionId:payload.sessionId,name:payload.name}});
+  }
+  const match=path.match(/^\/api\/sessions\/(socio_[0-9a-f]{40})(?:\/(bot-config|start|restart|stop|logout|qr))?$/);
+  if(match){
+   const item=dynamicSessions.get(match[1]);
+   if(!item)return send(404,{status:false});
+   const action=match[2];
+   if(req.method==='GET'&&!action)return send(200,{status:true,data:{
+    sessionId:match[1],status:item.connected?'CONNECTED':item.started?'SCAN_QR':'STOPPED',
+    me:item.connected?{id:dynamicPhone+':1@s.whatsapp.net'}:null}});
+   if(req.method==='POST'&&action==='bot-config'){
+    const parts=[];for await(const part of req)parts.push(part);
+    const body=JSON.parse(Buffer.concat(parts).toString('utf8'));
+    item.botDisabled=body.enabled===false;
+    return send(200,{status:true,data:{enabled:item.botDisabled===false}});
+   }
+   if(req.method==='GET'&&action==='bot-config')return send(200,{status:true,data:{enabled:!item.botDisabled}});
+   if(req.method==='POST'&&['start','restart','stop','logout'].includes(action)){
+    if(['start','restart'].includes(action))item.started=true;
+    if(['stop','logout'].includes(action)){item.started=false;item.connected=false;}
+    return send(200,{status:true});
+   }
+   if(req.method==='GET'&&action==='qr')return send(200,{success:true,
+    base64:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg=='});
+  }
+
   if(path==='/api/sessions/'+waSession)return send(200,{status:true,data:{sessionId:waSession,status:'CONNECTED',me:{id:waPhone+':1@s.whatsapp.net'}}});
   if(path==='/api/chat/'+waSession)return send(200,{status:true,data:[{jid:waJid,name:'Nome particular'}, {jid:'551500000000@g.us',name:'Grupo privado'}]});
   if(path==='/api/messages/'+waSession+'/search'&&url.searchParams.get('jid')===waJid){
@@ -172,6 +204,40 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(crossSync.status,404);
  const crossStatus=await call('/api/waakg/channels/'+waChannelId+'/status','GET',undefined,adminCookie);
  assert.equal(crossStatus.status,404);
+
+
+ // Dedicated WA-AKG self-service: authenticated tenant owner can create a
+ // randomized session without seeing server credentials or another tenant's QR.
+ const self=await call('/api/waakg/channels/connect','POST',{label:'Atendimento 2'},betaCookie,betaCsrf);
+ assert.equal(self.status,201,JSON.stringify(self.result));
+ const selfId=self.result.id;
+ const provisioned=[...dynamicSessions.values()];
+ assert.equal(provisioned.length,1);
+ assert.equal(provisioned[0].botDisabled,true);
+ assert.equal(provisioned[0].started,true);
+ assert.equal(self.result.sessionId,undefined,'Gateway session identifier must remain server-only');
+ const qr=await call('/api/waakg/channels/'+selfId+'/qr','GET',undefined,betaCookie);
+ assert.equal(qr.status,200);
+ assert.equal(qr.result.ready,true);
+ assert.match(qr.result.image,/^data:image\/png;base64,/);
+ const beforeConnect=await call('/api/waakg/channels/'+selfId+'/status','GET',undefined,betaCookie);
+ assert.equal(beforeConnect.result.connected,false);
+ const hidden=await call('/api/waakg/channels/'+selfId+'/qr','GET',undefined,adminCookie);
+ assert.equal(hidden.status,404);
+ const newConnected=provisioned[0];newConnected.connected=true;
+ const verifiedSelf=await call('/api/waakg/channels/'+selfId+'/status','GET',undefined,betaCookie);
+ assert.equal(verifiedSelf.status,200);
+ assert.equal(verifiedSelf.result.connected,true);
+ assert.equal(verifiedSelf.result.phone,dynamicPhone);
+ const listSelf=await call('/api/waakg/channels','GET',undefined,betaCookie);
+ assert(listSelf.result.some(x=>x.id===selfId&&x.phone===dynamicPhone));
+ const pausedSelf=await call('/api/waakg/channels/'+selfId+'/stop','POST',{},betaCookie,betaCsrf);
+ assert.equal(pausedSelf.status,200);
+ const restartedSelf=await call('/api/waakg/channels/'+selfId+'/start','POST',{},betaCookie,betaCsrf);
+ assert.equal(restartedSelf.status,200);
+ const fakeMethods=gatewayRequests.filter(x=>x.method==='POST');
+ assert(fakeMethods.length>=4);
+ assert(fakeMethods.every(x=>x.path.startsWith('/api/sessions')));
 
  const ag=await call('/api/agent','GET',undefined,betaCookie);
  assert.doesNotMatch(ag.result.knowledge_md,/Alice|15981142577|Nome Comprador|cliente-1\.txt/);
