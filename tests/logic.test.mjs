@@ -1,7 +1,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {hashPassword,verifyPassword,hashToken,secureEqual,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk} from '../lib.mjs';
+import {hashPassword,verifyPassword,hashToken,secureEqual,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier} from '../lib.mjs';
 test('passwords use salted scrypt, not plaintext',async()=>{
  const a=await hashPassword('UmaSenhaForte@2026');
  const b=await hashPassword('UmaSenhaForte@2026');
@@ -40,4 +40,20 @@ test('multiline WhatsApp messages are normalized',()=>{
  const parsed=parseWhatsAppExport('[01/11/26, 09:00] Cliente: Primeira linha\nSegunda linha\n[01/11/26, 09:01] Loja: Pode deixar');
  assert.equal(parsed.messageCount,2);
  assert.match(parsed.entries[0].text,/Segunda linha/);
+});
+
+test('Brazilian phone numbers normalize and log in with same identifier regardless of formatting',()=>{
+ assert.equal(normalizeLoginPhone('(15) 99999-9999'),'5515999999999');
+ assert.equal(normalizeLoginPhone('15999999999'),'5515999999999');
+ assert.equal(normalizeLoginPhone('+55 (15) 99999-9999'),'5515999999999');
+ assert.equal(normalizeLoginPhone('5515999999999'),'5515999999999');
+ assert.equal(normalizeLoginPhone('15 3333-4444'),'551533334444');
+ assert.equal(normalizeLoginPhone('119999999'),null);
+ assert.equal(normalizeLoginPhone('5515 abc 999999999'),null);
+ assert.equal(normalizeLoginPhone(''),null);
+ assert.equal(loginIdentifier(' Cliente@Exemplo.COM ' ).type,'email');
+ assert.deepEqual(loginIdentifier(' Cliente@Exemplo.COM '),{type:'email',value:'cliente@exemplo.com'});
+ assert.deepEqual(loginIdentifier('(15) 99999-9999'),{type:'phone',value:'5515999999999'});
+ assert.equal(loginIdentifier('invalido'),null);
+ assert.equal(loginIdentifier({phone:'5515999999999'}),null);
 });
