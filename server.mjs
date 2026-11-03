@@ -6,7 +6,7 @@ import {Pool} from 'pg';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk} from './lib.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
 import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
-import {gatewayConfigured,getSessionStatus,validSessionId} from './waakg-adapter.mjs';
+import {gatewayConfigured,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
 import {processNextWaakgScan} from './waakg-history.mjs';
 
 const PORT=Number(process.env.PORT||3000);
@@ -156,9 +156,68 @@ async function handle(req,res){
  }
  if(method==='GET'&&pathname==='/api/waakg/channels'){
   const r=await query(
-   'SELECT l.channel_id AS id,ch.label,ch.phone,l.created_at FROM waakg_links l JOIN channels ch ON ch.id=l.channel_id AND ch.tenant_id=l.tenant_id WHERE l.tenant_id=$1 ORDER BY l.created_at DESC',
+   'SELECT l.channel_id AS id,ch.label,ch.phone,ch.status,l.created_at FROM waakg_links l JOIN channels ch ON ch.id=l.channel_id AND ch.tenant_id=l.tenant_id WHERE l.tenant_id=$1 ORDER BY l.created_at DESC',
    [a.active_tenant_id]);
   return json(res,200,r.rows);
+ }
+
+ // Self-service onboarding to a dedicated gateway. No user-provided session id:
+ // session id is CSPRNG and exclusively bound to the active tenant in Postgres.
+ if(method==='POST'&&pathname==='/api/waakg/channels/connect'){
+  needRole(a,['owner','admin']);
+  if(!gatewayConfigured())throw fail(503,'O gateway exclusivo do Sócio ainda não está configurado.');
+  if(!limiter(simulationAttempts,'waakg-connect:'+a.active_tenant_id,3600000,12))throw fail(429,'Limite de solicitações de conexão.');
+  const {data}=await body(req);
+  if(!validText(data.label,90))throw fail(422,'Informe um nome para o WhatsApp.');
+  const counter=await query('SELECT COUNT(*)::int AS n FROM waakg_links WHERE tenant_id=$1',[a.active_tenant_id]);
+  if(counter.rows[0].n>=10)throw fail(422,'Limite inicial de dez sessões por empresa. Contate a Consecom para ampliar.');
+  const channelId=id(),sessionId='socio_'+randomBytes(20).toString('hex');
+  const client=await pool.connect();
+  try{
+   await client.query('BEGIN');
+   await client.query(
+    "INSERT INTO channels(id,tenant_id,label,phone,provider,status) VALUES($1,$2,$3,$4,'waakg','connecting')",
+    [channelId,a.active_tenant_id,data.label.trim(),'pending-'+channelId]);
+   await client.query('INSERT INTO waakg_links(id,tenant_id,channel_id,session_id) VALUES($1,$2,$3,$4)',
+    [id(),a.active_tenant_id,channelId,sessionId]);
+   await client.query('COMMIT');
+  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  let ready=false;
+  try{await ensureSessionProvisioned(sessionId,data.label.trim());ready=true;}
+  catch(error){
+   // Preserve mapping for safe retry; never leave an unknown orphan in the
+   // gateway, and never report the gateway session id to the tenant.
+   console.warn('[socio-waakg-connect]',String(error?.status||'unavailable'));
+  }
+  await audit(a,'waakg.onboarding.created',{channelId,ready});
+  return json(res,201,{id:channelId,label:data.label.trim(),status:ready?'qr_pending':'connecting',
+   note:ready?'Escaneie o QR Code no seu WhatsApp.':'Conexão iniciada; use Reiniciar para tentar novamente.'});
+ }
+ const qrPath=pathname.match(/^\/api\/waakg\/channels\/([0-9a-f-]{36})\/qr$/);
+ if(qrPath&&method==='GET'){
+  needRole(a,['owner','admin']);
+  const found=await query('SELECT l.session_id FROM waakg_links l WHERE l.channel_id=$1 AND l.tenant_id=$2',
+   [qrPath[1],a.active_tenant_id]);
+  if(!found.rowCount)throw fail(404,'Canal não encontrado nesta empresa.');
+  return json(res,200,await getSessionQr(found.rows[0].session_id));
+ }
+ const lifecycle=pathname.match(/^\/api\/waakg\/channels\/([0-9a-f-]{36})\/(start|stop|restart|logout)$/);
+ if(lifecycle&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const [channelId,action]=lifecycle.slice(1);
+  const found=await query('SELECT l.session_id,c.label,c.phone FROM waakg_links l JOIN channels c ON c.id=l.channel_id AND c.tenant_id=l.tenant_id WHERE l.channel_id=$1 AND l.tenant_id=$2',
+   [channelId,a.active_tenant_id]);
+  if(!found.rowCount)throw fail(404,'Canal não encontrado nesta empresa.');
+  const record=found.rows[0];
+  if(action==='start'||action==='restart'){
+   await ensureSessionProvisioned(record.session_id,record.label);
+  }else{
+   await sessionLifecycle(record.session_id,action);
+   await query("UPDATE channels SET status=$3 WHERE id=$1 AND tenant_id=$2",
+    [channelId,a.active_tenant_id,action==='logout'?'disconnected':'stopped']);
+  }
+  await audit(a,'waakg.session.'+action,{channelId});
+  return json(res,200,{id:channelId,status:action==='logout'?'disconnected':action==='stop'?'stopped':'connecting'});
  }
  if(method==='POST'&&pathname==='/api/waakg/channels/link'){
   needPlatform(a); // Shared gateway credentials are Consecom-only.
@@ -188,8 +247,18 @@ async function handle(req,res){
    [linkStatus[1],a.active_tenant_id]);
   if(!found.rowCount)throw fail(404,'Canal não encontrado nesta empresa.');
   const remote=await getSessionStatus(found.rows[0].session_id);
-  return json(res,200,{connected:remote.connected&&remote.connectedNumber===found.rows[0].phone,
-   status:remote.status,phoneVerified:remote.connectedNumber===found.rows[0].phone});
+  const verified=remote.connected&&/^\d{10,15}$/.test(remote.connectedNumber);
+  if(verified&&found.rows[0].phone.startsWith('pending-')){
+   // Never allow a provider number belonging to another channel to be claimed.
+   // The unique tenant+phone constraint protects double-scanning of the same phone.
+   await query("UPDATE channels SET phone=$3,status='connected' WHERE id=$1 AND tenant_id=$2 AND phone LIKE 'pending-%'",
+    [linkStatus[1],a.active_tenant_id,remote.connectedNumber]);
+  }else if(verified&&found.rows[0].phone===remote.connectedNumber){
+   await query("UPDATE channels SET status='connected' WHERE id=$1 AND tenant_id=$2",[linkStatus[1],a.active_tenant_id]);
+  }
+  const phoneVerified=verified&&(found.rows[0].phone===remote.connectedNumber||found.rows[0].phone.startsWith('pending-'));
+  return json(res,200,{connected:verified&&phoneVerified,
+   status:remote.status,phoneVerified,phone:phoneVerified?remote.connectedNumber:null});
  }
  if(method==='GET'&&pathname==='/api/waakg/scans'){
   const r=await query(
