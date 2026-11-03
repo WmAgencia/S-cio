@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk} from './lib.mjs';
+import {extractWhatsAppZip} from './zip-import.mjs';
 
 const PORT=Number(process.env.PORT||3000);
 const DATABASE_URL=process.env.DATABASE_URL;
@@ -187,6 +188,31 @@ async function handle(req,res){
  }
  if(method==='GET'&&pathname==='/api/imports'){
   const r=await query('SELECT id,filename,conversation_count,message_count,created_at FROM imports WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 100',[a.active_tenant_id]);return json(res,200,r.rows);
+ }
+ if(method==='POST'&&pathname==='/api/imports/zip'){
+  needRole(a,['owner','admin']);
+  const {data}=await body(req,2_850_000);
+  const filename=trimmed(data.filename,120);
+  if(!/\.zip$/i.test(filename))throw fail(422,'Envie um arquivo ZIP exportado do WhatsApp.');
+  const files=extractWhatsAppZip(data.contentBase64);
+  // Skip unrelated text files, but fail rather than claim training when
+  // the archive has no valid WhatsApp conversations.
+  const ready=files.map(file=>({...file,parsed:parseWhatsAppExport(file.content)})).filter(file=>file.parsed.messageCount>=3);
+  if(!ready.length)throw fail(422,'ZIP não contém conversas reconhecidas do WhatsApp.');
+  const c=await pool.connect();
+  let totalMessages=0;
+  try{
+   await c.query('BEGIN');
+   for(const file of ready){
+    const md=buildTrainingMarkdown(file.parsed,'conversa-importada.txt');
+    totalMessages+=file.parsed.messageCount;
+    await c.query('INSERT INTO imports(id,tenant_id,filename,conversation_count,message_count,sample_md) VALUES($1,$2,$3,1,$4,$5)',[id(),a.active_tenant_id,trimmed(file.filename,120),file.parsed.messageCount,md]);
+    await c.query("UPDATE agents SET knowledge_md=right(CASE WHEN knowledge_md='' THEN $2 ELSE knowledge_md||E'\\n\\n---\\n\\n'||$2 END,45000),updated_at=now() WHERE tenant_id=$1",[a.active_tenant_id,md]);
+   }
+   await c.query('COMMIT');
+  }catch(err){await c.query('ROLLBACK');throw err;}finally{c.release();}
+  await audit(a,'training.zip.imported',{count:ready.length,messages:totalMessages});
+  return json(res,201,{conversationCount:ready.length,messageCount:totalMessages});
  }
  if(method==='POST'&&pathname==='/api/imports'){
   needRole(a,['owner','admin']);const {data}=await body(req,950000);
