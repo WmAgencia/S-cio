@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Sócio — plataforma de atendimento multiempresa da Consecom",
   "engines": {
-    "node": ">=20"
+    "node": ">=22 <25"
   },
   "scripts": {
     "start": "node server.mjs",
