@@ -155,7 +155,7 @@ async function handle(req,res){
   const {data}=await body(req);
   if(!validText(data.label,90)||!/^\+?\d{10,15}$/.test(String(data.phone||'').replace(/\s/g,'')))throw fail(422,'Informe identificação e número completo (10 a 15 dígitos).');
   const external=trimmed(data.externalPhoneId,80)||null;
-  if(external&&!a.platform_owner)throw fail(403,'A vinculação do identificador Meta requer validação pela administração da Consecom.');
+  if(external)throw fail(422,'Identificadores Meta só podem ser vinculados após validação do número no menu WhatsApps.');
   const r=await query("INSERT INTO channels(id,tenant_id,label,phone,provider,external_phone_id) VALUES($1,$2,$3,$4,'meta',$5) RETURNING id,label,phone,provider,external_phone_id,status",[id(),a.active_tenant_id,data.label.trim(),String(data.phone).replace(/\s/g,''),external]);
   await audit(a,'channel.created',{channelId:r.rows[0].id});
   return json(res,201,r.rows[0]);
