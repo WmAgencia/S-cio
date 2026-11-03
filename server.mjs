@@ -3,7 +3,7 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
-import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk} from './lib.mjs';
+import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier} from './lib.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
 import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
 import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
@@ -72,7 +72,7 @@ async function sessionFor(req){
  if(!match)return null;
  const token=decodeURIComponent(match[1]);
  if(!token||token.length>256)return null;
- const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now()",[hashToken(token)]);
+ const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.phone,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now()",[hashToken(token)]);
  return result.rows[0]||null;
 }
 async function createSession(userId,tenantId,res){
@@ -116,6 +116,9 @@ async function handle(req,res){
   if(!process.env.SETUP_TOKEN||process.env.SETUP_TOKEN.length<32)throw fail(503,'Configure SETUP_TOKEN com pelo menos 32 caracteres no Railway.');
   if(!secureEqual(String(data.setupToken||''),process.env.SETUP_TOKEN))throw fail(403,'Token de instalação incorreto.');
   if(!emailOk(data.email)||!validText(data.name,100)||!validText(data.company,120))throw fail(422,'Informe nome, empresa e e-mail válidos.');
+  const accountPhone=String(data.phone||'').trim();
+  const phone=accountPhone?normalizeLoginPhone(accountPhone):null;
+  if(accountPhone&&!phone)throw fail(422,'Informe um celular válido com DDD.');
   const pw=await hashPassword(data.password);
   const c=await pool.connect(),tenant=id(),user=id();
   try{
@@ -124,7 +127,7 @@ async function handle(req,res){
    const exists=await c.query('SELECT 1 FROM users WHERE platform_owner=true LIMIT 1');
    if(exists.rowCount)throw fail(409,'Instalação já concluída.');
    await c.query("INSERT INTO tenants(id,name,slug,plan,status) VALUES($1,$2,$3,'essencial','trial')",[tenant,data.company.trim(),slugify(data.company)+'-'+tenant.slice(0,6)]);
-   await c.query('INSERT INTO users(id,tenant_id,email,name,password_hash,role,platform_owner) VALUES($1,$2,$3,$4,$5,$6,true)',[user,tenant,String(data.email).toLowerCase().trim(),data.name.trim(),pw,'owner']);
+   await c.query('INSERT INTO users(id,tenant_id,email,phone,name,password_hash,role,platform_owner) VALUES($1,$2,$3,$4,$5,$6,$7,true)',[user,tenant,String(data.email).toLowerCase().trim(),phone,data.name.trim(),pw,'owner']);
    await c.query('INSERT INTO agents(tenant_id) VALUES($1)',[tenant]);
    await c.query('COMMIT');
   }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
@@ -135,10 +138,14 @@ async function handle(req,res){
   const key='login:'+clientIp(req);
   if(!limiter(authAttempts,key,600000,15))throw fail(429,'Muitas tentativas de login. Tente mais tarde.');
   const {data}=await body(req);
-  const email=trimmed(data.email,255).toLowerCase();
-  const result=await query('SELECT id,tenant_id,password_hash FROM users WHERE email=$1',[email]);
+  const identity=loginIdentifier(data.identifier??data.email);
+  const result=identity?await query(
+   identity.type==='email'
+    ?'SELECT id,tenant_id,password_hash FROM users WHERE email=$1'
+    :'SELECT id,tenant_id,password_hash FROM users WHERE phone=$1',[identity.value]
+  ):{rows:[]};
   const u=result.rows[0];
-  if(!u||!(await verifyPassword(data.password||'',u.password_hash)))throw fail(401,'E-mail ou senha incorretos.');
+  if(!u||!(await verifyPassword(data.password||'',u.password_hash)))throw fail(401,'E-mail, número ou senha incorretos.');
   authAttempts.delete(key);
   const csrf=await createSession(u.id,u.tenant_id,res);
   return json(res,200,{ok:true,csrf});
@@ -149,7 +156,24 @@ async function handle(req,res){
   const csrf=req.headers['x-csrf-token'];
   if(!csrf||!secureEqual(String(csrf),a.csrf))throw fail(403,'Sessão sem validação de segurança.');
  }
- if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,role:a.role,platformOwner:a.platform_owner},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status},csrf:a.csrf,groqConfigured:!!process.env.GROQ_API_KEY});
+ if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,platformOwner:a.platform_owner},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status},csrf:a.csrf,groqConfigured:!!process.env.GROQ_API_KEY});
+ // Changing a phone login identifier requires the signed-in user's current password.
+ // Never infer this from the company's connected WhatsApp number.
+ if(method==='POST'&&pathname==='/api/me/phone'){
+  if(!limiter(authAttempts,'phone-update:'+a.user_id,600000,8))throw fail(429,'Muitas tentativas. Tente novamente.');
+  const {data}=await body(req);
+  const raw=typeof data.phone==='string'?data.phone.trim():'';
+  if(raw.length>32)throw fail(422,'Número de telefone inválido.');
+  const normalized=raw?normalizeLoginPhone(raw):null;
+  if(raw&&!normalized)throw fail(422,'Informe um número válido com DDD.');
+  const record=await query('SELECT password_hash FROM users WHERE id=$1',[a.user_id]);
+  if(!record.rowCount||!(await verifyPassword(data.currentPassword||'',record.rows[0].password_hash)))
+   throw fail(401,'Senha atual incorreta.');
+  const updated=await query('UPDATE users SET phone=$2 WHERE id=$1 RETURNING phone',[a.user_id,normalized]);
+  authAttempts.delete('phone-update:'+a.user_id);
+  await audit(a,'auth.login_phone_updated',{configured:!!normalized});
+  return json(res,200,{ok:true,phone:updated.rows[0].phone});
+ }
  if(method==='POST'&&pathname==='/api/logout'){
   await query('DELETE FROM sessions WHERE token_hash=$1',[a.token_hash]);
   res.setHeader('Set-Cookie',sessionCookie('',true));
@@ -603,13 +627,15 @@ async function handle(req,res){
   }
  }
  if(method==='GET'&&pathname==='/api/team'){
-  const r=await query('SELECT id,name,email,role,created_at FROM users WHERE tenant_id=$1 ORDER BY created_at',[a.active_tenant_id]);return json(res,200,r.rows);
+  const r=await query('SELECT id,name,email,phone,role,created_at FROM users WHERE tenant_id=$1 ORDER BY created_at',[a.active_tenant_id]);return json(res,200,r.rows);
  }
  if(method==='POST'&&pathname==='/api/team'){
   needRole(a,['owner','admin']);const {data}=await body(req);
   if(!emailOk(data.email)||!validText(data.name,100)||!['admin','agent'].includes(data.role))throw fail(422,'Dados de usuário inválidos.');
+  const raw=String(data.phone||'').trim(),phone=raw?normalizeLoginPhone(raw):null;
+  if(raw&&!phone)throw fail(422,'Número de colaborador inválido. Informe o DDD.');
   const hash=await hashPassword(data.password);
-  const r=await query('INSERT INTO users(id,tenant_id,email,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,name,email,role',[id(),a.active_tenant_id,data.email.trim().toLowerCase(),data.name.trim(),hash,data.role]);
+  const r=await query('INSERT INTO users(id,tenant_id,email,phone,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,name,email,phone,role',[id(),a.active_tenant_id,data.email.trim().toLowerCase(),phone,data.name.trim(),hash,data.role]);
   await audit(a,'team.invited',{userId:r.rows[0].id});return json(res,201,r.rows[0]);
  }
  if(method==='GET'&&pathname==='/api/admin/tenants'){
@@ -620,11 +646,13 @@ async function handle(req,res){
  if(method==='POST'&&pathname==='/api/admin/tenants'){
   needPlatform(a);const {data}=await body(req);
   if(!validText(data.company,120)||!validText(data.ownerName,100)||!emailOk(data.ownerEmail)||!['essencial','equipe','voz'].includes(data.plan||'essencial'))throw fail(422,'Dados da empresa inválidos.');
+  const raw=String(data.ownerPhone||'').trim(),phone=raw?normalizeLoginPhone(raw):null;
+  if(raw&&!phone)throw fail(422,'Número do responsável inválido. Informe o DDD.');
   const hash=await hashPassword(data.ownerPassword),tenant=id(),user=id(),client=await pool.connect();
   try{
    await client.query('BEGIN');
    await client.query("INSERT INTO tenants(id,name,slug,plan,status) VALUES($1,$2,$3,$4,'trial')",[tenant,data.company.trim(),slugify(data.company)+'-'+tenant.slice(0,6),data.plan||'essencial']);
-   await client.query('INSERT INTO users(id,tenant_id,email,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6)',[user,tenant,data.ownerEmail.trim().toLowerCase(),data.ownerName.trim(),hash,'owner']);
+   await client.query('INSERT INTO users(id,tenant_id,email,phone,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6,$7)',[user,tenant,data.ownerEmail.trim().toLowerCase(),phone,data.ownerName.trim(),hash,'owner']);
    await client.query('INSERT INTO agents(tenant_id) VALUES($1)',[tenant]);
    await client.query('COMMIT');
   }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
