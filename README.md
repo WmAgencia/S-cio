@@ -24,7 +24,7 @@ O projeto Wmagencia `svbdigkomsbugiyufdtc` recebeu migrations aditivas em `supab
 
 ## Análise de conversas
 
-Em Treinamento, após importar os exemplos, clique em **Analisar conversas**. O processamento opera sobre as amostras anonimizadas guardadas pelo próprio Sócio; não varre automaticamente mensagens das sessões do WA-AKG, ainda não conectadas ao SaaS. O progresso é por fonte processada, não por caracteres ou por conversas externas. Ao final, revise o relatório e o Markdown e use **Aprovar conhecimento** para substituir o conhecimento atual do agente. A aprovação não dispara mensagens externas. Expressões como “fechar pedido” não provam venda; precisamos de confirmação de vendas/CRM para analisar conversão real.
+Em Treinamento, após importar os exemplos, clique em **Analisar conversas**. O processamento opera sobre as amostras anonimizadas guardadas pelo próprio Sócio; não varre automaticamente mensagens das sessões do WA-AKG, ainda não conectadas ao SaaS. O progresso é por fonte processada, não por caracteres ou por conversas externas. Ao final, revise o relatório e o Markdown e use **Aprovar conhecimento** para substituir o conhecimento atual do agente. Novos arquivos importados são armazenados como fontes e não modificam o prompt do agente até que uma versão da análise seja aprovada. A aprovação não dispara mensagens externas. Expressões como “fechar pedido” não provam venda; precisamos de confirmação de vendas/CRM para analisar conversão real.
 
 ## Deploy Railway
 

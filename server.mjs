@@ -251,7 +251,6 @@ async function handle(req,res){
     const md=buildTrainingMarkdown(file.parsed,'conversa-importada.txt');
     totalMessages+=file.parsed.messageCount;
     await c.query('INSERT INTO imports(id,tenant_id,filename,conversation_count,message_count,sample_md) VALUES($1,$2,$3,1,$4,$5)',[id(),a.active_tenant_id,trimmed(file.filename,120),file.parsed.messageCount,md]);
-    await c.query("UPDATE agents SET knowledge_md=right(CASE WHEN knowledge_md='' THEN $2 ELSE knowledge_md||E'\\n\\n---\\n\\n'||$2 END,45000),updated_at=now() WHERE tenant_id=$1",[a.active_tenant_id,md]);
    }
    await c.query('COMMIT');
   }catch(err){await c.query('ROLLBACK');throw err;}finally{c.release();}
@@ -269,7 +268,6 @@ async function handle(req,res){
   try{
    await c.query('BEGIN');
    await c.query('INSERT INTO imports(id,tenant_id,filename,conversation_count,message_count,sample_md) VALUES($1,$2,$3,1,$4,$5)',[item,a.active_tenant_id,filename,parsed.messageCount,md]);
-   await c.query("UPDATE agents SET knowledge_md=right(CASE WHEN knowledge_md='' THEN $2 ELSE knowledge_md||E'\n\n---\n\n'||$2 END,45000),updated_at=now() WHERE tenant_id=$1",[a.active_tenant_id,md]);
    await c.query('COMMIT');
   }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
   await audit(a,'training.imported',{importId:item,messages:parsed.messageCount});
