@@ -8,12 +8,30 @@ import {extractWhatsAppZip} from './zip-import.mjs';
 import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
 import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
 import {processNextWaakgScan} from './waakg-history.mjs';
+import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
+import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
 
 const PORT=Number(process.env.PORT||3000);
 const DATABASE_URL=process.env.DATABASE_URL;
 if(!DATABASE_URL){console.error('DATABASE_URL não configurada');process.exit(1);}
 const pool=new Pool({connectionString:DATABASE_URL,max:10,connectionTimeoutMillis:8000,idleTimeoutMillis:30000});
 const query=(sql,values=[])=>pool.query(sql,values);
+async function fullCatalog(tenantId){
+ const [items,variants,media,campaigns]=await Promise.all([
+  query('SELECT id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active FROM products WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 500',[tenantId]),
+  query('SELECT id,product_id,name,sku,price_cents,stock_quantity,active FROM product_variants WHERE tenant_id=$1 ORDER BY created_at ASC',[tenantId]),
+  query('SELECT id,product_id,alt,bytes FROM product_media WHERE tenant_id=$1 ORDER BY created_at ASC',[tenantId]),
+  query('SELECT id,product_id,provider,campaign_id,label,verified FROM product_campaign_links WHERE tenant_id=$1 ORDER BY created_at DESC',[tenantId])
+ ]);
+ const byId=new Map(items.rows.map(p=>[p.id,{...p,variants:[],media:[],campaigns:[]}]));
+ for(const variant of variants.rows){const p=byId.get(variant.product_id);if(p)p.variants.push(variant);}
+ for(const m of media.rows){const p=byId.get(m.product_id);
+  if(p)p.media.push({id:m.id,alt:m.alt,bytes:m.bytes,url:'/api/products/'+m.product_id+'/media/'+m.id+'/file'});
+ }
+ for(const c of campaigns.rows){const p=byId.get(c.product_id);if(p)p.campaigns.push(c);}
+ return [...byId.values()];
+}
+
 const json=(res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const id=()=>randomUUID();
@@ -312,23 +330,122 @@ async function handle(req,res){
   await audit(a,'channel.created',{channelId:r.rows[0].id});
   return json(res,201,r.rows[0]);
  }
+
  if(method==='GET'&&pathname==='/api/products'){
-  const r=await query('SELECT id,name,description,price_cents,active FROM products WHERE tenant_id=$1 ORDER BY created_at DESC',[a.active_tenant_id]);
-  return json(res,200,r.rows);
+  return json(res,200,await fullCatalog(a.active_tenant_id));
+ }
+ if(method==='GET'&&pathname==='/api/products/storage'){
+  return json(res,200,{configured:mediaConfigured(),limits:{maxPhotos:8,maxSourceBytes:3000000},
+   supported:['image/jpeg','image/png','image/webp']});
  }
  if(method==='POST'&&pathname==='/api/products'){
-  needRole(a,['owner','admin']);const {data}=await body(req);
-  if(!validText(data.name,120)||!money(data.priceCents)||String(data.description||'').length>1200)throw fail(422,'Nome ou preço inválido.');
-  const r=await query('INSERT INTO products(id,tenant_id,name,description,price_cents) VALUES($1,$2,$3,$4,$5) RETURNING id,name,description,price_cents,active',[id(),a.active_tenant_id,data.name.trim(),trimmed(data.description,1200),data.priceCents]);
-  await audit(a,'product.created',{productId:r.rows[0].id});
-  return json(res,201,r.rows[0]);
+  needRole(a,['owner','admin']);
+  const {data}=await body(req);
+  const p=validateProduct(data);
+  const count=await query('SELECT COUNT(*)::int AS count FROM products WHERE tenant_id=$1',[a.active_tenant_id]);
+  if(count.rows[0].count>=500)throw fail(422,'Limite de 500 produtos por empresa.');
+  const item=await query(
+   'INSERT INTO products(id,tenant_id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active',
+   [id(),a.active_tenant_id,p.name,p.description,p.sku,p.priceCents,p.stockQuantity,p.compareAtPriceCents,p.active]);
+  await audit(a,'product.created',{productId:item.rows[0].id});
+  return json(res,201,item.rows[0]);
+ }
+ const productVariants=pathname.match(/^\/api\/products\/([a-f0-9-]{36})\/variants$/);
+ if(productVariants&&method==='PUT'){
+  needRole(a,['owner','admin']);
+  const {data}=await body(req,22000);
+  const variants=validateVariants(data.variants);
+  const client=await pool.connect();
+  try{
+   await client.query('BEGIN');
+   const check=await client.query('SELECT id FROM products WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[a.active_tenant_id,productVariants[1]]);
+   if(!check.rowCount)throw fail(404,'Produto não encontrado nesta empresa.');
+   await client.query('DELETE FROM product_variants WHERE tenant_id=$1 AND product_id=$2',[a.active_tenant_id,productVariants[1]]);
+   for(const variant of variants){
+    await client.query('INSERT INTO product_variants(id,tenant_id,product_id,name,sku,price_cents,stock_quantity,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+     [id(),a.active_tenant_id,productVariants[1],variant.name,variant.sku,variant.priceCents,variant.stockQuantity,variant.active]);
+   }
+   await client.query('COMMIT');
+  }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
+  await audit(a,'product.variants.updated',{productId:productVariants[1],count:variants.length});
+  return json(res,200,{ok:true,count:variants.length});
+ }
+ const productMedia=pathname.match(/^\/api\/products\/([a-f0-9-]{36})\/media$/);
+ if(productMedia&&method==='POST'){
+  needRole(a,['owner','admin']);
+  if(!mediaConfigured())throw fail(503,'Armazenamento de imagens indisponível.');
+  if(!limiter(simulationAttempts,'media:'+a.active_tenant_id,60000,16))throw fail(429,'Muitos envios de imagem. Tente novamente.');
+  const {data}=await body(req,4300000);
+  const alt=typeof data.alt==='string'?data.alt.trim():'';
+  if(alt.length>200)throw fail(422,'Texto alternativo muito longo.');
+  const product=await query('SELECT id FROM products WHERE tenant_id=$1 AND id=$2',[a.active_tenant_id,productMedia[1]]);
+  if(!product.rowCount)throw fail(404,'Produto não encontrado nesta empresa.');
+  const count=await query('SELECT count(*)::int AS n FROM product_media WHERE tenant_id=$1 AND product_id=$2',[a.active_tenant_id,productMedia[1]]);
+  if(count.rows[0].n>=8)throw fail(422,'Cada produto permite até 8 fotos.');
+  const img=await normalizeImage(data.contentBase64);
+  const objectKey=imageKey(a.active_tenant_id,productMedia[1]),mediaId=id();
+  try{
+   await putPrivateImage(objectKey,img.bytes);
+   await query('INSERT INTO product_media(id,tenant_id,product_id,object_key,content_type,bytes,alt) VALUES($1,$2,$3,$4,$5,$6,$7)',
+    [mediaId,a.active_tenant_id,productMedia[1],objectKey,img.contentType,img.bytes.length,alt]);
+  }catch(e){try{await deletePrivateImage(objectKey);}catch{}throw e;}
+  await audit(a,'product.media.uploaded',{productId:productMedia[1],mediaId,bytes:img.bytes.length});
+  return json(res,201,{id:mediaId,url:'/api/products/'+productMedia[1]+'/media/'+mediaId+'/file',alt,bytes:img.bytes.length});
+ }
+ const productFile=pathname.match(/^\/api\/products\/([a-f0-9-]{36})\/media\/([a-f0-9-]{36})\/file$/);
+ if(productFile&&method==='GET'){
+  const record=await query('SELECT object_key,content_type FROM product_media WHERE tenant_id=$1 AND product_id=$2 AND id=$3',
+   [a.active_tenant_id,productFile[1],productFile[2]]);
+  if(!record.rowCount)throw fail(404,'Foto não encontrada nesta empresa.');
+  const bytes=await getPrivateImage(record.rows[0].object_key);
+  res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':bytes.length,
+   'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});
+  return res.end(bytes);
+ }
+ const mediaDelete=pathname.match(/^\/api\/products\/([a-f0-9-]{36})\/media\/([a-f0-9-]{36})$/);
+ if(mediaDelete&&method==='DELETE'){
+  needRole(a,['owner','admin']);
+  const record=await query('SELECT object_key FROM product_media WHERE tenant_id=$1 AND product_id=$2 AND id=$3',
+   [a.active_tenant_id,mediaDelete[1],mediaDelete[2]]);
+  if(!record.rowCount)throw fail(404,'Foto não encontrada nesta empresa.');
+  await deletePrivateImage(record.rows[0].object_key);
+  await query('DELETE FROM product_media WHERE tenant_id=$1 AND product_id=$2 AND id=$3',
+   [a.active_tenant_id,mediaDelete[1],mediaDelete[2]]);
+  await audit(a,'product.media.deleted',{productId:mediaDelete[1],mediaId:mediaDelete[2]});
+  return json(res,200,{ok:true});
+ }
+ const campaignPath=pathname.match(/^\/api\/products\/([a-f0-9-]{36})\/campaigns$/);
+ if(campaignPath&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const {data}=await body(req);
+  const campaign=validateCampaign(data);
+  const check=await query('SELECT id FROM products WHERE tenant_id=$1 AND id=$2',[a.active_tenant_id,campaignPath[1]]);
+  if(!check.rowCount)throw fail(404,'Produto não encontrado nesta empresa.');
+  const result=await query(
+   'INSERT INTO product_campaign_links(id,tenant_id,product_id,provider,campaign_id,label) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,provider,campaign_id,label,verified',
+   [id(),a.active_tenant_id,campaignPath[1],campaign.provider,campaign.campaignId,campaign.label]);
+  await audit(a,'product.campaign.linked',{productId:campaignPath[1],provider:campaign.provider});
+  return json(res,201,result.rows[0]);
+ }
+ const campaignDelete=pathname.match(/^\/api\/products\/([a-f0-9-]{36})\/campaigns\/([a-f0-9-]{36})$/);
+ if(campaignDelete&&method==='DELETE'){
+  needRole(a,['owner','admin']);
+  const deleted=await query('DELETE FROM product_campaign_links WHERE tenant_id=$1 AND product_id=$2 AND id=$3 RETURNING id',
+   [a.active_tenant_id,campaignDelete[1],campaignDelete[2]]);
+  if(!deleted.rowCount)throw fail(404,'Vínculo de campanha não encontrado.');
+  await audit(a,'product.campaign.unlinked',{productId:campaignDelete[1]});
+  return json(res,200,{ok:true});
  }
  const prodMatch=pathname.match(/^\/api\/products\/([a-f0-9-]{36})$/);
  if(prodMatch&&method==='PATCH'){
-  needRole(a,['owner','admin']);const {data}=await body(req);
-  if(!validText(data.name,120)||!money(data.priceCents)||typeof data.active!=='boolean'||String(data.description||'').length>1200)throw fail(422,'Produto inválido.');
-  const r=await query('UPDATE products SET name=$3,description=$4,price_cents=$5,active=$6 WHERE id=$1 AND tenant_id=$2 RETURNING id,name,description,price_cents,active',[prodMatch[1],a.active_tenant_id,data.name.trim(),trimmed(data.description,1200),data.priceCents,data.active]);
-  if(!r.rowCount)throw fail(404,'Produto não encontrado.');return json(res,200,r.rows[0]);
+  needRole(a,['owner','admin']);
+  const {data}=await body(req),p=validateProduct(data);
+  const result=await query(
+   'UPDATE products SET name=$3,description=$4,sku=$5,price_cents=$6,stock_quantity=$7,compare_at_price_cents=$8,active=$9,updated_at=now() WHERE id=$1 AND tenant_id=$2 RETURNING id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active',
+   [prodMatch[1],a.active_tenant_id,p.name,p.description,p.sku,p.priceCents,p.stockQuantity,p.compareAtPriceCents,p.active]);
+  if(!result.rowCount)throw fail(404,'Produto não encontrado.');
+  await audit(a,'product.updated',{productId:prodMatch[1]});
+  return json(res,200,result.rows[0]);
  }
  if(method==='GET'&&pathname==='/api/agent'){
   const r=await query('SELECT name,tone,instructions,knowledge_md,enabled,updated_at FROM agents WHERE tenant_id=$1',[a.active_tenant_id]);
@@ -431,12 +548,12 @@ async function handle(req,res){
   if(!limiter(simulationAttempts,key,60000,12))throw fail(429,'Limite de testes por minuto atingido.');
   const {data}=await body(req);
   if(!validText(data.message,1200))throw fail(422,'Digite uma mensagem de até 1200 caracteres.');
-  const [agent,products]=await Promise.all([
+  const [agent,catalogProducts]=await Promise.all([
    query('SELECT name,tone,instructions,knowledge_md FROM agents WHERE tenant_id=$1',[a.active_tenant_id]),
-   query('SELECT name,description,price_cents FROM products WHERE tenant_id=$1 AND active=true ORDER BY name LIMIT 70',[a.active_tenant_id])
+   fullCatalog(a.active_tenant_id)
   ]);
   if(!process.env.GROQ_API_KEY)throw fail(503,'O simulador precisa da chave GROQ_API_KEY configurada no Railway.');
-  const catalog=products.rows.map(p=>p.name+' | R$ '+(p.price_cents/100).toFixed(2)+' | '+p.description).join('\n');
+  const catalog=catalogPrompt(catalogProducts.filter(p=>p.active));
   const config=agent.rows[0]||{};
   const system=[
    'Você é '+String(config.name||'Sócio')+', assistente comercial de '+a.tenant_name+'.',
@@ -458,7 +575,8 @@ async function handle(req,res){
    });
    if(!resp.ok)throw fail(503,'Groq não respondeu corretamente. Consulte a chave e o modelo configurados.');
    const payload=await resp.json();
-   return json(res,200,{reply:String(payload.choices?.[0]?.message?.content||'').slice(0,3000),simulation:true});
+   return json(res,200,{reply:String(payload.choices?.[0]?.message?.content||'').slice(0,3000),simulation:true,
+    productCards:matchCatalogProducts(data.message,catalogProducts)});
   }finally{clearTimeout(timer);}
  }
  if(method==='GET'&&pathname==='/api/inbox'){
@@ -553,6 +671,10 @@ async function receiveWhatsApp(req,res){
 async function main(){
  const schema=await readFile(new URL('./schema.sql',import.meta.url),'utf8');
  await query(schema);
+ // Storage probe checks the real private S3 endpoint without touching customer files.
+ if(mediaConfigured())void checkMediaStorage()
+  .then(x=>console.info('[socio product media]',JSON.stringify(x)))
+  .catch(()=>console.warn('[socio product media]',JSON.stringify({configured:true,reachable:false})));
  // Asynchronous gateway auth/scope probe; logs only boolean readiness.
  // Never log session ids, telephone numbers, raw responses or secrets.
  if(gatewayConfigured()){
