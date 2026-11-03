@@ -236,7 +236,8 @@ async function products(selected=state.catalogProductId){
  const photo=p=>p.media?.length?'<img class="catalog-cover-image" src="'+e(p.media[0].url)+'" alt="'+e(p.media[0].alt||p.name)+'" loading="lazy">':
    '<div class="catalog-placeholder">◈</div>';
  const productCards=list.length?'<div class="catalog-list">'+list.map(p=>{
-  const available=p.active&&(p.stock_quantity===null||p.stock_quantity>0);
+  const stockedVariants=p.variants?.filter(v=>v.active!==false)||[];
+  const available=p.active&&(stockedVariants.length?stockedVariants.some(v=>v.stock_quantity===null||v.stock_quantity>0):(p.stock_quantity===null||p.stock_quantity>0));
   return '<button type="button" class="catalog-product '+(selected===p.id?'is-selected':'')+'" data-select-product="'+e(p.id)+'">'+
    '<div class="catalog-cover">'+photo(p)+'</div>'+
    '<div class="catalog-product-copy"><strong>'+e(p.name)+'</strong><small>'+e(p.sku||'Sem SKU')+' · '+e(p.media?.length||0)+' foto(s)</small>'+
