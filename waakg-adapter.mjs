@@ -92,7 +92,8 @@ export async function getSessionStatus(sessionId,opts={}){
  if(!validSessionId(sessionId))throw error(422,'Identificador da sessão inválido.');
  const payload=await gatewayRead('/api/sessions/'+pathPart(sessionId),opts);
  if(payload.data?.sessionId!==sessionId)throw error(503,'Gateway retornou outra sessão.');
- return {connected:String(payload.data.status).toUpperCase()==='CONNECTED',status:String(payload.data.status||'UNKNOWN').slice(0,40)};
+ return {connected:String(payload.data.status).toUpperCase()==='CONNECTED',status:String(payload.data.status||'UNKNOWN').slice(0,40),
+  connectedNumber:String(payload.data.me?.id||'').split(':')[0].split('@')[0].replace(/\D/g,'')};
 }
 export async function listAvailableChats(sessionId,opts={}){
  if(!validSessionId(sessionId))throw error(422,'Sessão inválida.');
