@@ -184,28 +184,165 @@ async function showWaQr(channelId){
  await poll();
 }
 
-async function products(){
- const list=await api('/api/products');
- view.innerHTML=heading('CATÁLOGO','Produtos e serviços.','Informações oficiais que o Sócio utiliza ao conversar com seus clientes.')+
- '<div class="two-pane"><div>'+panel('Catálogo da empresa',list.length+' item(ns) cadastrados.',
- list.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>Produto</th><th>Preço</th><th>Ação</th></tr></thead><tbody>'+list.map(p=>'<tr><td><strong>'+e(p.name)+'</strong><div class="table-detail">'+e(p.description||'Sem descrição')+'</div>'+(!p.active?badge('Inativo'):'')+'</td><td><strong>'+e(brl(p.price_cents))+'</strong></td><td><button class="btn sm ghost" data-edit="'+e(p.id)+'">Editar</button></td></tr>').join('')+'</tbody></table></div>':empty('▦','Seu catálogo está vazio','Adicione um produto, preço ou serviço para começar.'))+'</div>'+
- '<div class="card card-pad"><div class="section-title" id="productFormTitle">Novo item</div><form class="form-stack" id="productForm"><input type="hidden" name="id"><label>Nome do produto ou serviço<input name="name" required maxlength="120" placeholder="Ex.: Consultoria personalizada"></label><label>Preço (R$)<input name="price" required type="number" min="0" max="999999" step="0.01" placeholder="129.00"></label><label>Descrição<textarea name="description" maxlength="1200" placeholder="Detalhes, o que inclui, condições..."></textarea></label><label id="activeLabel" class="hidden">Disponibilidade<select name="active"><option value="true">Ativo</option><option value="false">Inativo</option></select></label><div class="form-actions"><button class="btn primary" type="submit">Salvar item →</button><button id="cancelEdit" type="button" class="btn ghost hidden">Cancelar</button></div></form></div></div>';
- const form=$('#productForm');
- view.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>{
-  const p=list.find(x=>x.id===b.dataset.edit);if(!p)return;
-  form.elements.id.value=p.id;form.elements.name.value=p.name;form.elements.price.value=(p.price_cents/100).toFixed(2);form.elements.description.value=p.description;
-  form.elements.active.value=String(p.active);$('#productFormTitle').textContent='Editar item';$('#activeLabel').classList.remove('hidden');$('#cancelEdit').classList.remove('hidden');
-  form.scrollIntoView({behavior:'smooth',block:'center'});
- }));
- $('#cancelEdit').addEventListener('click',()=>products());
- form.addEventListener('submit',async ev=>{
-  ev.preventDefault();const f=formValues(form),priceCents=Math.round(Number(f.price)*100);
-  if(!Number.isSafeInteger(priceCents))return toast('Preço inválido.',true);
+
+const catalogPrice=cents=>brl(Number(cents||0));
+const centsFromInput=text=>{
+ const raw=String(text??'').trim().replace(',','.');
+ if(!/^\d{1,7}(\.\d{1,2})?$/.test(raw))throw Error('Preço inválido. Use, por exemplo, 129.90.');
+ return Math.round(Number(raw)*100);
+};
+const stockFromInput=text=>{
+ const value=String(text??'').trim();
+ if(!value)return null;
+ if(!/^\d{1,7}$/.test(value)||Number(value)>1000000)throw Error('Estoque inválido: use um número não negativo ou deixe vazio.');
+ return Number(value);
+};
+async function compressCatalogImage(file){
+ if(file.size>12000000)throw Error('Foto original acima de 12 MB. Escolha outra imagem.');
+ if(!/^image\/(jpeg|png|webp)$/.test(file.type))throw Error('Selecione JPG, PNG ou WebP.');
+ const bitmap=await createImageBitmap(file);
+ try{
+  if(bitmap.width<20||bitmap.height<20)throw Error('Foto muito pequena.');
+  const ratio=Math.min(1,1600/Math.max(bitmap.width,bitmap.height));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.round(bitmap.width*ratio);canvas.height=Math.round(bitmap.height*ratio);
+  const context=canvas.getContext('2d');if(!context)throw Error('Não foi possível preparar a imagem.');
+  context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);
+  context.drawImage(bitmap,0,0,canvas.width,canvas.height);
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.83));
+  if(!blob||blob.size>3000000)throw Error('Foto resultante muito grande. Selecione outra imagem.');
+  return new Promise((resolve,reject)=>{
+   const reader=new FileReader();
+   reader.onload=()=>resolve(String(reader.result).split(',')[1]);
+   reader.onerror=()=>reject(new Error('Não foi possível ler a foto.'));
+   reader.readAsDataURL(blob);
+  });
+ }finally{bitmap.close();}
+}
+function catalogVariantRow(variant={}){
+ return '<div class="catalog-variant-row" data-variant-row>'+
+  '<input data-variant-name aria-label="Nome da variação" maxlength="100" placeholder="Tamanho, cor ou modelo" value="'+e(variant.name||'')+'">'+
+  '<input data-variant-price aria-label="Preço da variação" type="number" min="0" step="0.01" placeholder="Preço R$" value="'+e(variant.price_cents===undefined?'':(variant.price_cents/100).toFixed(2))+'">'+
+  '<input data-variant-stock aria-label="Estoque da variação" type="number" min="0" step="1" placeholder="Estoque" value="'+e(variant.stock_quantity??'')+'">'+
+  '<input data-variant-sku aria-label="SKU da variação" maxlength="50" placeholder="SKU opcional" value="'+e(variant.sku||'')+'">'+
+  '<button type="button" class="btn sm ghost" data-remove-variant aria-label="Excluir variação">×</button>'+
+ '</div>';
+}
+async function products(selected=state.catalogProductId){
+ const [list,storage]=await Promise.all([api('/api/products'),api('/api/products/storage')]);
+ if(selected&&!list.some(p=>p.id===selected))selected=null;
+ state.catalogProductId=selected||null;
+ const current=list.find(p=>p.id===selected);
+ const photo=p=>p.media?.length?'<img class="catalog-cover-image" src="'+e(p.media[0].url)+'" alt="'+e(p.media[0].alt||p.name)+'" loading="lazy">':
+   '<div class="catalog-placeholder">◈</div>';
+ const productCards=list.length?'<div class="catalog-list">'+list.map(p=>{
+  const available=p.active&&(p.stock_quantity===null||p.stock_quantity>0);
+  return '<button type="button" class="catalog-product '+(selected===p.id?'is-selected':'')+'" data-select-product="'+e(p.id)+'">'+
+   '<div class="catalog-cover">'+photo(p)+'</div>'+
+   '<div class="catalog-product-copy"><strong>'+e(p.name)+'</strong><small>'+e(p.sku||'Sem SKU')+' · '+e(p.media?.length||0)+' foto(s)</small>'+
+   '<span>'+e(catalogPrice(p.price_cents))+'</span></div>'+
+   '<span class="catalog-status '+(available?'yes':'no')+'">'+(available?'Ativo':'Indisponível')+'</span></button>';
+ }).join('')+'</div>':
+ empty('▦','Seu catálogo está vazio','Cadastre um produto para incluir preço, variações e fotos.');
+ const gallery=current?'<div class="catalog-gallery">'+current.media.map(m=>
+  '<div class="catalog-gallery-item"><img src="'+e(m.url)+'" alt="'+e(m.alt||current.name)+'" loading="lazy">'+
+  '<button type="button" data-delete-photo="'+e(m.id)+'" class="btn sm ghost">Remover</button></div>').join('')+'</div>':'';
+ const detail=current?
+  '<section class="card card-pad section-gap"><div class="section-title">Fotos do produto · '+e(current.media.length)+'/8</div>'+
+   '<p class="form-note">Arquivos privados por empresa. JPG, PNG e WebP são otimizados sem metadados da foto. A IA poderá exibir essas imagens no laboratório.</p>'+
+   gallery+
+   '<form id="catalogPhotoForm" class="form-stack"><label>Adicionar fotos<input type="file" name="photos" accept="image/jpeg,image/png,image/webp" multiple '+(!storage.configured?'disabled':'')+'></label>'+
+   '<button class="btn primary" type="submit" '+(!storage.configured?'disabled':'')+'>Adicionar fotos →</button></form>'+
+   (!storage.configured?'<p class="form-note">Armazenamento de fotos não configurado no servidor.</p>':'')+
+  '</section>'+
+  '<section class="card card-pad section-gap"><div class="section-title">Variações e preços</div>'+
+   '<p class="form-note">Tamanhos, cores e versões podem ter preços e estoques próprios. Estoque vazio significa não controlado.</p>'+
+   '<form id="catalogVariantForm" class="form-stack"><div id="catalogVariantRows">'+current.variants.map(catalogVariantRow).join('')+'</div>'+
+   '<div class="row-actions"><button class="btn soft" id="addVariant" type="button">+ Adicionar variação</button><button class="btn primary" type="submit">Salvar variações</button></div></form></section>'+
+  '<section class="card card-pad section-gap"><div class="section-title">Campanhas associadas</div>'+
+   '<p class="form-note">Associação manual de referência. A conexão e os resultados da conta de anúncios ainda não foram verificados.</p>'+
+   (current.campaigns.length?'<div class="catalog-campaign-list">'+current.campaigns.map(c=>
+     '<div><strong>'+e(c.provider==='meta_ads'?'Meta Ads':'Google Ads')+'</strong> · '+e(c.label||c.campaign_id)+
+     '<span class="form-note"> '+e(c.campaign_id)+' · Não verificada</span>'+
+     '<button class="btn sm ghost" data-delete-campaign="'+e(c.id)+'">Remover</button></div>').join('')+'</div>':'')+
+   '<form id="catalogCampaignForm" class="form-stack"><label>Plataforma<select name="provider"><option value="meta_ads">Meta Ads</option><option value="google_ads">Google Ads</option></select></label>'+
+   '<label>ID da campanha<input name="campaignId" maxlength="150" required placeholder="Identificador na plataforma"></label>'+
+   '<label>Nome interno<input name="label" maxlength="120" placeholder="Ex.: Campanha Black Friday"></label>'+
+   '<button class="btn soft" type="submit">Associar campanha →</button></form></section>':'';
+ view.innerHTML=heading('CATÁLOGO INTELIGENTE','Produtos que o Sócio conhece.','Fotos reais, preços oficiais, variações e disponibilidade. Tudo separado por empresa.')+
+  '<div class="two-pane"><div><section class="card card-pad"><div class="section-title">Catálogo comercial · '+e(list.length)+' produto(s)</div>'+productCards+'</section></div>'+
+  '<div class="card card-pad"><div class="section-title" id="productFormTitle">'+(current?'Editar produto':'Novo produto')+'</div>'+
+  '<form class="form-stack" id="productForm"><label>Nome<input name="name" required maxlength="120" placeholder="Ex.: Pizza de calabresa" value="'+e(current?.name||'')+'"></label>'+
+  '<div class="catalog-pair"><label>Preço (R$)<input name="price" required type="number" min="0" step="0.01" value="'+e(current?(current.price_cents/100).toFixed(2):'')+'"></label>'+
+  '<label>Preço anterior (opcional)<input name="compareAtPrice" type="number" min="0" step="0.01" value="'+e(current?.compare_at_price_cents!=null?(current.compare_at_price_cents/100).toFixed(2):'')+'"></label></div>'+
+  '<div class="catalog-pair"><label>SKU<input name="sku" maxlength="50" placeholder="Código do produto" value="'+e(current?.sku||'')+'"></label>'+
+  '<label>Estoque (vazio = sem controle)<input name="stock" type="number" min="0" step="1" value="'+e(current?.stock_quantity??'')+'"></label></div>'+
+  '<label>Descrição comercial<textarea name="description" maxlength="1200" placeholder="Características, benefícios e condições...">'+e(current?.description||'')+'</textarea></label>'+
+  '<label>Disponibilidade<select name="active"><option value="true"'+(current?.active===false?'':' selected')+'>Ativo</option>'+
+  '<option value="false"'+(current?.active===false?' selected':'')+'>Inativo</option></select></label>'+
+  '<div class="form-actions"><button class="btn primary" type="submit">'+(current?'Salvar alterações':'Criar produto')+' →</button>'+
+  (current?'<button class="btn ghost" type="button" id="clearProduct">Novo produto</button>':'')+'</div></form></div></div>'+
+  detail;
+ view.querySelectorAll('[data-select-product]').forEach(btn=>btn.addEventListener('click',()=>products(btn.dataset.selectProduct)));
+ $('#clearProduct')?.addEventListener('click',()=>products(null));
+ $('#productForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();const d=formValues(ev.currentTarget);
   await action(async()=>{
-   await api(f.id?'/api/products/'+f.id:'/api/products',f.id?'PATCH':'POST',{name:f.name,description:f.description,priceCents,active:f.active!=='false'});
-   toast('Catálogo atualizado.');await products();
+   const data={name:d.name,description:d.description,sku:d.sku,
+    priceCents:centsFromInput(d.price),compareAtPriceCents:d.compareAtPrice?centsFromInput(d.compareAtPrice):null,
+    stockQuantity:stockFromInput(d.stock),active:d.active==='true'};
+   const result=await api(current?'/api/products/'+current.id:'/api/products',current?'PATCH':'POST',data);
+   toast('Catálogo atualizado.');await products(current?.id||result.id);
   });
  });
+ if(!current)return;
+ $('#catalogPhotoForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();const files=[...ev.currentTarget.elements.photos.files];
+  if(!files.length)return toast('Selecione pelo menos uma foto.',true);
+  if(files.length+current.media.length>8)return toast('Cada produto aceita até 8 fotos.',true);
+  await action(async()=>{
+   for(const file of files){
+    const contentBase64=await compressCatalogImage(file);
+    await api('/api/products/'+current.id+'/media','POST',{contentBase64,alt:current.name});
+   }
+   toast('Fotos adicionadas.');await products(current.id);
+  });
+ });
+ view.querySelectorAll('[data-delete-photo]').forEach(btn=>btn.addEventListener('click',()=>action(async()=>{
+  await api('/api/products/'+current.id+'/media/'+btn.dataset.deletePhoto,'DELETE',{});
+  toast('Foto removida.');await products(current.id);
+ })));
+ $('#addVariant').addEventListener('click',()=>{
+  const rows=$('#catalogVariantRows');
+  if(rows.querySelectorAll('[data-variant-row]').length>=25)return toast('Máximo de 25 variações.',true);
+  rows.insertAdjacentHTML('beforeend',catalogVariantRow());
+ });
+ $('#catalogVariantRows').addEventListener('click',ev=>{const btn=ev.target.closest('[data-remove-variant]');if(btn)btn.closest('[data-variant-row]').remove();});
+ $('#catalogVariantForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  await action(async()=>{
+   const rows=[...$('#catalogVariantRows').querySelectorAll('[data-variant-row]')];
+   const variants=rows.map(row=>{
+    const get=selector=>row.querySelector(selector)?.value||'';
+    return {name:get('[data-variant-name]'),sku:get('[data-variant-sku]'),
+     priceCents:centsFromInput(get('[data-variant-price]')),
+     stockQuantity:stockFromInput(get('[data-variant-stock]')),active:true};
+   });
+   await api('/api/products/'+current.id+'/variants','PUT',{variants});
+   toast('Variações atualizadas.');await products(current.id);
+  });
+ });
+ $('#catalogCampaignForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();const d=formValues(ev.currentTarget);
+  await action(async()=>{
+   await api('/api/products/'+current.id+'/campaigns','POST',d);
+   toast('Campanha associada como referência manual.');await products(current.id);
+  });
+ });
+ view.querySelectorAll('[data-delete-campaign]').forEach(btn=>btn.addEventListener('click',()=>action(async()=>{
+  await api('/api/products/'+current.id+'/campaigns/'+btn.dataset.deleteCampaign,'DELETE',{});
+  toast('Associação removida.');await products(current.id);
+ })));
 }
 async function training(){
  clearTimeout(trainingTimer);
@@ -319,7 +456,15 @@ async function agent(){
   const msgs=$('#simulationMessages');msgs.insertAdjacentHTML('beforeend','<div class="bubble agent">'+e(txt)+'</div>');form.reset();msgs.scrollTop=msgs.scrollHeight;
   await action(async()=>{
    const result=await api('/api/simulate','POST',{message:txt});
-   msgs.insertAdjacentHTML('beforeend','<div class="bubble">'+e(result.reply||'Não foi possível gerar uma resposta.')+'</div>');msgs.scrollTop=msgs.scrollHeight;
+   msgs.insertAdjacentHTML('beforeend','<div class="bubble">'+e(result.reply||'Não foi possível gerar uma resposta.')+'</div>');
+   const cards=Array.isArray(result.productCards)?result.productCards:[];
+   if(cards.length){
+    const html=cards.map(p=>'<div class="catalog-ai-card"><strong>'+e(p.name)+'</strong> · '+e(brl(p.priceCents))+
+     '<div class="catalog-ai-photos">'+(p.media||[]).map(m=>'<img loading="lazy" src="'+e(m.url)+'" alt="'+e(m.alt||p.name)+'">').join('')+'</div>'+
+     '<small>Produto encontrado no catálogo oficial. Fotos mostradas apenas neste laboratório.</small></div>').join('');
+    msgs.insertAdjacentHTML('beforeend',html);
+   }
+   msgs.scrollTop=msgs.scrollHeight;
   });
  });
 }
