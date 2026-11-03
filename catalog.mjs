@@ -7,7 +7,7 @@ const cleanText=(x,max)=>typeof x==='string'&&x.trim().length>0&&x.length<=max?x
 export function validateProduct(data){
  if(!data||typeof data!=='object')throw fault('Produto inválido.');
  const name=cleanText(data.name,120);
- const description=typeof data.description==='string'&&data.description.length<=1200?data.description.trim():null;
+ const description=data.description===undefined||data.description===null?'':typeof data.description==='string'&&data.description.length<=1200?data.description.trim():null;
  const sku=data.sku==null||data.sku===''?null:cleanText(data.sku,50);
  const stockQuantity=data.stockQuantity===undefined?null:data.stockQuantity;
  const compareAtPriceCents=data.compareAtPriceCents===undefined||data.compareAtPriceCents===null?null:data.compareAtPriceCents;
