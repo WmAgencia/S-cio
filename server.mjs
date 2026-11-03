@@ -200,7 +200,7 @@ async function handle(req,res){
   const interval=range.unit==='day'?'1 day':'1 month';
   const sql=`WITH buckets AS (
    SELECT date_trunc('${range.unit}', now()) - step * interval '${interval}' AS bucket
-   FROM generate_series(${range.count-1},0,-1) AS step
+   FROM generate_series(${range.count-1},0,-1) AS series(step)
   ) SELECT to_char(b.bucket,'YYYY-MM-DD') AS date,
    COALESCE(count(m.id) FILTER (WHERE m.direction='inbound'),0)::int AS inbound,
    COALESCE(count(m.id) FILTER (WHERE m.direction='outbound'),0)::int AS outbound
