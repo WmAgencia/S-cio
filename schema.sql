@@ -160,6 +160,8 @@ BEGIN
  END IF;
 END $socio_provider_guard$;
 CREATE UNIQUE INDEX IF NOT EXISTS channels_tenant_id_unique ON channels(tenant_id,id);
+-- A physical WA-AKG number may not be claimed by two customer companies.
+CREATE UNIQUE INDEX IF NOT EXISTS channels_unique_waakg_phone ON channels(phone) WHERE provider='waakg' AND status='connected';
 CREATE UNIQUE INDEX IF NOT EXISTS imports_tenant_id_unique ON imports(tenant_id,id);
 CREATE TABLE IF NOT EXISTS waakg_links (
  id uuid PRIMARY KEY,
