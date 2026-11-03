@@ -27,7 +27,7 @@
     <p id="authDescription">Acesse o painel da sua empresa.</p>
    </div>
    <form id="loginForm" class="form-stack">
-    <label>E-mail comercial<input name="email" type="email" required autocomplete="username" placeholder="voce@empresa.com.br"></label>
+    <label>E-mail ou número de celular<input name="identifier" type="text" required maxlength="255" autocomplete="username" placeholder="Seu e-mail ou celular com DDD"></label>
     <label>Senha<input name="password" type="password" required autocomplete="current-password" placeholder="Sua senha"></label>
     <button class="btn primary wide" type="submit">Entrar no Sócio <span>→</span></button>
    </form>
@@ -37,6 +37,7 @@
     <label>Nome completo<input name="name" required maxlength="100" placeholder="Responsável"></label>
     <label>Nome da empresa<input name="company" required maxlength="120" placeholder="Consecom Brasil"></label>
     <label>E-mail de administrador<input name="email" type="email" required autocomplete="username" placeholder="contato@empresa.com.br"></label>
+    <label>Celular de acesso (opcional)<input name="phone" type="tel" maxlength="32" autocomplete="tel" placeholder="(15) 99999-9999"></label>
     <label>Senha forte (mínimo 12 caracteres)<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="Crie sua senha"></label>
     <button class="btn primary wide" type="submit">Criar conta principal <span>→</span></button>
    </form>

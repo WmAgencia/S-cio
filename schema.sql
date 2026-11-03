@@ -17,6 +17,11 @@ CREATE TABLE IF NOT EXISTS users (
  platform_owner boolean NOT NULL DEFAULT false,
  created_at timestamptz NOT NULL DEFAULT now()
 );
+-- Backward compatible with existing Railway users and passwords.
+-- Phone is an optional individual login identifier, never a business channel number.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone text;
+CREATE UNIQUE INDEX IF NOT EXISTS users_phone_login_unique ON users(phone) WHERE phone IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS sessions (
  token_hash text PRIMARY KEY,
  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
