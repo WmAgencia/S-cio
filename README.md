@@ -42,3 +42,13 @@ Node.js 20+ e PostgreSQL.
 Comandos: npm install, npm test e npm start.
 
 O teste e2e requer DATABASE_URL apontando para um Postgres descartável. O GitHub Actions provisiona esse Postgres automaticamente; não use banco de produção para rodar o teste de instalação.
+
+## Respostas reais via WhatsApp (opt-in)
+
+- A Consecom cadastra o número e informa Phone Number ID e token da Meta. O servidor consulta o identificador oficial e confere o telefone antes de vincular. O token é criptografado em repouso com AES-256-GCM usando CHANNEL_ENCRYPTION_KEY.
+- Ative META_WEBHOOK_VERIFY_TOKEN e META_APP_SECRET no Railway e cadastre o callback de mensagens na WhatsApp Business Platform. Configure GROQ_API_KEY para respostas automáticas.
+- O proprietário marca o agente como preparado e ativa manualmente cada canal. Por padrão todos ficam DESLIGADOS; novos clientes não recebem mensagens automáticas durante a implantação.
+- Cada mensagem recebida entra no PostgreSQL e apenas quando autorizado pode gerar trabalho na fila persistente. Não há disparo para contatos frios. O atendimento humano suspende a IA; pedidos para parar também cancelam a resposta.
+- Respostas manuais exigem clique explícito e confirmação na tela. A API exige janela de atendimento iniciada pelo cliente e valida a conexão.
+- Resposta confirmada pela Meta gera evento de envio no histórico. Entregas incertas são marcadas como 'unknown' e não reenviadas automaticamente, evitando duplicidade.
+- Há limites de respostas automáticas por plano. Este recurso não substitui revisão de custos da Meta, conformidade LGPD, alertas e testes com números reais.
