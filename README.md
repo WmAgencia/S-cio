@@ -9,6 +9,7 @@ SaaS multiempresa de atendimento e vendas. Projeto independente do Prospector: n
 - Contas isoladas por empresa (tenant_id em todas as consultas de dados).
 - Login seguro com scrypt, sessões persistentes, cookie HttpOnly/SameSite e CSRF.
 - Cadastro de WhatsApps, produtos, descrições e preços oficiais.
+- Associação de sessões WA-AKG existentes após conferência do número pelo administrador Consecom e histórico disponível com sincronização, pausas e progresso.
 - Importação de múltiplas conversas do WhatsApp em `.txt`, `.md` ou ZIP de exportação sem mídia; ZIPs são extraídos em memória com limites de tamanho, sem armazenar o arquivo bruto.
 - Base Markdown anonimizada por empresa. Interlocutores ganham nomes genéricos; padrões de telefone, e-mail, links e documentos numéricos são mascarados.
 - Análise de conversas **já importadas** com progresso persistente, pausa, retomada, cancelamento, relatório de padrões e Markdown em rascunho, sujeito à aprovação humana.
@@ -24,7 +25,21 @@ O projeto Wmagencia `svbdigkomsbugiyufdtc` recebeu migrations aditivas em `supab
 
 ## Análise de conversas
 
-Em Treinamento, após importar os exemplos, clique em **Analisar conversas**. O processamento opera sobre as amostras anonimizadas guardadas pelo próprio Sócio; não varre automaticamente mensagens das sessões do WA-AKG, ainda não conectadas ao SaaS. O progresso é por fonte processada, não por caracteres ou por conversas externas. Ao final, revise o relatório e o Markdown e use **Aprovar conhecimento** para substituir o conhecimento atual do agente. Novos arquivos importados são armazenados como fontes e não modificam o prompt do agente até que uma versão da análise seja aprovada. A aprovação não dispara mensagens externas. Expressões como “fechar pedido” não provam venda; precisamos de confirmação de vendas/CRM para analisar conversão real.
+Em Treinamento, após importar os exemplos, clique em **Analisar conversas**. O processamento opera sobre as amostras anonimizadas guardadas pelo próprio Sócio; permite importar pelo gateway os históricos disponíveis nas sessões WA-AKG previamente vinculadas; a sincronização e a análise de Markdown continuam duas ações separadas. O progresso é por fonte processada, não por caracteres ou por conversas externas. Ao final, revise o relatório e o Markdown e use **Aprovar conhecimento** para substituir o conhecimento atual do agente. Novos arquivos importados são armazenados como fontes e não modificam o prompt do agente até que uma versão da análise seja aprovada. A aprovação não dispara mensagens externas. Expressões como “fechar pedido” não provam venda; precisamos de confirmação de vendas/CRM para analisar conversão real.
+
+## WA-AKG: leitura de históricos sem disparos
+
+O aplicativo aceita um gateway WA-AKG próprio, usando variáveis secretas do Railway `WA_AKG_BASE_URL`, `WA_AKG_API_KEY` e `CHANNEL_ENCRYPTION_KEY` (mínimo 32 caracteres). Não reutilize credenciais do Prospector nem um gateway que misture contas de terceiros. Use HTTPS ou endereço privado `.railway.internal`.
+
+Somente um administrador da Consecom pode associar uma sessão já conectada à empresa, mediante conferência exata do telefone reportado pelo gateway. Cada empresa enxerga apenas seus vínculos; nunca recebe o ID interno de sessão do provedor nem a chave API.
+
+Em **Treinamento**, a empresa pode iniciar a sincronização das sessões vinculadas, pausar, retomar e visualizar quantos chats e mensagens foram importados. Depois, use **Analisar conversas** para gerar relatório e Markdown em rascunho, que requer aprovação humana.
+
+**Limitações do gateway atual:** a API de listagem fornece até 50 chats por sessão, sem paginação; a leitura extrai no máximo 400 mensagens por chat. A cobertura parcial é explicitada no painel. Grupos, status e mídias ficam fora da análise. Não é um backup integral de WhatsApp e não comprova vendas.
+
+IDs de conversas são criptografados em repouso com AES-GCM e vinculados ao tenant. O sistema guarda amostras sanitizadas e hashes para evitar duplicações. A anonimização por padrões não remove necessariamente nomes próprios mencionados no corpo; use apenas dados autorizados e revise os exemplos.
+
+O Sócio **não cria sessões nem oferece QR automaticamente nesta fase**, nem envia mensagens pelo WA-AKG. A configuração do bot nativo do gateway deve ser auditada antes de conectar clientes reais. Na conta `paidogame` ainda precisam ser configuradas as variáveis de gateway para utilizar essa integração.
 
 ## Deploy Railway
 

@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS channels (
  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
  label text NOT NULL,
  phone text NOT NULL,
- provider text NOT NULL DEFAULT 'meta' CHECK (provider IN ('meta','manual')),
+ provider text NOT NULL DEFAULT 'meta' CHECK (provider IN ('meta','manual','waakg')),
  external_phone_id text UNIQUE,
  status text NOT NULL DEFAULT 'not_connected',
  created_at timestamptz NOT NULL DEFAULT now(),
@@ -143,3 +143,82 @@ CREATE TABLE IF NOT EXISTS training_versions (
 );
 CREATE INDEX IF NOT EXISTS training_versions_tenant_idx ON training_versions(tenant_id,created_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS training_versions_one_approved_per_tenant ON training_versions(tenant_id) WHERE status='approved';
+
+
+-- WA-AKG phase 2: read-only bindings; no gateway credential is stored here.
+-- Foreign keys include tenant_id so accidental cross-tenant association fails.
+-- Avoid taking an ACCESS EXCLUSIVE lock on every app restart.
+DO $socio_provider_guard$
+BEGIN
+ IF EXISTS(
+  SELECT 1 FROM pg_constraint WHERE conrelid='channels'::regclass
+  AND conname='channels_provider_check'
+  AND pg_get_constraintdef(oid) NOT LIKE '%waakg%'
+ ) THEN
+  ALTER TABLE channels DROP CONSTRAINT channels_provider_check;
+  ALTER TABLE channels ADD CONSTRAINT channels_provider_check CHECK(provider IN ('meta','manual','waakg'));
+ END IF;
+END $socio_provider_guard$;
+CREATE UNIQUE INDEX IF NOT EXISTS channels_tenant_id_unique ON channels(tenant_id,id);
+CREATE UNIQUE INDEX IF NOT EXISTS imports_tenant_id_unique ON imports(tenant_id,id);
+CREATE TABLE IF NOT EXISTS waakg_links (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ channel_id uuid NOT NULL,
+ session_id text NOT NULL UNIQUE CHECK(char_length(session_id) BETWEEN 6 AND 64),
+ created_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(tenant_id,channel_id) REFERENCES channels(tenant_id,id) ON DELETE CASCADE,
+ UNIQUE(tenant_id,channel_id)
+);
+CREATE INDEX IF NOT EXISTS waakg_links_tenant_idx ON waakg_links(tenant_id);
+CREATE TABLE IF NOT EXISTS waakg_scans (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ channel_id uuid NOT NULL,
+ status text NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','scanning','importing','paused','failed','completed','cancelled')),
+ total_chats integer NOT NULL DEFAULT 0 CHECK(total_chats>=0),
+ processed_chats integer NOT NULL DEFAULT 0 CHECK(processed_chats>=0 AND processed_chats<=total_chats),
+ imported_chats integer NOT NULL DEFAULT 0 CHECK(imported_chats>=0),
+ imported_messages integer NOT NULL DEFAULT 0 CHECK(imported_messages>=0),
+ partial_coverage boolean NOT NULL DEFAULT false,
+ truncated_chats integer NOT NULL DEFAULT 0 CHECK(truncated_chats>=0),
+ error_code text,
+ lease_until timestamptz,
+ lease_token uuid,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ finished_at timestamptz,
+ FOREIGN KEY(tenant_id,channel_id) REFERENCES waakg_links(tenant_id,channel_id),
+ UNIQUE(tenant_id,id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS waakg_scan_single_active ON waakg_scans(tenant_id,channel_id)
+ WHERE status IN ('queued','scanning','importing','paused');
+CREATE INDEX IF NOT EXISTS waakg_scans_queue ON waakg_scans(status,lease_until,created_at);
+CREATE TABLE IF NOT EXISTS waakg_scan_chats (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ channel_id uuid NOT NULL,
+ scan_id uuid NOT NULL,
+ jid_ciphertext text NOT NULL,
+ jid_hash char(64) NOT NULL,
+ status text NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','imported','unchanged','empty')),
+ message_count integer NOT NULL DEFAULT 0 CHECK(message_count>=0),
+ truncated boolean NOT NULL DEFAULT false,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(tenant_id,scan_id) REFERENCES waakg_scans(tenant_id,id) ON DELETE CASCADE,
+ FOREIGN KEY(tenant_id,channel_id) REFERENCES waakg_links(tenant_id,channel_id),
+ UNIQUE(scan_id,jid_hash)
+);
+CREATE INDEX IF NOT EXISTS waakg_scan_chats_pending ON waakg_scan_chats(scan_id,status);
+CREATE TABLE IF NOT EXISTS waakg_import_snapshots (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ channel_id uuid NOT NULL,
+ jid_hash char(64) NOT NULL,
+ fingerprint char(64) NOT NULL,
+ import_id uuid NOT NULL,
+ imported_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(tenant_id,channel_id) REFERENCES waakg_links(tenant_id,channel_id),
+ FOREIGN KEY(tenant_id,import_id) REFERENCES imports(tenant_id,id) ON DELETE CASCADE,
+ UNIQUE(tenant_id,channel_id,jid_hash,fingerprint)
+);

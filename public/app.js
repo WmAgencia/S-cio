@@ -97,13 +97,37 @@ async function overview(){
 }
 function bindNavWithin(){view.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>changeView(b.dataset.go)));}
 async function channels(){
- const data=await api('/api/channels');
+ const [data,waConfig,linked]=await Promise.all([api('/api/channels'),api('/api/waakg/config'),api('/api/waakg/channels')]);
  view.innerHTML=heading('CANAIS DE ATENDIMENTO','Seus WhatsApps.','Cada número pode atender uma equipe diferente. A conexão deve ser autorizada no provedor.')+
  '<div class="two-pane"><div>'+panel('Números cadastrados',data.length+' canal(is) no seu espaço.',
  data.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>Canal</th><th>Conexão</th></tr></thead><tbody>'+data.map(c=>'<tr><td><strong>'+e(c.label)+'</strong><div class="table-detail pill-num">'+e(c.phone)+'</div></td><td>'+badge(c.status==='connected'?'Conectado':'Não conectado',c.status==='connected'?'green':'yellow')+'</td></tr>').join('')+'</tbody></table></div>':empty('◉','Nenhum número ainda','Cadastre o primeiro WhatsApp comercial da empresa.'))+
  '</div><div class="card card-pad"><div class="section-title">Adicionar WhatsApp</div><form id="channelForm" class="form-stack"><label>Nome para identificar<input name="label" required maxlength="90" placeholder="Ex.: Vendas • WhatsApp 1"></label><label>Número com DDD<input name="phone" required placeholder="5515999999999" inputmode="tel"></label><label>ID do número na WhatsApp Business Platform (validado pela Consecom)<input name="externalPhoneId" placeholder="Phone number ID da Meta"></label><div class="info-strip"><strong>Conexão segura</strong>Cadastrar o número não ativa respostas automáticas. Para receber mensagens reais será necessário concluir a configuração do webhook e da conta Meta.</div><button class="btn primary" type="submit">Cadastrar canal →</button></form></div></div>';
  if(!state.me.user.platformOwner) $('#channelForm').elements.externalPhoneId.disabled=true;
  $('#channelForm').addEventListener('submit',async ev=>{ev.preventDefault();const f=ev.currentTarget;const data=formValues(f);await action(async()=>{await api('/api/channels','POST',data);toast('Canal cadastrado. Ainda não conectado.');await channels();});});
+ view.insertAdjacentHTML('beforeend',
+  '<div class="card card-pad section-gap"><div class="section-title">WA-AKG — histórico para treinamento</div>'+
+  '<p class="form-note">Conectamos sessões existentes com verificação do número. A leitura é somente para treinamento: não envia nem responde mensagens.</p>'+
+  '<p class="form-note">'+(waConfig.configured?'Gateway configurado no servidor.':'Gateway do Sócio ainda não configurado pela Consecom.')+'</p>'+
+  (linked.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>Sessão da empresa</th><th>Conexão</th></tr></thead><tbody>'+
+    linked.map(c=>'<tr><td><strong>'+e(c.label)+'</strong><div class="table-detail">'+e(c.phone)+'</div></td><td><button class="btn sm soft" data-wa-check="'+e(c.id)+'">Verificar</button><span class="form-note" data-wa-state="'+e(c.id)+'"></span></td></tr>').join('')+'</tbody></table></div>':
+    '<p class="form-note">Nenhuma sessão WA-AKG vinculada a esta empresa.</p>')+
+  (state.me.user.platformOwner&&waConfig.configured?
+    '<form id="waakgLinkForm" class="form-stack section-gap"><div class="section-title">Vincular sessão existente — Consecom</div>'+
+    '<label>Nome comercial<input name="label" required maxlength="90" placeholder="Vendas 1"></label>'+
+    '<label>Número conectado com DDI e DDD<input name="phone" required placeholder="5515999999999"></label>'+
+    '<label>ID da sessão WA-AKG já conectada<input name="sessionId" required placeholder="Identificador da sessão"></label>'+
+    '<button class="btn primary">Verificar número e vincular</button></form>':
+    '<p class="form-note">A associação inicial de uma sessão existente é realizada pela Consecom. Conexão automática por QR será adicionada após isolar as credenciais e desabilitar o bot nativo do gateway.</p>')+
+  '</div>');
+ $('#waakgLinkForm')?.addEventListener('submit',async ev=>{
+  ev.preventDefault();const data=formValues(ev.currentTarget);
+  await action(async()=>{await api('/api/waakg/channels/link','POST',data);toast('Sessão validada e vinculada.');await channels();});
+ });
+ view.querySelectorAll('[data-wa-check]').forEach(button=>button.addEventListener('click',async()=>{
+  const id=button.dataset.waCheck,stateEl=view.querySelector('[data-wa-state="'+id+'"]');
+  try{const remote=await api('/api/waakg/channels/'+id+'/status');stateEl.textContent=remote.connected?'Conectado e verificado':'Desconectado ou número divergente';}
+  catch(err){stateEl.textContent=errMsg(err);}
+ }));
 }
 async function products(){
  const list=await api('/api/products');
@@ -130,8 +154,9 @@ async function products(){
 }
 async function training(){
  clearTimeout(trainingTimer);
- const [list,ag,jobs,versions]=await Promise.all([
-  api('/api/imports'),api('/api/agent'),api('/api/training/jobs'),api('/api/training/versions')
+ const [list,ag,jobs,versions,waConfig,waLinks,waScans]=await Promise.all([
+  api('/api/imports'),api('/api/agent'),api('/api/training/jobs'),api('/api/training/versions'),
+  api('/api/waakg/config'),api('/api/waakg/channels'),api('/api/waakg/scans')
  ]);
  const latest=jobs[0],open=jobs.find(x=>['queued','analyzing','paused'].includes(x.status));
  const percent=latest?.totalItems?Math.min(100,Math.round(100*Number(latest.processedItems||0)/Number(latest.totalItems))):0;
@@ -142,6 +167,26 @@ async function training(){
   '<button class="btn primary" id="analysisStart" '+(list.length?'':'disabled')+'>Analisar '+list.length+' conversa(s) →</button>';
  const summary=latest?.report?.summary||'A análise é baseada somente nas conversas importadas nesta empresa. '+
   'A coleta automática do histórico dos WhatsApps conectados ainda será disponibilizada.';
+ const syncActive=waScans.some(j=>['queued','scanning','importing'].includes(j.status));
+ const waCard='<section class="card card-pad section-gap"><div class="section-title">Analisar conversas dos WhatsApps conectados</div>'+
+   '<p class="form-note">Importa texto das sessões autorizadas, sem mensagens automáticas. O WA-AKG atual lista no máximo 50 chats por sessão e até 400 mensagens por conversa; mídias e grupos são ignorados.</p>'+
+   (waLinks.length?'<button class="btn soft" id="waSyncAll" '+(!waConfig.configured?'disabled':'')+'>Sincronizar histórico dos '+waLinks.length+' WhatsApp(s) →</button>':
+   '<p class="form-note">Conecte primeiro uma sessão existente na guia WhatsApps.</p>')+
+   (!waConfig.configured?'<p class="form-note">Gateway pendente de configuração pela Consecom.</p>':'')+
+   (waScans.length?'<div class="section-gap">'+waScans.slice(0,8).map(j=>{
+     const pct=j.status==='completed'?100:j.totalChats?Math.round(100*j.processedChats/j.totalChats):0;
+     const label=waLinks.find(c=>c.id===j.channelId)?.label||'WhatsApp';
+     return '<div class="section-gap"><strong>'+e(label)+' — '+pct+'%</strong><span class="form-note"> '+e(j.status)+'</span>'+
+      '<div class="progress-track"><div class="progress-fill" style="width:'+pct+'%"></div></div>'+
+      '<p class="form-note">'+e(j.processedChats)+'/'+e(j.totalChats)+' conversas processadas, '+e(j.importedChats)+' importadas, '+e(j.importedMessages)+' mensagens. '+
+      (j.partialCoverage?'Cobertura parcial: listagem do gateway limitada. ':'')+
+      (j.truncatedChats?'Algumas conversas excedem 400 mensagens. ':'')+
+      (j.errorCode?'Erro: '+e(j.errorCode):'')+'</p>'+
+      (['queued','scanning','importing','paused','failed'].includes(j.status)?
+        '<div class="row-actions"><button class="btn sm soft" data-wa-action="'+(j.status==='paused'||j.status==='failed'?'resume':'pause')+'" data-job="'+e(j.id)+'">'+(j.status==='paused'||j.status==='failed'?'Retomar':'Pausar')+'</button>'+
+        '<button class="btn sm soft" data-wa-action="cancel" data-job="'+e(j.id)+'">Cancelar</button></div>':'')+'</div>';
+   }).join('')+'</div>':'')+
+   '<p class="form-note">Depois de sincronizar, use <strong>Analisar conversas</strong> abaixo para gerar relatório e Markdown. A aprovação do conhecimento continua manual.</p></section>';
  const trainingCard='<section class="card card-pad section-gap" id="analysisCard">'+
   '<div class="section-title">Análise automática — rascunho supervisionado</div>'+
   '<p class="form-note">O percentual indica registros realmente processados. Não mede a eficácia de vendas sem conversões verificadas.</p>'+
@@ -157,19 +202,32 @@ async function training(){
   '</section>';
 
  view.innerHTML=heading('PERSONALIZAÇÃO','Aprenda com as boas conversas.','Envie 10 a 20 atendimentos que deram certo. O Sócio extrai exemplos de linguagem sem usar os dados para treinar um modelo compartilhado.')+
- trainingCard+
+ waCard+trainingCard+
  '<div class="two-pane train"><div class="card card-pad"><div class="section-title">Importar conversas de sucesso</div><div class="file-drop"><span class="file-icon">⇧</span><strong>Escolha conversas .txt, .md ou .zip</strong><small>Múltiplos arquivos · até 700 KB por texto ou 2 MB por ZIP</small><input type="file" id="importInput" accept=".txt,.md,.zip,text/plain,text/markdown,application/zip" multiple aria-label="Escolher conversas"></div><p class="form-note">No WhatsApp: abra a conversa → Exportar conversa → Sem mídia. Você também pode enviar o ZIP da exportação diretamente, sem extraí-lo.</p><div class="info-strip"><strong>Privacidade em primeiro lugar</strong>Utilize conversas que sua empresa está autorizada a tratar. Telefones, e-mails e documentos numéricos são mascarados; nomes de participantes são substituídos por identificadores genéricos.</div><div id="importFeedback" class="form-note"></div></div>'+
  '<div>'+panel('Base de experiência',list.length+' conversa(s) importada(s).',
  '<div class="card-pad"><div class="progress-track"><div class="progress-fill" style="width:'+Math.min(100,list.length*10)+'%"></div></div><p class="form-note">'+Math.min(list.length,10)+' de 10 referências sugeridas para o primeiro treinamento.</p></div>'+
  (list.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>Arquivo</th><th>Mensagens</th></tr></thead><tbody>'+list.map(x=>'<tr><td><strong>'+e(x.filename)+'</strong><div class="table-detail">'+date(x.created_at)+'</div></td><td>'+e(x.message_count)+'</td></tr>').join('')+'</tbody></table></div>':empty('✳','Ainda não há exemplos','Suas primeiras conversas de referência aparecerão aqui.')))+
  '<div class="card card-pad section-gap"><div class="section-title">Conhecimento aprovado</div><p class="form-note">Somente análises revisadas e aprovadas entram no conhecimento do agente. Produtos e preços continuam em configuração separada.</p><div class="code-preview">'+e(ag.knowledge_md||'# Aguardando as primeiras conversas de referência...')+'</div></div></div></div>';
  const run=async(path)=>action(async()=>{await api(path,'POST',{});await training();});
+ $('#waSyncAll')?.addEventListener('click',async()=>{
+  await action(async()=>{
+   let started=0,errors=[];
+   for(const c of waLinks){
+    if(waScans.some(j=>j.channelId===c.id&&['queued','scanning','importing','paused'].includes(j.status)))continue;
+    try{await api('/api/waakg/scans','POST',{channelId:c.id});started++;}
+    catch(err){errors.push(c.label+': '+errMsg(err));}
+   }
+   toast(started+' sincronização(ões) iniciada(s).'+(errors.length?' '+errors.join(' | '):''),!started);
+   await training();
+  });
+ });
+ view.querySelectorAll('[data-wa-action]').forEach(button=>button.addEventListener('click',()=>run('/api/waakg/scans/'+button.dataset.job+'/'+button.dataset.waAction)));
  $('#analysisStart')?.addEventListener('click',()=>run('/api/training/jobs'));
  $('#analysisPause')?.addEventListener('click',()=>run('/api/training/jobs/'+open.id+'/pause'));
  $('#analysisResume')?.addEventListener('click',()=>run('/api/training/jobs/'+open.id+'/resume'));
  $('#analysisCancel')?.addEventListener('click',()=>run('/api/training/jobs/'+open.id+'/cancel'));
  $('#analysisApprove')?.addEventListener('click',()=>run('/api/training/versions/'+draft.id+'/approve'));
- if(open&&open.status!=='paused'){
+ if((open&&open.status!=='paused')||syncActive){
   trainingTimer=setTimeout(()=>{if(state.view==='training')training().catch(error=>toast(errMsg(error),true));},1750);
  }
  $('#importInput').addEventListener('change',async ev=>{
