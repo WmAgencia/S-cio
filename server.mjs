@@ -14,7 +14,18 @@ import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,
 const PORT=Number(process.env.PORT||3000);
 const DATABASE_URL=process.env.DATABASE_URL;
 if(!DATABASE_URL){console.error('DATABASE_URL não configurada');process.exit(1);}
-const pool=new Pool({connectionString:DATABASE_URL,max:10,connectionTimeoutMillis:8000,idleTimeoutMillis:30000});
+// Railway remains the live source until data is copied and validated.
+// Supabase uses the private socio_app schema; never create the runtime tables
+// in the public Data API schema during a future database cutover.
+const dbHost=new URL(DATABASE_URL).hostname;
+const isSupabaseDb=dbHost.endsWith('.supabase.co')||dbHost.endsWith('.pooler.supabase.com');
+const dbSchema=process.env.SOCIO_DB_SCHEMA||'public';
+if(!['public','socio_app'].includes(dbSchema)||(isSupabaseDb&&dbSchema!=='socio_app')){
+ console.error('SOCIO_DB_SCHEMA must be socio_app for a Supabase database');
+ process.exit(1);
+}
+const pool=new Pool({connectionString:DATABASE_URL,max:10,connectionTimeoutMillis:8000,idleTimeoutMillis:30000,
+ options:dbSchema==='socio_app'?'-c search_path=socio_app,public':undefined});
 const query=(sql,values=[])=>pool.query(sql,values);
 async function fullCatalog(tenantId){
  const [items,variants,media,campaigns]=await Promise.all([
