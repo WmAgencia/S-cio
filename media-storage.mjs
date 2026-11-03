@@ -71,9 +71,19 @@ export async function deletePrivateImage(key,env=process.env){
  await client.send(new lib.DeleteObjectCommand({Bucket:env.SOCIO_S3_BUCKET,Key:key}));
 }
 export async function checkMediaStorage(env=process.env){
- if(!mediaConfigured(env))return {configured:false,reachable:false};
- if(useMemory(env))return {configured:true,reachable:true};
- const {client,lib}=await s3(env);
- try{await client.send(new lib.HeadBucketCommand({Bucket:env.SOCIO_S3_BUCKET}));return {configured:true,reachable:true};}
- catch{return {configured:true,reachable:false};}
+ if(!mediaConfigured(env))return {configured:false,reachable:false,readWrite:false};
+ if(useMemory(env))return {configured:true,reachable:true,readWrite:true};
+ const {client,lib}=await s3(env),key='health/'+randomUUID()+'.jpg';
+ try{
+  await client.send(new lib.HeadBucketCommand({Bucket:env.SOCIO_S3_BUCKET}));
+  const probe=Buffer.from('ffd8ffd9','hex');
+  try{
+   await client.send(new lib.PutObjectCommand({Bucket:env.SOCIO_S3_BUCKET,Key:key,Body:probe,ContentType:'image/jpeg'}));
+   const got=await client.send(new lib.GetObjectCommand({Bucket:env.SOCIO_S3_BUCKET,Key:key}));
+   const bytes=Buffer.from(await got.Body.transformToByteArray());
+   return {configured:true,reachable:true,readWrite:bytes.equals(probe)};
+  }finally{
+   try{await client.send(new lib.DeleteObjectCommand({Bucket:env.SOCIO_S3_BUCKET,Key:key}));}catch{}
+  }
+ }catch{return {configured:true,reachable:false,readWrite:false};}
 }
