@@ -8,7 +8,7 @@ const enabled=!!process.env.DATABASE_URL;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 test('real PostgreSQL: login, tenant isolation, imports and webhook signature protections',{skip:!enabled,timeout:65000},async t=>{
  const port=38475,waPort=38476,waKey='mock-readonly-waakg-key',waSession='socioFixture123',waPhone='5515999999999',waJid=waPhone+'@s.whatsapp.net';
- const gatewayRequests=[],dynamicSessions=new Map();
+ const gatewayRequests=[],dynamicSessions=new Map(),dynamicPhone='5515888888888';
  const fakeGateway=createServer(async(req,res)=>{
   const url=new URL(req.url||'/', 'http://localhost'),path=url.pathname;
   gatewayRequests.push({path,method:req.method});
@@ -29,7 +29,7 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
    const action=match[2];
    if(req.method==='GET'&&!action)return send(200,{status:true,data:{
     sessionId:match[1],status:item.connected?'CONNECTED':item.started?'SCAN_QR':'STOPPED',
-    me:item.connected?{id:waPhone+':1@s.whatsapp.net'}:null}});
+    me:item.connected?{id:dynamicPhone+':1@s.whatsapp.net'}:null}});
    if(req.method==='POST'&&action==='bot-config'){
     const parts=[];for await(const part of req)parts.push(part);
     const body=JSON.parse(Buffer.concat(parts).toString('utf8'));
@@ -228,9 +228,9 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const verifiedSelf=await call('/api/waakg/channels/'+selfId+'/status','GET',undefined,betaCookie);
  assert.equal(verifiedSelf.status,200);
  assert.equal(verifiedSelf.result.connected,true);
- assert.equal(verifiedSelf.result.phone,waPhone);
+ assert.equal(verifiedSelf.result.phone,dynamicPhone);
  const listSelf=await call('/api/waakg/channels','GET',undefined,betaCookie);
- assert(listSelf.result.some(x=>x.id===selfId&&x.phone===waPhone));
+ assert(listSelf.result.some(x=>x.id===selfId&&x.phone===dynamicPhone));
  const pausedSelf=await call('/api/waakg/channels/'+selfId+'/stop','POST',{},betaCookie,betaCsrf);
  assert.equal(pausedSelf.status,200);
  const restartedSelf=await call('/api/waakg/channels/'+selfId+'/start','POST',{},betaCookie,betaCsrf);
