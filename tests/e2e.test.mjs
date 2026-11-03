@@ -64,6 +64,42 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(zipResult.result.conversationCount,2);
  const list=await call('/api/imports','GET',undefined,betaCookie);
  assert.equal(list.result.length,3);
+
+ // The new training pipeline keeps results in DRAFT until explicit approval.
+ const start=await call('/api/training/jobs','POST',{},betaCookie,betaCsrf);
+ assert.equal(start.status,201,JSON.stringify(start.result));
+ assert.equal(start.result.source,'imports_only');
+ const duplicateJob=await call('/api/training/jobs','POST',{},betaCookie,betaCsrf);
+ assert.equal(duplicateJob.status,409);
+ const invalidApproval=await call('/api/training/versions/00000000-0000-0000-0000-000000000001/approve','POST',{},betaCookie,betaCsrf);
+ assert.equal(invalidApproval.status,409);
+ let last={};
+ for(let i=0;i<60;i++){
+  const jobs=await call('/api/training/jobs','GET',undefined,betaCookie);
+  assert.equal(jobs.status,200);
+  last=jobs.result[0];
+  if(last?.status==='completed')break;
+  await sleep(220);
+ }
+ assert.equal(last.status,'completed','training job remained unfinished: '+JSON.stringify(last));
+ assert.equal(last.processedItems,last.totalItems);
+ const versions=await call('/api/training/versions','GET',undefined,betaCookie);
+ assert.equal(versions.status,200);
+ assert.equal(versions.result[0].status,'draft');
+ assert.equal(versions.result[0].report.salesValidated,false);
+ assert.match(versions.result[0].markdown,/rascunho/);
+ const approval=await call('/api/training/versions/'+versions.result[0].id+'/approve','POST',{},betaCookie,betaCsrf);
+ assert.equal(approval.status,200);
+ assert.equal(approval.result.autoReply,false);
+ const revised=await call('/api/agent','GET',undefined,betaCookie);
+ assert.match(revised.result.knowledge_md,/Conhecimento do Sócio/);
+ const wrongTenant=await call('/api/admin/switch','POST',{tenantId:me.result.tenant.id},adminCookie,csrf);
+ assert.equal(wrongTenant.status,200);
+ const alphaJobs=await call('/api/training/jobs','GET',undefined,adminCookie);
+ assert.deepEqual(alphaJobs.result,[]);
+ const otherTenantApprove=await call('/api/training/versions/'+versions.result[0].id+'/approve','POST',{},adminCookie,csrf);
+ assert.equal(otherTenantApprove.status,409);
+
  const ag=await call('/api/agent','GET',undefined,betaCookie);
  assert.doesNotMatch(ag.result.knowledge_md,/Alice|15981142577|Nome Comprador|cliente-1\.txt/);
  const webhook=await call('/webhooks/whatsapp','POST',{object:'whatsapp_business_account'});

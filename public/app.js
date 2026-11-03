@@ -9,7 +9,8 @@ const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'sho
 const val=(form,k)=>String(new FormData(form).get(k)||'').trim();
 const errMsg=error=>String(error?.message||'Não foi possível concluir a solicitação.');
 const view=$('#view');
-let toastTimer;
+let toastTimer,trainingTimer;
+
 function toast(message,error=false){
  const el=$('#toast');el.textContent=message;el.className='toast'+(error?' error':'');
  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.add('hidden'),5000);
@@ -57,6 +58,7 @@ async function boot(){
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
 async function changeView(next){
+ clearTimeout(trainingTimer);
  if(next==='admin'&&!state.me?.user.platformOwner)return;
  state.view=next;
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
@@ -127,13 +129,49 @@ async function products(){
  });
 }
 async function training(){
- const [list,ag]=await Promise.all([api('/api/imports'),api('/api/agent')]);
+ clearTimeout(trainingTimer);
+ const [list,ag,jobs,versions]=await Promise.all([
+  api('/api/imports'),api('/api/agent'),api('/api/training/jobs'),api('/api/training/versions')
+ ]);
+ const latest=jobs[0],open=jobs.find(x=>['queued','analyzing','paused'].includes(x.status));
+ const percent=latest?.totalItems?Math.min(100,Math.round(100*Number(latest.processedItems||0)/Number(latest.totalItems))):0;
+ const draft=versions.find(x=>x.status==='draft'),published=versions.find(x=>x.status==='approved');
+ const controls=open?'<div class="row-actions">'+
+  (open.status==='paused'?'<button class="btn soft" id="analysisResume">Retomar</button>':'<button class="btn soft" id="analysisPause">Pausar</button>')+
+  '<button class="btn soft" id="analysisCancel">Cancelar</button></div>':
+  '<button class="btn primary" id="analysisStart" '+(list.length?'':'disabled')+'>Analisar '+list.length+' conversa(s) →</button>';
+ const summary=latest?.report?.summary||'A análise é baseada somente nas conversas importadas nesta empresa. '+
+  'A coleta automática do histórico dos WhatsApps conectados ainda será disponibilizada.';
+ const trainingCard='<section class="card card-pad section-gap" id="analysisCard">'+
+  '<div class="section-title">Análise automática — rascunho supervisionado</div>'+
+  '<p class="form-note">O percentual indica registros realmente processados. Não mede a eficácia de vendas sem conversões verificadas.</p>'+
+  '<div class="progress-track"><div class="progress-fill" style="width:'+percent+'%"></div></div>'+
+  '<p><strong>'+percent+'% analisado</strong> · '+(latest?e(latest.processedItems)+' de '+e(latest.totalItems)+' conversas':'Nenhuma análise iniciada')+
+  ' · '+e(latest?.status||'pronto para começar')+'</p>'+
+  '<p class="form-note">'+e(summary)+'</p>'+controls+
+  (draft?'<div class="section-gap"><strong>Versão '+e(draft.version)+' gerada — aguardando aprovação</strong>'+
+    '<p class="form-note">'+e(draft.report?.summary||'')+'</p>'+
+    '<div class="code-preview">'+e(draft.markdown||'')+'</div>'+
+    '<button class="btn primary section-gap" id="analysisApprove" data-id="'+e(draft.id)+'">Aprovar conhecimento →</button></div>':'')+
+  (published?'<p class="form-note">Última versão aprovada: '+e(published.version)+'. A publicação não ativa envios automáticos.</p>':'')+
+  '</section>';
+
  view.innerHTML=heading('PERSONALIZAÇÃO','Aprenda com as boas conversas.','Envie 10 a 20 atendimentos que deram certo. O Sócio extrai exemplos de linguagem sem usar os dados para treinar um modelo compartilhado.')+
+ trainingCard+
  '<div class="two-pane train"><div class="card card-pad"><div class="section-title">Importar conversas de sucesso</div><div class="file-drop"><span class="file-icon">⇧</span><strong>Escolha conversas .txt, .md ou .zip</strong><small>Múltiplos arquivos · até 700 KB por texto ou 2 MB por ZIP</small><input type="file" id="importInput" accept=".txt,.md,.zip,text/plain,text/markdown,application/zip" multiple aria-label="Escolher conversas"></div><p class="form-note">No WhatsApp: abra a conversa → Exportar conversa → Sem mídia. Você também pode enviar o ZIP da exportação diretamente, sem extraí-lo.</p><div class="info-strip"><strong>Privacidade em primeiro lugar</strong>Utilize conversas que sua empresa está autorizada a tratar. Telefones, e-mails e documentos numéricos são mascarados; nomes de participantes são substituídos por identificadores genéricos.</div><div id="importFeedback" class="form-note"></div></div>'+
  '<div>'+panel('Base de experiência',list.length+' conversa(s) importada(s).',
  '<div class="card-pad"><div class="progress-track"><div class="progress-fill" style="width:'+Math.min(100,list.length*10)+'%"></div></div><p class="form-note">'+Math.min(list.length,10)+' de 10 referências sugeridas para o primeiro treinamento.</p></div>'+
  (list.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>Arquivo</th><th>Mensagens</th></tr></thead><tbody>'+list.map(x=>'<tr><td><strong>'+e(x.filename)+'</strong><div class="table-detail">'+date(x.created_at)+'</div></td><td>'+e(x.message_count)+'</td></tr>').join('')+'</tbody></table></div>':empty('✳','Ainda não há exemplos','Suas primeiras conversas de referência aparecerão aqui.')))+
  '<div class="card card-pad section-gap"><div class="section-title">Conhecimento adquirido</div><p class="form-note">O Sócio consulta exemplos anonimizados para aprender seu jeito de conversar. Produtos e preços são configurados separadamente.</p><div class="code-preview">'+e(ag.knowledge_md||'# Aguardando as primeiras conversas de referência...')+'</div></div></div></div>';
+ const run=async(path)=>action(async()=>{await api(path,'POST',{});await training();});
+ $('#analysisStart')?.addEventListener('click',()=>run('/api/training/jobs'));
+ $('#analysisPause')?.addEventListener('click',()=>run('/api/training/jobs/'+open.id+'/pause'));
+ $('#analysisResume')?.addEventListener('click',()=>run('/api/training/jobs/'+open.id+'/resume'));
+ $('#analysisCancel')?.addEventListener('click',()=>run('/api/training/jobs/'+open.id+'/cancel'));
+ $('#analysisApprove')?.addEventListener('click',()=>run('/api/training/versions/'+draft.id+'/approve'));
+ if(open&&open.status!=='paused'){
+  trainingTimer=setTimeout(()=>{if(state.view==='training')training().catch(error=>toast(errMsg(error),true));},1750);
+ }
  $('#importInput').addEventListener('change',async ev=>{
   const files=Array.from(ev.target.files||[]);
   const feedback=$('#importFeedback');if(!files.length)return;
