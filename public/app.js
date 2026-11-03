@@ -94,15 +94,40 @@ async function overview(){
  bindNavWithin();
 }
 function bindNavWithin(){view.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>changeView(b.dataset.go)));}
+
 async function channels(){
  const data=await api('/api/channels');
- view.innerHTML=heading('CANAIS DE ATENDIMENTO','Seus WhatsApps.','Cada número pode atender uma equipe diferente. A conexão deve ser autorizada no provedor.')+
+ const ready=data.filter(x=>x.status==='connected');
+ const rows=data.map(c=>'<tr><td><strong>'+e(c.label)+'</strong><div class="table-detail pill-num">'+e(c.phone)+'</div></td>'+
+ '<td>'+badge(c.status==='connected'?'Meta validada':'Não conectado',c.status==='connected'?'green':'yellow')+
+ '<div class="table-detail">'+(c.auto_reply?'Respostas automáticas ativas':'Respostas automáticas desligadas')+'</div></td>'+
+ '<td><div class="actions-inline">'+(c.status==='connected'?'<button class="btn sm '+(c.auto_reply?'danger':'soft')+'" data-auto="'+e(c.id)+'" data-enabled="'+(!c.auto_reply)+'">'+(c.auto_reply?'Desativar IA':'Ativar IA')+'</button>':'')+'</div></td></tr>').join('');
+ const extra=state.me.user.platformOwner&&data.length?'<div class="card card-pad section-gap"><div class="section-title">Vincular canal oficial da Meta</div>'+
+ '<p class="form-note">Somente a Consecom pode validar um número. O token será criptografado no banco de dados e não poderá ser lido pelos usuários do painel.</p>'+
+ '<form id="metaLinkForm" class="form-stack"><label>Canal<select name="id">'+data.map(c=>'<option value="'+e(c.id)+'">'+e(c.label)+' · '+e(c.phone)+'</option>').join('')+'</select></label>'+
+ '<label>Phone Number ID da Meta<input name="phoneId" required inputmode="numeric" placeholder="Identificador oficial do número"></label>'+
+ '<label>Token de acesso da Meta<input name="accessToken" type="password" required autocomplete="off" placeholder="Token válido com permissão de envio"></label>'+
+ '<button class="btn primary" type="submit">Validar e vincular via Meta →</button></form></div>':'';
+ view.innerHTML=heading('CANAIS DE ATENDIMENTO','Seus WhatsApps.','Vincule números oficiais e escolha individualmente quando o Sócio pode responder.')+
  '<div class="two-pane"><div>'+panel('Números cadastrados',data.length+' canal(is) no seu espaço.',
- data.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>Canal</th><th>Conexão</th></tr></thead><tbody>'+data.map(c=>'<tr><td><strong>'+e(c.label)+'</strong><div class="table-detail pill-num">'+e(c.phone)+'</div></td><td>'+badge(c.status==='connected'?'Conectado':'Não conectado',c.status==='connected'?'green':'yellow')+'</td></tr>').join('')+'</tbody></table></div>':empty('◉','Nenhum número ainda','Cadastre o primeiro WhatsApp comercial da empresa.'))+
- '</div><div class="card card-pad"><div class="section-title">Adicionar WhatsApp</div><form id="channelForm" class="form-stack"><label>Nome para identificar<input name="label" required maxlength="90" placeholder="Ex.: Vendas • WhatsApp 1"></label><label>Número com DDD<input name="phone" required placeholder="5515999999999" inputmode="tel"></label><label>ID do número na WhatsApp Business Platform (validado pela Consecom)<input name="externalPhoneId" placeholder="Phone number ID da Meta"></label><div class="info-strip"><strong>Conexão segura</strong>Cadastrar o número não ativa respostas automáticas. Para receber mensagens reais será necessário concluir a configuração do webhook e da conta Meta.</div><button class="btn primary" type="submit">Cadastrar canal →</button></form></div></div>';
- if(!state.me.user.platformOwner) $('#channelForm').elements.externalPhoneId.disabled=true;
- $('#channelForm').addEventListener('submit',async ev=>{ev.preventDefault();const f=ev.currentTarget;const data=formValues(f);await action(async()=>{await api('/api/channels','POST',data);toast('Canal cadastrado. Ainda não conectado.');await channels();});});
+ data.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>Canal</th><th>Estado</th><th>IA</th></tr></thead><tbody>'+rows+'</tbody></table></div>':empty('◉','Nenhum número ainda','Cadastre o primeiro WhatsApp comercial da empresa.'))+
+ extra+'</div><div class="card card-pad"><div class="section-title">Adicionar WhatsApp</div>'+
+ '<form id="channelForm" class="form-stack"><label>Nome para identificar<input name="label" required maxlength="90" placeholder="Ex.: Vendas • WhatsApp 1"></label>'+
+ '<label>Número com DDD<input name="phone" required placeholder="5515999999999" inputmode="tel"></label>'+
+ '<div class="info-strip"><strong>Conexão segura</strong>O cadastro não ativa envios. A Consecom valida os dados diretamente com a Meta antes de habilitar qualquer resposta.</div>'+
+ '<button class="btn primary" type="submit">Cadastrar canal →</button></form></div></div>';
+ $('#channelForm').addEventListener('submit',async ev=>{ev.preventDefault();const data=formValues(ev.currentTarget);await action(async()=>{await api('/api/channels','POST',data);toast('Canal cadastrado. Aguarda validação Meta.');await channels();});});
+ if(state.me.user.platformOwner&&data.length)$('#metaLinkForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();const d=formValues(ev.currentTarget);
+  await action(async()=>{await api('/api/channels/'+d.id+'/link','POST',{phoneId:d.phoneId,accessToken:d.accessToken});toast('Canal validado pela Meta. IA continua desligada.');await channels();});
+ });
+ view.querySelectorAll('[data-auto]').forEach(button=>button.addEventListener('click',async()=>{
+  const enabled=button.dataset.enabled==='true';
+  if(enabled&&!confirm('Ativar respostas automáticas para novas mensagens recebidas neste canal? O sistema poderá enviar respostas reais com custos de uso.'))return;
+  await action(async()=>{await api('/api/channels/'+button.dataset.auto+'/auto','POST',{enabled});toast(enabled?'IA ativada neste canal.':'IA desligada neste canal.');await channels();});
+ }));
 }
+
 async function products(){
  const list=await api('/api/products');
  view.innerHTML=heading('CATÁLOGO','Produtos e serviços.','Informações oficiais que o Sócio utiliza ao conversar com seus clientes.')+
