@@ -98,3 +98,46 @@ CREATE TABLE IF NOT EXISTS audit (
  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
  created_at timestamptz NOT NULL DEFAULT now()
 );
+
+
+-- On-premise Railway phase: auditable jobs derived ONLY from imported examples.
+-- Supabase RLS model is a separate migration, not a production DB switch.
+CREATE UNIQUE INDEX IF NOT EXISTS imports_tenant_id_unique ON imports(tenant_id,id);
+CREATE TABLE IF NOT EXISTS training_jobs (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ status text NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','analyzing','paused','completed','cancelled','failed')),
+ total_items integer NOT NULL DEFAULT 0 CHECK(total_items>=0),
+ processed_items integer NOT NULL DEFAULT 0 CHECK(processed_items>=0 AND processed_items<=total_items),
+ report_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ finished_at timestamptz,
+ UNIQUE(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS training_jobs_tenant_idx ON training_jobs(tenant_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS training_jobs_status_idx ON training_jobs(status,created_at);
+CREATE TABLE IF NOT EXISTS training_job_items (
+ job_id uuid NOT NULL,
+ tenant_id uuid NOT NULL,
+ import_id uuid NOT NULL,
+ processed boolean NOT NULL DEFAULT false,
+ findings jsonb NOT NULL DEFAULT '{}'::jsonb,
+ PRIMARY KEY(job_id,import_id),
+ FOREIGN KEY(tenant_id,job_id) REFERENCES training_jobs(tenant_id,id) ON DELETE CASCADE,
+ FOREIGN KEY(tenant_id,import_id) REFERENCES imports(tenant_id,id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS training_versions (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ job_id uuid NOT NULL,
+ version integer NOT NULL CHECK(version>0),
+ status text NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','approved','archived')),
+ knowledge_md text NOT NULL CHECK(char_length(knowledge_md)<=22000),
+ report_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ approved_at timestamptz,
+ FOREIGN KEY(tenant_id,job_id) REFERENCES training_jobs(tenant_id,id) ON DELETE CASCADE,
+ UNIQUE(tenant_id,version)
+);
+CREATE INDEX IF NOT EXISTS training_versions_tenant_idx ON training_versions(tenant_id,created_at DESC);
