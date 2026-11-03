@@ -6,7 +6,7 @@ import {Pool} from 'pg';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk} from './lib.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
 import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
-import {gatewayConfigured,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
+import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
 import {processNextWaakgScan} from './waakg-history.mjs';
 
 const PORT=Number(process.env.PORT||3000);
@@ -553,6 +553,15 @@ async function receiveWhatsApp(req,res){
 async function main(){
  const schema=await readFile(new URL('./schema.sql',import.meta.url),'utf8');
  await query(schema);
+ // Asynchronous gateway auth/scope probe; logs only boolean readiness.
+ // Never log session ids, telephone numbers, raw responses or secrets.
+ if(gatewayConfigured()){
+  void gatewayRead('/api/sessions',{timeoutMs:7000})
+   .then(result=>console.info('[socio gateway private]',JSON.stringify({reachable:true,authorized:true,
+     sessions:Array.isArray(result.data)?result.data.length:0})))
+   .catch(error=>console.warn('[socio gateway private]',JSON.stringify({reachable:false,
+     code:Number(error?.status||503)})));
+ }
  // One active worker per Node instance; row locks serialize jobs across replicas.
  // All results remain drafts until the tenant owner approves them.
  let waBusy=false,waLastError=0;
