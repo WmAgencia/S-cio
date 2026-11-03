@@ -128,7 +128,7 @@ function dashboardBars(data){
  return points.map((p,i)=>{
   const v=totals[i],height=v===0?3:Math.max(6,Math.round(v/max*108));
   return '<div class="neo-bar-column'+(i===maxIndex&&v>0?' is-highlight':'')+'"><span class="neo-bar-value">'+e(v)+'</span>'+
-   '<span class="neo-bar-shape" style="height:'+height+'px" title="'+e(v+' mensagens no mês')+'"></span>'+
+   '<span class="neo-bar-shape" data-height="'+height+'" title="'+e(v+' mensagens no mês')+'"></span>'+
    '<span class="neo-bar-label">'+e(shortPeriodLabel(p,'month'))+'</span></div>';
  }).join('');
 }
@@ -180,7 +180,7 @@ async function overview(){
       '<div class="neo-promo-content"><h2>Seu Sócio.<br>Sempre presente.</h2>'+
        '<p>Atenda melhor, aprenda com suas conversas e faça cada contato valer mais.</p>'+
        '<div class="neo-promo-bubbles"><span>S</span><span>C</span><span>✳</span></div>'+
-       '<div class="neo-progress-mini"><span style="width:'+(done/steps.length*100)+'%"></span></div>'+
+       '<div class="neo-progress-mini"><span data-progress="'+Math.round(done/steps.length*100)+'"></span></div>'+
        '<p>'+done+' de '+steps.length+' etapas de preparação concluídas</p></div>'+
        '<button class="neo-promo-action" type="button" data-go="training">Explorar inteligência artificial ↗</button>'+
      '</section>'+
@@ -218,6 +218,13 @@ async function overview(){
      '</div></section>'+
    '</div>'+
   '</div>';
+ // Inline style attributes are blocked by the production CSP; set trusted
+ // presentation-only CSSOM properties after rendering instead.
+ view.querySelectorAll('.neo-bar-shape[data-height]').forEach(el=>{
+  el.style.height=String(Math.max(3,Math.min(108,Number(el.dataset.height)||3)))+'px';
+ });
+ const stepFill=view.querySelector('.neo-progress-mini [data-progress]');
+ if(stepFill)stepFill.style.width=String(Math.max(0,Math.min(100,Number(stepFill.dataset.progress)||0)))+'%';
  bindNavWithin();
  view.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',async()=>{
   const range=button.dataset.range;
