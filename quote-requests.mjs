@@ -85,7 +85,7 @@ export async function processOwnerQuoteAlert(pool,{env=process.env,getStatus=get
  if(!outboundEnabled(env))return {processed:false,reason:'OUTBOUND_DISABLED'};
  const rows=await pool.query(
   "SELECT q.id,q.tenant_id,q.request_excerpt,c.customer_name,t.quote_alerts_enabled,"+
-  "u.phone AS owner_phone,l.session_id,ch.phone AS linked_phone "+
+  "u.phone AS owner_phone,l.session_id,l.phone AS linked_phone "+
   "FROM quote_requests q JOIN tenants t ON t.id=q.tenant_id "+
   "JOIN conversations c ON c.id=q.conversation_id AND c.tenant_id=q.tenant_id "+
   "LEFT JOIN users u ON u.id=t.quote_alert_owner_id AND u.tenant_id=t.id AND u.role='owner' AND u.active=true "+
@@ -93,7 +93,6 @@ export async function processOwnerQuoteAlert(pool,{env=process.env,getStatus=get
   "FROM waakg_links wl JOIN channels ON channels.tenant_id=wl.tenant_id AND channels.id=wl.channel_id "+
   "WHERE wl.tenant_id=t.id AND channels.provider='waakg' AND channels.status='connected' "+
   "ORDER BY wl.created_at ASC LIMIT 1) l ON true "+
-  "LEFT JOIN channels ch ON false "+
   "WHERE q.alert_status='pending' AND q.created_at>now()-interval '2 days' "+
   "ORDER BY q.created_at ASC LIMIT 1");
  if(!rows.rowCount)return {processed:false};
