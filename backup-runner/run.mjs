@@ -14,8 +14,10 @@ import {Client} from 'pg';
 import {S3Client,PutObjectCommand,GetObjectCommand,HeadObjectCommand,CreateMultipartUploadCommand,UploadPartCommand,CompleteMultipartUploadCommand,AbortMultipartUploadCommand} from '@aws-sdk/client-s3';
 
 const execFileAsync=promisify(execFile);
+console.info('[socio-backup] starting encrypted PostgreSQL 18 snapshot');
 const need=(v,label)=>{if(!v)throw new Error('Configuration missing: '+label);return v;};
 const database=need(process.env.SOCIO_BACKUP_SOURCE_DATABASE_URL,'SOCIO_BACKUP_SOURCE_DATABASE_URL');
+if(database.includes('${{'))throw new Error('Railway source database reference was not resolved');
 const secret=need(process.env.SOCIO_BACKUP_PASSPHRASE,'SOCIO_BACKUP_PASSPHRASE');
 const bucket=need(process.env.SOCIO_BACKUP_S3_BUCKET,'SOCIO_BACKUP_S3_BUCKET');
 if(secret.length<40)throw new Error('Backup passphrase must have 40+ characters');
@@ -98,7 +100,7 @@ async function main(){
   const version=await db.query('SHOW server_version_num');
   const major=Math.floor(Number(version.rows[0].server_version_num)/10000);
   const {stdout}=await execFileAsync('pg_dump',['--version']);
-  const dumpMajor=Number(stdout.match(/(\d+)(?:\.\d+)?\s*$/)?.[1]);
+  const dumpMajor=Number(stdout.match(/PostgreSQL\)\s+(\d+)/)?.[1]);
   if(major!==18||dumpMajor!==18)throw new Error('Postgres backup client/server must be v18');
  }finally{await db.end();}
  const folder=await mkdtemp(join(tmpdir(),'socio-dr-')),encrypted=join(folder,'archive.enc'),downloaded=join(folder,'roundtrip.enc');
