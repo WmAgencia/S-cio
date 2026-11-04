@@ -29,20 +29,21 @@ async function openQr({api,toast,onConnected,canManage=true}={}){
   '<span>1. Abra o WhatsApp no celular</span><span>2. Vá em Dispositivos conectados</span>'+
   '<span>3. Escolha Conectar dispositivo e escaneie o QR</span></div>'+
   '<div class="socio-qr-image-wrap"><img id="socioQrImage" alt="QR Code temporário para conectar o WhatsApp" class="hidden"></div>'+
-  '<p id="socioQrStatus" role="status">Preparando conexão...</p>'+
+  '<p id="socioQrStatus" role="status">Preparando conexão...</p><button type="button" class="btn soft hidden" id="socioQrRetry">Reiniciar conexão</button>'+
   '</div></section>';
  document.body.appendChild(el);
- const x={overlay:el,previous,timer:null,keyHandler:null};active=x;
+ const x={overlay:el,previous,timer:null,keyHandler:null,qrChecks:0,channelId:null};active=x;
  const q=selector=>el.querySelector(selector);
  const feedback=(s,error=false)=>{q('#socioQrStatus').textContent=s;q('#socioQrStatus').classList.toggle('error',error);};
  const stop=()=>{clearTimeout(x.timer);x.timer=null;};
  const poll=async(channelId)=>{
   if(active!==x)return;
+  x.channelId=channelId;x.qrChecks++;
   try{
    const status=await api('/api/waakg/channels/'+encodeURIComponent(channelId)+'/status');
    if(active!==x)return;
    if(status.connected){
-    stop();q('#socioQrImage').classList.add('hidden');feedback('WhatsApp conectado e verificado!');
+    stop();q('#socioQrRetry').classList.add('hidden');q('#socioQrImage').classList.add('hidden');feedback('WhatsApp conectado e verificado!');
     toast('WhatsApp conectado com sucesso.');
     if(typeof onConnected==='function')await onConnected();
     close();return;
@@ -52,10 +53,11 @@ async function openQr({api,toast,onConnected,canManage=true}={}){
    const image=q('#socioQrImage');
    if(qr?.ready&&qrOk(qr.image)){
     image.src=qr.image;image.classList.remove('hidden');
-    feedback('Escaneie o QR Code. Ele poderá ser atualizado automaticamente.');
-   }else{image.classList.add('hidden');feedback('Aguardando o QR Code do gateway...');}
+    q('#socioQrRetry').classList.add('hidden');feedback('Escaneie o QR Code. Ele poderá ser atualizado automaticamente.');
+   }else{image.classList.add('hidden');feedback('Aguardando QR Code do gateway...');
+    if(x.qrChecks>=8)q('#socioQrRetry').classList.remove('hidden');}
   }catch(err){
-   if(active===x)feedback('Conexão indisponível: '+String(err.message||'Tente novamente.'),true);
+   if(active===x){q('#socioQrRetry').classList.remove('hidden');feedback('Conexão indisponível: '+String(err.message||'Tente novamente.'),true);}
   }
   if(active===x)x.timer=setTimeout(()=>poll(channelId),3000);
  };
@@ -72,8 +74,15 @@ async function openQr({api,toast,onConnected,canManage=true}={}){
    pending.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.label||'WhatsApp pendente')+'</option>').join('')+
    '</select></label><button type="button" class="btn soft" data-qr-resume>Mostrar QR pendente</button>';
   q('#socioQrForm').before(section);
-  section.querySelector('[data-qr-resume]').addEventListener('click',()=>{
-   stop();q('#socioQrLive').classList.remove('hidden');void poll(q('#socioPending').value);
+  section.querySelector('[data-qr-resume]').addEventListener('click',async()=>{
+   const id=q('#socioPending').value;
+   if(!id)return;
+   stop();x.qrChecks=0;q('#socioQrLive').classList.remove('hidden');
+   feedback('Recuperando a sessão e solicitando novo QR...');
+   try{await api('/api/waakg/channels/'+encodeURIComponent(id)+'/start','POST',{});}
+   catch(error){feedback('Não foi possível reiniciar: '+String(error.message||'Gateway indisponível.'),true);
+    q('#socioQrRetry').classList.remove('hidden');x.channelId=id;return;}
+   if(active===x)void poll(id);
   });
  }
  q('#socioQrForm').addEventListener('submit',async ev=>{
@@ -84,9 +93,26 @@ async function openQr({api,toast,onConnected,canManage=true}={}){
   try{
    const channel=await api('/api/waakg/channels/connect','POST',{label});
    if(active!==x)return;
-   stop();q('#socioQrLive').classList.remove('hidden');feedback('Preparando QR Code...');
+   stop();x.qrChecks=0;q('#socioQrLive').classList.remove('hidden');feedback('Preparando QR Code...');
+   if(channel.status==='connecting'){
+    try{await api('/api/waakg/channels/'+encodeURIComponent(channel.id)+'/start','POST',{});}
+    catch(error){feedback('Sessão criada, mas o gateway ainda está indisponível: '+String(error.message||''),true);
+     q('#socioQrRetry').classList.remove('hidden');x.channelId=channel.id;return;}
+   }
    await poll(channel.id);
   }catch(err){if(active===x){toast(String(err.message||'Não foi possível criar a sessão.'),true);btn.disabled=false;}}
+ });
+ q('#socioQrRetry').addEventListener('click',async()=>{
+  if(!x.channelId||active!==x)return;
+  q('#socioQrRetry').classList.add('hidden');x.qrChecks=0;stop();
+  feedback('Reiniciando conexão com o WhatsApp...');
+  try{
+   await api('/api/waakg/channels/'+encodeURIComponent(x.channelId)+'/start','POST',{});
+   if(active===x)await poll(x.channelId);
+  }catch(error){
+   if(active===x){feedback('Falha ao reiniciar: '+String(error.message||'Indisponível'),true);
+    q('#socioQrRetry').classList.remove('hidden');}
+  }
  });
  el.addEventListener('click',ev=>{if(ev.target===el||ev.target.closest('[data-qr-close]'))close();});
  x.keyHandler=ev=>{if(ev.key==='Escape')close();
