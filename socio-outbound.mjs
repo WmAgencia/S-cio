@@ -51,7 +51,10 @@ export async function deliverToConversation(pool,{tenantId,conversationId,userId
   "JOIN waakg_links l ON l.channel_id=ch.id AND l.tenant_id=ch.tenant_id "+
   "LEFT JOIN conversation_ui_state st ON st.tenant_id=c.tenant_id AND st.conversation_id=c.id "+
   "LEFT JOIN agents ag ON ag.tenant_id=c.tenant_id "+
-  "WHERE c.tenant_id=$1 AND c.id=$2 AND ch.provider='waakg'",[tenantId,conversationId]);
+  "JOIN tenants t ON t.id=c.tenant_id "+
+  "WHERE c.tenant_id=$1 AND c.id=$2 AND ch.provider='waakg' AND t.status<>'paused' "+
+  "AND COALESCE((t.features->>'whatsapp')::boolean,true)=true "+
+  "AND ($3::text<>'ai' OR COALESCE((t.features->>'ai')::boolean,true)=true)",[tenantId,conversationId,mode]);
  if(!record.rowCount)throw bad(404,'Conversa WhatsApp não encontrada nesta empresa.');
  const c=record.rows[0];
  if(c.status==='resolved')throw bad(409,'Reabra a conversa antes de responder.');
@@ -91,21 +94,51 @@ export async function deliverToConversation(pool,{tenantId,conversationId,userId
   "UPDATE message_outbox SET status='processing',updated_at=now() WHERE id=$1 AND tenant_id=$2 AND status='pending' RETURNING id",
   [outboxId,tenantId]);
  if(!claimed.rowCount)throw bad(409,'Mensagem já está em processamento.');
+ let confirmedProviderId=null;
  try{
   const delivery=await send({sessionId:c.session_id,jid,text:body,env});
   if(!delivery.sent||!delivery.providerId)throw bad(503,'O gateway não confirmou o envio.');
   const providerId='waakg:'+createHash('sha256').update(c.session_id+':'+jid+':'+delivery.providerId).digest('hex');
-  await pool.query("UPDATE message_outbox SET status='sent',provider_id=$3,updated_at=now() WHERE id=$1 AND tenant_id=$2",
+  confirmedProviderId=providerId;
+  await pool.query("UPDATE message_outbox SET status='sent',provider_id=$3,error_code='HISTORY_PENDING',updated_at=now() WHERE id=$1 AND tenant_id=$2",
    [outboxId,tenantId,providerId]);
   await pool.query(
    "INSERT INTO messages(id,tenant_id,conversation_id,direction,body,provider_id,reply_to_id) "+
    "VALUES($1,$2,$3,'outbound',$4,$5,$6) ON CONFLICT(tenant_id,provider_id) DO NOTHING",
    [randomUUID(),tenantId,conversationId,body,providerId,replyToId]);
   await pool.query('UPDATE conversations SET last_message_at=now() WHERE id=$1 AND tenant_id=$2',[conversationId,tenantId]);
+  await pool.query('UPDATE message_outbox SET error_code=NULL WHERE id=$1 AND tenant_id=$2',[outboxId,tenantId]);
   return {id:outboxId,sent:true,status:'sent',whatsappSent:true};
  }catch{
+  if(confirmedProviderId){
+   // Persist a confirmed receipt independently of history projection. Recovery
+   // below repairs history without ever contacting the gateway or sending again.
+   const saved=await pool.query("UPDATE message_outbox SET status='sent',provider_id=$3,error_code='HISTORY_PENDING',updated_at=now() WHERE id=$1 AND tenant_id=$2",
+    [outboxId,tenantId,confirmedProviderId]).then(()=>true).catch(()=>false);
+   if(saved)return {id:outboxId,sent:true,status:'sent',whatsappSent:true,historyPending:true};
+  }
   await pool.query("UPDATE message_outbox SET status='uncertain',error_code='SEND_UNCONFIRMED',updated_at=now() WHERE id=$1 AND tenant_id=$2",
    [outboxId,tenantId]).catch(()=>{});
   throw bad(503,'Envio sem confirmação. Confira o WhatsApp antes de tentar novamente.');
  }
+}
+
+export async function reconcileConfirmedOutbox(pool){
+ const client=await pool.connect();
+ try{
+  await client.query('BEGIN');
+  const rows=await client.query("SELECT o.* FROM message_outbox o WHERE o.status='sent' AND o.provider_id IS NOT NULL "+
+   "AND (o.error_code='HISTORY_PENDING' OR NOT EXISTS(SELECT 1 FROM messages m WHERE m.tenant_id=o.tenant_id AND m.provider_id=o.provider_id)) "+
+   "ORDER BY o.updated_at,o.id LIMIT 30 FOR UPDATE OF o SKIP LOCKED");
+  for(const o of rows.rows){
+   await client.query("INSERT INTO messages(id,tenant_id,conversation_id,direction,body,provider_id,reply_to_id,created_at) "+
+    "VALUES($1,$2,$3,'outbound',$4,$5,$6,$7) ON CONFLICT(tenant_id,provider_id) DO NOTHING",
+    [randomUUID(),o.tenant_id,o.conversation_id,o.body,o.provider_id,o.reply_to_id,o.created_at]);
+   await client.query('UPDATE conversations SET last_message_at=GREATEST(last_message_at,$3) WHERE tenant_id=$1 AND id=$2',
+    [o.tenant_id,o.conversation_id,o.created_at]);
+   await client.query('UPDATE message_outbox SET error_code=NULL WHERE id=$1',[o.id]);
+  }
+  await client.query('COMMIT');return {reconciled:rows.rowCount};
+ }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}
+ finally{client.release();}
 }

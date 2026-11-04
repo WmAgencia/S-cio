@@ -109,7 +109,7 @@ export async function publicQuote(pool,token){
  const r=await pool.query(
   "SELECT q.id,q.series_id,q.version,q.status,q.amount_cents,q.items,q.expires_at,q.buyer_name,t.name AS business_name,o.id AS order_id,o.status AS order_status "+
   "FROM sales_quotes q JOIN tenants t ON t.id=q.tenant_id LEFT JOIN sales_orders o ON o.tenant_id=q.tenant_id AND o.quote_id=q.id "+
-  "WHERE q.token_hash=$1",[hash(token)]);
+  "WHERE q.token_hash=$1 AND t.status<>'paused' AND COALESCE((t.features->>'quotes')::boolean,true)=true",[hash(token)]);
  if(!r.rowCount)throw bad(404,'Orçamento não encontrado ou link substituído.');
  const q=r.rows[0];
  if(q.status==='issued'&&new Date(q.expires_at).getTime()<=Date.now())return {...q,status:'expired',paymentTestAvailable:false};
@@ -125,13 +125,20 @@ export async function approveQuote(pool,token,name,consent){
   const rows=await c.query('SELECT * FROM sales_quotes WHERE token_hash=$1 FOR UPDATE',[hash(token)]);
   if(!rows.rowCount)throw bad(404,'Orçamento não encontrado.');
   const quote=rows.rows[0];
+  const tenant=await c.query("SELECT id FROM tenants WHERE id=$1 AND status<>'paused' "+
+   "AND COALESCE((features->>'quotes')::boolean,true)=true",[quote.tenant_id]);
+  if(!tenant.rowCount)throw bad(403,'Esta empresa não está disponível para novos pedidos.');
   if(quote.status==='accepted'){
    const prior=await c.query('SELECT id,status FROM sales_orders WHERE tenant_id=$1 AND quote_id=$2',[quote.tenant_id,quote.id]);
    await c.query('COMMIT');return {id:prior.rows[0].id,status:prior.rows[0].status,alreadyApproved:true};
   }
   if(quote.status!=='issued'||new Date(quote.expires_at).getTime()<=Date.now())
    throw bad(409,'Este orçamento expirou ou foi substituído.');
-  for(const item of quote.items)await snapshotStock(c,quote.tenant_id,item);
+  // Lock products in a stable order so concurrent multi-item approvals cannot
+  // deadlock merely because their items were added in a different order.
+  for(const item of [...quote.items].sort((a,b)=>
+   (a.productId+':'+(a.variantId||'')).localeCompare(b.productId+':'+(b.variantId||''))))
+   await snapshotStock(c,quote.tenant_id,item);
   const order=await c.query(
    "INSERT INTO sales_orders(id,tenant_id,quote_id,conversation_id,customer_name,amount_cents,items,status) "+
    "VALUES($1,$2,$3,$4,$5,$6,$7,'pending_payment') RETURNING id,status",
@@ -141,15 +148,31 @@ export async function approveQuote(pool,token,name,consent){
  }catch(e){await c.query('ROLLBACK').catch(()=>{});throw e;}finally{c.release();}
 }
 async function snapshotStock(c,tenant,item){
+ const product=await c.query('SELECT active FROM products WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[item.productId,tenant]);
+ if(!product.rowCount||!product.rows[0].active)throw bad(409,'Produto indisponível. Peça uma nova proposta à empresa.');
  const v=item.variantId?
   await c.query('SELECT stock_quantity,active FROM product_variants WHERE id=$1 AND tenant_id=$2 AND product_id=$3 FOR UPDATE',[item.variantId,tenant,item.productId]):
   await c.query('SELECT stock_quantity,active FROM products WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[item.productId,tenant]);
- if(!v.rowCount||!v.rows[0].active||v.rows[0].stock_quantity!==null&&Number(v.rows[0].stock_quantity)<item.quantity)
+ if(!v.rowCount||!v.rows[0].active)
   throw bad(409,'Estoque alterado desde o orçamento. Peça uma nova proposta à empresa.');
+ if(v.rows[0].stock_quantity!==null){
+  // Pending approvals reserve units until the quote expires. A sandbox payment
+  // releases the reservation; test orders must never consume real inventory.
+  const reserved=await c.query(
+   "SELECT COALESCE(SUM((item->>'quantity')::integer),0)::int AS quantity "+
+   "FROM sales_orders o JOIN sales_quotes q ON q.id=o.quote_id AND q.tenant_id=o.tenant_id "+
+   "CROSS JOIN LATERAL jsonb_array_elements(o.items) item "+
+   "WHERE o.tenant_id=$1 AND o.status='pending_payment' AND q.expires_at>now() "+
+   "AND item->>'productId'=$2 AND COALESCE(item->>'variantId','')=$3",
+   [tenant,item.productId,item.variantId||'']);
+  if(Number(v.rows[0].stock_quantity)-Number(reserved.rows[0].quantity)<item.quantity)
+   throw bad(409,'Estoque insuficiente ou reservado por outro pedido. Peça uma nova proposta à empresa.');
+ }
 }
 export async function declineQuote(pool,token){
  if(!validToken(token))throw bad(404,'Link inválido.');
- const r=await pool.query("UPDATE sales_quotes SET status='declined',updated_at=now() WHERE token_hash=$1 AND status='issued' AND expires_at>now() RETURNING id",[hash(token)]);
+ const r=await pool.query("UPDATE sales_quotes SET status='declined',updated_at=now() WHERE token_hash=$1 AND status='issued' AND expires_at>now() "+
+  "AND tenant_id IN (SELECT id FROM tenants WHERE status<>'paused' AND COALESCE((features->>'quotes')::boolean,true)=true) RETURNING id",[hash(token)]);
  if(!r.rowCount)throw bad(409,'Orçamento indisponível para recusa.');
  return {status:'declined'};
 }
@@ -173,6 +196,8 @@ export async function createTestCheckout(pool,token,{env=process.env,fetchImpl=f
  if(!stripeTestReady(env))throw bad(503,'Pagamento de teste não configurado. Nenhuma cobrança foi feita.');
  const quote=await publicQuote(pool,token);
  if(quote.status!=='accepted'||!quote.order_id)throw bad(409,'Aprove o orçamento antes de acessar o pagamento de teste.');
+ if(quote.expires_at&&new Date(quote.expires_at).getTime()<=Date.now())
+  throw bad(409,'A reserva deste orçamento expirou. Peça uma nova proposta à empresa.');
  const c=await pool.connect();
  try{
   await c.query('BEGIN');

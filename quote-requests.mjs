@@ -16,10 +16,10 @@ export function isQuoteRequest(text){
 export async function scanQuoteRequests(pool){
  const found=await pool.query(
   "SELECT m.id,m.tenant_id,m.conversation_id,m.body,c.customer_name,c.customer_phone "+
-  "FROM messages m JOIN tenants t ON t.id=m.tenant_id "+
+  "FROM messages m JOIN tenants t ON t.id=m.tenant_id AND t.status<>'paused' "+
   "JOIN conversations c ON c.tenant_id=m.tenant_id AND c.id=m.conversation_id "+
   "WHERE m.direction='inbound' AND m.created_at > now()-interval '48 hours' "+
-  "AND COALESCE((t.features->>'quotes')::boolean,true)=true "+
+  "AND COALESCE((t.features->>'quotes')::boolean,true)=true AND COALESCE((t.features->>'whatsapp')::boolean,true)=true "+
   "AND NOT EXISTS (SELECT 1 FROM quote_requests q WHERE q.tenant_id=m.tenant_id AND q.inbound_message_id=m.id) "+
   "AND m.body ~* '(orçamento|orcamento|cotação|cotacao|preço|preco|quanto custa|quanto fica|quanto sai|qual valor|qual o valor)' "+
   "ORDER BY m.created_at DESC LIMIT 40"
@@ -78,11 +78,11 @@ export async function processNextOwnerQuoteAlert(pool,{
  if(!outboundEnabled(env))return {processed:false,reason:'OUTBOUND_DISABLED'};
  const queued=await pool.query(
   "SELECT q.id,q.tenant_id,q.conversation_id,q.customer_name,q.customer_phone,q.summary,t.name AS company_name "+
-  "FROM quote_requests q JOIN tenants t ON t.id=q.tenant_id "+
+  "FROM quote_requests q JOIN tenants t ON t.id=q.tenant_id AND t.status<>'paused' "+
   "WHERE q.alert_status='pending' AND q.status IN ('pending','preparing') "+
   "AND t.quote_alert_whatsapp=true AND t.quote_alert_enabled_at IS NOT NULL "+
   "AND q.created_at>=t.quote_alert_enabled_at "+
-  "AND COALESCE((t.features->>'quotes')::boolean,true)=true "+
+  "AND COALESCE((t.features->>'quotes')::boolean,true)=true AND COALESCE((t.features->>'whatsapp')::boolean,true)=true "+
   "ORDER BY q.created_at LIMIT 1"
  );
  if(!queued.rowCount)return {processed:false};

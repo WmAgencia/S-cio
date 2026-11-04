@@ -10,9 +10,24 @@ import {randomUUID,createHash} from 'node:crypto';
 const enabled=!!process.env.DATABASE_URL;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 test('real PostgreSQL: login, tenant isolation, imports and webhook signature protections',{skip:!enabled,timeout:65000},async t=>{
+ const database='socio_e2e_'+randomUUID().replaceAll('-','');
+ const fixtureUrl=new URL(process.env.DATABASE_URL);fixtureUrl.pathname='/'+database;
+ const setupToken='e2e-isolated-fixture-setup-token-2026-long-enough';
+ const admin=new Client({connectionString:process.env.DATABASE_URL});
+ await admin.connect();await admin.query('CREATE DATABASE '+database);
+ let child,fakeGateway,db;
+ t.after(async()=>{
+  if(child&&child.exitCode===null){
+   child.kill('SIGTERM');
+   await new Promise(resolve=>{child.once('exit',resolve);setTimeout(resolve,2000).unref();});
+  }
+  fakeGateway?.close();
+  if(db)await db.end();
+  await admin.query('DROP DATABASE IF EXISTS '+database+' WITH (FORCE)');await admin.end();
+ });
  const port=38475,waPort=38476,waKey='mock-readonly-waakg-key',waSession='socioFixture123',waPhone='5515999999999',waJid=waPhone+'@s.whatsapp.net';
  const gatewayRequests=[],dynamicSessions=new Map(),dynamicPhone='5515888888888';
- const fakeGateway=createServer(async(req,res)=>{
+ fakeGateway=createServer(async(req,res)=>{
   const url=new URL(req.url||'/', 'http://localhost'),path=url.pathname;
   gatewayRequests.push({path,method:req.method});
   const send=(status,data)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(data));};
@@ -62,15 +77,15 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
   return send(404,{status:false});
  });
  await new Promise(resolve=>fakeGateway.listen(waPort,'127.0.0.1',resolve));
- const child=spawn(process.execPath,['server.mjs'],{
-  env:{...process.env,PORT:String(port),NODE_ENV:'test',
+ child=spawn(process.execPath,['server.mjs'],{
+  env:{...process.env,DATABASE_URL:fixtureUrl.href,SETUP_TOKEN:setupToken,PORT:String(port),NODE_ENV:'test',
+   GROQ_API_KEY:'',SOCIO_OUTBOUND_ENABLED:'false',SOCIO_AUTOREPLY_ENABLED:'false',SOCIO_LIVE_SYNC_ENABLED:'false',
    WA_AKG_BASE_URL:'http://127.0.0.1:'+waPort,WA_AKG_API_KEY:waKey,
    CHANNEL_ENCRYPTION_KEY:'0123456789abcdef0123456789abcdef0123456789abcdef',
    SOCIO_STORAGE_DRIVER:'memory'},
   stdio:['ignore','pipe','pipe']
  });
  let logs='';child.stderr.on('data',x=>logs+=x.toString());
- t.after(()=>{child.kill('SIGTERM');fakeGateway.close();});
  const base='http://127.0.0.1:'+port;
  let ready=false;
  for(let i=0;i<80;i++){
@@ -117,7 +132,7 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
   const resp=await fetch(base+path,{method,headers,body:data===undefined?undefined:JSON.stringify(data)});
   const result=await resp.json();return {status:resp.status,result,cookie:resp.headers.get('set-cookie')||''};
  }
- const setup=await call('/api/setup','POST',{setupToken:process.env.SETUP_TOKEN,name:'Administradora',company:'Consecom QA',email:'qa-owner@test.invalid',password:'SenhaMuitoForte2026!'});
+ const setup=await call('/api/setup','POST',{setupToken,name:'Administradora',company:'Consecom QA',email:'qa-owner@test.invalid',password:'SenhaMuitoForte2026!'});
  assert.equal(setup.status,201,JSON.stringify(setup.result));
  const adminCookie=setup.cookie.split(';')[0],csrf=setup.result.csrf;
  const badCnpj=await call('/api/admin/cnpj?number=00000000000000','GET',undefined,adminCookie);
@@ -184,8 +199,8 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
 
  // Real PostgreSQL inbox: migration, tenant isolation, notes, accessibility
  // metadata and human/AI-assist state. No WhatsApp send is attempted.
- const db=new Client({connectionString:process.env.DATABASE_URL});
- await db.connect();t.after(()=>db.end());
+ db=new Client({connectionString:fixtureUrl.href});
+ await db.connect();
  const conversationId=randomUUID(),otherConversationId=randomUUID(),channelId=randomUUID(),messageId=randomUUID();
  const ownerTenant=me.result.tenant.id;
  await db.query("INSERT INTO channels(id,tenant_id,label,phone,provider) VALUES($1,$2,'Atendimento','5515890000000','manual')",[channelId,ownerTenant]);
