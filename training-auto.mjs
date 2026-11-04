@@ -120,6 +120,7 @@ export async function processNextAutoTraining(pool){
   await client.query('BEGIN');
   const rows=await client.query(
    "SELECT * FROM training_auto_runs WHERE status IN ('scanning','analyzing') "+
+   "AND tenant_id IN (SELECT id FROM tenants WHERE COALESCE((features->>'ai')::boolean,true)=true) "+
    "ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1");
   if(!rows.rowCount){await client.query('COMMIT');return {processed:false};}
   const run=rows.rows[0];
