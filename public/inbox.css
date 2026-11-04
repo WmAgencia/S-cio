@@ -19,6 +19,7 @@
 .wa-inbox-eyebrow{font-weight:730;font-size:9px;letter-spacing:1.45px;color:#e48a51}
 .wa-inbox-side-head h1{font-size:22px;margin:6px 0 0;color:#fff3e8;letter-spacing:-.75px;line-height:1.2}
 .wa-inbox-side-head h1 span{font-size:11px;color:#ae9580;margin-left:4px;font-weight:500}
+.wa-side-head-buttons{display:flex;align-items:center;gap:4px}
 .wa-round-icon,.wa-small-action{display:inline-grid;place-items:center;flex:0 0 auto;border:1px solid transparent;
  color:#d0ad96;background:transparent;border-radius:10px;height:36px;min-width:36px;width:36px;
  font-size:19px;padding:0;line-height:1}
@@ -247,3 +248,5 @@
  .wa-inbox-main,.wa-message-bubble,.wa-message-more{transition:none!important;animation:none!important}
  .wa-message-bubble.wa-highlight{outline:2px solid #ffba7b}
 }
+
+.wa-sync-feedback{margin-top:14px;padding:12px;border-radius:10px;background:#492d1b;border:1px solid #7b4d2c;color:#efc5a1;font-size:11px;line-height:1.5;min-height:22px}
