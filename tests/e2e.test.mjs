@@ -296,6 +296,16 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(switchTenant.status,200);
  const betaProducts=await call('/api/products','GET',undefined,adminCookie);
  assert.equal(betaProducts.result.length,0);
+ const betaSales=await call('/api/sales','GET',undefined,adminCookie);
+ assert.equal(betaSales.status,200);
+ assert.deepEqual(betaSales.result.quotes,[],'Company B must not see company A proposals');
+ assert.deepEqual(betaSales.result.orders,[],'Company B must not see company A orders');
+ const crossQuote=await call('/api/sales/quotes','POST',
+  {conversationId,items:[{productId:alphaId,quantity:1}]},adminCookie,csrf);
+ assert.equal(crossQuote.status,404,'One tenant cannot quote another tenant conversation');
+ const crossCancelQuote=await call('/api/sales/quotes/'+revision.result.id+'/cancel','POST',{},adminCookie,csrf);
+ assert.equal(crossCancelQuote.status,409,'Other company must not cancel customer-approved quotes');
+
  const betaActivity=await call('/api/dashboard/activity?range=6m','GET',undefined,adminCookie);
  assert.equal(betaActivity.status,200);
  assert.equal(betaActivity.result.points.reduce((n,p)=>n+p.inbound+p.outbound,0),0,
