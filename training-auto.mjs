@@ -7,6 +7,13 @@ const uuid=()=>randomUUID();
 const bad=(status,message)=>Object.assign(new Error(message),{status});
 const activeScan=new Set(['queued','scanning','importing','paused']);
 const finishedScan=new Set(['completed','failed','cancelled']);
+export function scanDecision(statuses,expected){
+ if(statuses.length!==expected)return {state:'waiting'};
+ if(statuses.some(s=>s==='failed'||s==='cancelled'))return {state:'failed',errorCode:'SCAN_INTERRUPTED'};
+ if(statuses.some(s=>activeScan.has(s)||s==='importing'))return {state:'waiting'};
+ if(statuses.every(s=>s==='completed'))return {state:'ready'};
+ return {state:'failed',errorCode:'SCAN_INVALID_STATE'};
+}
 export async function startAutoTraining(pool,tenantId,{getStatus=getSessionStatus,configured=gatewayConfigured}={}){
  if(!configured())throw bad(503,'Gateway WhatsApp indisponível.');
  const available=await pool.query(
@@ -82,6 +89,31 @@ export async function autoTrainingStatus(pool,tenantId){
   messagesImported:scans.rows.reduce((n,s)=>n+Number(s.imported_messages||0),0),
   source:'available_waakg_text',approvalRequired:true};
 }
+export async function cancelAutoTraining(pool,tenantId,runId){
+ const c=await pool.connect();
+ try{
+  await c.query('BEGIN');
+  const q=await c.query(
+   "SELECT id,scan_ids,job_id FROM training_auto_runs WHERE id=$1 AND tenant_id=$2 AND status IN ('scanning','analyzing') FOR UPDATE",
+   [runId,tenantId]);
+  if(!q.rowCount)throw bad(409,'Treinamento não encontrado ou já finalizado.');
+  const run=q.rows[0];
+  await c.query(
+   "UPDATE waakg_scans SET status='cancelled',lease_token=NULL,lease_until=NULL,updated_at=now(),finished_at=now() "+
+   "WHERE tenant_id=$1 AND id=ANY($2::uuid[]) AND status IN ('queued','scanning','importing','paused')",
+   [tenantId,run.scan_ids]);
+  if(run.job_id)await c.query(
+   "UPDATE training_jobs SET status='cancelled',updated_at=now(),finished_at=now() "+
+   "WHERE tenant_id=$1 AND id=$2 AND status IN ('queued','analyzing','paused')",
+   [tenantId,run.job_id]);
+  await c.query(
+   "UPDATE training_auto_runs SET status='cancelled',updated_at=now(),finished_at=now() WHERE id=$1",
+   [runId]);
+  await c.query('COMMIT');
+  return {id:runId,status:'cancelled'};
+ }catch(err){await c.query('ROLLBACK').catch(()=>{});throw err;}
+ finally{c.release();}
+}
 export async function processNextAutoTraining(pool){
  const client=await pool.connect();
  try{
@@ -95,27 +127,26 @@ export async function processNextAutoTraining(pool){
    const scans=await client.query(
     "SELECT status FROM waakg_scans WHERE tenant_id=$1 AND id=ANY($2::uuid[])",
     [run.tenant_id,run.scan_ids]);
-   if(scans.rows.length<run.scan_ids.length||scans.rows.some(s=>activeScan.has(s.status))){
+   const decision=scanDecision(scans.rows.map(s=>s.status),run.scan_ids.length);
+   if(decision.state==='waiting'){
     await client.query('COMMIT');return {processed:false,reason:'SCANNING'};
    }
-   const imported=await client.query(
-    "SELECT COUNT(*)::int AS n FROM imports WHERE tenant_id=$1",[run.tenant_id]);
-   if(!imported.rows[0].n){
+   if(decision.state==='failed'){
     await client.query(
-     "UPDATE training_auto_runs SET status='failed',error_code='NO_TEXT_HISTORY',updated_at=now(),finished_at=now() WHERE id=$1",
-     [run.id]);
+     "UPDATE training_auto_runs SET status='failed',error_code=$2,updated_at=now(),finished_at=now() WHERE id=$1",
+     [run.id,decision.errorCode]);
     await client.query('COMMIT');return {processed:true,failed:true};
    }
    try{
-    const job=await createTrainingAnalysis(pool,run.tenant_id);
+    const job=await createTrainingAnalysis(pool,run.tenant_id,{scanIds:run.scan_ids});
     await client.query(
      "UPDATE training_auto_runs SET status='analyzing',job_id=$2,updated_at=now() WHERE id=$1",
      [run.id,job.id]);
     await client.query('COMMIT');return {processed:true,stage:'ANALYZING',jobId:job.id};
    }catch(err){
     await client.query(
-     "UPDATE training_auto_runs SET status='failed',error_code='ANALYSIS_NOT_STARTED',updated_at=now(),finished_at=now() WHERE id=$1",
-     [run.id]);
+     "UPDATE training_auto_runs SET status='failed',error_code=$2,updated_at=now(),finished_at=now() WHERE id=$1",
+     [run.id,err.status===422?'NO_TEXT_HISTORY':'ANALYSIS_NOT_STARTED']);
     await client.query('COMMIT');return {processed:true,failed:true};
    }
   }
