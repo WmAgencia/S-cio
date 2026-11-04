@@ -861,9 +861,41 @@ async function handle(req,res){
   if(!emailOk(data.email)||!validText(data.name,100)||!allowedNewMemberRole(a,data.role))throw fail(422,'Dados de usuário ou permissão inválidos.');
   const raw=String(data.phone||'').trim(),phone=raw?normalizeLoginPhone(raw):null;
   if(raw&&!phone)throw fail(422,'Número de colaborador inválido. Informe o DDD.');
-  const hash=await hashPassword(data.password);
-  const r=await query('INSERT INTO users(id,tenant_id,email,phone,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,name,email,phone,role',[id(),a.active_tenant_id,data.email.trim().toLowerCase(),phone,data.name.trim(),hash,data.role]);
-  await audit(a,'team.invited',{userId:r.rows[0].id});return json(res,201,r.rows[0]);
+  const hash=await hashPassword(data.password),c=await pool.connect();
+  try{
+   await c.query('BEGIN');
+   const r=await c.query(
+    'INSERT INTO users(id,tenant_id,email,phone,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,name,email,phone,role,active',
+    [id(),a.active_tenant_id,data.email.trim().toLowerCase(),phone,data.name.trim(),hash,data.role]);
+   await c.query('INSERT INTO audit(id,tenant_id,actor_id,action,metadata) VALUES($1,$2,$3,$4,$5)',
+    [id(),a.active_tenant_id,a.user_id,'team.invited',JSON.stringify({userId:r.rows[0].id,role:data.role})]);
+   await c.query('COMMIT');
+   return json(res,201,r.rows[0]);
+  }catch(error){await c.query('ROLLBACK').catch(()=>{});throw error;}finally{c.release();}
+ }
+ if(method==='GET'&&pathname==='/api/ops/tenant-integrity'){
+  requirePermission(a,'audit.read');
+  const record=await query(
+   "SELECT "+
+   "(SELECT count(*)::int FROM conversations c LEFT JOIN channels ch ON ch.id=c.channel_id "+
+   " WHERE c.tenant_id=$1 AND (ch.id IS NULL OR ch.tenant_id IS DISTINCT FROM c.tenant_id)) AS channel_links,"+
+   "(SELECT count(*)::int FROM messages m LEFT JOIN conversations c ON c.id=m.conversation_id "+
+   " WHERE m.tenant_id=$1 AND (c.id IS NULL OR c.tenant_id IS DISTINCT FROM m.tenant_id)) AS message_links,"+
+   "(SELECT count(*)::int FROM product_variants v LEFT JOIN products p ON p.id=v.product_id "+
+   " WHERE v.tenant_id=$1 AND (p.id IS NULL OR p.tenant_id IS DISTINCT FROM v.tenant_id)) AS variant_links,"+
+   "(SELECT count(*)::int FROM product_media pm LEFT JOIN products p ON p.id=pm.product_id "+
+   " WHERE pm.tenant_id=$1 AND (p.id IS NULL OR p.tenant_id IS DISTINCT FROM pm.tenant_id)) AS media_links,"+
+   "(SELECT count(*)::int FROM sales_quotes q LEFT JOIN conversations c ON c.id=q.conversation_id "+
+   " WHERE q.tenant_id=$1 AND (c.id IS NULL OR c.tenant_id IS DISTINCT FROM q.tenant_id)) AS quote_links,"+
+   "(SELECT count(*)::int FROM sales_orders o LEFT JOIN sales_quotes q ON q.id=o.quote_id "+
+   " WHERE o.tenant_id=$1 AND (q.id IS NULL OR q.tenant_id IS DISTINCT FROM o.tenant_id)) AS order_links,"+
+   "(SELECT count(*)::int FROM sessions s JOIN users u ON u.id=s.user_id "+
+   " WHERE s.active_tenant_id=$1 AND u.platform_owner=false AND u.tenant_id<>s.active_tenant_id) AS foreign_sessions",
+   [a.active_tenant_id]);
+  const counts=record.rows[0],total=Object.values(counts).reduce((n,v)=>n+Number(v||0),0);
+  return json(res,200,{checkedAt:new Date().toISOString(),tenantId:a.active_tenant_id,
+   mismatches:counts,totalMismatches:total,preflightClean:total===0,
+   note:'Contagens das relações existentes. Restrições novas não foram validadas retroativamente.'});
  }
  if(method==='GET'&&pathname==='/api/ops/audit'){
   requirePermission(a,'audit.read');
