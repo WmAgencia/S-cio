@@ -12,6 +12,8 @@ import {startAutoTraining,autoTrainingStatus,processNextAutoTraining} from './tr
 import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
+import {processLiveInboxSync} from './inbox-live-sync.mjs';
+import {processNextAiReply} from './ai-replies.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
 
@@ -789,6 +791,28 @@ async function main(){
    .catch(error=>console.warn('[socio gateway private]',JSON.stringify({reachable:false,
      code:Number(error?.status||503)})));
  }
+ // Continuously import only the text available in authorized WhatsApp chats.
+ // This worker NEVER sends; it detects newly arrived messages for the inbox.
+ let liveSyncBusy=false;
+ const liveSyncWorker=setInterval(async()=>{
+  if(liveSyncBusy||!gatewayConfigured()||process.env.SOCIO_LIVE_SYNC_ENABLED==='false')return;
+  liveSyncBusy=true;
+  try{await processLiveInboxSync(pool);}
+  catch(e){console.warn('[socio-inbox-sync]',String(e?.code||'SYNC_ERROR').slice(0,40));}
+  finally{liveSyncBusy=false;}
+ },16000);
+ liveSyncWorker.unref();
+ // AI only attempts replies if explicitly enabled, agent enabled and each
+ // conversation handed over. Claims are durable to avoid duplicate messages.
+ let replyBusy=false;
+ const aiReplyWorker=setInterval(async()=>{
+  if(replyBusy)return;
+  replyBusy=true;
+  try{await processNextAiReply(pool);}
+  catch(e){console.warn('[socio-ai-reply]',String(e?.code||'REPLY_ERROR').slice(0,40));}
+  finally{replyBusy=false;}
+ },6000);
+ aiReplyWorker.unref();
  // Automatically move a supervised training run from scan to Markdown draft;
  // per-run database row locks make this safe across replicas.
  let autoBusy=false;
