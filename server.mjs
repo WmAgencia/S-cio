@@ -11,6 +11,8 @@ import {maintenanceEnabled,writesBlocked,workersBlocked} from './migration-guard
 import {TABLES as MIGRATION_TABLES} from './scripts/socio-supabase-migrate.mjs';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier} from './lib.mjs';
 import {permissionsFor,requirePermission,allowedNewMemberRole,validateMemberPatch} from './team-permissions.mjs';
+import {DEFAULT_TENANT_FEATURES,normalizeTenantFeatures,tenantFeatureEnabled,effectiveTenantPermissions,featureForPath,assertTenantFeature} from './tenant-features.mjs';
+import {processQuoteInterest,listQuoteRequests,configureQuoteAlerts,updateQuoteRequest,processOwnerQuoteAlert} from './quote-requests.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
 import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
 import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
@@ -98,7 +100,7 @@ async function sessionFor(req){
  if(!match)return null;
  const token=decodeURIComponent(match[1]);
  if(!token||token.length>256)return null;
- const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.phone,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true AND (u.platform_owner=true OR u.tenant_id=s.active_tenant_id)",[hashToken(token)]);
+ const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.phone,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status,t.features AS tenant_features FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true AND (u.platform_owner=true OR u.tenant_id=s.active_tenant_id)",[hashToken(token)]);
  return result.rows[0]||null;
 }
 async function createSession(userId,tenantId,res){
@@ -272,11 +274,13 @@ async function handle(req,res){
  }
  const a=await sessionFor(req);
  if(!a)throw fail(401,'Entre na sua conta para continuar.');
+ const requiredModule=featureForPath(pathname);
+ if(requiredModule)assertTenantFeature(a.tenant_features,requiredModule);
  if(mutations.has(method)){
   const csrf=req.headers['x-csrf-token'];
   if(!csrf||!secureEqual(String(csrf),a.csrf))throw fail(403,'Sessão sem validação de segurança.');
  }
- if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,platformOwner:a.platform_owner,permissions:permissionsFor(a.role,a.platform_owner)},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status},csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
+ if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,platformOwner:a.platform_owner,permissions:effectiveTenantPermissions(permissionsFor(a.role,a.platform_owner),a.tenant_features)},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status,features:a.tenant_features||DEFAULT_TENANT_FEATURES},csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
  // Hosted one-click OAuth (Pipeboard). Tokens never go to the browser.
  if(method==='GET'&&pathname==='/api/marketing/oauth'){
   requirePermission(a,'marketing.read');
@@ -634,6 +638,25 @@ async function handle(req,res){
   return json(res,201,r.rows[0]);
  }
 
+ if(method==='GET'&&pathname==='/api/quote-requests'){
+  requirePermission(a,'sales.read');
+  return json(res,200,await listQuoteRequests(pool,a.active_tenant_id));
+ }
+ if(method==='POST'&&pathname==='/api/quote-requests/alerts'){
+  requirePermission(a,'sales.manage');
+  const {data}=await body(req,2000);
+  const result=await configureQuoteAlerts(pool,a,data.enabled);
+  await audit(a,'quote.alert_preferences.updated',{enabled:result.enabled});
+  return json(res,200,result);
+ }
+ const requestStatus=pathname.match(/^\/api\/quote-requests\/([a-f\d-]{36})\/status$/i);
+ if(requestStatus&&method==='POST'){
+  requirePermission(a,'sales.manage');
+  const {data}=await body(req,2000);
+  const result=await updateQuoteRequest(pool,a,requestStatus[1],data.status);
+  await audit(a,'quote.request.updated',{requestId:result.id,status:result.status});
+  return json(res,200,result);
+ }
  if(method==='GET'&&pathname==='/api/sales'){
   requirePermission(a,'sales.read');
   return json(res,200,await listSales(pool,a.active_tenant_id));
@@ -1137,7 +1160,7 @@ async function handle(req,res){
  }
  if(method==='GET'&&pathname==='/api/admin/tenants'){
   needPlatform(a);
-  const r=await query("SELECT t.id,t.name,t.slug,t.plan,t.status,t.cnpj,t.legal_name,t.trade_name,t.created_at,(SELECT count(*)::int FROM users u WHERE u.tenant_id=t.id) AS members FROM tenants t ORDER BY t.created_at DESC");
+  const r=await query("SELECT t.id,t.name,t.slug,t.plan,t.status,t.features,t.cnpj,t.legal_name,t.trade_name,t.created_at,(SELECT count(*)::int FROM users u WHERE u.tenant_id=t.id) AS members FROM tenants t ORDER BY t.created_at DESC");
   return json(res,200,r.rows);
  }
  if(method==='POST'&&pathname==='/api/admin/tenants'){
@@ -1160,15 +1183,27 @@ async function handle(req,res){
   const legalName=trimmed(data.legalName||'',200),tradeName=trimmed(data.tradeName||'',200);
   const raw=String(data.ownerPhone||'').trim(),phone=raw?normalizeLoginPhone(raw):null;
   if(raw&&!phone)throw fail(422,'Número do responsável inválido. Informe o DDD.');
+  const features=normalizeTenantFeatures(data.features);
   const hash=await hashPassword(data.ownerPassword),tenant=id(),user=id(),client=await pool.connect();
   try{
    await client.query('BEGIN');
-   await client.query("INSERT INTO tenants(id,name,slug,plan,status,cnpj,legal_name,trade_name,company_profile) VALUES($1,$2,$3,$4,'trial',$5,$6,$7,$8)",[tenant,data.company.trim(),slugify(data.company)+'-'+tenant.slice(0,6),data.plan||'essencial',companyCnpj,legalName,tradeName,JSON.stringify(companyProfile)]);
+   await client.query("INSERT INTO tenants(id,name,slug,plan,status,cnpj,legal_name,trade_name,company_profile,features) VALUES($1,$2,$3,$4,'trial',$5,$6,$7,$8,$9)",[tenant,data.company.trim(),slugify(data.company)+'-'+tenant.slice(0,6),data.plan||'essencial',companyCnpj,legalName,tradeName,JSON.stringify(companyProfile),JSON.stringify(features)]);
    await client.query('INSERT INTO users(id,tenant_id,email,phone,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6,$7)',[user,tenant,data.ownerEmail.trim().toLowerCase(),phone,data.ownerName.trim(),hash,'owner']);
    await client.query('INSERT INTO agents(tenant_id) VALUES($1)',[tenant]);
    await client.query('COMMIT');
   }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
   await audit(a,'tenant.created',{tenantId:tenant});return json(res,201,{id:tenant});
+ }
+ const featurePatch=pathname.match(/^\/api\/admin\/tenants\/([a-f\d-]{36})\/features$/i);
+ if(featurePatch&&method==='PATCH'){
+  needPlatform(a);
+  const {data}=await body(req,3000);
+  const features=normalizeTenantFeatures(data.features,{fallback:null});
+  const result=await query("UPDATE tenants SET features=$2::jsonb WHERE id=$1 RETURNING id,name,features",
+   [featurePatch[1],JSON.stringify(features)]);
+  if(!result.rowCount)throw fail(404,'Empresa não encontrada.');
+  await audit(a,'tenant.modules.changed',{tenantId:featurePatch[1],features});
+  return json(res,200,result.rows[0]);
  }
  if(method==='POST'&&pathname==='/api/admin/switch'){
   needPlatform(a);const {data}=await body(req);
@@ -1276,6 +1311,19 @@ async function main(){
   finally{replyBusy=false;}
  },6000);
  aiReplyWorker.unref();
+ // Quote requests are internal supervised tasks. The optional WhatsApp owner
+ // alert is opt-in; one remote attempt only, and never sends to a client.
+ let quoteBusy=false;
+ const quoteWorker=setInterval(async()=>{
+  if(quoteBusy||workersBlocked())return;
+  quoteBusy=true;
+  try{
+   await processQuoteInterest(pool);
+   await processOwnerQuoteAlert(pool);
+  }catch(error){console.warn('[socio-quote-request]',String(error?.code||'QUOTE_WORKER_ERROR').slice(0,45));}
+  finally{quoteBusy=false;}
+ },9000);
+ quoteWorker.unref();
  // Automatically move a supervised training run from scan to Markdown draft;
  // per-run database row locks make this safe across replicas.
  let autoBusy=false;
