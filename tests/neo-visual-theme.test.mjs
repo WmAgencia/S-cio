@@ -7,7 +7,8 @@ test('visual theme progressively upgrades to lavender without fictitious financi
  assert.match(old,/\.neo-dashboard\{display:grid/);
  assert.match(css,/--bg:#e9e6f1/);
  assert.match(css,/\.lucid-dashboard/);
- assert.ok(html.indexOf('/cloud-theme.css')>html.indexOf('/neo-theme.css'),'light theme loads last');
+ assert.ok(html.indexOf('/cloud-theme.css')>html.indexOf('/app.css'),'light theme loads after base CSS');
+ assert.doesNotMatch(html,/href="\/neo-theme\.css"/);
  assert.match(js,/Movimento do atendimento/);
  assert.match(js,/Mensagens recebidas e enviadas/);
  assert.match(js,/activityTicks\(trend\)/);
