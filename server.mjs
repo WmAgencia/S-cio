@@ -203,6 +203,9 @@ async function handle(req,res){
   }
   return res.end();
  }
+ // Retired Google Ads Scripts receiver is intentionally closed.
+ if(/^\/webhooks\/google-ads\/[0-9a-f-]{36}$/i.test(pathname))
+  throw fail(410,'O conector Google Ads foi desativado.');
  // Stripe server-to-server webhook validates its raw signature before using JSON.
  if(pathname==='/webhooks/stripe-test'&&method==='POST'){
   const {raw}=await body(req,160000);
@@ -332,7 +335,14 @@ async function handle(req,res){
  // Company-level Meta Ads integration: read-only by default.
  if(method==='GET'&&pathname==='/api/marketing'){
   requirePermission(a,'marketing.read');
-  return json(res,200,await listMarketing(pool,a));
+  const report=await listMarketing(pool,a);
+  // Google integrations are retired; retain historic SQL rows privately,
+  // but never surface them through the active company dashboard API.
+  return json(res,200,{
+   connections:report.connections.filter(c=>c.provider==='pipeboard_meta'),
+   reports:report.reports.filter(row=>row.provider==='pipeboard_meta'),
+   providers:{pipeboard_meta:report.providers.pipeboard_meta}
+  });
  }
  if(method==='POST'&&pathname==='/api/marketing/meta/connect'){
   requirePermission(a,'marketing.manage');
