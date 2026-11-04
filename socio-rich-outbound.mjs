@@ -15,7 +15,9 @@ export function buildQuickReplyMessage({message,choices}){
   if(typeof choice!=='string'||!choice.trim()||choice.length>24)
    throw fail(422,'Cada botão deve ter até 24 caracteres.');
   const label=choice.trim();
-  const token=createHash('sha256').update(label.toLocaleLowerCase('pt-BR')).digest('hex').slice(0,16);
+  const slug=label.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+   .toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,55);
+  const token=slug||createHash('sha256').update(label).digest('hex').slice(0,16);
   if(used.has(token))throw fail(422,'Botões duplicados.');
   used.add(token);
   return {type:'quick_reply',displayText:label,id:'socio:reply:'+token};
