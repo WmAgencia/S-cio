@@ -189,3 +189,32 @@ test('Instagram managed SSO: tenant profile, encrypted keys, authorized URL, sta
  assert.equal((await pool.query('SELECT status FROM instagram_hosted_profiles WHERE tenant_id=$1',[tenant])).rows[0].status,'pending');
  await assert.rejects(disconnectInstagramHosted(pool,other,{env,request:fake.request}),e=>e.status===404);
 });
+
+test('read-only connection test keeps tenant scope and calls only account listing tools',async()=>{
+ const {testPipeboardConnection,decodeMcpReply,normalizeAdsAccounts}=await import('../marketing-oauth.mjs');
+ const {sealMarketingSecret}=await import('../marketing-integrations.mjs');
+ const tenant=randomUUID(),identity={active_tenant_id:tenant,user_id:randomUUID()};
+ const sealed=sealMarketingSecret('socio-oauth-v1:'+JSON.stringify({access_token:'test-access-token-no-production-data'}),env);
+ const calls=[];
+ const pool={query:async(sql,args)=>{
+  assert(sql.startsWith('SELECT '));assert.equal(args[0],tenant);
+  return {rowCount:1,rows:[{token_ciphertext:sealed,expires_at:new Date(Date.now()+60000)}]};
+ }};
+ const request=async(url,opts)=>{
+  const rpc=JSON.parse(opts.body);calls.push(rpc);
+  let result={};
+  if(rpc.method==='tools/list')result={tools:[{name:'delete_campaign',inputSchema:{}},{name:'mcp_meta_ads_get_ad_accounts',inputSchema:{required:['user_id']}}]};
+  if(rpc.method==='tools/call'){
+   assert.equal(rpc.params.name,'mcp_meta_ads_get_ad_accounts');
+   result={content:[{type:'text',text:JSON.stringify({accounts:[{id:'act_123456',name:'Conta teste'}]})}]};
+  }
+  return {ok:true,status:200,headers:{get:()=>null},text:async()=>JSON.stringify({jsonrpc:'2.0',id:rpc.id,result})};
+ };
+ const verified=await testPipeboardConnection(pool,identity,'meta',{env,request});
+ assert.equal(verified.status,'verified');assert.deepEqual(verified.accounts,[{id:'act_123456',name:'Conta teste'}]);
+ assert.deepEqual(calls.map(x=>x.method),['initialize','notifications/initialized','tools/list','tools/call']);
+ assert.deepEqual(normalizeAdsAccounts({structuredContent:{resourceNames:['customers/1234567890']}},'google'),[{id:'1234567890',name:'1234567890'}]);
+ assert.throws(()=>decodeMcpReply('{"id":1,"result":{"isError":true}}',1));
+ await assert.rejects(testPipeboardConnection({query:async()=>({rowCount:0})},identity,'google',{env,request}),e=>e.status===409);
+ await assert.rejects(testPipeboardConnection(pool,identity,'google',{env,request}),e=>e.status===503);
+});
