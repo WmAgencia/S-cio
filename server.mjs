@@ -13,6 +13,7 @@ import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
 import {processLiveInboxSync} from './inbox-live-sync.mjs';
+import {pollRecentInteractiveChoices} from './inbox-interactive-sync.mjs';
 import {processNextAiReply} from './ai-replies.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
@@ -827,6 +828,18 @@ async function main(){
   finally{liveSyncBusy=false;}
  },16000);
  liveSyncWorker.unref();
+ // Priority scan for choices in the first minutes after sending Native Flow
+ // cards, without sweeping entire WhatsApp histories every few seconds.
+ let choiceSyncBusy=false;
+ const choiceSyncWorker=setInterval(async()=>{
+  if(choiceSyncBusy||process.env.SOCIO_LIVE_SYNC_ENABLED!=='true'||!gatewayConfigured())return;
+  choiceSyncBusy=true;
+  try{await pollRecentInteractiveChoices(pool);}
+  catch(e){console.warn('[socio-button-sync]',String(e?.code||'BUTTON_SYNC_ERROR').slice(0,40));}
+  finally{choiceSyncBusy=false;}
+ },3500);
+ choiceSyncWorker.unref();
+
  // AI only attempts replies if explicitly enabled, agent enabled and each
  // conversation handed over. Claims are durable to avoid duplicate messages.
  let replyBusy=false;
@@ -836,7 +849,7 @@ async function main(){
   try{await processNextAiReply(pool);}
   catch(e){console.warn('[socio-ai-reply]',String(e?.code||'REPLY_ERROR').slice(0,40));}
   finally{replyBusy=false;}
- },6000);
+ },3500);
  aiReplyWorker.unref();
  // Automatically move a supervised training run from scan to Markdown draft;
  // per-run database row locks make this safe across replicas.
