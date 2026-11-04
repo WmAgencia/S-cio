@@ -108,7 +108,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:!!process.env.GROQ_API_KEY});
  }
- if(method==='GET'&&['/','/index.html','/app.js','/app.css','/neo-theme.css','/cloud-theme.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/app.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -194,7 +194,7 @@ async function handle(req,res){
  // All counts are tenant-scoped; the chart never uses illustrative or invented data.
  if(method==='GET'&&pathname==='/api/dashboard/activity'){
   const requested=new URL(req.url,'http://local').searchParams.get('range')||'6m';
-  const ranges={'12m':{count:12,unit:'month'},'6m':{count:6,unit:'month'},'3m':{count:3,unit:'month'},'1m':{count:30,unit:'day'}};
+  const ranges={'12m':{count:12,unit:'month'},'6m':{count:6,unit:'month'},'3m':{count:3,unit:'month'},'1m':{count:30,unit:'day'},'7d':{count:7,unit:'day'},'90d':{count:90,unit:'day'}};
   const range=ranges[requested];
   if(!range)throw fail(400,'Período inválido.');
   const interval=range.unit==='day'?'1 day':'1 month';

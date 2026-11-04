@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const code=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 
-test('authenticated Sócio boot renders lavender dashboard and never stays blank',async()=>{
+test('authenticated Sócio boot renders approved orange espresso dashboard and never stays blank',async()=>{
  const nodes=new Map();
  const make=(key)=>{
   if(!nodes.has(key)){
@@ -35,7 +35,12 @@ test('authenticated Sócio boot renders lavender dashboard and never stays blank
   '/api/me':{user:{name:'Conta master',role:'owner',platformOwner:true},
    tenant:{name:'Consecom Brasil'},csrf:'csrf-abc'},
   '/api/dashboard':{openConversations:2,channels:1,products:4,imports:5,inboundMessages:9},
+  '/api/waakg/channels':[{id:'example-channel',status:'connected',label:'Vendas'}],
   '/api/agent':{instructions:'Atenda com respeito.',enabled:false},
+  '/api/dashboard/activity?range=1m':{range:'1m',granularity:'day',points:[
+    {date:'2026-11-01',inbound:2,outbound:1},
+    {date:'2026-11-02',inbound:3,outbound:2}
+  ]},
   '/api/dashboard/activity?range=6m':{range:'6m',granularity:'month',points:[
     {date:'2026-08-01',inbound:2,outbound:1},
     {date:'2026-09-01',inbound:3,outbound:2}
@@ -52,8 +57,8 @@ test('authenticated Sócio boot renders lavender dashboard and never stays blank
  const dashboard=make('id:view');
  assert.equal(make('id:appShell').classList.contains('hidden'),false);
  assert.equal(make('id:authScreen').classList.contains('hidden'),true);
- assert.match(dashboard.innerHTML,/class="lucid-dashboard"/);
- assert.match(dashboard.innerHTML,/Conectar via QR Code/);
+ assert.match(dashboard.innerHTML,/lucid-dashboard ember-dashboard/);
+ assert.match(dashboard.innerHTML,/Conectar WhatsApp/);
  assert.match(dashboard.innerHTML,/Cliente de teste/);
  assert.match(dashboard.innerHTML,/Mensagens recebidas/);
  assert.doesNotMatch(dashboard.innerHTML,/Não foi possível carregar|class="loading"/);

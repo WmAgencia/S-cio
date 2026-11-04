@@ -109,8 +109,8 @@ function renderActivityGraph(data){
   return '<circle class="chart-node" cx="'+ins[0]+'" cy="'+ins[1]+'" r="3"><title>'+e(period+': '+chartNumber(item.inbound)+' recebidas')+'</title></circle>'+
    '<circle class="chart-node-green" cx="'+outs[0]+'" cy="'+outs[1]+'" r="2.3"><title>'+e(period+': '+chartNumber(item.outbound)+' enviadas')+'</title></circle>';
  }).join('');
- return '<svg role="img" aria-label="Atividade real do atendimento da empresa no período escolhido: mensagens recebidas em roxo e enviadas em lilás" viewBox="0 0 795 190" preserveAspectRatio="none">'+
-  '<defs><linearGradient id="neoOrangeFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#9a85d8" stop-opacity=".25"/><stop offset="100%" stop-color="#9a85d8" stop-opacity="0"/></linearGradient></defs>'+
+ return '<svg role="img" aria-label="Atividade real do atendimento: linha laranja para mensagens recebidas e verde para enviadas" viewBox="0 0 795 190" preserveAspectRatio="none">'+
+  '<defs><linearGradient id="neoOrangeFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f57b22" stop-opacity=".25"/><stop offset="100%" stop-color="#f57b22" stop-opacity="0"/></linearGradient></defs>'+
   grid+'<path d="'+fill+'" fill="url(#neoOrangeFill)"/>'+
   '<path class="chart-orange" d="'+plot(inbound)+'"/>'+
   '<path class="chart-green" d="'+plot(outbound)+'"/>'+markers+'</svg>';
@@ -134,108 +134,156 @@ function dashboardBars(data){
  }).join('');
 }
 
+
+const emberIcons={
+ bubble:'<path d="M20 11.4c0 4.5-3.6 8-8.1 8-1.6 0-3.2-.4-4.5-1.2L3 20l1.7-4.3C3.6 14.4 3 12.8 3 11.4c0-4.4 3.9-8.2 8.9-8.2S20 7 20 11.4Z"/>',
+ whatsapp:'<path d="M21 11.9a9 9 0 0 1-13.4 7.8L3 21l1.4-4.4A9 9 0 1 1 21 11.9Z"/><path d="M9 8.5c.6 3 2.4 4.8 5.5 6l1.5-1.4"/>',
+ mail:'<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
+ spark:'<path d="m12 2 2.1 7 7 3-7 3-2.1 7-2.3-7-6.7-3 6.7-3Z"/>',
+ book:'<path d="M12 6C9 4.2 6.7 4 3 4v14c3.7 0 6 .3 9 2 3-1.7 5.3-2 9-2V4c-3.7 0-6 .2-9 2Zm0 0v14"/>',
+ user:'<circle cx="12" cy="8" r="3.5"/><path d="M4.5 21v-1.6c0-4.3 3.2-6.5 7.5-6.5s7.5 2.2 7.5 6.5V21"/>',
+ play:'<path d="m8 5 11 7-11 7z"/>',
+ scan:'<path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3"/><path d="M7 10h4v4H7zm7 0h3m-3 4h3m-10 3h3"/>',
+ arrows:'<path d="m5 13 5 5L20 8"/>'
+};
+function emberIcon(kind){
+ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(emberIcons[kind]||emberIcons.spark)+'</svg>';
+}
 async function overview(){
- const [d,ag,trend,recent]=await Promise.all([
-  api('/api/dashboard'),api('/api/agent'),api('/api/dashboard/activity?range=6m'),api('/api/inbox')
+ const [d,ag,trend,recent,links]=await Promise.all([
+  api('/api/dashboard'),api('/api/agent'),api('/api/dashboard/activity?range=1m'),api('/api/inbox'),api('/api/waakg/channels')
  ]);
  state.dashboard=d;
- const steps=[
-  {label:'Conectar WhatsApp',desc:'Leia o QR Code para vincular seu número.',view:'channels',done:d.channels>0},
-  {label:'Cadastrar catálogo',desc:'Organize serviços e preços oficiais.',view:'products',done:d.products>0},
-  {label:'Ensinar sua IA',desc:'Importe conversas e personalize a comunicação.',view:'training',done:d.imports>=10&&!!ag.instructions},
-  {label:'Testar o Sócio',desc:'Experimente respostas antes de ativar.',view:'agent',done:!!ag.enabled}
- ];
- const done=steps.filter(x=>x.done).length;
- const userFirst=(state.me?.user?.name||'').trim().split(/\s+/)[0]||'seu time';
+ const openCount=chartNumber(d.openConversations);
+ const online=Array.isArray(links)?links.filter(channel=>channel.status==='connected').length:0;
+ const messages=chartNumber(d.inboundMessages);
+ const totalMessages=(trend.points||[]).reduce((sum,p)=>sum+chartNumber(p.inbound)+chartNumber(p.outbound),0);
+ const received=(trend.points||[]).reduce((sum,p)=>sum+chartNumber(p.inbound),0);
+ const sent=(trend.points||[]).reduce((sum,p)=>sum+chartNumber(p.outbound),0);
  const recentItems=Array.isArray(recent)?recent.slice(0,4):[];
- const activityTotal=(trend.points||[]).reduce((n,p)=>n+chartNumber(p.inbound)+chartNumber(p.outbound),0);
- const quickStat=(icon,label,value,detail,style)=>{
-  return '<div class="lucid-kpi '+style+'"><div class="lucid-kpi-top"><span class="lucid-kpi-icon">'+icon+'</span>'+
-   '<span class="lucid-kpi-accent" aria-hidden="true">◦ ◦ ◦</span></div>'+
-   '<div class="lucid-kpi-name">'+e(label)+'</div>'+
-   '<div class="lucid-kpi-number">'+e(value)+'</div>'+
-   '<div class="lucid-kpi-detail">'+e(detail)+'</div></div>';
+ const pending=Array.isArray(links)?links.find(c=>c.status!=='connected'):null;
+ let qrImage=null;
+ if(pending){
+  try{
+   const qr=await api('/api/waakg/channels/'+encodeURIComponent(pending.id)+'/qr');
+   if(qr?.ready&&typeof qr.image==='string'&&
+      /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(qr.image)&&qr.image.length<350000){
+      qrImage=qr.image;
+   }
+  }catch{} // A failed/expired QR must never blank the main dashboard.
+ }
+ const kpi=(kind,label,value,meta,type)=>'<div class="ember-kpi ember-kpi-'+type+'">'+
+  '<div class="ember-kpi-symbol">'+emberIcon(kind)+'</div>'+
+  '<div class="ember-kpi-copy"><div class="ember-kpi-name">'+e(label)+'</div>'+
+  '<div class="ember-kpi-value">'+e(value)+'</div><div class="ember-kpi-meta">'+e(meta)+'</div></div>'+
+  '<div class="ember-kpi-glow" aria-hidden="true"></div></div>';
+ const aiRow=(kind,label,description,section)=>'<button class="ember-ai-row" data-go="'+section+'" type="button">'+
+  '<span class="ember-ai-row-icon">'+emberIcon(kind)+'</span>'+
+  '<span class="ember-ai-row-copy"><strong>'+e(label)+'</strong><small>'+e(description)+'</small></span>'+
+  '<span class="ember-ai-chevron" aria-hidden="true">›</span></button>';
+ const conversation=(item,index)=>{
+  const first=(item.customer_name||item.customer_phone||'C').trim().slice(0,1).toUpperCase();
+  const time=item.last_message_at?new Date(item.last_message_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
+  const label=item.status==='resolved'?'Resolvida':item.status==='human'?'Com atendente':'Em andamento';
+  const chip=item.status==='resolved'?'muted':item.status==='human'?'amber':'green';
+  return '<button class="ember-conversation" data-go="inbox" type="button">'+
+   '<span class="ember-avatar ember-avatar-'+index%4+'">'+e(first)+'</span>'+
+   '<span class="ember-conversation-copy"><strong>'+e(item.customer_name||item.customer_phone||'Cliente')+'</strong>'+
+    '<small>'+e(item.channel_label||'WhatsApp')+' · '+e(item.last_message_at?date(item.last_message_at):'Sem data')+'</small></span>'+
+   '<span class="ember-conversation-tail">'+(time?'<small>'+e(time)+'</small>':'')+
+    '<span class="ember-status '+chip+'">'+e(label)+'</span></span></button>';
  };
+ const qrVisual=qrImage?
+  '<div class="ember-qr-live"><img src="'+e(qrImage)+'" alt="QR Code ativo do WhatsApp. Escaneie com o aplicativo no celular."></div>':
+  '<div class="ember-qr-placeholder" aria-label="QR Code disponível após iniciar a conexão">'+emberIcon('scan')+
+   '<strong>Seu QR Code</strong><small>'+e(pending?'Aguardando novo código':'Gerado ao conectar')+'</small></div>';
  view.innerHTML=
- '<div class="lucid-dashboard">'+
-  '<div class="lucid-welcome"><div><span class="lucid-overline">PAINEL DA SUA EMPRESA</span>'+
-   '<h1>Bem-vindo de volta, '+e(userFirst)+' <span class="lucid-wave">✳</span></h1>'+
-   '<p>Seu atendimento, sua equipe e sua inteligência em um só lugar.</p></div>'+
-   '<button type="button" class="btn soft lucid-welcome-action" data-go="channels">Conectar WhatsApp <span>↗</span></button></div>'+
-  '<div class="lucid-topstats">'+
-   quickStat('▤','Conversas abertas',Number(d.openConversations||0).toLocaleString('pt-BR'),
-    'Acompanhe os atendimentos em andamento.','lucid-stat-lilac')+
-   quickStat('◉','WhatsApps cadastrados',Number(d.channels||0).toLocaleString('pt-BR'),
-    'Números associados ao espaço.','lucid-stat-peach')+
-   quickStat('✳','Mensagens recebidas',Number(d.inboundMessages||0).toLocaleString('pt-BR'),
-    'Histórico registrado na plataforma.','lucid-stat-silver')+
+ '<div class="lucid-dashboard ember-dashboard">'+
+  '<div class="ember-kpi-grid">'+
+   kpi('bubble','Conversas em aberto',openCount.toLocaleString('pt-BR'),'Atendimentos aguardando acompanhamento','conversations')+
+   kpi('whatsapp','WhatsApps conectados',online.toLocaleString('pt-BR'),'Sessões vinculadas neste espaço','connected')+
+   kpi('mail','Mensagens recebidas',messages.toLocaleString('pt-BR'),'Total registrado nesta empresa','messages')+
   '</div>'+
-  '<div class="lucid-body-grid"><div class="lucid-main-stack">'+
-   '<section class="lucid-card lucid-chart-panel">'+
-    '<div class="lucid-card-heading"><div><span class="lucid-overline">ATIVIDADE</span><h2>Movimento do atendimento</h2>'+
-     '<p>Mensagens recebidas e enviadas ao longo do tempo.</p></div>'+
-    '<div class="lucid-filter" role="group" aria-label="Período do gráfico">'+
-     '<button type="button" data-range="1m" aria-pressed="false">30 dias</button>'+
-     '<button type="button" data-range="3m" aria-pressed="false">3 meses</button>'+
-     '<button type="button" data-range="6m" class="is-active" aria-pressed="true">6 meses</button></div></div>'+
-    '<div class="lucid-chart-headline"><strong id="activitySummary">'+e(activityTotal.toLocaleString('pt-BR'))+'</strong>'+
-     '<span>mensagens no período</span></div>'+
-    '<div class="neo-chart-canvas lucid-line-chart" id="activityChart">'+renderActivityGraph(trend)+'</div>'+
-    '<div id="chartTicks" class="neo-month-ticks lucid-chart-ticks">'+activityTicks(trend)+'</div>'+
-    '<div class="lucid-chart-legend"><span><i></i> Recebidas</span><span><i></i> Enviadas</span>'+
-     '<small>Dados da empresa selecionada</small></div>'+
+  '<div class="ember-primary-grid">'+
+   '<section class="ember-card ember-activity">'+
+    '<div class="ember-card-heading ember-chart-heading"><div class="ember-heading-left">'+
+     '<span class="ember-heading-icon">'+emberIcon('arrows')+'</span><div><h1>Atividade de conversas</h1>'+
+     '<p>Mensagens recebidas e enviadas no período</p></div></div>'+
+     '<div class="ember-filter" role="group" aria-label="Período do gráfico">'+
+      '<button type="button" data-range="7d" aria-pressed="false">7 dias</button>'+
+      '<button type="button" class="is-active" data-range="1m" aria-pressed="true">30 dias</button>'+
+      '<button type="button" data-range="90d" aria-pressed="false">90 dias</button>'+
+     '</div></div>'+
+    '<div class="ember-chart-metrics">'+
+     '<div><span>Mensagens no período</span><strong id="activitySummary">'+e(totalMessages.toLocaleString('pt-BR'))+'</strong></div>'+
+     '<div><span>Recebidas</span><strong id="activityInbound">'+e(received.toLocaleString('pt-BR'))+'</strong></div>'+
+     '<div><span>Enviadas</span><strong id="activityOutbound">'+e(sent.toLocaleString('pt-BR'))+'</strong></div>'+
+    '</div>'+
+    '<div class="neo-chart-canvas ember-chart-area" id="activityChart">'+renderActivityGraph(trend)+'</div>'+
+    '<div id="chartTicks" class="neo-month-ticks ember-chart-labels">'+activityTicks(trend)+'</div>'+
+    '<div class="ember-chart-legend">'+
+     '<span><i class="ember-dot orange"></i>Recebidas</span>'+
+     '<span><i class="ember-dot green"></i>Enviadas</span>'+
+     '<small>Dados reais da empresa selecionada</small></div>'+
    '</section>'+
-   '<div class="lucid-bottom-grid">'+
-    '<section class="lucid-card lucid-setup-panel"><div class="lucid-card-heading"><div><span class="lucid-overline">CONFIGURAÇÃO</span>'+
-    '<h2>Primeiros passos</h2><p>Prepare seu espaço no seu ritmo.</p></div>'+
-    '<span class="lucid-progress-label">'+done+'/'+steps.length+'</span></div>'+
-    '<progress class="lucid-progress" value="'+done+'" max="'+steps.length+'">'+done+' de '+steps.length+'</progress>'+
-    '<div class="lucid-checklist">'+steps.map((step,i)=>
-      '<button class="lucid-check-row" type="button" data-go="'+e(step.view)+'"><span class="lucid-check-number '+(step.done?'done':'')+'">'+
-       (step.done?'✓':String(i+1).padStart(2,'0'))+'</span><span><strong>'+e(step.label)+'</strong>'+
-       '<small>'+e(step.desc)+'</small></span><b>↗</b></button>').join('')+'</div></section>'+
-    '<section class="lucid-card lucid-intelligence-panel"><div class="lucid-ai-symbol">✳</div>'+
-     '<span class="lucid-overline">INTELIGÊNCIA ARTIFICIAL</span><h2>Uma IA que aprende com seu negócio.</h2>'+
-     '<p>Traga suas conversas reais, aprove o conhecimento e teste como o Sócio responde.</p>'+
-     '<div class="lucid-ai-stats"><span><b>'+e(d.imports)+'</b> conversas de referência</span>'+
-     '<span><b>'+e(d.products)+'</b> produtos cadastrados</span></div>'+
-     '<button class="btn primary" type="button" data-go="training">Explorar inteligência <span>↗</span></button></section>'+
-   '</div></div>'+
-   '<div class="lucid-side-stack">'+
-    '<section class="lucid-card lucid-whatsapp-panel"><div class="lucid-side-icon">◉</div>'+
-     '<span class="lucid-overline">CONEXÃO</span><h2>Seu WhatsApp, no seu Sócio.</h2>'+
-     '<p>Conecte escaneando um QR Code. Sem configurar identificadores manualmente.</p>'+
-     '<div class="lucid-mini-count"><strong>'+e(d.channels)+'</strong><span>número(s) cadastrados</span></div>'+
-     '<button class="btn primary wide" type="button" data-go="channels">Conectar via QR Code <span>↗</span></button></section>'+
-    '<section class="lucid-card lucid-recent-panel"><div class="lucid-card-heading"><div><span class="lucid-overline">EM TEMPO REAL</span>'+
-     '<h2>Conversas recentes</h2></div><button class="lucid-link" type="button" data-go="inbox">Ver todas ↗</button></div>'+
-     (recentItems.length?'<div class="lucid-conversations">'+recentItems.map((item,i)=>
-      '<button type="button" class="lucid-conversation" data-go="inbox">'+
-       '<span class="lucid-avatar lucid-avatar-'+i%4+'">'+e((item.customer_name||item.customer_phone||'C').trim().slice(0,1).toUpperCase())+'</span>'+
-       '<span class="lucid-conversation-copy"><strong>'+e(item.customer_name||item.customer_phone||'Cliente')+'</strong>'+
-       '<small>'+e(item.channel_label||'WhatsApp')+' · '+e(item.last_message_at?date(item.last_message_at):'Sem data')+'</small></span>'+
-       '<span class="lucid-conversation-state">'+e(item.status==='resolved'?'Resolvida':'Abrir')+'</span></button>').join('')+'</div>':
-       '<p class="lucid-empty-note">Suas conversas aparecerão aqui assim que houver mensagens.</p>')+
-    '</section>'+
-   '</div></div></div>';
+   '<section class="ember-card ember-qr-card">'+
+    '<div class="ember-qr-head">'+
+     '<span class="ember-whatsapp-icon">'+emberIcon('whatsapp')+'</span>'+
+     '<div><h2>Conectar WhatsApp</h2><p>Conecte um número para usar os recursos de atendimento do Sócio.</p></div>'+
+    '</div>'+
+    '<div class="ember-qr-content">'+qrVisual+
+     '<ol class="ember-qr-steps"><li><b>1</b><span>Abra o WhatsApp no celular</span></li>'+
+     '<li><b>2</b><span>Toque em Dispositivos conectados</span></li>'+
+     '<li><b>3</b><span>Escaneie o QR Code</span></li></ol>'+
+    '</div>'+
+    '<button type="button" class="btn primary ember-qr-cta" data-go="channels">'+emberIcon('scan')+' Conectar WhatsApp</button>'+
+    '<p class="ember-qr-disclaimer">A leitura de conversas depende de autorização e conexão ativa. Respostas automáticas permanecem desativadas.</p>'+
+   '</section>'+
+  '</div>'+
+  '<div class="ember-secondary-grid">'+
+   '<section class="ember-card ember-ai-card">'+
+    '<div class="ember-card-heading"><div class="ember-heading-left"><span class="ember-heading-icon orange">'+emberIcon('spark')+'</span>'+
+     '<div><h2>Inteligência Artificial</h2><p>Treine, personalize e teste a IA do atendimento.</p></div></div></div>'+
+    '<div class="ember-ai-layout"><div class="ember-ai-actions">'+
+     aiRow('book','Treinamento','Analise conversas e aprove o conhecimento da IA.','training')+
+     aiRow('user','Personalidade','Defina o estilo, instruções e limites de resposta.','agent')+
+     aiRow('play','Testar IA','Simule perguntas e veja como ela responde.','agent')+
+    '</div><div class="ember-ai-visual" aria-hidden="true">'+
+      '<span class="ember-ai-layer one"></span><span class="ember-ai-layer two"></span>'+
+      '<span class="ember-ai-layer front">✦</span><span class="ember-ai-sparkle">✧</span></div></div>'+
+    '<button type="button" class="btn primary ember-ai-cta" data-go="training">Abrir Inteligência Artificial <span>↗</span></button>'+
+   '</section>'+
+   '<section class="ember-card ember-recent-card">'+
+    '<div class="ember-card-heading ember-recent-heading"><div class="ember-heading-left">'+
+     '<span class="ember-heading-icon">'+emberIcon('bubble')+'</span><h2>Conversas recentes</h2></div>'+
+     '<button class="ember-link" type="button" data-go="inbox">Ver todas →</button></div>'+
+    '<div class="ember-recent-list">'+(recentItems.length?recentItems.map(conversation).join(''):
+     '<p class="ember-empty-recent">As conversas da sua empresa aparecerão aqui quando houver mensagens.</p>')+'</div>'+
+   '</section>'+
+  '</div>'+
+ '</div>';
  bindNavWithin();
  view.querySelectorAll('[data-range]').forEach(btn=>btn.addEventListener('click',async()=>{
-  const selected=btn.dataset.range;
-  if(!['1m','3m','6m'].includes(selected))return;
-  view.querySelectorAll('[data-range]').forEach(b=>b.disabled=true);
+  const range=btn.dataset.range;
+  if(!['7d','1m','90d'].includes(range))return;
+  view.querySelectorAll('[data-range]').forEach(x=>x.disabled=true);
   try{
-   const result=await api('/api/dashboard/activity?range='+selected);
+   const data=await api('/api/dashboard/activity?range='+range);
    if(state.view!=='overview'||!$('#activityChart'))return;
-   const count=(result.points||[]).reduce((n,p)=>n+chartNumber(p.inbound)+chartNumber(p.outbound),0);
-   $('#activitySummary').textContent=count.toLocaleString('pt-BR');
-   $('#activityChart').innerHTML=renderActivityGraph(result);
-   $('#chartTicks').innerHTML=activityTicks(result);
-   view.querySelectorAll('[data-range]').forEach(b=>{
-    const on=b.dataset.range===selected;b.classList.toggle('is-active',on);
-    b.setAttribute('aria-pressed',String(on));
+   const inbound=(data.points||[]).reduce((n,p)=>n+chartNumber(p.inbound),0);
+   const outbound=(data.points||[]).reduce((n,p)=>n+chartNumber(p.outbound),0);
+   $('#activitySummary').textContent=(inbound+outbound).toLocaleString('pt-BR');
+   $('#activityInbound').textContent=inbound.toLocaleString('pt-BR');
+   $('#activityOutbound').textContent=outbound.toLocaleString('pt-BR');
+   $('#activityChart').innerHTML=renderActivityGraph(data);
+   $('#chartTicks').innerHTML=activityTicks(data);
+   view.querySelectorAll('[data-range]').forEach(x=>{
+    const on=x.dataset.range===range;
+    x.classList.toggle('is-active',on);
+    x.setAttribute('aria-pressed',String(on));
    });
   }catch(err){toast(errMsg(err),true)}
-  finally{if(state.view==='overview')view.querySelectorAll('[data-range]').forEach(b=>b.disabled=false);}
+  finally{if(state.view==='overview')view.querySelectorAll('[data-range]').forEach(x=>x.disabled=false);}
  }));
 }
 function bindNavWithin(){view.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>changeView(b.dataset.go)));}
