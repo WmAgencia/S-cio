@@ -86,13 +86,13 @@
        '<span class="wa-chat-text"><span class="wa-chat-name-line"><strong>'+t(name,120)+'</strong>'+
        '<small>'+t(stamp(c.last_message_at))+'</small></span>'+
        '<span class="wa-chat-preview">'+(c.draft?'<em>Rascunho: '+t(c.draft,60)+'</em>':t(latest,80))+'</span>'+
-       '<span class="wa-chat-meta">'+t(c.channel_label||'Canal')+(c.labels?.length?' · '+t(c.labels[0],25):'')+'</span></span>'+
+       '<span class="wa-chat-meta">'+(c.channel_provider==='instagram'?'Instagram · ':'WhatsApp · ')+t(c.channel_label||'Canal')+(c.labels?.length?' · '+t(c.labels[0],25):'')+'</span></span>'+
        '<span class="wa-chat-indicators">'+(c.pinned?'<span title="Conversa fixada">⌖</span>':'')+
        (c.muted?'<span title="Silenciada">◌</span>':'')+
        (unread?'<span class="wa-unread-dot" title="Não lida"></span>':'')+'</span>'+
       '</button></div>';
    }).join(''):'<div class="wa-inbox-empty-list"><strong>Nenhuma conversa encontrada</strong>'+
-    '<p>Conecte um WhatsApp para receber mensagens ou altere os filtros.</p>'+
+    '<p>Conecte um WhatsApp ou Instagram profissional para receber mensagens, ou altere os filtros.</p>'+
     '<button class="btn soft" type="button" data-inbox-connect>Conectar WhatsApp</button></div>';
   }
   function renderHeader(c){
@@ -101,7 +101,7 @@
     '<button class="wa-mobile-back wa-round-icon" type="button" data-chat-action="back" aria-label="Voltar à lista de conversas">‹</button>'+
     '<button class="wa-thread-identity" type="button" data-chat-action="details" aria-label="Ver detalhes de '+t(name)+'">'+
      '<span class="wa-chat-avatar">'+t(initials(name))+'</span><span><strong>'+t(name)+'</strong>'+
-     '<small>'+t(c?.customer_phone||'')+' · '+t(statusLabel(c))+'</small></span></button>'+
+     '<small>'+(c?.channel_provider==='instagram'?'Instagram · ':'WhatsApp · ')+t(c?.customer_phone||'')+' · '+t(statusLabel(c))+'</small></span></button>'+
     '<span class="wa-thread-actions"><button type="button" class="wa-small-action" data-chat-action="search" aria-label="Buscar nesta conversa" title="Pesquisar">⌕</button>'+
      '<button type="button" class="wa-small-action" data-chat-action="details" aria-label="Detalhes do contato" title="Informações">ⓘ</button>'+
      '<button type="button" class="wa-small-action" data-chat-action="help" aria-label="Atalhos de teclado" title="Atalhos">⌨</button></span>'+
@@ -142,34 +142,35 @@
   }
   function renderComposer(){
    const box=byId('inboxCompose');if(!box)return;
-   const enabled=thread?.capabilities?.whatsappSend===true;
+   const instagram=current()?.channel_provider==='instagram';
+   const enabled=instagram?thread?.capabilities?.instagramSend===true:thread?.capabilities?.whatsappSend===true;
    const controlledByAi=current()?.handling_mode==='ai_assist';
    const asNote=!enabled||controlledByAi||noteMode;
    const hasReply=reply&&thread?.messages.some(m=>m.id===reply.id);
-   const label=asNote?'Salvar nota interna':'Enviar mensagem pelo WhatsApp';
+   const label=asNote?'Salvar nota interna':('Enviar mensagem pelo '+(instagram?'Instagram':'WhatsApp'));
    box.innerHTML=
     '<div class="wa-compose-top">'+
      '<div class="wa-compose-ownership">'+
       '<button type="button" data-chat-action="take" class="wa-mode-btn'+(!controlledByAi?' active':'')+'">♙ Assumir conversa</button>'+
-      '<button type="button" data-chat-action="assist" class="wa-mode-btn'+(controlledByAi?' active':'')+'">✳ Entregar para IA</button>'+
+      (instagram?'':'<button type="button" data-chat-action="assist" class="wa-mode-btn'+(controlledByAi?' active':'')+'">✳ Entregar para IA</button>')+
      '</div><span class="wa-compose-disclaimer">'+
-      (!enabled?'Envio externo indisponível: gateway ainda não validado':
+      (!enabled?'Envio externo indisponível: canal ainda não autorizado':
        controlledByAi?(thread?.capabilities?.aiAutoReply?'IA autorizada a responder automaticamente':'IA selecionada · automação aguarda ativação'):
-       asNote?'Nota interna · não vai ao WhatsApp':'Envio pelo WhatsApp conectado')+
+       asNote?'Nota interna · não enviada ao cliente':('Envio pelo '+(instagram?'Instagram autorizado':'WhatsApp conectado')))+
       '</span></div>'+
     (hasReply?'<div class="wa-reply-banner"><div><strong>'+(!asNote?'Respondendo no Sócio (citação local)':'Respondendo como nota interna')+'</strong>'+
       '<small>'+t(reply.body,155)+'</small></div>'+
       '<button type="button" class="wa-small-action" data-chat-action="cancel-reply" aria-label="Cancelar resposta">×</button></div>':'')+
     '<div class="wa-compose-row">'+
      '<button type="button" class="wa-small-action wa-unsupported" data-chat-action="attach" aria-label="Anexar arquivo indisponível" title="Anexos serão habilitados após teste de mídia">＋</button>'+
-     '<textarea id="inboxDraft" aria-label="'+(asNote?'Escrever nota interna':'Mensagem para enviar ao WhatsApp')+
+     '<textarea id="inboxDraft" aria-label="'+(asNote?'Escrever nota interna':'Mensagem para enviar ao '+(instagram?'Instagram':'WhatsApp'))+
       '" rows="1" maxlength="3000" placeholder="'+(asNote?'Nota interna da equipe (não enviada ao cliente)':'Escreva sua mensagem para o cliente...')+'">'+t(current()?.draft||'',3000)+'</textarea>'+
      '<button type="button" class="wa-small-action wa-unsupported" data-chat-action="voice" aria-label="Áudio indisponível até validação" title="Áudio indisponível">♩</button>'+
      '<button type="button" class="wa-compose-send" data-chat-action="submit-compose" aria-label="'+label+'" title="'+label+'">➤</button>'+
     '</div>'+
     '<div class="wa-compose-foot"><span>Enter '+(asNote?'salva nota':'envia mensagem')+' · Shift + Enter pula linha · Alt + R responde</span>'+
       '<div class="wa-compose-extras">'+
-       (enabled&&!controlledByAi?'<button type="button" class="wa-inline-link" data-chat-action="toggle-notes">'+(noteMode?'Voltar ao WhatsApp':'Nota interna')+'</button>':'')+
+       (enabled&&!controlledByAi?'<button type="button" class="wa-inline-link" data-chat-action="toggle-notes">'+(noteMode?'Voltar ao '+(instagram?'Instagram':'WhatsApp'):'Nota interna')+'</button>':'')+
        '<button type="button" class="wa-inline-link" data-chat-action="ai-suggest">✳ Sugerir resposta</button></div></div>'+
     '<div class="wa-ai-suggestion hidden" id="inboxSuggestion" role="status" aria-live="polite"></div>';
   }
@@ -286,7 +287,8 @@
    finally{lock=false;}
   }
   async function submitComposer(){
-   if(!thread?.capabilities?.whatsappSend||noteMode||current()?.handling_mode==='ai_assist')
+   const enabled=current()?.channel_provider==='instagram'?thread?.capabilities?.instagramSend:thread?.capabilities?.whatsappSend;
+   if(!enabled||noteMode||current()?.handling_mode==='ai_assist')
     return submitNote();
    const input=byId('inboxDraft');
    if(!input||lock)return;
@@ -305,8 +307,8 @@
     const c=current();if(c)c.draft='';
     await setPref({draft:''},{silent:true});
     await open(active,{background:true});
-    announce('WhatsApp aceitou a mensagem; a entrega ao dispositivo pode ocorrer depois.');
-    toast('Mensagem aceita pelo gateway WhatsApp.');
+    announce('A plataforma recebeu a mensagem; a entrega ao destinatário pode ocorrer depois.');
+    toast(current()?.channel_provider==='instagram'?'Instagram aceitou a resposta.':'Mensagem aceita pelo gateway WhatsApp.');
    }catch(error){toast(error.message,true);}
    finally{lock=false;}
   }

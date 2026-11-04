@@ -2,7 +2,7 @@
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training'};
-const titles={overview:'Visão geral',inbox:'WhatsApp',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas e orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
+const titles={overview:'Visão geral',inbox:'WhatsApp',instagram:'Instagram',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas e orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -58,10 +58,17 @@ async function boot(){
    $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
    $('#teamNav')?.classList.toggle('hidden',!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner);
    const access=new Set(me.user.permissions||[]);
-   for(const [section,permission] of [['training','training.manage'],['sales','sales.read']]){
+   for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['instagram','channels.manage']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
+   const instagramStatus=typeof location==='object'?new URL(location.href).searchParams.get('instagram'):null;
+   if(['connected','failed'].includes(instagramStatus)){
+    state.view='instagram';
+    if(typeof history==='object')history.replaceState(null,'',location.pathname);
+   }
    await changeView(state.view);
+   if(instagramStatus==='connected')toast('Instagram autorizado. Confirme a conexão nesta guia.');
+   if(instagramStatus==='failed')toast('A Meta não concluiu a autorização. Confira as permissões e tente novamente.',true);
   }catch(error){state.me=null;state.csrf='';setupAuth(bootstrap.initialized);}
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
@@ -75,6 +82,7 @@ async function changeView(next){
  const access=new Set(state.me?.user?.permissions||[]);
  if(next==='training'&&!access.has('training.manage'))next='overview';
  if(next==='sales'&&!access.has('sales.read'))next='overview';
+ if(next==='instagram'&&!access.has('channels.manage'))next='overview';
  state.view=next;
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
  $('#topTitle').textContent=titles[next]||'Sócio';
@@ -86,6 +94,7 @@ async function changeView(next){
   if(next==='sales')await window.SocioSales.render({api,e,toast,view});
   if(next==='training')await (state.aiTab==='agent'?agent():training());
   if(next==='inbox')await inbox();
+  if(next==='instagram')await instagram();
   if(next==='team')await team();
   if(next==='admin')await admin();
  }catch(error){view.innerHTML=empty('!', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
@@ -373,6 +382,58 @@ async function channels(){
   });
  }));
 }
+async function instagram(){
+ const config=await api('/api/instagram/config');
+ const accounts=await api('/api/instagram/accounts');
+ const source=config.configured?'Conexão habilitada para receber autorização da Meta.':
+  'Conexão disponível após configurar o aplicativo na Meta. Nenhuma conta foi conectada.';
+ const lines=accounts.length?accounts.map(account=>
+  '<div class="card card-pad" style="margin-bottom:12px">'+
+   '<div class="section-title">'+e(account.username?'@'+account.username:'Instagram')+'</div>'+
+   '<p class="form-note">Status: '+e(account.status==='connected'?'Conectado':'Desconectado')+
+   ' · Autorização: '+e(account.token_expires_at?date(account.token_expires_at):'sem token ativo')+'</p>'+
+   (account.status==='connected'?
+    '<button class="btn soft" type="button" data-ig-revoke="'+e(account.channel_id)+'">Desconectar conta</button>':
+    '<span class="form-note">Sem acesso a novas mensagens.</span>')+'</div>').join(''):
+  empty('◎','Nenhuma conta Instagram conectada',
+   'Cada empresa autoriza sua própria conta profissional. Mensagens de outras empresas não ficam acessíveis.');
+ view.innerHTML=heading('CANAIS','Instagram.',
+  'Conecte a conta profissional da sua empresa e atenda mensagens recebidas com segurança.')+
+  '<section class="card card-pad" style="margin-bottom:18px">'+
+   '<div class="section-title">Instagram profissional</div>'+
+   '<p>'+e(source)+'</p>'+
+   '<p class="form-note">Permissões solicitadas: perfil comercial e gerenciamento de mensagens. '+
+   'Não é utilizada autorização para anúncios ou publicação de conteúdos.</p>'+
+   '<button class="btn primary" id="instagramConnect" '+(config.configured?'':'disabled')+
+   '>Conectar Instagram com autorização da Meta</button>'+
+   (!config.configured?'<p class="form-note">Aguardando cadastro de INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET, '+
+   'INSTAGRAM_WEBHOOK_VERIFY_TOKEN e URL pública nas variáveis seguras do Railway. '+
+   'Não é possível conectar sem a configuração oficial do aplicativo.</p>':'')+
+   '<p class="form-note">Callback OAuth: '+e(config.redirectUri||'Configuração pendente')+
+   ' · Webhook: '+e(config.webhookPath||'/webhooks/instagram')+'</p>'+
+  '</section>'+
+  '<section aria-label="Contas Instagram autorizadas">'+lines+'</section>'+
+  '<section class="card card-pad"><div class="section-title">Mensagens e privacidade</div>'+
+   '<p>Somente conversas iniciadas pelo cliente chegam ao atendimento. Respostas manuais exigem '+
+   'uma mensagem recebida recentemente, dentro da janela de atendimento. '+
+   'Envios automáticos e mensagens em massa não estão ativados no Instagram.</p>'+
+   '<button class="btn soft" id="instagramOpenInbox">Ver caixa de entrada</button></section>';
+ $('#instagramOpenInbox')?.addEventListener('click',()=>changeView('inbox'));
+ $('#instagramConnect')?.addEventListener('click',()=>action(async()=>{
+  const response=await api('/api/instagram/connect','POST',{});
+  if(!/^https:\/\/www\.instagram\.com\/oauth\/authorize\?/.test(response.authorizationUrl||''))
+   throw Error('Não foi possível iniciar autorização segura.');
+  window.location.assign(response.authorizationUrl);
+ }));
+ view.querySelectorAll('[data-ig-revoke]').forEach(btn=>btn.addEventListener('click',()=>{
+  if(!confirm('Desconectar esta conta Instagram e impedir novas mensagens? O histórico autorizado será mantido.'))return;
+  void action(async()=>{
+   await api('/api/instagram/accounts/'+btn.dataset.igRevoke+'/revoke','POST',{});
+   toast('Conta Instagram desconectada.');await instagram();
+  });
+ }));
+}
+
 async function showWaQr(channelId){
  clearTimeout(waQrTimer);
  const panel=$('#waQrPanel'),image=$('#waQrImage'),help=$('#waQrHelp');
@@ -982,6 +1043,7 @@ async function action(fn){try{await fn();}catch(err){toast(errMsg(err),true);}}
 const sidebarIcons={
  overview:'<rect x="3" y="3" width="8" height="8" rx="1.7"/><rect x="13" y="3" width="8" height="8" rx="1.7"/><rect x="3" y="13" width="8" height="8" rx="1.7"/><rect x="13" y="13" width="8" height="8" rx="1.7"/>',
  inbox:'<path d="M4 4h16v12h-5l-3 3-3-3H4z"/><path d="M7 9h10M7 12h7"/>',
+ instagram:'<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.6 6.7h.01"/>',
  channels:'<path d="M6 18c-2-1.7-3-4.1-3-6.6C3 6.6 6.7 3 12 3s9 3.6 9 8.4c0 4.5-3.7 8.6-9 8.6-1.6 0-3.2-.3-4.4-1L3 21z"/><path d="M9 9c.4 2.6 2.4 4.7 5 5l1.4-1.5"/>',
  products:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 10h18M10 3v18"/>',
  training:'<path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8m8.6 8.6 2.8 2.8M2 12h4m12 0h4M4.9 19.1l2.8-2.8m8.6-8.6 2.8-2.8"/><circle cx="12" cy="12" r="3.4"/>',

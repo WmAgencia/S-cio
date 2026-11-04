@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {TABLES,checkMigrationConfiguration,compareTableShape,fingerprintRow} from '../scripts/socio-supabase-migrate.mjs';
 import {validateMasterConfig} from '../scripts/socio-provision-master.mjs';
 
-test('Sócio migration covers all 28 production tables in dependency order',()=>{
- assert.equal(TABLES.length,28);
+test('Sócio migration covers all 31 production tables in dependency order',()=>{
+ assert.equal(TABLES.length,31);
  assert.equal(new Set(TABLES).size,TABLES.length);
  for(const [parent,child] of [['tenants','users'],['tenants','products'],['channels','conversations'],
-  ['conversations','messages'],['training_jobs','training_job_items'],
+  ['conversations','messages'],['users','instagram_oauth_states'],['channels','instagram_accounts'],['conversations','instagram_outbox'],['training_jobs','training_job_items'],
   ['training_jobs','training_versions'],['imports','training_job_items'],
   ['waakg_scans','waakg_scan_chats'],['products','product_variants'],['conversations','conversation_ui_state'],['messages','message_ui_state'],['messages','ai_reply_attempts'],['conversations','message_outbox'],['conversations','sales_quotes'],['sales_quotes','sales_orders'],['sales_orders','sales_payment_events']]){
   assert.ok(TABLES.indexOf(parent)<TABLES.indexOf(child),parent+' must be inserted before '+child);

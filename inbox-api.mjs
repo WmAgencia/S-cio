@@ -1,11 +1,12 @@
 import {createHash} from 'node:crypto';
 import {gatewayRead,getSessionStatus,listAvailableChats,privateJid} from './waakg-adapter.mjs';
 import {outboundEnabled,canAutoReply,deliverToConversation} from './socio-outbound.mjs';
+import {sendInstagramReply,instagramReady} from './instagram-integration.mjs';
 // Tenant-scoped inbox interaction endpoints. No WhatsApp transmission is performed
 // here: the dedicated Sócio WA-AKG gateway is intentionally read-only.
 const uuid=/^[a-f\d]{8}-[a-f\d]{4}-[1-8][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
 const reactions=new Set(['👍','❤️','😂','😮','😢','🙏','🔥','👏','✅']);
-export const allowedInboxFilters=new Set(['all','unread','favorites','pinned','archived','human','ai_assist','resolved']);
+export const allowedInboxFilters=new Set(['all','unread','favorites','pinned','archived','human','ai_assist','resolved','instagram','whatsapp']);
 export const inboxCapabilities=Object.freeze({
  whatsappSend:false,whatsappMedia:false,whatsappReactions:false,whatsappEdit:false,
  whatsappForward:false,whatsappDelete:false,whatsappReadReceipts:false,
@@ -47,7 +48,7 @@ export function validateUiPatch(data){
  if(!Object.keys(clean).length)throw new Error('PATCH_INVALID');
  return clean;
 }
-export const inboxRuntimeCapabilities=()=>({...inboxCapabilities,whatsappSend:outboundEnabled(),aiAutoReply:canAutoReply(),readOnlyGateway:!outboundEnabled()});
+export const inboxRuntimeCapabilities=()=>({...inboxCapabilities,whatsappSend:outboundEnabled(),instagramSend:instagramReady(),aiAutoReply:canAutoReply(),readOnlyGateway:!outboundEnabled()});
 export function validReaction(value){return value===null||reactions.has(value);}
 const noteValid=text=>typeof text==='string'&&text.trim().length>0&&text.length<=3000;
 const isUuid=value=>typeof value==='string'&&uuid.test(value);
@@ -181,6 +182,8 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
     AND ($3<>'human' OR COALESCE(st.handling_mode,'human')='human')
     AND ($3<>'ai_assist' OR COALESCE(st.handling_mode,'human')='ai_assist')
     AND ($3<>'resolved' OR c.status='resolved')
+    AND ($3<>'instagram' OR ch.provider='instagram')
+    AND ($3<>'whatsapp' OR ch.provider<>'instagram')
     ORDER BY COALESCE(st.pinned,false) DESC,c.last_message_at DESC,c.id
     LIMIT 150`,[tenant,search,filter]);
   return json(res,200,{conversations:result.rows,capabilities:inboxRuntimeCapabilities(),limitedTo:150});
@@ -189,7 +192,9 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
  if(!match)return false;
  const conversationId=match[1],route=match[2],messageId=match[3];
  if(!isUuid(conversationId)||messageId&&!isUuid(messageId))throw err(404,'Conversa não encontrada.');
- const exists=await query('SELECT id,customer_name,customer_phone,status,channel_id FROM conversations WHERE tenant_id=$1 AND id=$2',[tenant,conversationId]);
+ const exists=await query("SELECT c.id,c.customer_name,c.customer_phone,c.status,c.channel_id,ch.provider AS channel_provider "+
+  "FROM conversations c JOIN channels ch ON ch.id=c.channel_id AND ch.tenant_id=c.tenant_id "+
+  "WHERE c.tenant_id=$1 AND c.id=$2",[tenant,conversationId]);
  if(!exists.rowCount)throw err(404,'Conversa não encontrada.');
  const conversation=exists.rows[0];
  if(method==='GET'&&route==='history'){
@@ -217,6 +222,8 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
  if(method==='PATCH'&&route==='ui'){
   const {data}=await body(req);
   let clean;try{clean=validateUiPatch(data);}catch{throw err(422,'Configuração de conversa inválida.');}
+  if(conversation.channel_provider==='instagram'&&clean.handling_mode==='ai_assist')
+   throw err(403,'Respostas automáticas do Instagram não estão habilitadas.');
   if(Object.hasOwn(clean,'handling_mode'))clean.ai_activated_at=clean.handling_mode==='ai_assist'?new Date():null;
   if(Object.hasOwn(clean,'assigned_user_id')){
    if(!['owner','admin'].includes(a.role)&&!a.platform_owner)throw err(403,'Sem permissão para atribuir conversas.');
@@ -235,6 +242,16 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
   return json(res,200,{ok:true,preferences:updated.rows[0]});
  }
  if(method==='POST'&&route==='send'){
+  if(conversation.channel_provider==='instagram'){
+   const {data}=await body(req);
+   if(!['owner','admin','agent'].includes(a.role)&&!a.platform_owner)
+    throw err(403,'Usuário não tem permissão para responder.');
+   const result=await sendInstagramReply(pool,{
+    tenantId:tenant,conversationId,userId:a.user_id,
+    text:data?.text,clientRequestId:data?.clientRequestId
+   });
+   return json(res,result.sent?201:202,result);
+  }
   if(!outboundEnabled())throw err(503,'Envio de mensagens indisponível até a validação do WhatsApp.');
   const {data}=await body(req);
   if(typeof data?.text!=='string'||typeof data?.clientRequestId!=='string')

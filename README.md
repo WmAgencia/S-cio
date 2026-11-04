@@ -172,3 +172,17 @@ o CI agora exige `npm audit --omit=dev --audit-level=high`.
 
 Veja critérios, comandos, inventário S3/WA-AKG e plano de reversão:
 [docs/socio-phase5-supabase-cutover-20261104.md](docs/socio-phase5-supabase-cutover-20261104.md)
+
+
+## Instagram profissional — Fase 6
+
+Uma nova guia Instagram permite que cada empresa autorize uma conta profissional
+por OAuth com a Meta. O backend valida assinaturas de webhooks, salva mensagens
+somente no tenant vinculado, protege tokens cifrados e permite respostas humanas
+apenas depois de mensagem recente. Inclui revogação de acesso e deduplicação.
+A IA automática **não** responde no Instagram nesta versão.
+
+Sem aplicativo Instagram Login autorizado e suas credenciais em Railway, a
+funcionalidade permanece visível como **não configurada**. Não foram enviadas DMs
+reais ou feitas conexões não autorizadas. Configuração e limites:
+[docs/socio-instagram-phase6.md](docs/socio-instagram-phase6.md).
