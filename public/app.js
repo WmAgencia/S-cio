@@ -2,7 +2,7 @@
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training'};
-const titles={overview:'Visão geral',inbox:'Conversas',channels:'WhatsApps',products:'Produtos e serviços',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
+const titles={overview:'Visão geral',inbox:'WhatsApp',channels:'WhatsApps',products:'Produtos e serviços',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -56,6 +56,7 @@ async function boot(){
    $('#userName').textContent=me.user.name;
    $('#userRole').textContent=me.user.platformOwner?'Administrador master':me.user.role==='owner'?'Proprietário':'Equipe da empresa';
    $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
+   $('#teamNav')?.classList.toggle('hidden',!!me.user.platformOwner);
    await changeView(state.view);
   }catch(error){state.me=null;state.csrf='';setupAuth(bootstrap.initialized);}
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
@@ -66,6 +67,7 @@ async function changeView(next){
  else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
  if(next==='admin'&&!state.me?.user.platformOwner)return;
+ if(next==='team'&&state.me?.user.platformOwner)return;
  state.view=next;
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
  $('#topTitle').textContent=titles[next]||'Sócio';
@@ -152,28 +154,18 @@ function emberIcon(kind){
  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(emberIcons[kind]||emberIcons.spark)+'</svg>';
 }
 async function overview(){
- const [d,ag,trend,recent,links]=await Promise.all([
-  api('/api/dashboard'),api('/api/agent'),api('/api/dashboard/activity?range=1m'),api('/api/inbox'),api('/api/waakg/channels')
+ const [d,trend,recent,links]=await Promise.all([
+  api('/api/dashboard'),api('/api/dashboard/activity?range=1m'),api('/api/inbox'),api('/api/waakg/channels')
  ]);
  state.dashboard=d;
  const openCount=chartNumber(d.openConversations);
  const online=Array.isArray(links)?links.filter(channel=>channel.status==='connected').length:0;
- const messages=chartNumber(d.inboundMessages);
+ const messages=chartNumber(d.messagesReceivedToday);
  const totalMessages=(trend.points||[]).reduce((sum,p)=>sum+chartNumber(p.inbound)+chartNumber(p.outbound),0);
  const received=(trend.points||[]).reduce((sum,p)=>sum+chartNumber(p.inbound),0);
  const sent=(trend.points||[]).reduce((sum,p)=>sum+chartNumber(p.outbound),0);
  const recentItems=Array.isArray(recent)?recent.slice(0,4):[];
- const pending=Array.isArray(links)?links.find(c=>c.status!=='connected'):null;
- let qrImage=null;
- if(pending){
-  try{
-   const qr=await api('/api/waakg/channels/'+encodeURIComponent(pending.id)+'/qr');
-   if(qr?.ready&&typeof qr.image==='string'&&
-      /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(qr.image)&&qr.image.length<350000){
-      qrImage=qr.image;
-   }
-  }catch{} // A failed/expired QR must never blank the main dashboard.
- }
+ const connectedWhatsApps=Array.isArray(links)?links.filter(c=>c.status==='connected'):[];
  const kpi=(kind,label,value,meta,type)=>'<div class="ember-kpi ember-kpi-'+type+'">'+
   '<div class="ember-kpi-symbol">'+emberIcon(kind)+'</div>'+
   '<div class="ember-kpi-copy"><div class="ember-kpi-name">'+e(label)+'</div>'+
@@ -195,16 +187,19 @@ async function overview(){
    '<span class="ember-conversation-tail">'+(time?'<small>'+e(time)+'</small>':'')+
     '<span class="ember-status '+chip+'">'+e(label)+'</span></span></button>';
  };
- const qrVisual=qrImage?
-  '<div class="ember-qr-live"><img src="'+e(qrImage)+'" alt="QR Code ativo do WhatsApp. Escaneie com o aplicativo no celular."></div>':
-  '<div class="ember-qr-placeholder" aria-label="QR Code disponível após iniciar a conexão">'+emberIcon('scan')+
-   '<strong>Seu QR Code</strong><small>'+e(pending?'Aguardando novo código':'Gerado ao conectar')+'</small></div>';
+ const whatsappSummary=connectedWhatsApps.length?
+  '<div class="socio-connected-list">'+connectedWhatsApps.slice(0,5).map(c=>
+    '<div class="socio-connected-item"><span class="socio-green-dot"></span><div><strong>'+e(c.label||'WhatsApp')+
+    '</strong><small>'+e(c.phone||'Número confirmado')+'</small></div><span class="badge green">Conectado</span></div>'
+   ).join('')+(connectedWhatsApps.length>5?'<small>Mais '+(connectedWhatsApps.length-5)+' número(s) conectado(s)</small>':'')+'</div>':
+  '<div class="socio-no-connections"><span class="socio-wa-empty-icon">◉</span><strong>Nenhum WhatsApp conectado</strong>'+
+  '<p>Conecte seu primeiro número usando o QR Code.</p></div>';
  view.innerHTML=
  '<div class="lucid-dashboard ember-dashboard">'+
   '<div class="ember-kpi-grid">'+
    kpi('bubble','Conversas em aberto',openCount.toLocaleString('pt-BR'),'Atendimentos aguardando acompanhamento','conversations')+
    kpi('whatsapp','WhatsApps conectados',online.toLocaleString('pt-BR'),'Sessões vinculadas neste espaço','connected')+
-   kpi('mail','Mensagens recebidas',messages.toLocaleString('pt-BR'),'Total registrado nesta empresa','messages')+
+   kpi('mail','Mensagens recebidas hoje',messages.toLocaleString('pt-BR'),'Dia atual · horário de Brasília','messages')+
   '</div>'+
   '<div class="ember-primary-grid">'+
    '<section class="ember-card ember-activity">'+
@@ -228,18 +223,12 @@ async function overview(){
      '<span><i class="ember-dot green"></i>Enviadas</span>'+
      '<small>Dados reais da empresa selecionada</small></div>'+
    '</section>'+
-   '<section class="ember-card ember-qr-card">'+
-    '<div class="ember-qr-head">'+
-     '<span class="ember-whatsapp-icon">'+emberIcon('whatsapp')+'</span>'+
-     '<div><h2>Conectar WhatsApp</h2><p>Conecte um número para usar os recursos de atendimento do Sócio.</p></div>'+
-    '</div>'+
-    '<div class="ember-qr-content">'+qrVisual+
-     '<ol class="ember-qr-steps"><li><b>1</b><span>Abra o WhatsApp no celular</span></li>'+
-     '<li><b>2</b><span>Toque em Dispositivos conectados</span></li>'+
-     '<li><b>3</b><span>Escaneie o QR Code</span></li></ol>'+
-    '</div>'+
-    '<button type="button" class="btn primary ember-qr-cta" data-go="channels">'+emberIcon('scan')+' Conectar WhatsApp</button>'+
-    '<p class="ember-qr-disclaimer">A leitura de conversas depende de autorização e conexão ativa. Respostas automáticas permanecem desativadas.</p>'+
+   '<section class="ember-card ember-qr-card socio-dashboard-whatsapp">'+
+    '<div class="ember-qr-head"><span class="ember-whatsapp-icon">'+emberIcon('whatsapp')+'</span>'+
+      '<div><h2>Seus WhatsApps</h2><p>Números da empresa disponíveis para atendimento.</p></div></div>'+
+    whatsappSummary+
+    '<button type="button" class="btn primary ember-qr-cta" id="dashboardConnectWhatsApp">+ Conectar WhatsApp</button>'+
+    '<p class="ember-qr-disclaimer">Conexão por QR Code. Leitura e análise do histórico autorizadas; envio externo ainda desativado.</p>'+
    '</section>'+
   '</div>'+
   '<div class="ember-secondary-grid">'+
@@ -265,6 +254,10 @@ async function overview(){
   '</div>'+
  '</div>';
  bindNavWithin();
+ $('#dashboardConnectWhatsApp')?.addEventListener('click',()=>window.SocioUX.openQr({
+  api,toast,canManage:state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role),
+  onConnected:()=>state.view==='overview'?overview():Promise.resolve()
+ }));
  view.querySelectorAll('[data-range]').forEach(btn=>btn.addEventListener('click',async()=>{
   const range=btn.dataset.range;
   if(!['7d','1m','90d'].includes(range))return;
@@ -705,7 +698,11 @@ async function agent(){
 async function inbox(){
  if(!window.SocioInbox)throw new Error('Módulo de conversas não foi carregado. Recarregue a página.');
  if(activeInbox)activeInbox.cleanup();
- activeInbox=window.SocioInbox.create({api,e,toast,view,changeView});
+ activeInbox=window.SocioInbox.create({api,e,toast,view,changeView,
+  openQr:()=>window.SocioUX.openQr({api,toast,
+   canManage:state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role),
+   onConnected:()=>state.view==='inbox'?inbox():Promise.resolve()})
+ });
  await activeInbox.render();
 }
 async function openThread(convId){
