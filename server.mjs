@@ -8,7 +8,7 @@ import {extractWhatsAppZip} from './zip-import.mjs';
 import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
 import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
 import {processNextWaakgScan} from './waakg-history.mjs';
-import {startAutoTraining,autoTrainingStatus,processNextAutoTraining} from './training-auto.mjs';
+import {startAutoTraining,autoTrainingStatus,cancelAutoTraining,processNextAutoTraining} from './training-auto.mjs';
 import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
@@ -560,6 +560,13 @@ async function handle(req,res){
   await audit(a,'training.auto.started',{runId:run.id,connectedChannels:run.connectedChannels});
   return json(res,201,run);
  }
+ const autoCancel=pathname.match(/^\/api\/training\/auto\/([0-9a-f-]{36})\/cancel$/);
+ if(autoCancel&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const result=await cancelAutoTraining(pool,a.active_tenant_id,autoCancel[1]);
+  await audit(a,'training.auto.cancelled',{runId:result.id});
+  return json(res,200,result);
+ }
  if(method==='GET'&&pathname==='/api/training/jobs'){
   const r=await query("SELECT id,status,total_items AS \"totalItems\",processed_items AS \"processedItems\",report_json AS report,created_at AS \"createdAt\",updated_at AS \"updatedAt\" FROM training_jobs WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 12",[a.active_tenant_id]);
   return json(res,200,r.rows);
@@ -587,12 +594,49 @@ async function handle(req,res){
   const versions=await query('SELECT id,job_id AS "jobId",version,status,knowledge_md AS markdown,report_json AS report,created_at AS "createdAt",approved_at AS "approvedAt" FROM training_versions WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 15',[a.active_tenant_id]);
   return json(res,200,versions.rows);
  }
+ const knowledgeEdit=pathname.match(/^\/api\/training\/versions\/([0-9a-f-]{36})\/edit$/);
+ if(knowledgeEdit&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const {data}=await body(req);
+  if(!validText(data.markdown,22000)||data.markdown.trim().length<20)
+   throw fail(422,'Markdown de conhecimento inválido.');
+  const edited=await query(
+   "UPDATE training_versions SET knowledge_md=$3 WHERE tenant_id=$1 AND id=$2 AND status='draft' RETURNING id,version",
+   [a.active_tenant_id,knowledgeEdit[1],data.markdown.trim()]);
+  if(!edited.rowCount)throw fail(409,'Somente rascunhos podem ser editados.');
+  await audit(a,'training.version.edited',{versionId:edited.rows[0].id});
+  return json(res,200,{ok:true,versionId:edited.rows[0].id});
+ }
+ const knowledgeRestore=pathname.match(/^\/api\/training\/versions\/([0-9a-f-]{36})\/restore$/);
+ if(knowledgeRestore&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const c=await pool.connect();
+  try{
+   await c.query('BEGIN');
+   // Serialize all approval/rollback operations for the same company.
+   await c.query('SELECT id FROM tenants WHERE id=$1 FOR UPDATE',[a.active_tenant_id]);
+   const version=await c.query(
+    "SELECT id,knowledge_md FROM training_versions WHERE tenant_id=$1 AND id=$2 AND status='archived' FOR UPDATE",
+    [a.active_tenant_id,knowledgeRestore[1]]);
+   if(!version.rowCount)throw fail(409,'Somente versões anteriores podem ser restauradas.');
+   await c.query("UPDATE training_versions SET status='archived' WHERE tenant_id=$1 AND status='approved'",[a.active_tenant_id]);
+   await c.query(
+    "UPDATE training_versions SET status='approved',approved_at=now() WHERE tenant_id=$1 AND id=$2",
+    [a.active_tenant_id,knowledgeRestore[1]]);
+   await c.query('UPDATE agents SET knowledge_md=$2,updated_at=now() WHERE tenant_id=$1',
+    [a.active_tenant_id,version.rows[0].knowledge_md]);
+   await c.query('COMMIT');
+  }catch(error){await c.query('ROLLBACK');throw error;}finally{c.release();}
+  await audit(a,'training.version.restored',{versionId:knowledgeRestore[1]});
+  return json(res,200,{ok:true,versionId:knowledgeRestore[1],autoReply:false});
+ }
  const knowledgeApprove=pathname.match(/^\/api\/training\/versions\/([0-9a-f-]{36})\/approve$/);
  if(knowledgeApprove&&method==='POST'){
   needRole(a,['owner','admin']);
   const c=await pool.connect();
   try{
    await c.query('BEGIN');
+   await c.query('SELECT id FROM tenants WHERE id=$1 FOR UPDATE',[a.active_tenant_id]);
    const version=await c.query("SELECT id,knowledge_md FROM training_versions WHERE tenant_id=$1 AND id=$2 AND status='draft' FOR UPDATE",[a.active_tenant_id,knowledgeApprove[1]]);
    if(!version.rowCount)throw fail(409,'Versão não encontrada, já aprovada ou inválida.');
    await c.query("UPDATE training_versions SET status='archived' WHERE tenant_id=$1 AND status='approved'",[a.active_tenant_id]);
