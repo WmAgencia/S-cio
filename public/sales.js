@@ -171,7 +171,7 @@
    try{
     await api('/api/sales/quotes/'+btn.dataset.saleCancel+'/cancel','POST',{});
     if(revision===btn.dataset.saleCancel)revision=null;
-    linkToShare='';await render({api,e,toast,view});
+    linkToShare='';await render({api,e,toast,view,me,navigate});
    }catch(err){toast(err.message,true)}
   }));
   $('#saleCopy').addEventListener('click',async()=>{
