@@ -229,7 +229,7 @@ async function overview(){
       '<div><h2>Seus WhatsApps</h2><p>Números da empresa disponíveis para atendimento.</p></div></div>'+
     whatsappSummary+
     '<button type="button" class="btn primary ember-qr-cta" id="dashboardConnectWhatsApp">+ Conectar WhatsApp</button>'+
-    '<p class="ember-qr-disclaimer">Conexão por QR Code. Leitura e análise do histórico autorizadas; envio externo ainda desativado.</p>'+
+    '<p class="ember-qr-disclaimer">Conexão por QR Code. Atendimento e envios exigem número conectado e autorização.</p>'+
    '</section>'+
   '</div>'+
   '<div class="ember-secondary-grid">'+
