@@ -112,7 +112,7 @@ export async function createTrainingAnalysisInClient(c,tenantId,{scanIds=[]}={})
   // THIS run; never silently train on arbitrary old imports from the tenant.
   // 'unchanged' contacts reuse their last known, tenant-owned snapshot.
   imports=await c.query(
-   "SELECT import_id AS id FROM ("+
+   "SELECT recent.import_id AS id,items.message_count FROM ("+
    "SELECT DISTINCT ON (snap.tenant_id,snap.channel_id,snap.jid_hash) "+
    "snap.import_id,snap.imported_at FROM waakg_scan_chats chat "+
    "JOIN waakg_import_snapshots snap ON snap.tenant_id=chat.tenant_id "+
@@ -120,15 +120,21 @@ export async function createTrainingAnalysisInClient(c,tenantId,{scanIds=[]}={})
    "WHERE chat.tenant_id=$1 AND chat.scan_id=ANY($2::uuid[]) "+
    "AND chat.status IN ('imported','unchanged') "+
    "ORDER BY snap.tenant_id,snap.channel_id,snap.jid_hash,snap.imported_at DESC "+
-   ") recent ORDER BY imported_at DESC LIMIT 201",[tenantId,scanIds]);
+   ") recent JOIN imports items ON items.tenant_id=$1 AND items.id=recent.import_id "+
+   "ORDER BY recent.imported_at DESC LIMIT 201",[tenantId,scanIds]);
   provenance={source:'connected_whatsapp_history',scans:scanIds.length,
    sourcesIncluded:Math.min(imports.rows.length,200),
+   messagesAvailable:imports.rows.slice(0,200).reduce((n,x)=>n+Number(x.message_count||0),0),
+   sampledMessageLimitPerConversation:80,
    partialCoverage:imports.rows.length>200||
+    imports.rows.some(v=>Number(v.message_count||0)>80)||
     scans.rows.some(v=>v.partial_coverage||v.truncated_chats>0)};
  }else{
-  imports=await c.query('SELECT id FROM imports WHERE tenant_id=$1 ORDER BY created_at ASC LIMIT 201',[tenantId]);
+  imports=await c.query('SELECT id,message_count FROM imports WHERE tenant_id=$1 ORDER BY created_at ASC LIMIT 201',[tenantId]);
   provenance={source:'uploaded_and_existing_imports',sourcesIncluded:Math.min(imports.rows.length,200),
-   partialCoverage:imports.rows.length>200};
+   messagesAvailable:imports.rows.slice(0,200).reduce((n,x)=>n+Number(x.message_count||0),0),
+   sampledMessageLimitPerConversation:80,
+   partialCoverage:imports.rows.length>200||imports.rows.some(v=>Number(v.message_count||0)>80)};
  }
  const selected=imports.rows.slice(0,200);
  if(!selected.length){
