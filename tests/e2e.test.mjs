@@ -427,6 +427,63 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const knowledgeAfterSync=await call('/api/agent','GET',undefined,betaCookie);
  assert(!knowledgeAfterSync.result.knowledge_md.includes('Gostaria de fazer um pedido'),
   'WA-AKG imports must remain out of active agent knowledge until approval');
+ // Phase 2: one-click analysis must use ONLY scanned WA-AKG messages.
+ // Previously uploaded exports (3 imports) must not contaminate its summary.
+ const autoStart=await call('/api/training/auto','POST',{},betaCookie,betaCsrf);
+ assert.equal(autoStart.status,201,JSON.stringify(autoStart.result));
+ const duplicateAuto=await call('/api/training/auto','POST',{},betaCookie,betaCsrf);
+ assert.equal(duplicateAuto.status,409,'Only one active automatic scan per tenant');
+ let autoRun=null;
+ for(let i=0;i<90;i++){
+  const status=await call('/api/training/auto','GET',undefined,betaCookie);
+  assert.equal(status.status,200);
+  autoRun=status.result.run;
+  if(['completed','failed'].includes(autoRun?.status))break;
+  await sleep(240);
+ }
+ assert.equal(autoRun.status,'completed','Auto training failed: '+JSON.stringify(autoRun));
+ assert.equal(autoRun.percent,100);
+ assert.equal(autoRun.channels,1);
+ assert.equal(autoRun.approvalRequired,true);
+ assert.equal(autoRun.source,'available_waakg_text');
+ const autoVersions=await call('/api/training/versions','GET',undefined,betaCookie);
+ const autoDraft=autoVersions.result.find(v=>v.status==='draft');
+ const previousKnowledge=autoVersions.result.find(v=>v.status==='approved');
+ assert.ok(autoDraft,'Auto training did not produce a draft');
+ assert.ok(previousKnowledge,'A previously approved version should remain active');
+ assert.equal(autoDraft.report.conversations,1,'Only chats enumerated by the auto scan belong in this draft');
+ assert.equal(autoDraft.report.messages,3,'Only three text messages from gateway are eligible');
+ assert.equal(autoDraft.report.salesValidated,false);
+ const beforeNewApproval=await call('/api/agent','GET',undefined,betaCookie);
+ assert.equal(beforeNewApproval.result.knowledge_md,previousKnowledge.markdown);
+ const badEdit=await call('/api/training/versions/'+autoDraft.id+'/edit','POST',{markdown:'short'},betaCookie,betaCsrf);
+ assert.equal(badEdit.status,422);
+ const newKnowledge='# Conhecimento aprovado pelo humano\\n\\nSempre verificar preços oficiais antes de criar orçamento.';
+ const saved=await call('/api/training/versions/'+autoDraft.id+'/edit','POST',{markdown:newKnowledge},betaCookie,betaCsrf);
+ assert.equal(saved.status,200,JSON.stringify(saved.result));
+ const stillOld=await call('/api/agent','GET',undefined,betaCookie);
+ assert.equal(stillOld.result.knowledge_md,previousKnowledge.markdown,'Editing a draft must never activate it');
+ const autoApprove=await call('/api/training/versions/'+autoDraft.id+'/approve','POST',{},betaCookie,betaCsrf);
+ assert.equal(autoApprove.status,200);
+ const nowApproved=await call('/api/agent','GET',undefined,betaCookie);
+ assert.equal(nowApproved.result.knowledge_md,newKnowledge);
+ const archivedEdit=await call('/api/training/versions/'+previousKnowledge.id+'/edit','POST',{markdown:newKnowledge},betaCookie,betaCsrf);
+ assert.equal(archivedEdit.status,409);
+ const restored=await call('/api/training/versions/'+previousKnowledge.id+'/restore','POST',{},betaCookie,betaCsrf);
+ assert.equal(restored.status,200);
+ const afterRollback=await call('/api/agent','GET',undefined,betaCookie);
+ assert.equal(afterRollback.result.knowledge_md,previousKnowledge.markdown);
+ const wrongRollback=await call('/api/training/versions/'+previousKnowledge.id+'/restore','POST',{},betaCookie,betaCsrf);
+ assert.equal(wrongRollback.status,409,'An already-active version must not be restored again');
+ const cancelStart=await call('/api/training/auto','POST',{},betaCookie,betaCsrf);
+ assert.equal(cancelStart.status,201);
+ const cancelled=await call('/api/training/auto/'+cancelStart.result.id+'/cancel','POST',{},betaCookie,betaCsrf);
+ assert.equal(cancelled.status,200);
+ const cancelStatus=await call('/api/training/auto','GET',undefined,betaCookie);
+ assert.equal(cancelStatus.result.run.status,'cancelled');
+ const cancelAgain=await call('/api/training/auto/'+cancelStart.result.id+'/cancel','POST',{},betaCookie,betaCsrf);
+ assert.equal(cancelAgain.status,409);
+
  await call('/api/admin/switch','POST',{tenantId:me.result.tenant.id},adminCookie,csrf);
  const otherTenantLinks=await call('/api/waakg/channels','GET',undefined,adminCookie);
  assert.deepEqual(otherTenantLinks.result,[]);
