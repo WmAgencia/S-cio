@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {randomUUID,randomBytes,createHmac} from 'node:crypto';
+import {randomBytes} from 'node:crypto';
 import {Client} from 'pg';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
-test('marketing HTTP: owner/CSRF, signed Google Ads Scripts, replay and disconnect',
+test('marketing HTTP: Meta-only UI and OAuth; retired Google routes cannot reconnect or ingest',
  {skip:!process.env.DATABASE_URL,timeout:65000},async t=>{
  const name='socio_marketing_http_test_'+randomBytes(5).toString('hex');
  const url=new URL(process.env.DATABASE_URL);url.pathname='/'+name;
@@ -79,46 +79,30 @@ test('marketing HTTP: owner/CSRF, signed Google Ads Scripts, replay and disconne
  assert.deepEqual(initial.connections,[]);
  assert.deepEqual(initial.reports,[]);
  assert.equal(initial.instagramLab,undefined);
- const withoutCsrf=await fetch(base+'/api/marketing/google/register',{
-  method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json'},
-  body:JSON.stringify({accountId:'1234567890',label:'Google Teste'})});
- assert.equal(withoutCsrf.status,403);
- const create=await fetch(base+'/api/marketing/google/register',{
-  method:'POST',headers:{Cookie:cookie,'X-CSRF-Token':csrf,'Content-Type':'application/json'},
-  body:JSON.stringify({accountId:'1234567890',label:'Google Teste'})});
- assert.equal(create.status,201);
- const created=await create.json();
- assert.equal(created.accountId,'1234567890');
- assert.equal(created.status,'pending');
- assert(created.script.includes('UrlFetchApp.fetch'));
- const extract=created.script.match(/const SOCIO_SECRET = ("[^"]+");/);
- assert(extract,'Google Script must include one-time secret');
- const secret=JSON.parse(extract[1]);
- const row={date:new Date().toISOString().slice(0,10),campaignId:'333444555',
-  campaignName:'Somente teste',impressions:12,clicks:2,costMicros:5500000,conversions:0};
- const raw=JSON.stringify({version:1,accountId:'1234567890',runId:randomUUID(),
-  timestamp:Date.now(),rows:[row]});
- const uri=base+'/webhooks/google-ads/'+created.id;
- const wrong=await fetch(uri,{method:'POST',headers:{'Content-Type':'application/json',
-  'X-Socio-Signature-256':'sha256='+'a'.repeat(64)},body:raw});
- assert.equal(wrong.status,403);
- const signature='sha256='+createHmac('sha256',secret).update(raw).digest('hex');
- const send=await fetch(uri,{method:'POST',headers:{'Content-Type':'application/json',
-  'X-Socio-Signature-256':signature},body:raw});
- assert.equal(send.status,200);
- assert.deepEqual(await send.json(),{ok:true,reused:false,stored:1});
- const again=await fetch(uri,{method:'POST',headers:{'Content-Type':'application/json',
-  'X-Socio-Signature-256':signature},body:raw});
- assert.deepEqual(await again.json(),{ok:true,reused:true,stored:0});
- const listed=await(await fetch(base+'/api/marketing',{headers:{Cookie:cookie}})).json();
- assert.equal(listed.reports.length,1);
- assert.equal(listed.reports[0].campaign_name,'Somente teste');
- assert(!JSON.stringify(listed).includes(secret));
- const disconnect=await fetch(base+'/api/marketing/connections/'+created.id+'/disconnect',{
-  method:'POST',headers:{Cookie:cookie,'X-CSRF-Token':csrf,'Content-Type':'application/json'},body:'{}'});
- assert.equal(disconnect.status,200);
- assert.equal((await(await fetch(uri,{method:'POST',headers:{
-  'Content-Type':'application/json','X-Socio-Signature-256':signature},body:raw})).status),403);
- const after=await(await fetch(base+'/api/marketing',{headers:{Cookie:cookie}})).json();
- assert.equal(after.reports.length,1,'Past verified metrics must not vanish on disconnect');
+
+ const js=await(await fetch(base+'/app.js')).text();
+ assert(js.includes("item('meta','Meta Ads'"),'Meta Ads card must exist');
+ assert(!js.includes("item('google'"),'Google Ads card must be absent');
+ assert(js.includes("marketingProvider==='meta'"),'OAuth return must verify Meta only');
+ const options={method:'POST',headers:{Cookie:cookie,'X-CSRF-Token':csrf,'Content-Type':'application/json'},body:'{}'};
+ const googleStart=await fetch(base+'/api/marketing/oauth/start',{...options,
+  body:JSON.stringify({provider:'google'})});
+ assert.equal(googleStart.status,422,'Google OAuth must reject new authorizations');
+ for(const path of [
+  '/api/marketing/google/register',
+  '/api/marketing/oauth/google/test',
+  '/api/marketing/oauth/google/disconnect'
+ ]){
+  const response=await fetch(base+path,options);
+  assert.equal(response.status,410,'Retired Google route should be closed: '+path);
+ }
+ const hook=await fetch(base+'/webhooks/google-ads/'+randomBytes(16).toString('hex').slice(0,8)+'-1111-4111-8111-111111111111',{
+  method:'POST',headers:{'Content-Type':'application/json'},body:'{}'
+ });
+ assert.equal(hook.status,410,'No Google Ads Scripts webhook ingestion allowed');
+ const stillVisible=await(await fetch(base+'/api/marketing',{headers:{Cookie:cookie}})).json();
+ assert.deepEqual(stillVisible.connections,[]);
+ assert.deepEqual(stillVisible.reports,[]);
+ assert(!JSON.stringify(stillVisible).includes('google_ads_scripts'));
+
 });
