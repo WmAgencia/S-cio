@@ -2,7 +2,8 @@
 (function(){
  'use strict';
  let revision=null,linkToShare='',requestedConversationId=null,activeRequestId=null;
- async function render({api,e,toast,view,me,navigate}){
+ async function render({api,e,toast,view,me,navigate,mode='quotes'}){
+  if(mode==='sales')return renderPurchaseQueue({api,e,toast,view,navigate});
   const [sales,products,contacts,leads]=await Promise.all([
    api('/api/sales'),api('/api/products'),api('/api/inbox'),api('/api/sales/quote-requests')
   ]);
@@ -24,8 +25,8 @@
   const items=activeQuote?itemByQuote(activeQuote):[{}];
   const label={draft:'Rascunho',issued:'Aguardando cliente',accepted:'Aprovado',declined:'Recusado',superseded:'Versão antiga',cancelled:'Cancelado',expired:'Expirado'};
   view.innerHTML='<div class="socio-sales">'+
-   '<div class="view-heading"><div><span class="eyebrow">VENDAS SUPERVISIONADAS</span><h1>Orçamentos e pedidos</h1>'+
-   '<p>Escolha produtos reais, compartilhe o link de aprovação e acompanhe seus pedidos. Nenhum envio ou cobrança é automático.</p></div></div>'+
+   '<div class="view-heading"><div><span class="eyebrow">PROPOSTAS COMERCIAIS</span><h1>Orçamentos</h1>'+
+   '<p>Pedidos recebidos, propostas personalizadas e valores conferidos antes do envio ao cliente.</p></div></div>'+
    '<section class="card card-pad quote-request-panel"><div class="quote-request-header"><div><h2>Pedidos de orçamento recebidos</h2>'+
    '<p class="form-note">Pedidos identificados nas mensagens do WhatsApp. A IA não cria preços nem envia orçamentos sem sua revisão.</p></div>'+
    (canConfigureAlerts?'<label class="quote-alert-toggle"><input type="checkbox" id="quoteOwnerAlerts" '+
@@ -38,9 +39,22 @@
      ' · '+e(new Date(q.created_at).toLocaleDateString('pt-BR'))+
      (q.alert_status==='sent'?' · Aviso enviado ao dono':q.alert_status==='unconfirmed'?' · Verifique aviso no WhatsApp':'')+'</small></div>'+
     '<div class="quote-request-actions">'+
+    '<button type="button" class="btn sm soft" data-quote-chat="'+e(q.conversation_id)+'">Conversar</button>'+
+    (q.delivery_status==='sent'?'<span class="sale-state">Enviado ao cliente</span>':
+     q.delivery_status==='unconfirmed'?'<span class="sale-state">Envio incerto — confira o WhatsApp</span>':'')+
     (q.status!=='resolved'?'<button type="button" class="btn sm primary" data-quote-prepare="'+e(q.id)+
       '">Preparar orçamento</button><button type="button" class="btn sm soft" data-quote-resolve="'+e(q.id)+'">Marcar resolvido</button>':'')+
-    '</div></article>').join('')+'</div>':
+    '</div>'+
+    (q.status!=='resolved'?
+     '<details class="quote-quick-editor"><summary>Finalizar e enviar orçamento</summary>'+
+      '<form data-quote-draft="'+e(q.id)+'" class="quote-draft-form form-stack">'+
+       '<label>Descrição dos materiais, serviços e condições<textarea name="text" rows="4" maxlength="2300" required placeholder="Descreva os itens, quantidades, prazos e condições">'+e(q.draft_text||q.summary||'')+'</textarea></label>'+
+       '<label>Valor final (R$)<input name="amount" type="number" min="0.01" max="999999.99" step="0.01" required value="'+e(q.draft_amount_cents?Number(q.draft_amount_cents/100).toFixed(2):'')+'"></label>'+
+       '<div class="quote-request-actions"><button class="btn sm soft" type="submit">Salvar orçamento</button>'+
+       '<button class="btn sm primary" type="button" data-quote-send="'+e(q.id)+'" '+(!q.draft_text||!q.draft_amount_cents||q.delivery_status!=='not_sent'?'disabled':'')+'>Enviar para o WhatsApp</button></div>'+
+       '<p class="form-note">O envio só acontece por um WhatsApp autorizado e uma conversa assumida por humano. Confira o texto antes de enviar.</p>'+
+      '</form></details>':'')+
+    '</article>').join('')+'</div>':
     '<p class="form-note">Nenhum pedido identificado ainda. Quando o cliente pedir um orçamento pelo WhatsApp, ele aparecerá aqui.</p>')+
    '<p class="form-note">Notificações por WhatsApp são opcionais, exigem autorização do dono e um número da empresa conectado. Nenhuma mensagem é reenviada automaticamente se a entrega for incerta.</p>'+
    '</section>'+
@@ -68,7 +82,7 @@
        '<button class="btn sm ghost" data-sale-cancel="'+e(q.id)+'">Cancelar</button>':'')+
       '</div></div>').join('')+'</div>':'<p class="form-note">Nenhum orçamento emitido.</p>')+
    '</section></div>'+
-   '<section class="card card-pad"><h2>Pedidos</h2><p class="form-note">Pedido aprovado não significa pagamento confirmado ou mercadoria reservada.</p>'+
+   '<section class="card card-pad hidden"><h2>Pedidos</h2><p class="form-note">Pedido aprovado não significa pagamento confirmado ou mercadoria reservada.</p>'+
     (sales.orders.length?'<div class="sale-records">'+sales.orders.map(o=>
      '<div class="sale-record"><div><strong>'+e(o.customer_name)+'</strong><small>'+money(o.amount_cents)+
      '</small></div><span class="sale-state">'+
@@ -96,6 +110,26 @@
    }catch(err){ev.currentTarget.checked=!enabled;toast(err.message,true);}
    finally{ev.currentTarget.disabled=false;}
   });
+  view.querySelectorAll('[data-quote-chat]').forEach(btn=>btn.addEventListener('click',()=>navigate?.('inbox',btn.dataset.quoteChat)));
+  view.querySelectorAll('[data-quote-draft]').forEach(form=>form.addEventListener('submit',async event=>{
+   event.preventDefault();
+   const amount=Math.round(Number(form.elements.amount.value)*100);
+   const text=form.elements.text.value.trim();
+   try{
+    await api('/api/sales/quote-requests/'+form.dataset.quoteDraft+'/draft','POST',{text,amountCents:amount});
+    toast('Orçamento salvo. Revise antes de enviar.');
+    await render({api,e,toast,view,me,navigate,mode:'quotes'});
+   }catch(error){toast(error.message,true);}
+  }));
+  view.querySelectorAll('[data-quote-send]').forEach(btn=>btn.addEventListener('click',async()=>{
+   if(!confirm('Confirma o envio deste orçamento salvo diretamente ao WhatsApp do cliente?'))return;
+   btn.disabled=true;
+   try{
+    await api('/api/sales/quote-requests/'+btn.dataset.quoteSend+'/send','POST',{});
+    toast('Envio confirmado pelo gateway do WhatsApp.');
+    await render({api,e,toast,view,me,navigate,mode:'quotes'});
+   }catch(error){toast(error.message,true);btn.disabled=false;}
+  }));
   view.querySelectorAll('[data-quote-prepare]').forEach(btn=>btn.addEventListener('click',async()=>{
    const q=requests.find(x=>x.id===btn.dataset.quotePrepare);
    if(!q)return;
@@ -180,5 +214,120 @@
    catch{prompt('Copie o link:',linkToShare);}
   });
  }
+
+ async function renderPurchaseQueue({api,e,toast,view,navigate}){
+  const [result,sales,catalog]=await Promise.all([
+   api('/api/sales/intents'),api('/api/sales'),api('/api/products')
+  ]);
+  const intents=result.intents||[],products=catalog.filter(p=>p.active);
+  const money=n=>n===null||n===undefined?'A confirmar':
+   new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n)/100);
+  const count=intents.filter(x=>x.status==='pending').length;
+  const orderStatus={pending_payment:'Aguardando pagamento',paid_test:'Pago apenas em teste',manual_review:'Em revisão'};
+  const card=x=>{
+   const items=Array.isArray(x.items)?x.items:[];
+   const names=items.length?items.map(i=>i.quantity+'× '+i.name+(i.variantName?' · '+i.variantName:'')).join(', '):'Produtos e quantidades a confirmar';
+   return '<article class="commerce-lead-card" data-intent="'+e(x.id)+'">'+
+    '<div class="commerce-lead-main"><div class="commerce-lead-avatar">'+e((x.customer_name||'C').slice(0,1).toUpperCase())+'</div>'+
+    '<div class="commerce-lead-copy"><span class="commerce-lead-eyebrow">'+
+     e(x.status==='pending'?'Cliente quer comprar':x.status==='contacted'?'Atendimento iniciado':x.status==='completed'?'Concluída manualmente':'Descartada')+
+     '</span><h3>'+e(x.customer_name||'Cliente')+'</h3><small>'+e(x.customer_phone||'Número não informado')+'</small>'+
+     '<p>'+e(names)+'</p></div><div class="commerce-lead-total"><small>Valor estimado</small><strong>'+money(x.amount_cents)+'</strong></div></div>'+
+    '<div class="commerce-lead-actions"><button type="button" class="btn primary" data-lead-chat="'+e(x.conversation_id)+'">Conversar com cliente</button>'+
+    '<button type="button" class="btn soft" data-lead-expand="'+e(x.id)+'">Ver detalhes</button>'+
+    (x.status==='pending'?'<button type="button" class="btn soft" data-lead-status="'+e(x.id)+'" data-status="contacted">Iniciar atendimento</button>':'')+
+    '</div><div class="commerce-lead-detail hidden" data-lead-detail="'+e(x.id)+'">'+
+    '<p class="form-note">Mensagem original: '+e(x.summary)+'</p>'+
+    '<p class="form-note">Uma oportunidade não comprova venda, reserva de estoque ou pagamento.</p>'+
+    '<form data-lead-edit="'+e(x.id)+'" class="form-stack"><div class="commerce-lead-items"></div>'+
+    '<div class="row-actions"><button type="button" class="btn soft" data-lead-add>+ Produto</button>'+
+    '<button type="submit" class="btn primary">Salvar itens e recalcular total</button></div></form>'+
+    '<div class="row-actions"><button type="button" class="btn soft" data-lead-status="'+e(x.id)+'" data-status="completed">Marcar concluída manualmente</button>'+
+    '<button type="button" class="btn ghost" data-lead-status="'+e(x.id)+'" data-status="dismissed">Descartar</button></div>'+
+    '</div></article>';
+  };
+  view.innerHTML='<div class="socio-sales commerce-page">'+
+   '<div class="view-heading"><div><span class="eyebrow">OPORTUNIDADES DE COMPRA</span><h1>Vendas</h1>'+
+   '<p>Clientes que demonstraram intenção de comprar. Revise os produtos, converse e finalize o pagamento diretamente no atendimento.</p></div></div>'+
+   '<div class="commerce-summary"><div><small>Aguardando atendimento</small><strong>'+count+'</strong></div>'+
+    '<div><small>Em acompanhamento</small><strong>'+intents.filter(x=>x.status==='contacted').length+'</strong></div>'+
+    '<div><small>Concluídas manualmente</small><strong>'+intents.filter(x=>x.status==='completed').length+'</strong></div></div>'+
+   '<section class="commerce-section"><div class="commerce-section-heading"><h2>Oportunidades identificadas</h2><span>'+intents.length+' registros</span></div>'+
+   (intents.length?'<div class="commerce-lead-list">'+intents.map(card).join('')+'</div>':
+    '<div class="card card-pad commerce-empty"><h3>As oportunidades aparecerão aqui</h3><p>Quando um cliente demonstrar intenção clara de comprar, o Sócio registra o pedido para a equipe conferir e assumir a conversa.</p></div>')+'</section>'+
+   '<section class="card card-pad"><h2>Pedidos aprovados</h2><p class="form-note">Um pedido aprovado pelo cliente não significa pagamento ou entrega concluídos.</p>'+
+   (sales.orders.length?'<div class="sale-records">'+sales.orders.map(o=>
+    '<div class="sale-record"><div><strong>'+e(o.customer_name||'Cliente')+'</strong><small>'+money(o.amount_cents)+'</small></div>'+
+    '<span class="sale-state">'+e(orderStatus[o.status]||o.status)+'</span>'+
+    '<button type="button" class="btn soft" data-lead-chat="'+e(o.conversation_id)+'">Conversar</button></div>').join('')+'</div>':
+    '<p class="form-note">Nenhum pedido aprovado ainda.</p>')+'</section></div>';
+  const row=(selected={})=>{
+   const p=products.find(p=>p.id===selected.productId);
+   const variants=(p?.variants||[]).filter(v=>v.active);
+   return '<div class="commerce-item-row" data-purchase-row><select data-item-product aria-label="Produto" required>'+
+    '<option value="">Selecione o produto</option>'+products.map(p=>
+    '<option value="'+e(p.id)+'"'+(p.id===selected.productId?' selected':'')+'>'+e(p.name)+'</option>').join('')+'</select>'+
+    '<select data-item-variant aria-label="Variação" '+(!variants.length?'disabled':'')+'>'+
+    (variants.length?'<option value="">Selecione a variação</option>'+variants.map(v=>
+     '<option value="'+e(v.id)+'"'+(v.id===selected.variantId?' selected':'')+'>'+e(v.name)+'</option>').join(''):
+     '<option value="">Padrão</option>')+'</select>'+
+    '<input data-item-qty type="number" min="1" max="100" step="1" aria-label="Quantidade" value="'+e(selected.quantity||1)+'" required>'+
+    '<button class="btn ghost" type="button" data-item-remove aria-label="Remover produto">×</button></div>';
+  };
+  const updateVariants=group=>{
+   const p=products.find(p=>p.id===group.querySelector('[data-item-product]').value);
+   const select=group.querySelector('[data-item-variant]');
+   const variants=(p?.variants||[]).filter(v=>v.active);
+   select.disabled=!variants.length;
+   select.innerHTML=variants.length?'<option value="">Selecione a variação</option>'+
+    variants.map(v=>'<option value="'+e(v.id)+'">'+e(v.name)+'</option>').join(''):'<option value="">Padrão</option>';
+  };
+  view.querySelectorAll('[data-intent]').forEach(article=>{
+   const item=intents.find(x=>x.id===article.dataset.intent);
+   const form=article.querySelector('[data-lead-edit]');
+   const container=form.querySelector('.commerce-lead-items');
+   container.innerHTML=(item.items?.length?item.items:[{}]).map(row).join('');
+   form.addEventListener('change',event=>{
+    if(event.target.matches('[data-item-product]'))updateVariants(event.target.closest('[data-purchase-row]'));
+   });
+   form.querySelector('[data-lead-add]').addEventListener('click',()=>{
+    if(container.querySelectorAll('[data-purchase-row]').length>=15)return toast('Limite de 15 itens.',true);
+    container.insertAdjacentHTML('beforeend',row());
+   });
+   container.addEventListener('click',event=>{
+    if(!event.target.closest('[data-item-remove]'))return;
+    if(container.querySelectorAll('[data-purchase-row]').length<=1)return toast('Mantenha ao menos um produto.',true);
+    event.target.closest('[data-purchase-row]').remove();
+   });
+   form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const items=[...container.querySelectorAll('[data-purchase-row]')].map(node=>({
+     productId:node.querySelector('[data-item-product]').value,
+     variantId:node.querySelector('[data-item-variant]').value||null,
+     quantity:Number(node.querySelector('[data-item-qty]').value)
+    }));
+    try{
+     await api('/api/sales/intents/'+item.id,'PATCH',{items});
+     toast('Valores recalculados a partir do catálogo.');
+     await renderPurchaseQueue({api,e,toast,view,navigate});
+    }catch(err){toast(err.message,true);}
+   });
+  });
+  view.querySelectorAll('[data-lead-expand]').forEach(btn=>btn.addEventListener('click',()=>{
+   const section=view.querySelector('[data-lead-detail="'+btn.dataset.leadExpand+'"]');
+   const closed=section.classList.toggle('hidden');
+   btn.textContent=closed?'Ver detalhes':'Ocultar detalhes';
+  }));
+  view.querySelectorAll('[data-lead-chat]').forEach(btn=>btn.addEventListener('click',()=>navigate?.('inbox',btn.dataset.leadChat)));
+  view.querySelectorAll('[data-lead-status]').forEach(btn=>btn.addEventListener('click',async()=>{
+   if(btn.dataset.status==='completed'&&!confirm('Marcar como concluída manualmente? Isso não confirma pagamento.'))return;
+   try{
+    await api('/api/sales/intents/'+btn.dataset.leadStatus,'PATCH',{status:btn.dataset.status});
+    toast('Status atualizado.');
+    await renderPurchaseQueue({api,e,toast,view,navigate});
+   }catch(error){toast(error.message,true);}
+  }));
+ }
+
  window.SocioSales={render};
 })();
