@@ -85,7 +85,7 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
      (data.offset||0)<0||(data.offset||0)>50)
    throw err(422,'Canal ou posição de sincronização inválidos.');
   const offset=data.offset||0;
-  const rateKey=tenant+':'+data.channelId,prev=inboxSyncLast.get(rateKey)||0;
+  const rateKey=tenant+':'+data.channelId+':'+offset,prev=inboxSyncLast.get(rateKey)||0;
   if(Date.now()-prev<2400)throw err(429,'Sincronização já solicitada. Tente novamente.');
   inboxSyncLast.set(rateKey,Date.now());
   const c=await query(\`SELECT l.session_id,ch.id,ch.phone FROM waakg_links l
