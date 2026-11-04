@@ -241,6 +241,55 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const alpha=await call('/api/products','POST',{name:'Site Institucional',description:'Site responsivo',priceCents:49700},adminCookie,csrf);
  assert.equal(alpha.status,201);
  const alphaId=alpha.result.id;
+ // Supervised sales Phase 3: immutable catalog price snapshots, revision
+ // invalidation, public buyer approval and order idempotency.
+ const noCsrfQuote=await call('/api/sales/quotes','POST',{conversationId,items:[{productId:alphaId,quantity:1}]},adminCookie);
+ assert.equal(noCsrfQuote.status,403,'Quote creation requires CSRF');
+ const invalidQuantity=await call('/api/sales/quotes','POST',{conversationId,items:[{productId:alphaId,quantity:999}]},adminCookie,csrf);
+ assert.equal(invalidQuantity.status,422);
+ const quoteOne=await call('/api/sales/quotes','POST',
+  {conversationId,items:[{productId:alphaId,quantity:2,unitPriceCents:1}]},adminCookie,csrf);
+ assert.equal(quoteOne.status,201,JSON.stringify(quoteOne.result));
+ assert.equal(quoteOne.result.amount_cents,99400,'Price must be sourced from the official catalog, never client payload');
+ const issuedOne=await call('/api/sales/quotes/'+quoteOne.result.id+'/issue','POST',{},adminCookie,csrf);
+ assert.equal(issuedOne.status,200);
+ const tokenOne=issuedOne.result.path.split('#')[1];
+ assert.equal(tokenOne.length,64);
+ const publicOne=await call('/api/public/quotes/'+tokenOne,'GET');
+ assert.equal(publicOne.status,200);
+ assert.equal(publicOne.result.items[0].unitPriceCents,49700);
+ const revision=await call('/api/sales/quotes','POST',
+  {conversationId,seriesId:quoteOne.result.series_id,items:[{productId:alphaId,quantity:1}]},adminCookie,csrf);
+ assert.equal(revision.status,201);
+ assert.equal(revision.result.version,2);
+ const invalidated=await call('/api/public/quotes/'+tokenOne,'GET');
+ assert.equal(invalidated.status,404,'Old buyer links must be invalidated when repriced');
+ const issuedTwo=await call('/api/sales/quotes/'+revision.result.id+'/issue','POST',{},adminCookie,csrf);
+ assert.equal(issuedTwo.status,200);
+ const tokenTwo=issuedTwo.result.path.split('#')[1];
+ const noConsent=await call('/api/public/quotes/'+tokenTwo+'/accept','POST',{buyerName:'Cliente',agree:false});
+ assert.equal(noConsent.status,422);
+ const accepted=await call('/api/public/quotes/'+tokenTwo+'/accept','POST',{buyerName:'Compradora Exemplo',agree:true});
+ assert.equal(accepted.status,200,JSON.stringify(accepted.result));
+ assert.equal(accepted.result.status,'pending_payment');
+ const twice=await call('/api/public/quotes/'+tokenTwo+'/accept','POST',{buyerName:'Compradora Exemplo',agree:true});
+ assert.equal(twice.status,200);
+ assert.equal(twice.result.id,accepted.result.id,'Buyer retry must not duplicate order');
+ assert.equal(twice.result.alreadyApproved,true);
+ const unavailableCheckout=await call('/api/public/quotes/'+tokenTwo+'/checkout','POST',{});
+ assert.equal(unavailableCheckout.status,503,'Real payment must remain disabled without test credentials');
+ const afterSales=await call('/api/sales','GET',undefined,adminCookie);
+ assert.equal(afterSales.status,200);
+ assert.equal(afterSales.result.orders.length,1);
+ assert.equal(afterSales.result.orders[0].status,'pending_payment');
+ assert.equal(afterSales.result.quotes.length,2);
+ const noReprice=await call('/api/sales/quotes','POST',
+  {conversationId,seriesId:quoteOne.result.series_id,items:[{productId:alphaId,quantity:1}]},adminCookie,csrf);
+ assert.equal(noReprice.status,409,'An approved quote must stay immutable');
+ const publicPage=await fetch(base+'/quote.html');
+ assert.equal(publicPage.status,200);
+ assert.match(await publicPage.text(),/ORÇAMENTO DIGITAL/);
+
  const foreign=await call('/api/admin/tenants','POST',{company:'Pizzaria Beta',ownerName:'Dono Beta',ownerEmail:'beta@test.invalid',ownerPhone:'15981112222',ownerPassword:'SenhaBetaMuitoForte2026',plan:'essencial'},adminCookie,csrf);
  assert.equal(foreign.status,201);
  const switchTenant=await call('/api/admin/switch','POST',{tenantId:foreign.result.id},adminCookie,csrf);
