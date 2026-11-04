@@ -159,7 +159,7 @@ export async function listAvailableChats(sessionId,opts={}){
  for(const entry of Array.isArray(data)?data.slice(0,MAX_CHATS_PER_SCAN):[]){
   if(!list.includes(entry?.jid))continue;
   const name=String(entry.name||entry.pushName||entry.notify||'').trim();
-  if(name&&name.length<=100&&!/[\\x00-\\x1f]/.test(name))names[entry.jid]=name;
+  if(name&&name.length<=100&&![...name].some(char=>char.charCodeAt(0)<32))names[entry.jid]=name;
  }
  return {jids:list,names,partial:!Array.isArray(data)?true:data.length>=MAX_CHATS_PER_SCAN,
   discoveredChats:Array.isArray(data)?data.length:0};
