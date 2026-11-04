@@ -8,7 +8,7 @@ import {buildQuickReplyMessage,sendQuickReplies,loadCatalogCard,sendCatalogCard,
  suggestedCatalogProduct} from '../socio-rich-outbound.mjs';
 const env={SOCIO_OUTBOUND_ENABLED:'true',
  WA_AKG_API_KEY:'example-gateway-signing-key-not-a-secret-2026',
- WA_AKG_BASE_URL:'http://127.0.0.1:3000'};
+ WA_AKG_BASE_URL:'http://127.0.0.1:3000',CHANNEL_ENCRYPTION_KEY:'test-channel-key-must-be-at-least-32-bytes'};
 const tenantId='11111111-1111-4111-8111-111111111111';
 const conversationId='22222222-2222-4222-8222-222222222222';
 const productId='33333333-3333-4333-8333-333333333333';
@@ -134,7 +134,8 @@ test('Gateway private patch HMACs product and button messages; no broadcast or g
  assert.match(patch,/x-socio-outbound-signature/);
  assert.match(patch,/timingSafeEqual/);
  assert.match(patch,/quick_reply/);
- assert.match(patch,/s\\.whatsapp/);
+ assert.ok(patch.includes('whatsapp.net'));
+
  assert.match(docker,/patch_interactive\.py/);
  const server=readFileSync(new URL('../server.mjs',import.meta.url),'utf8');
  const inbox=readFileSync(new URL('../inbox-api.mjs',import.meta.url),'utf8');
