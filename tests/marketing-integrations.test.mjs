@@ -111,8 +111,8 @@ test('disposable Postgres: per-company Pipeboard, signed Google Ads import, repl
  assert.equal(reports.reports[0].cost_micros,'10050000');
  assert.equal((await listMarketing(pool,b)).reports.length,0);
  assert.equal((await listMarketing(pool,b)).connections.length,0);
- const changed=Buffer.from(raw);
- changed[changed.length-2]^=1;
+ const changed=Buffer.from(raw.toString('utf8').replace('Campanha teste','Campanha diferente'));
+
  await assert.rejects(ingestGoogleReport(pool,google.id,changed,signature,{env}),e=>e.status===403);
  const oldRaw=Buffer.from(JSON.stringify({...JSON.parse(raw),runId:randomUUID(),timestamp:Date.now()-24*3600000}));
  const oldSig='sha256='+createHmac('sha256',google.secret).update(oldRaw).digest('hex');
