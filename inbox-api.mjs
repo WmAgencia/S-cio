@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {gatewayRead,getSessionStatus,listAvailableChats,privateJid} from './waakg-adapter.mjs';
 import {outboundEnabled,canAutoReply,deliverToConversation} from './socio-outbound.mjs';
+import {sendQuickReplies,sendCatalogCard} from './socio-rich-outbound.mjs';
 // Tenant-scoped inbox interaction endpoints. No WhatsApp transmission is performed
 // here: the dedicated Sócio WA-AKG gateway is intentionally read-only.
 const uuid=/^[a-f\d]{8}-[a-f\d]{4}-[1-8][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
@@ -47,7 +48,7 @@ export function validateUiPatch(data){
  if(!Object.keys(clean).length)throw new Error('PATCH_INVALID');
  return clean;
 }
-export const inboxRuntimeCapabilities=()=>({...inboxCapabilities,whatsappSend:outboundEnabled(),aiAutoReply:canAutoReply(),readOnlyGateway:!outboundEnabled()});
+export const inboxRuntimeCapabilities=()=>({...inboxCapabilities,whatsappSend:outboundEnabled(),whatsappInteractive:outboundEnabled(),whatsappProductCards:outboundEnabled(),aiAutoReply:canAutoReply(),readOnlyGateway:!outboundEnabled()});
 export function validReaction(value){return value===null||reactions.has(value);}
 const noteValid=text=>typeof text==='string'&&text.trim().length>0&&text.length<=3000;
 const isUuid=value=>typeof value==='string'&&uuid.test(value);
@@ -185,7 +186,7 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
     LIMIT 150`,[tenant,search,filter]);
   return json(res,200,{conversations:result.rows,capabilities:inboxRuntimeCapabilities(),limitedTo:150});
  }
- const match=pathname.match(/^\/api\/conversations\/([a-f\d-]{36})\/(ui|history|notes|send|forward-internal|messages\/([a-f\d-]{36})\/ui)$/i);
+ const match=pathname.match(/^\/api\/conversations\/([a-f\d-]{36})\/(ui|history|notes|send|send-interactive|send-product|forward-internal|messages\/([a-f\d-]{36})\/ui)$/i);
  if(!match)return false;
  const conversationId=match[1],route=match[2],messageId=match[3];
  if(!isUuid(conversationId)||messageId&&!isUuid(messageId))throw err(404,'Conversa não encontrada.');
@@ -199,9 +200,13 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
   if(!Number.isInteger(limitNumber)||limitNumber<1||limitNumber>120)throw err(422,'Limite inválido.');
   if(cursor&&(cursor.length>35||!Number.isFinite(Date.parse(cursor))))throw err(422,'Cursor inválido.');
   const items=await query(`SELECT m.id,m.direction,m.body,m.created_at,m.reply_to_id,m.provider_id,
-   COALESCE(flag.starred,false) AS starred,flag.reaction
+   COALESCE(flag.starred,false) AS starred,flag.reaction,
+   COALESCE(outbound.kind,'text') AS content_kind,
+   outbound.product_id,outbound.media_id
    FROM messages m LEFT JOIN message_ui_state flag ON
     flag.tenant_id=m.tenant_id AND flag.message_id=m.id AND flag.user_id=$3
+   LEFT JOIN message_outbox outbound ON outbound.tenant_id=m.tenant_id
+    AND outbound.provider_id=m.provider_id AND outbound.status='sent'
    WHERE m.tenant_id=$1 AND m.conversation_id=$2
      AND ($4::timestamptz IS NULL OR m.created_at<$4)
    ORDER BY m.created_at DESC,m.id DESC LIMIT $5`,
@@ -244,6 +249,31 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
    text:data.text,clientRequestId:data.clientRequestId,replyToId:data.replyToMessageId||null
   });
   if(sent.sent&&!sent.reused)await audit(a,'inbox.whatsapp.text_sent',{conversationId,outboxId:sent.id});
+  return json(res,sent.sent?201:202,{...sent,channel:'whatsapp'});
+ }
+ if(method==='POST'&&route==='send-interactive'){
+  if(!outboundEnabled())throw err(503,'Mensagens interativas ainda não liberadas.');
+  const {data}=await body(req);
+  if(!isUuid(data?.clientRequestId))throw err(422,'Identificador de envio inválido.');
+  const sent=await sendQuickReplies(pool,{
+   tenantId:tenant,conversationId,userId:a.user_id,clientRequestId:data.clientRequestId,
+   message:data.message,choices:data.choices,mode:'human'
+  });
+  if(sent.sent&&!sent.reused)await audit(a,'inbox.whatsapp.buttons_sent',
+   {conversationId,outboxId:sent.id,buttonCount:data.choices.length});
+  return json(res,sent.sent?201:202,{...sent,kind:'buttons',channel:'whatsapp'});
+ }
+ if(method==='POST'&&route==='send-product'){
+  if(!outboundEnabled())throw err(503,'Envio de produtos ainda não liberado.');
+  const {data}=await body(req);
+  if(!isUuid(data?.clientRequestId)||!isUuid(data?.productId))
+   throw err(422,'Produto ou identificador de envio inválido.');
+  const sent=await sendCatalogCard(pool,{
+   tenantId:tenant,conversationId,userId:a.user_id,clientRequestId:data.clientRequestId,
+   productId:data.productId,mode:'human'
+  });
+  if(sent.sent&&!sent.reused)await audit(a,'inbox.whatsapp.product_sent',
+   {conversationId,outboxId:sent.id,productId:sent.productId});
   return json(res,sent.sent?201:202,{...sent,channel:'whatsapp'});
  }
  if(method==='POST'&&route==='notes'){
