@@ -18,9 +18,12 @@ test('reference-style visual theme uses dark chocolate, orange and green, withou
 });
 test('all tenant modules are still navigable and the command palette actually routes',()=>{
  const html=read('index.html'),js=read('app.js');
- for(const module of ['overview','inbox','channels','products','training','agent','team','admin']){
+ for(const module of ['overview','inbox','channels','products','training','team','admin']){
   assert.match(html,new RegExp('data-view="'+module+'"'));
  }
+ assert.doesNotMatch(html,/data-view="agent"/);
+ assert.match(js,/data-ai-tab="agent"/);
+ assert.match(js,/mountAiGuideTabs/);
  assert.match(html,/id="quickSearchBtn"/);
  assert.match(html,/id="commandOverlay"/);
  assert.match(js,/changeView\(b\.dataset\.searchView\)/);
