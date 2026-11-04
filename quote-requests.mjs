@@ -68,8 +68,17 @@ export async function configureQuoteAlerts(pool,identity,enabled,{env=process.en
   throw bad(422,'Cadastre seu celular com DDD no perfil antes de habilitar os avisos.');
  if(enabled&&!outboundEnabled(env))
   throw bad(503,'O envio WhatsApp está desativado neste ambiente. Avisos internos continuam disponíveis no Sócio.');
- await pool.query("UPDATE tenants SET quote_alerts_enabled=$2,quote_alert_owner_id=$3 "+
-  "WHERE id=$1",[identity.active_tenant_id,enabled,enabled?identity.user_id:null]);
+ const c=await pool.connect();
+ try{
+  await c.query('BEGIN');
+  await c.query("UPDATE tenants SET quote_alerts_enabled=$2,quote_alert_owner_id=$3 "+
+   "WHERE id=$1",[identity.active_tenant_id,enabled,enabled?identity.user_id:null]);
+  if(!enabled)await c.query(
+   "UPDATE quote_requests SET alert_status='disabled',updated_at=now() "+
+   "WHERE tenant_id=$1 AND alert_status='pending'",[identity.active_tenant_id]);
+  await c.query('COMMIT');
+ }catch(error){await c.query('ROLLBACK').catch(()=>{});throw error;}
+ finally{c.release();}
  return {enabled,ownerPhoneMasked:enabled?String(owner.rows[0].phone).replace(/.(?=.{4})/g,'•'):null};
 }
 export async function updateQuoteRequest(pool,identity,id,status){
@@ -93,7 +102,9 @@ export async function processOwnerQuoteAlert(pool,{env=process.env,getStatus=get
   "FROM waakg_links wl JOIN channels ON channels.tenant_id=wl.tenant_id AND channels.id=wl.channel_id "+
   "WHERE wl.tenant_id=t.id AND channels.provider='waakg' AND channels.status='connected' "+
   "ORDER BY wl.created_at ASC LIMIT 1) l ON true "+
-  "WHERE q.alert_status='pending' AND q.created_at>now()-interval '2 days' "+
+  "WHERE q.alert_status='pending' AND t.quote_alerts_enabled=true "+
+  "AND t.features->>'sales'='true' AND t.features->>'ai'='true' "+
+  "AND q.created_at>now()-interval '2 days' "+
   "ORDER BY q.created_at ASC LIMIT 1");
  if(!rows.rowCount)return {processed:false};
  const q=rows.rows[0];
