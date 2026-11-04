@@ -234,6 +234,11 @@ export function normalizeAdsAccounts(result,provider){
    try{payload=JSON.parse(block.text);break;}catch{}
   }
  }
+ for(let depth=0;depth<4;depth++){
+  if(typeof payload==='string'){try{payload=JSON.parse(payload);continue;}catch{break;}}
+  if(payload&&typeof payload==='object'&&!Array.isArray(payload)&&Object.hasOwn(payload,'result')&&!payload.error){payload=payload.result;continue;}
+  break;
+ }
  if(!payload||payload.error||payload.success===false)throw bad(503,'O provedor não retornou uma lista válida de contas.');
  const list=Array.isArray(payload)?payload:payload.accounts||payload.data?.accounts||payload.data||payload.customers||payload.resourceNames;
  if(!Array.isArray(list))throw bad(503,'Formato de contas não reconhecido. A autorização permanece salva.');
