@@ -649,7 +649,7 @@ async function handle(req,res){
  // Inbox v2: tenant-bound WhatsApp-style management. Keep legacy API for
  // existing dashboards and migrations; never expose gateway send operations.
  if(pathname==='/api/inbox/v2'||pathname==='/api/inbox/capabilities'||pathname==='/api/inbox/sync'||
-    /^\/api\/conversations\/[a-f0-9-]{36}\/(?:ui|history|notes|forward-internal|messages\/[a-f0-9-]{36}\/ui)$/i.test(pathname)){
+    /^\/api\/conversations\/[a-f0-9-]{36}\/(?:ui|history|notes|send|forward-internal|messages\/[a-f0-9-]{36}\/ui)$/i.test(pathname)){
   return await handleInboxApi({pathname,method,req,res,a,query,body,json,id,audit,pool});
  }
  if(method==='GET'&&pathname==='/api/inbox'){
