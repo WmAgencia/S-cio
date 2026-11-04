@@ -7,6 +7,10 @@ CREATE TABLE IF NOT EXISTS tenants (
  status text NOT NULL DEFAULT 'trial' CHECK (status IN ('trial','active','paused')),
  created_at timestamptz NOT NULL DEFAULT now()
 );
+-- Feature bundles: existing companies retain all functions until the platform owner changes them.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS features jsonb NOT NULL DEFAULT
+ '{"whatsapp":true,"catalog":true,"quotes":true,"meta_ads":true,"ai":true,"team":true}'::jsonb;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS quote_alert_whatsapp boolean NOT NULL DEFAULT false;
 CREATE TABLE IF NOT EXISTS users (
  id uuid PRIMARY KEY,
  tenant_id uuid NOT NULL REFERENCES tenants(id),
