@@ -136,6 +136,7 @@ test('disposable Postgres OAuth Meta and Google: tenant ownership, one-use state
  assert(!record.rows[0].token_ciphertext.includes('pipeboard-fake-access-token'));
  assert.equal((await listPipeboardOAuth(pool,b)).length,0);
  assert.equal((await listPipeboardOAuth(pool,a))[0].provider,'meta');
+ assert.equal((await listPipeboardOAuth(pool,a))[0].last_read_status,'not_tested');
  const google=await startPipeboardOAuth(pool,a,'google',{env,request:mock.request});
  await finishPipeboardOAuth(pool,new URL(google.authorizationUrl).searchParams.get('state'),
   'google-code-not-real-123456789',{env,request:mock.request});
@@ -143,9 +144,12 @@ test('disposable Postgres OAuth Meta and Google: tenant ownership, one-use state
  await assert.rejects(revokePipeboardOAuth(pool,b,'meta'),e=>e.status===404);
  assert.equal((await revokePipeboardOAuth(pool,a,'meta')).disconnected,true);
  assert.equal((await listPipeboardOAuth(pool,a)).length,1);
- const revoked=await pool.query("SELECT token_ciphertext FROM marketing_oauth_grants WHERE tenant_id=$1 AND provider='meta'",
+ const revoked=await pool.query("SELECT token_ciphertext,last_read_status,last_account_count,last_checked_at FROM marketing_oauth_grants WHERE tenant_id=$1 AND provider='meta'",
   [tenantA]);
  assert.equal(revoked.rows[0].token_ciphertext,null);
+ assert.equal(revoked.rows[0].last_read_status,'not_tested');
+ assert.equal(revoked.rows[0].last_account_count,0);
+ assert.equal(revoked.rows[0].last_checked_at,null);
  const newAuthorization=await startPipeboardOAuth(pool,a,'meta',{env,request:mock.request});
  await pool.query("UPDATE users SET active=false WHERE id=$1",[ownerA]);
  await assert.rejects(finishPipeboardOAuth(pool,new URL(newAuthorization.authorizationUrl).searchParams.get('state'),
@@ -195,10 +199,20 @@ test('read-only connection test keeps tenant scope and calls only account listin
  const {sealMarketingSecret}=await import('../marketing-integrations.mjs');
  const tenant=randomUUID(),identity={active_tenant_id:tenant,user_id:randomUUID()};
  const sealed=sealMarketingSecret('socio-oauth-v1:'+JSON.stringify({access_token:'test-access-token-no-production-data'}),env);
- const calls=[];
+ const calls=[],writes=[];
  const pool={query:async(sql,args)=>{
-  assert(sql.startsWith('SELECT '));assert.equal(args[0],tenant);
-  return {rowCount:1,rows:[{token_ciphertext:sealed,expires_at:new Date(Date.now()+60000)}]};
+  assert.equal(args[0],tenant);
+  if(sql.startsWith('SELECT '))return {rowCount:1,rows:[{
+   token_ciphertext:sealed,expires_at:new Date(Date.now()+60000)}]};
+  if(sql.startsWith('UPDATE marketing_oauth_grants SET last_read_status')){
+   assert.equal(args[1],'meta');
+   assert.equal(args[2],sealed);
+   assert.equal(args[3],'verified');
+   assert.equal(args[4],1);
+   writes.push(args);
+   return {rowCount:1,rows:[{last_checked_at:new Date()}]};
+  }
+  throw Error('SQL inesperado: '+sql);
  }};
  const request=async(url,opts)=>{
   const rpc=JSON.parse(opts.body);calls.push(rpc);
@@ -212,6 +226,7 @@ test('read-only connection test keeps tenant scope and calls only account listin
  };
  const verified=await testPipeboardConnection(pool,identity,'meta',{env,request});
  assert.equal(verified.status,'verified');assert.deepEqual(verified.accounts,[{id:'act_123456',name:'Conta teste'}]);
+ assert.equal(writes.length,1,'Verificação real de leitura persistida apenas no tenant correto');
  assert.deepEqual(calls.map(x=>x.method),['initialize','notifications/initialized','tools/list','tools/call']);
  assert.deepEqual(normalizeAdsAccounts({structuredContent:{resourceNames:['customers/1234567890']}},'google'),[{id:'1234567890',name:'1234567890'}]);
  assert.throws(()=>decodeMcpReply('{"id":1,"result":{"isError":true}}',1));

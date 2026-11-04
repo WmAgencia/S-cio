@@ -184,13 +184,13 @@ export async function finishPipeboardOAuth(pool,state,code,{env=process.env,requ
   "VALUES($1,$2,$3,$4,$5,'authorized') "+
   "ON CONFLICT(tenant_id,provider) DO UPDATE SET user_id=EXCLUDED.user_id, "+
   "token_ciphertext=EXCLUDED.token_ciphertext,expires_at=EXCLUDED.expires_at, "+
-  "status='authorized',updated_at=now()",
+  "status='authorized',last_read_status='not_tested',last_checked_at=NULL,last_account_count=0,updated_at=now()",
   [row.tenant_id,row.user_id,row.provider,opaque,expiration]);
  return {provider:row.provider,tenantId:row.tenant_id,userId:row.user_id,status:'authorized'};
 }
 export async function listPipeboardOAuth(pool,identity){
  const r=await pool.query(
-  "SELECT provider,status,expires_at,updated_at FROM marketing_oauth_grants WHERE tenant_id=$1 "+
+  "SELECT provider,status,expires_at,updated_at,last_checked_at,last_read_status,last_account_count FROM marketing_oauth_grants WHERE tenant_id=$1 "+
   "AND status<>'disconnected' ORDER BY provider",[identity.active_tenant_id]);
  return r.rows;
 }
@@ -198,7 +198,7 @@ export async function revokePipeboardOAuth(pool,identity,provider){
  if(!oauthSupported(provider))throw bad(422,'Plataforma inválida.');
  const r=await pool.query(
   "UPDATE marketing_oauth_grants SET status='disconnected',token_ciphertext=NULL,expires_at=NULL, "+
-  "updated_at=now() WHERE tenant_id=$1 AND provider=$2 AND status<>'disconnected' RETURNING provider",
+  "last_read_status='not_tested',last_checked_at=NULL,last_account_count=0,updated_at=now() WHERE tenant_id=$1 AND provider=$2 AND status<>'disconnected' RETURNING provider",
   [identity.active_tenant_id,provider]);
  if(!r.rowCount)throw bad(404,'Autorização não encontrada.');
  return {ok:true,provider,disconnected:true};
@@ -294,6 +294,14 @@ export async function testPipeboardConnection(pool,identity,provider,{env=proces
  if(required.some(x=>!Object.hasOwn(args,x)))throw bad(503,'A consulta de contas exige uma configuração adicional no provedor.');
  const result=await rpc('tools/call',{name:tool.name,arguments:args});
  const accounts=normalizeAdsAccounts(result,provider);
- return {provider,status:accounts.length?'verified':'no_accounts',accounts,checkedAt:new Date().toISOString(),
+ // Only persist results if the exact encrypted authorization tested is still active.
+ // A concurrent reconnect or disconnect must not inherit this test's account status.
+ const status=accounts.length?'verified':'no_accounts';
+ const save=await pool.query(
+  "UPDATE marketing_oauth_grants SET last_read_status=$4,last_checked_at=now(),last_account_count=$5 "+
+  "WHERE tenant_id=$1 AND provider=$2 AND token_ciphertext=$3 AND status='authorized' RETURNING last_checked_at",
+  [identity.active_tenant_id,provider,grant.token_ciphertext,status,accounts.length]);
+ if(!save.rowCount)throw bad(409,'Autorização alterada durante a verificação. Refaça a consulta.');
+ return {provider,status,accounts,checkedAt:new Date(save.rows[0].last_checked_at).toISOString(),
   message:accounts.length?'Conexão testada: '+accounts.length+' conta(s) com acesso de leitura.':'Login válido, mas nenhuma conta de anúncios foi disponibilizada pelo provedor.'};
 }

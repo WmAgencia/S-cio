@@ -606,6 +606,16 @@ CREATE TABLE IF NOT EXISTS marketing_oauth_grants (
 );
 CREATE INDEX IF NOT EXISTS marketing_oauth_grants_actor_idx ON marketing_oauth_grants(tenant_id,user_id);
 
+-- Result of the latest real, read-only account inspection, not just an OAuth login.
+-- Status is reset on each new authorization, and is never a claim of current access
+-- after the saved check has become stale.
+ALTER TABLE marketing_oauth_grants ADD COLUMN IF NOT EXISTS last_checked_at timestamptz;
+ALTER TABLE marketing_oauth_grants ADD COLUMN IF NOT EXISTS last_read_status text NOT NULL DEFAULT 'not_tested'
+ CHECK(last_read_status IN ('not_tested','verified','no_accounts'));
+ALTER TABLE marketing_oauth_grants ADD COLUMN IF NOT EXISTS last_account_count integer NOT NULL DEFAULT 0
+ CHECK(last_account_count BETWEEN 0 AND 200);
+
+
 -- One managed Instagram social profile per business, with a provider profile
 -- key encrypted server-side. No Instagram password or session cookie is stored.
 CREATE TABLE IF NOT EXISTS instagram_hosted_profiles (

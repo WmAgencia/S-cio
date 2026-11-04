@@ -62,12 +62,39 @@ async function boot(){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
    const marketingStatus=typeof location==='object'?new URL(location.href).searchParams.get('marketing'):null;
+   const marketingProvider=typeof location==='object'?new URL(location.href).searchParams.get('provider'):null;
    if(['authorized','failed','cancelled'].includes(marketingStatus)){
     state.view='marketing';
     if(typeof history==='object')history.replaceState(null,'',location.pathname);
    }
    await changeView(state.view);
-   if(marketingStatus==='authorized')toast('Login Pipeboard autorizado. Confira o acesso às contas escolhidas.');
+   if(marketingStatus==='authorized'){
+    toast('Login autorizado. Verificando contas de anúncios disponíveis...');
+    if(['meta','google'].includes(marketingProvider))void (async()=>{
+     const provider=marketingProvider;
+     try{
+      const result=await api('/api/marketing/oauth/'+provider+'/test','POST',{});
+      if(state.view==='marketing'){
+       await marketing();
+       const target=view.querySelector('[data-marketing-result="'+provider+'"]');
+       if(target){
+        target.textContent=result.message;
+        if(result.accounts?.length)target.innerHTML='<p>'+e(result.message)+'</p><ul>'+
+         result.accounts.map(x=>'<li>'+e(x.name)+' · '+e(x.id)+'</li>').join('')+'</ul>';
+       }
+      }
+      toast(result.status==='verified'?'Contas disponíveis confirmadas!':
+       'Login autorizado, mas nenhuma conta publicitária foi encontrada.',result.status!=='verified');
+     }catch(error){
+      const message='Login autorizado, mas a leitura das contas não pôde ser confirmada: '+errMsg(error);
+      if(state.view==='marketing'){
+       const target=view.querySelector('[data-marketing-result="'+provider+'"]');
+       if(target)target.textContent=message;
+      }
+      toast(message,true);
+     }
+    })();
+   }
    if(marketingStatus==='failed')toast('Não foi possível concluir autorização. Confira a conta e tente novamente.',true);
    if(marketingStatus==='cancelled')toast('Autorização cancelada; nenhuma conta foi alterada.');
   }catch(error){state.me=null;state.csrf='';setupAuth(bootstrap.initialized);}
@@ -394,13 +421,19 @@ async function marketing(){
   const grant=scope(key);
   const expiry=grant?.expires_at?new Date(grant.expires_at).getTime():null;
   const valid=!!grant&&(!expiry||expiry>Date.now());
+  const lastCheck=grant?.last_checked_at?new Date(grant.last_checked_at).getTime():null;
+  const checkedRecently=!!lastCheck&&Number.isFinite(lastCheck)&&Date.now()-lastCheck<24*60*60*1000;
+  const verified=valid&&checkedRecently&&grant.last_read_status==='verified'&&Number(grant.last_account_count)>0;
+  const noAccounts=valid&&checkedRecently&&grant.last_read_status==='no_accounts';
+  const statusText=!valid?'Não autorizado no Sócio.':
+   verified?Number(grant.last_account_count)+' conta(s) com leitura confirmada nas últimas 24 horas.':
+   noAccounts?'Login autorizado, mas nenhuma conta de anúncios foi liberada.':
+   'Login autorizado. A leitura das contas ainda precisa ser confirmada ou atualizada.';
   const existing=accountCards(key,legacy);
   return '<section class="card" style="padding:24px;margin-bottom:18px">'+
    '<h2>'+e(label)+'</h2>'+
    '<p>'+e(description)+'</p>'+
-   '<p class="form-note">'+(valid?
-    'Login Pipeboard autorizado para esta empresa. Confira quais contas de anúncios você liberou no parceiro.':
-    'Ainda não autorizado no Sócio.')+'</p>'+
+   '<p class="form-note">'+e(statusText)+'</p>'+
    '<button type="button" class="btn primary" data-marketing-oauth="'+key+'">'+
     (valid?'Reconectar '+e(label):'Conectar '+e(label))+'</button> '+
    (valid?'<button type="button" class="btn soft" data-marketing-test="'+key+'">Testar conexão</button> <button type="button" class="btn soft" data-marketing-oauth-revoke="'+key+'">Desconectar</button>':'')+
