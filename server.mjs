@@ -9,6 +9,7 @@ import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs
 import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
 import {processNextWaakgScan} from './waakg-history.mjs';
 import {startAutoTraining,autoTrainingStatus,processNextAutoTraining} from './training-auto.mjs';
+import {reviseTrainingDraft,publishTrainingVersion} from './training-versions.mjs';
 import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
@@ -587,21 +588,25 @@ async function handle(req,res){
   const versions=await query('SELECT id,job_id AS "jobId",version,status,knowledge_md AS markdown,report_json AS report,created_at AS "createdAt",approved_at AS "approvedAt" FROM training_versions WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 15',[a.active_tenant_id]);
   return json(res,200,versions.rows);
  }
- const knowledgeApprove=pathname.match(/^\/api\/training\/versions\/([0-9a-f-]{36})\/approve$/);
- if(knowledgeApprove&&method==='POST'){
-  needRole(a,['owner','admin']);
-  const c=await pool.connect();
-  try{
-   await c.query('BEGIN');
-   const version=await c.query("SELECT id,knowledge_md FROM training_versions WHERE tenant_id=$1 AND id=$2 AND status='draft' FOR UPDATE",[a.active_tenant_id,knowledgeApprove[1]]);
-   if(!version.rowCount)throw fail(409,'Versão não encontrada, já aprovada ou inválida.');
-   await c.query("UPDATE training_versions SET status='archived' WHERE tenant_id=$1 AND status='approved'",[a.active_tenant_id]);
-   await c.query("UPDATE training_versions SET status='approved',approved_at=now() WHERE tenant_id=$1 AND id=$2",[a.active_tenant_id,knowledgeApprove[1]]);
-   await c.query('UPDATE agents SET knowledge_md=$2,updated_at=now() WHERE tenant_id=$1',[a.active_tenant_id,version.rows[0].knowledge_md]);
-   await c.query('COMMIT');
-  }catch(error){await c.query('ROLLBACK');throw error;}finally{c.release();}
-  await audit(a,'training.version.approved',{versionId:knowledgeApprove[1]});
-  return json(res,200,{ok:true,versionId:knowledgeApprove[1],autoReply:false});
+ const knowledgeAction=pathname.match(/^\/api\/training\/versions\/([0-9a-f-]{36})(?:\/(approve|restore))?$/);
+ if(knowledgeAction){
+  const versionId=knowledgeAction[1],change=knowledgeAction[2];
+  if(method==='PATCH'&&!change){
+   needRole(a,['owner','admin']);
+   const {data}=await body(req);
+   const result=await reviseTrainingDraft(pool,{tenantId:a.active_tenant_id,
+    versionId,markdown:data.markdown});
+   await audit(a,'training.version.edited',{versionId});
+   return json(res,200,result);
+  }
+  if(method==='POST'&&['approve','restore'].includes(change)){
+   needRole(a,['owner','admin']);
+   const result=await publishTrainingVersion(pool,{tenantId:a.active_tenant_id,
+    versionId,mode:change});
+   await audit(a,change==='restore'?'training.version.restored':'training.version.approved',
+    {versionId,version:result.version,previousVersion:result.previousVersion});
+   return json(res,200,result);
+  }
  }
  if(method==='GET'&&pathname==='/api/imports'){
   const r=await query('SELECT id,filename,conversation_count,message_count,created_at FROM imports WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 100',[a.active_tenant_id]);return json(res,200,r.rows);
