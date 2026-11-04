@@ -3,7 +3,8 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
-import {scanQuoteRequests,listQuoteRequests,updateQuoteRequest,setQuoteAlerts,processNextOwnerQuoteAlert} from './quote-requests.mjs';
+import {scanQuoteRequests,listQuoteRequests,updateQuoteRequest,setQuoteAlerts,processNextOwnerQuoteAlert,saveQuoteDraft,sendQuoteDraft} from './quote-requests.mjs';
+import {scanSalesIntents,listSaleIntents,updateSaleIntent} from './sales-intents.mjs';
 import {validateTenantFeatures,parseTenantFeatures,filterPermissions,assertApiFeature} from './tenant-features.mjs';
 import {startPipeboardOAuth,finishPipeboardOAuth,listPipeboardOAuth,revokePipeboardOAuth,oauthClientMetadata,testPipeboardConnection} from './marketing-oauth.mjs';
 import {instagramHostedReady,beginInstagramHosted,instagramHostedStatus,disconnectInstagramHosted} from './instagram-hosted.mjs';
@@ -643,6 +644,39 @@ async function handle(req,res){
   return json(res,201,r.rows[0]);
  }
 
+ if(method==='GET'&&pathname==='/api/sales/intents'){
+  requirePermission(a,'sales.read');
+  return json(res,200,{intents:await listSaleIntents(pool,a.active_tenant_id)});
+ }
+ const saleIntentRoute=pathname.match(/^\/api\/sales\/intents\/([a-f0-9-]{36})$/i);
+ if(saleIntentRoute&&method==='PATCH'){
+  requirePermission(a,'sales.manage');
+  const {data}=await body(req,15000);
+  const updated=await updateSaleIntent(pool,a.active_tenant_id,saleIntentRoute[1],data);
+  await audit(a,'sales.intent.updated',{intentId:updated.id,status:updated.status});
+  return json(res,200,updated);
+ }
+ if(method==='GET'&&pathname==='/api/sales/alerts'){
+  requirePermission(a,'sales.read');
+  const [intents,quotes]=await Promise.all([
+   query("SELECT id,conversation_id,customer_name,customer_phone,summary,items,amount_cents,created_at FROM sale_intents WHERE tenant_id=$1 AND status='pending' AND created_at>now()-interval '48 hours' ORDER BY created_at DESC LIMIT 20",[a.active_tenant_id]),
+   query("SELECT id,conversation_id,customer_name,customer_phone,summary,created_at FROM quote_requests WHERE tenant_id=$1 AND status='pending' AND created_at>now()-interval '48 hours' ORDER BY created_at DESC LIMIT 20",[a.active_tenant_id])
+  ]);
+  return json(res,200,{items:[...intents.rows.map(x=>({...x,kind:'sale'})),...quotes.rows.map(x=>({...x,kind:'quote'}))]
+   .sort((x,y)=>new Date(y.created_at)-new Date(x.created_at)).slice(0,20)});
+ }
+ const quoteDraftRoute=pathname.match(/^\/api\/sales\/quote-requests\/([a-f0-9-]{36})\/(draft|send)$/i);
+ if(quoteDraftRoute&&method==='POST'){
+  requirePermission(a,'sales.manage');
+  const [,requestId,action]=quoteDraftRoute;
+  if(action==='send'&&!limiter(simulationAttempts,'quote-send:'+a.user_id,60000,10))
+   throw fail(429,'Limite de envios por minuto atingido.');
+  const data=action==='draft'?(await body(req,6000)).data:{};
+  const result=action==='draft'?await saveQuoteDraft(pool,a.active_tenant_id,requestId,data):
+   await sendQuoteDraft(pool,a.active_tenant_id,requestId,a.user_id);
+  await audit(a,'sales.quote_request.'+action,{requestId,confirmed:action==='send'});
+  return json(res,200,result);
+ }
  if(method==='GET'&&pathname==='/api/sales/quote-requests'){
   requirePermission(a,'sales.read');
   return json(res,200,{requests:await listQuoteRequests(pool,a.active_tenant_id),
@@ -1319,6 +1353,15 @@ async function main(){
   finally{quoteBusy=false;}
  },15000);
  quoteWorker.unref();
+ let saleIntakeBusy=false;
+ const saleIntakeWorker=setInterval(async()=>{
+  if(saleIntakeBusy||workersBlocked())return;
+  saleIntakeBusy=true;
+  try{await scanSalesIntents(pool);}
+  catch(error){console.warn('[socio-sales-intake]',String(error?.code||'INTAKE_ERROR').slice(0,40));}
+  finally{saleIntakeBusy=false;}
+ },15000);
+ saleIntakeWorker.unref();
  // Owner WhatsApp alerts only when the owner explicitly enabled the setting.
  // Uncertain sends are marked permanently, never retried automatically.
  let ownerAlertBusy=false;
