@@ -218,3 +218,9 @@ test('read-only connection test keeps tenant scope and calls only account listin
  await assert.rejects(testPipeboardConnection({query:async()=>({rowCount:0})},identity,'google',{env,request}),e=>e.status===409);
  await assert.rejects(testPipeboardConnection(pool,identity,'google',{env,request}),e=>e.status===503);
 });
+
+ test('FastMCP string return wrappers preserve real Meta account data',async()=>{
+ const {normalizeAdsAccounts}=await import('../marketing-oauth.mjs');
+ assert.deepEqual(normalizeAdsAccounts({structuredContent:{result:JSON.stringify({data:[{id:'act_123456',name:'Conta real formato'}]})}},'meta'),[{id:'act_123456',name:'Conta real formato'}]);
+ assert.throws(()=>normalizeAdsAccounts({structuredContent:{result:JSON.stringify({error:'denied'})}},'meta'));
+ });
