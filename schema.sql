@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS tenants (
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS features jsonb NOT NULL DEFAULT
  '{"whatsapp":true,"catalog":true,"quotes":true,"meta_ads":true,"ai":true,"team":true}'::jsonb;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS quote_alert_whatsapp boolean NOT NULL DEFAULT false;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS quote_alert_enabled_at timestamptz;
 CREATE TABLE IF NOT EXISTS users (
  id uuid PRIMARY KEY,
  tenant_id uuid NOT NULL REFERENCES tenants(id),
