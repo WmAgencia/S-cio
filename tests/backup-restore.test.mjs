@@ -5,6 +5,7 @@ import {randomBytes} from 'node:crypto';
 import {readFile,mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 
@@ -58,7 +59,7 @@ test('encrypted backup restores a tenant-isolated fixture into a disposable Post
   SOCIO_BACKUP_DIR:temp,
   SOCIO_BACKUP_CONFIRM:'YES_ENCRYPTED_BACKUP'
  };
- const script=new URL('../scripts/socio-encrypted-backup.mjs',import.meta.url).pathname;
+ const script=fileURLToPath(new URL('../scripts/socio-encrypted-backup.mjs',import.meta.url));
  const run=(operation,env=baseEnv)=>exec(process.execPath,[script,operation],{env,timeout:45000,maxBuffer:30000});
  const saved=JSON.parse((await run('backup')).stdout);
  assert.equal(saved.ok,true);

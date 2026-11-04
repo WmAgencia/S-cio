@@ -20,7 +20,7 @@ export function proposedQuantity(body){
 export async function scanSalesIntents(pool){
  const messages=await pool.query(
   "SELECT m.id,m.tenant_id,m.conversation_id,m.body,c.customer_name,c.customer_phone "+
-  "FROM messages m JOIN tenants t ON t.id=m.tenant_id "+
+  "FROM messages m JOIN tenants t ON t.id=m.tenant_id AND t.status<>'paused' "+
   "JOIN conversations c ON c.id=m.conversation_id AND c.tenant_id=m.tenant_id "+
   "WHERE m.direction='inbound' AND m.created_at > now()-interval '48 hours' "+
   "AND COALESCE((t.features->>'quotes')::boolean,true)=true "+

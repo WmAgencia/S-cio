@@ -16,6 +16,7 @@ async function render(){
   const q=await api('');
   const available=q.status==='issued';
   const approved=q.status==='accepted';
+  const reservationExpired=approved&&q.order_status==='pending_payment'&&new Date(q.expires_at).getTime()<=Date.now();
   const labels={draft:'Em preparação',issued:'Aguardando sua aprovação',accepted:'Aprovado pelo cliente',expired:'Expirado',declined:'Recusado',superseded:'Substituído',cancelled:'Cancelado'};
   const lines=(q.items||[]).map(item=>'<div class="item"><div><strong>'+escape(item.name)+'</strong>'+
    (item.variantName?'<small>'+escape(item.variantName)+'</small>':'')+
@@ -31,7 +32,8 @@ async function render(){
     '<div class="buttons"><button class="primary" type="submit">Aprovar orçamento</button>'+
     '<button type="button" id="decline">Recusar</button></div></form>':'')+
    (approved?'<div class="panel"><strong>Pedido registrado</strong><p>O orçamento foi aprovado. Esta confirmação não significa pagamento ou entrega. A empresa deverá confirmar os próximos passos.</p>'+
-    (q.paymentTestAvailable&&q.order_status==='pending_payment'?
+    (reservationExpired?'<p>A reserva expirou. Solicite uma nova proposta à empresa.</p>':'')+
+    (q.paymentTestAvailable&&q.order_status==='pending_payment'&&!reservationExpired?
     '<button id="checkout" type="button">Abrir checkout de TESTE (sem cobrança real)</button>':'')+
     (q.order_status==='paid_test'?'<p class="success">Pagamento concluído em ambiente de teste. Não é um pagamento real.</p>':'')+'</div>':'');
   status('');

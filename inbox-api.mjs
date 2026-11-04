@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {gatewayRead,getSessionStatus,listAvailableChats,privateJid} from './waakg-adapter.mjs';
 import {outboundEnabled,canAutoReply,deliverToConversation} from './socio-outbound.mjs';
 import {sendInstagramReply,instagramReady} from './instagram-integration.mjs';
@@ -199,31 +200,33 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
  const conversation=exists.rows[0];
  if(method==='GET'&&route==='history'){
   const url=new URL(req.url,'http://localhost');
-  const cursor=url.searchParams.get('before');
+  const cursor=decodeHistoryCursor(url.searchParams.get('before'));
   const limitNumber=Number(url.searchParams.get('limit')||80);
   if(!Number.isInteger(limitNumber)||limitNumber<1||limitNumber>120)throw err(422,'Limite inválido.');
-  if(cursor&&(cursor.length>35||!Number.isFinite(Date.parse(cursor))))throw err(422,'Cursor inválido.');
-  const items=await query(`SELECT m.id,m.direction,m.body,m.created_at,m.reply_to_id,m.provider_id,
+  const items=await query(`SELECT m.id,m.direction,m.body,m.created_at,m.created_at::text AS cursor_created_at,m.reply_to_id,m.provider_id,
    COALESCE(flag.starred,false) AS starred,flag.reaction
    FROM messages m LEFT JOIN message_ui_state flag ON
     flag.tenant_id=m.tenant_id AND flag.message_id=m.id AND flag.user_id=$3
    WHERE m.tenant_id=$1 AND m.conversation_id=$2
-     AND ($4::timestamptz IS NULL OR m.created_at<$4)
+     AND ($4::timestamptz IS NULL OR m.created_at<$4
+       OR ($6::uuid IS NOT NULL AND m.created_at=$4 AND m.id<$6))
    ORDER BY m.created_at DESC,m.id DESC LIMIT $5`,
-   [tenant,conversationId,a.user_id,cursor?new Date(cursor).toISOString():null,limitNumber+1]);
+   [tenant,conversationId,a.user_id,cursor.time,limitNumber+1,cursor.id]);
   const more=items.rows.length>limitNumber;
   const selected=items.rows.slice(0,limitNumber).reverse();
   const pref=await query(`SELECT pinned,favorite,archived,muted,marked_unread,draft,labels,assigned_user_id,handling_mode
     FROM conversation_ui_state WHERE tenant_id=$1 AND conversation_id=$2`,[tenant,conversationId]);
   return json(res,200,{conversation,preferences:pref.rows[0]||{},
    messages:selected,hasMore:more,
-   nextCursor:more&&selected.length?selected[0].created_at:null,capabilities:inboxRuntimeCapabilities()});
+   nextCursor:more&&selected.length?encodeHistoryCursor(selected[0]):null,capabilities:inboxRuntimeCapabilities()});
  }
  if(method==='PATCH'&&route==='ui'){
   const {data}=await body(req);
   let clean;try{clean=validateUiPatch(data);}catch{throw err(422,'Configuração de conversa inválida.');}
   if(conversation.channel_provider==='instagram'&&clean.handling_mode==='ai_assist')
    throw err(403,'Respostas automáticas do Instagram não estão habilitadas.');
+  if(clean.handling_mode==='ai_assist'&&a.features?.ai===false)
+   throw err(403,'A inteligência artificial não está habilitada para sua empresa.');
   if(Object.hasOwn(clean,'handling_mode'))clean.ai_activated_at=clean.handling_mode==='ai_assist'?new Date():null;
   if(Object.hasOwn(clean,'assigned_user_id')){
    if(!['owner','admin'].includes(a.role)&&!a.platform_owner)throw err(403,'Sem permissão para atribuir conversas.');

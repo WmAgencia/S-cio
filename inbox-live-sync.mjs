@@ -3,19 +3,23 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {gatewayRead,getSessionStatus,listAvailableChats,privateJid} from './waakg-adapter.mjs';
 import {normalizeInboxRemoteText} from './inbox-api.mjs';
-let channelCursor=0;
+let channelCursor=null;
 const chatCursor=new Map();
 export async function processLiveInboxSync(pool,{
  getStatus=getSessionStatus,listChats=listAvailableChats,read=gatewayRead,maxChats=3
 }={}){
- const channels=await pool.query(
-  "SELECT l.session_id,l.channel_id,l.tenant_id,ch.phone FROM waakg_links l "+
+ const selectChannels=()=>pool.query(
+  "SELECT l.session_id,l.channel_id,l.tenant_id,l.created_at::text AS cursor_created_at,ch.phone FROM waakg_links l "+
   "JOIN channels ch ON ch.id=l.channel_id AND ch.tenant_id=l.tenant_id "+
   "JOIN tenants t ON t.id=l.tenant_id "+
-  "WHERE ch.provider='waakg' AND ch.status='connected' AND COALESCE((t.features->>'whatsapp')::boolean,true)=true "+
-  "ORDER BY l.created_at LIMIT 50");
+  "WHERE ch.provider='waakg' AND ch.status='connected' AND t.status<>'paused' AND COALESCE((t.features->>'whatsapp')::boolean,true)=true "+
+  "AND ($1::timestamptz IS NULL OR (l.created_at,l.channel_id)>($1::timestamptz,$2::uuid)) "+
+  "ORDER BY l.created_at,l.channel_id LIMIT 1",[channelCursor?.time||null,channelCursor?.id||null]);
+ let channels=await selectChannels();
+ if(!channels.rowCount&&channelCursor){channelCursor=null;channels=await selectChannels();}
  if(!channels.rowCount)return {processed:false,reason:'NO_CHANNELS'};
- const c=channels.rows[channelCursor++%channels.rows.length];
+ const c=channels.rows[0];
+ channelCursor={time:c.cursor_created_at,id:c.channel_id};
  let online;
  try{online=await getStatus(c.session_id);}
  catch{return {processed:false,reason:'GATEWAY_UNAVAILABLE'};}

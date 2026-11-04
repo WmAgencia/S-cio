@@ -24,6 +24,7 @@ import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
 import {processLiveInboxSync} from './inbox-live-sync.mjs';
 import {processNextAiReply} from './ai-replies.mjs';
+import {reconcileConfirmedOutbox} from './socio-outbound.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {createQuote,issueQuote,cancelQuote,publicQuote,approveQuote,declineQuote,listSales,createTestCheckout,processStripeTestEvent} from './sales-commerce.mjs';
@@ -72,7 +73,13 @@ const safeDetail=e=>[400,401,403,404,409,413,422,429,503].includes(e.status)?e.m
 const authAttempts=new Map(),simulationAttempts=new Map(),cnpjCache=new Map();
 function limiter(map,key,windowMs,max){
  const ts=Date.now(),value=map.get(key);
- if(!value||ts-value.since>windowMs){map.set(key,{since:ts,count:1});return true;}
+ if(!value||ts-value.since>windowMs){
+  if(map.size>=10000){
+   for(const [oldKey,entry] of map)if(ts-entry.since>windowMs)map.delete(oldKey);
+   if(map.size>=10000)map.delete(map.keys().next().value);
+  }
+  map.set(key,{since:ts,count:1});return true;
+ }
  value.count++;return value.count<=max;
 }
 function clientIp(req){return String(req.socket.remoteAddress||'unknown');}
@@ -275,6 +282,11 @@ async function handle(req,res){
  }
  const a=await sessionFor(req);
  if(!a)throw fail(401,'Entre na sua conta para continuar.');
+ // Keep account/session recovery and platform administration available while
+ // preventing a paused company from continuing its normal operations.
+ if(a.tenant_status==='paused'&&!['/api/me','/api/logout'].includes(pathname)&&
+    !(a.platform_owner&&pathname.startsWith('/api/admin/')))
+  throw fail(403,'Esta empresa está pausada. Entre em contato com a administração.');
  if(mutations.has(method)){
   const csrf=req.headers['x-csrf-token'];
   if(!csrf||!secureEqual(String(csrf),a.csrf))throw fail(403,'Sessão sem validação de segurança.');
@@ -1399,7 +1411,7 @@ async function main(){
  const aiReplyWorker=setInterval(async()=>{
   if(replyBusy||workersBlocked())return;
   replyBusy=true;
-  try{await processNextAiReply(pool);}
+  try{await reconcileConfirmedOutbox(pool);await processNextAiReply(pool);}
   catch(e){console.warn('[socio-ai-reply]',String(e?.code||'REPLY_ERROR').slice(0,40));}
   finally{replyBusy=false;}
  },6000);

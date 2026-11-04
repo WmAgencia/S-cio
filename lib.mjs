@@ -8,12 +8,13 @@ export const secureEqual=(a,b)=>{
  return x.length===y.length&&timingSafeEqual(x,y);
 };
 export async function hashPassword(password){
- if(typeof password!=='string'||password.length<12||password.length>128)throw new Error('A senha deve ter entre 12 e 128 caracteres.');
+ if(typeof password!=='string'||password.length<12||password.length>128)throw Object.assign(new Error('A senha deve ter entre 12 e 128 caracteres.'),{status:422});
  const salt=randomBytes(16).toString('hex');
  const derived=await scrypt(password,salt,64);
  return 'scrypt:'+salt+':'+derived.toString('hex');
 }
 export async function verifyPassword(password,stored){
+ if(typeof password!=='string'||password.length>128)return false;
  if(typeof stored!=='string'||!stored.startsWith('scrypt:'))return false;
  const [,salt,hex]=stored.split(':');
  if(!salt||!hex||!/^[a-f0-9]+$/.test(hex))return false;

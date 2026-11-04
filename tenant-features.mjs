@@ -39,7 +39,7 @@ export function requiredFeatureForApi(path){
  if(/^\/api\/(marketing)(?:\/|$)/.test(path))return 'meta_ads';
  if(/^\/api\/(agent|training)(?:\/|$)/.test(path))return 'ai';
  if(/^\/api\/(team)(?:\/|$)/.test(path))return 'team';
- if(/^\/api\/(inbox|waakg|channels)(?:\/|$)/.test(path))return 'whatsapp';
+ if(/^\/api\/(inbox|waakg|channels|conversations)(?:\/|$)/.test(path))return 'whatsapp';
  return null;
 }
 export function assertApiFeature(features,path){

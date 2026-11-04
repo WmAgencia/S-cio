@@ -2,9 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {TABLES,checkMigrationConfiguration,compareTableShape,fingerprintRow} from '../scripts/socio-supabase-migrate.mjs';
 import {validateMasterConfig} from '../scripts/socio-provision-master.mjs';
+import {readFileSync} from 'node:fs';
 
-test('Sócio migration covers all 38 production tables in dependency order',()=>{
- assert.equal(TABLES.length,38);
+test('Sócio migration covers every runtime table in dependency order',()=>{
+ const schema=readFileSync(new URL('../schema.sql',import.meta.url),'utf8');
+ const tables=[...schema.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/g)].map(match=>match[1]);
+ assert.deepEqual([...TABLES].sort(),tables.sort(),'New runtime tables must enter the migration manifest');
+ assert(TABLES.indexOf('messages')<TABLES.indexOf('sale_intents'));
  assert.equal(new Set(TABLES).size,TABLES.length);
  for(const [parent,child] of [['tenants','users'],['tenants','products'],['channels','conversations'],
   ['conversations','messages'],['users','instagram_oauth_states'],['users','marketing_connections'],['users','marketing_oauth_attempts'],['users','marketing_oauth_grants'],['users','instagram_hosted_profiles'],['marketing_connections','marketing_report_receipts'],['marketing_connections','marketing_daily_metrics'],['channels','instagram_accounts'],['conversations','instagram_outbox'],['training_jobs','training_job_items'],

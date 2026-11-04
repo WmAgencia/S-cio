@@ -2,7 +2,7 @@
 name: Validar Sócio
 on:
   push:
-    branches: [main, 'feat/**', 'fix/**']
+    branches: [main, 'feat/**', 'fix/**', 'codex/**']
   pull_request:
     branches: [main]
 permissions:
@@ -34,7 +34,7 @@ jobs:
         with:
           node-version: '22'
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-16
-      - run: npm install --ignore-scripts --no-audit
+      - run: npm ci --ignore-scripts --no-audit
       - run: node --check server.mjs && node --check lib.mjs && node --check public/app.js
       - run: node --check sales-commerce.mjs && node --check sales-intents.mjs && node --check quote-requests.mjs && node --check tenant-features.mjs && node --check ai-replies.mjs && node --check public/sales.js && node --check public/quote.js
       - run: node --check team-permissions.mjs && node --check scripts/socio-encrypted-backup.mjs
