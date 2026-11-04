@@ -342,12 +342,14 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const employeeMe=await call('/api/me','GET',undefined,employeeCookie);
  assert.equal(employeeMe.status,200);
  assert(!employeeMe.result.user.permissions.includes('team.promote'));
- for(const endpoint of ['/api/team','/api/ops/audit','/api/sales','/api/agent','/api/training/auto','/api/training/versions']){
+ for(const endpoint of ['/api/team','/api/ops/audit','/api/sales','/api/agent','/api/training/auto','/api/training/versions','/api/imports','/api/waakg/scans']){
   const denied=await call(endpoint,'GET',undefined,employeeCookie);
   assert.equal(denied.status,403,'Attendant must not read '+endpoint);
  }
  const employeeCatalog=await call('/api/products','GET',undefined,employeeCookie);
  assert.equal(employeeCatalog.status,200,'Attendant can read their company catalog');
+ const employeeBlockedSimulate=await call('/api/simulate','POST',{message:'Treinamento restrito'},employeeCookie,employeeCsrf);
+ assert.equal(employeeBlockedSimulate.status,403);
  const employeeBlockedCreate=await call('/api/products','POST',{name:'Proibido',priceCents:1},employeeCookie,employeeCsrf);
  assert.equal(employeeBlockedCreate.status,403);
  const employeeBlockedSwitch=await call('/api/admin/switch','POST',{tenantId:me.result.tenant.id},employeeCookie,employeeCsrf);
@@ -366,7 +368,7 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const subordinateAttempt=await call('/api/team','POST',{
   name:'Promovido indevidamente',email:'unauthorized-admin@example.test',role:'admin',password:'SenhaAdminNaoPermitido2026!'
  },subordinateCookie,subordinateCsrf);
- assert.equal(subordinateAttempt.status,422,'Tenant admins must not grant administrator privileges');
+ assert.equal(subordinateAttempt.status,403,'Tenant admins must not grant administrator privileges');
  const subordinateEdit=await call('/api/team/'+employeeId,'PATCH',{role:'admin'},subordinateCookie,subordinateCsrf);
  assert.equal(subordinateEdit.status,403,'Tenant admins cannot change another member role');
  const ownerPromote=await call('/api/team/'+employeeId,'PATCH',{role:'admin'},betaCookie,betaCsrf);
