@@ -133,117 +133,108 @@ function dashboardBars(data){
    '<span class="neo-bar-label">'+e(shortPeriodLabel(p,'month'))+'</span></div>';
  }).join('');
 }
+
 async function overview(){
- const [d,ag,trend,months,recent]=await Promise.all([
-  api('/api/dashboard'),api('/api/agent'),
-  api('/api/dashboard/activity?range=12m'),
-  api('/api/dashboard/activity?range=6m'),
-  api('/api/inbox')
+ const [d,ag,trend,recent]=await Promise.all([
+  api('/api/dashboard'),api('/api/agent'),api('/api/dashboard/activity?range=6m'),api('/api/inbox')
  ]);
  state.dashboard=d;
- const steps=[d.channels>0,d.products>0,d.imports>=10,!!ag.instructions,!!ag.enabled];
- const done=steps.filter(Boolean).length;
- const total=trend.points.reduce((sum,p)=>sum+chartNumber(p.inbound)+chartNumber(p.outbound),0);
- const monthTotal=months.points.reduce((sum,p)=>sum+chartNumber(p.inbound)+chartNumber(p.outbound),0);
- const latest=Array.isArray(recent)?recent.slice(0,3):[];
- const recentRows=latest.map(item=>{
-  const initials=String(item.customer_name||item.customer_phone||'?').trim().slice(0,1).toUpperCase();
-  const status=item.status==='resolved'?'Resolvida':item.status==='human'?'Humano':'Aberta';
-  const time=item.last_message_at?date(item.last_message_at):'Sem data';
-  return '<button class="neo-recent-row" type="button" data-go="inbox" aria-label="Abrir conversas">'+
-   '<span class="neo-recent-icon'+(item.status==='open'?' green':'')+'">'+e(initials)+'</span>'+
-   '<span class="neo-recent-text"><strong>'+e(item.customer_name||item.customer_phone||'Cliente')+'</strong>'+
-   '<small>'+e(item.channel_label||'WhatsApp')+' · '+e(time)+'</small></span>'+
-   '<span class="neo-recent-status">'+e(status)+'</span></button>';
- }).join('');
+ const steps=[
+  {label:'Conectar WhatsApp',desc:'Leia o QR Code para vincular seu número.',view:'channels',done:d.channels>0},
+  {label:'Cadastrar catálogo',desc:'Organize serviços e preços oficiais.',view:'products',done:d.products>0},
+  {label:'Ensinar sua IA',desc:'Importe conversas e personalize a comunicação.',view:'training',done:d.imports>=10&&!!ag.instructions},
+  {label:'Testar o Sócio',desc:'Experimente respostas antes de ativar.',view:'agent',done:!!ag.enabled}
+ ];
+ const done=steps.filter(x=>x.done).length;
+ const userFirst=(state.me?.user?.name||'').trim().split(/\s+/)[0]||'seu time';
+ const recentItems=Array.isArray(recent)?recent.slice(0,4):[];
+ const activityTotal=(trend.points||[]).reduce((n,p)=>n+chartNumber(p.inbound)+chartNumber(p.outbound),0);
+ const quickStat=(icon,label,value,detail,style)=>{
+  return '<div class="lucid-kpi '+style+'"><div class="lucid-kpi-top"><span class="lucid-kpi-icon">'+icon+'</span>'+
+   '<span class="lucid-kpi-accent" aria-hidden="true">◦ ◦ ◦</span></div>'+
+   '<div class="lucid-kpi-name">'+e(label)+'</div>'+
+   '<div class="lucid-kpi-number">'+e(value)+'</div>'+
+   '<div class="lucid-kpi-detail">'+e(detail)+'</div></div>';
+ };
  view.innerHTML=
-  '<div class="neo-dashboard">'+
-   '<div class="neo-left-col">'+
-    '<section class="neo-surface neo-chart-card" aria-label="Indicadores do atendimento">'+
-     '<div class="neo-card-head"><div><div class="neo-kicker">Atividade de atendimento</div>'+
-      '<div id="activitySummary" class="neo-big-number">'+e(total.toLocaleString('pt-BR'))+
-      ' <small>mensagens</small></div>'+
-      '<div id="activitySubtitle" class="neo-chart-sub">Mensagens recebidas e enviadas · últimos 12 meses</div></div>'+
-      '<div class="neo-range-list" role="group" aria-label="Período do gráfico">'+
-       '<button type="button" class="neo-range is-active" data-range="12m" aria-pressed="true">1 ano</button>'+
-       '<button type="button" class="neo-range" data-range="6m" aria-pressed="false">6 meses</button>'+
-       '<button type="button" class="neo-range" data-range="3m" aria-pressed="false">3 meses</button>'+
-       '<button type="button" class="neo-range" data-range="1m" aria-pressed="false">1 mês</button>'+
-      '</div></div>'+
-     '<div id="activityChart" class="neo-chart-canvas">'+renderActivityGraph(trend)+'</div>'+
-     '<div id="chartTicks" class="neo-month-ticks">'+activityTicks(trend)+'</div>'+
-     '<div class="neo-chart-footer"><div class="neo-chart-key">'+
-      '<span><i></i> Recebidas</span><span><i class="green"></i> Enviadas</span></div>'+
-      '<span class="neo-chart-footnote">Dados reais da empresa selecionada</span></div>'+
+ '<div class="lucid-dashboard">'+
+  '<div class="lucid-welcome"><div><span class="lucid-overline">PAINEL DA SUA EMPRESA</span>'+
+   '<h1>Bem-vindo de volta, '+e(userFirst)+' <span class="lucid-wave">✳</span></h1>'+
+   '<p>Seu atendimento, sua equipe e sua inteligência em um só lugar.</p></div>'+
+   '<button type="button" class="btn soft lucid-welcome-action" data-go="channels">Conectar WhatsApp <span>↗</span></button></div>'+
+  '<div class="lucid-topstats">'+
+   quickStat('▤','Conversas abertas',Number(d.openConversations||0).toLocaleString('pt-BR'),
+    'Acompanhe os atendimentos em andamento.','lucid-stat-lilac')+
+   quickStat('◉','WhatsApps cadastrados',Number(d.channels||0).toLocaleString('pt-BR'),
+    'Números associados ao espaço.','lucid-stat-peach')+
+   quickStat('✳','Mensagens recebidas',Number(d.inboundMessages||0).toLocaleString('pt-BR'),
+    'Histórico registrado na plataforma.','lucid-stat-silver')+
+  '</div>'+
+  '<div class="lucid-body-grid"><div class="lucid-main-stack">'+
+   '<section class="lucid-card lucid-chart-panel">'+
+    '<div class="lucid-card-heading"><div><span class="lucid-overline">ATIVIDADE</span><h2>Movimento do atendimento</h2>'+
+     '<p>Mensagens recebidas e enviadas ao longo do tempo.</p></div>'+
+    '<div class="lucid-filter" role="group" aria-label="Período do gráfico">'+
+     '<button type="button" data-range="1m" aria-pressed="false">30 dias</button>'+
+     '<button type="button" data-range="3m" aria-pressed="false">3 meses</button>'+
+     '<button type="button" data-range="6m" class="is-active" aria-pressed="true">6 meses</button></div></div>'+
+    '<div class="lucid-chart-headline"><strong id="activitySummary">'+e(activityTotal.toLocaleString('pt-BR'))+'</strong>'+
+     '<span>mensagens no período</span></div>'+
+    '<div class="neo-chart-canvas lucid-line-chart" id="activityChart">'+renderActivityGraph(trend)+'</div>'+
+    '<div id="chartTicks" class="neo-month-ticks lucid-chart-ticks">'+activityTicks(trend)+'</div>'+
+    '<div class="lucid-chart-legend"><span><i></i> Recebidas</span><span><i></i> Enviadas</span>'+
+     '<small>Dados da empresa selecionada</small></div>'+
+   '</section>'+
+   '<div class="lucid-bottom-grid">'+
+    '<section class="lucid-card lucid-setup-panel"><div class="lucid-card-heading"><div><span class="lucid-overline">CONFIGURAÇÃO</span>'+
+    '<h2>Primeiros passos</h2><p>Prepare seu espaço no seu ritmo.</p></div>'+
+    '<span class="lucid-progress-label">'+done+'/'+steps.length+'</span></div>'+
+    '<progress class="lucid-progress" value="'+done+'" max="'+steps.length+'">'+done+' de '+steps.length+'</progress>'+
+    '<div class="lucid-checklist">'+steps.map((step,i)=>
+      '<button class="lucid-check-row" type="button" data-go="'+e(step.view)+'"><span class="lucid-check-number '+(step.done?'done':'')+'">'+
+       (step.done?'✓':String(i+1).padStart(2,'0'))+'</span><span><strong>'+e(step.label)+'</strong>'+
+       '<small>'+e(step.desc)+'</small></span><b>↗</b></button>').join('')+'</div></section>'+
+    '<section class="lucid-card lucid-intelligence-panel"><div class="lucid-ai-symbol">✳</div>'+
+     '<span class="lucid-overline">INTELIGÊNCIA ARTIFICIAL</span><h2>Uma IA que aprende com seu negócio.</h2>'+
+     '<p>Traga suas conversas reais, aprove o conhecimento e teste como o Sócio responde.</p>'+
+     '<div class="lucid-ai-stats"><span><b>'+e(d.imports)+'</b> conversas de referência</span>'+
+     '<span><b>'+e(d.products)+'</b> produtos cadastrados</span></div>'+
+     '<button class="btn primary" type="button" data-go="training">Explorar inteligência <span>↗</span></button></section>'+
+   '</div></div>'+
+   '<div class="lucid-side-stack">'+
+    '<section class="lucid-card lucid-whatsapp-panel"><div class="lucid-side-icon">◉</div>'+
+     '<span class="lucid-overline">CONEXÃO</span><h2>Seu WhatsApp, no seu Sócio.</h2>'+
+     '<p>Conecte escaneando um QR Code. Sem configurar identificadores manualmente.</p>'+
+     '<div class="lucid-mini-count"><strong>'+e(d.channels)+'</strong><span>número(s) cadastrados</span></div>'+
+     '<button class="btn primary wide" type="button" data-go="channels">Conectar via QR Code <span>↗</span></button></section>'+
+    '<section class="lucid-card lucid-recent-panel"><div class="lucid-card-heading"><div><span class="lucid-overline">EM TEMPO REAL</span>'+
+     '<h2>Conversas recentes</h2></div><button class="lucid-link" type="button" data-go="inbox">Ver todas ↗</button></div>'+
+     (recentItems.length?'<div class="lucid-conversations">'+recentItems.map((item,i)=>
+      '<button type="button" class="lucid-conversation" data-go="inbox">'+
+       '<span class="lucid-avatar lucid-avatar-'+i%4+'">'+e((item.customer_name||item.customer_phone||'C').trim().slice(0,1).toUpperCase())+'</span>'+
+       '<span class="lucid-conversation-copy"><strong>'+e(item.customer_name||item.customer_phone||'Cliente')+'</strong>'+
+       '<small>'+e(item.channel_label||'WhatsApp')+' · '+e(item.last_message_at?date(item.last_message_at):'Sem data')+'</small></span>'+
+       '<span class="lucid-conversation-state">'+e(item.status==='resolved'?'Resolvida':'Abrir')+'</span></button>').join('')+'</div>':
+       '<p class="lucid-empty-note">Suas conversas aparecerão aqui assim que houver mensagens.</p>')+
     '</section>'+
-    '<div class="neo-bottom-grid">'+
-     '<section class="neo-surface neo-promo">'+
-      '<div class="neo-promo-content"><h2>Seu Sócio.<br>Sempre presente.</h2>'+
-       '<p>Atenda melhor, aprenda com suas conversas e faça cada contato valer mais.</p>'+
-       '<div class="neo-promo-bubbles"><span>S</span><span>C</span><span>✳</span></div>'+
-       '<div class="neo-progress-mini"><span data-progress="'+Math.round(done/steps.length*100)+'"></span></div>'+
-       '<p>'+done+' de '+steps.length+' etapas de preparação concluídas</p></div>'+
-       '<button class="neo-promo-action" type="button" data-go="training">Explorar inteligência artificial ↗</button>'+
-     '</section>'+
-     '<section class="neo-surface neo-bars">'+
-       '<div class="neo-card-titlebar"><div><h2>Movimento mensal</h2>'+
-        '<div class="neo-small-growth">'+e(monthTotal.toLocaleString('pt-BR'))+' mensagens</div>'+
-        '<p class="neo-small-desc">Evolução dos últimos 6 meses</p></div>'+
-        '<span class="neo-chart-footnote">Atendimentos</span></div>'+
-       '<div class="neo-bars-body">'+dashboardBars(months)+'</div>'+
-      '</section>'+
-    '</div>'+
-    '<div class="neo-trust-foot"><span>Seu negócio, seus dados, suas conversas.</span><b>Sócio · Consecom</b></div>'+
-   '</div>'+
-   '<div class="neo-right-col">'+
-    '<section class="neo-side-orange" aria-label="Resumo do seu espaço">'+
-     '<div class="neo-card-titlebar"><span class="neo-kicker">Seus canais</span>'+
-      '<button class="neo-top-actions" type="button" data-go="channels">+ Adicionar</button></div>'+
-     '<div class="neo-visual-stack">'+
-      '<div class="neo-preview-strip"><b>SÓCIO</b><small>'+e(d.products)+' produtos e serviços ativos</small></div>'+
-      '<div class="neo-preview-card">'+
-       '<div class="neo-brand">WhatsApp</div>'+
-       '<span class="neo-channel-label">Canais cadastrados</span>'+
-       '<div class="neo-channel-value">'+e(d.channels)+'</div>'+
-       '<div class="neo-channel-caption">● '+e(d.openConversations)+' conversas abertas</div>'+
-      '</div></div>'+
-     '<div class="neo-orange-buttons">'+
-      '<button type="button" data-go="channels">↗ WhatsApps</button>'+
-      '<button type="button" data-go="inbox">↗ Conversas</button></div>'+
-    '</section>'+
-    '<section class="neo-surface neo-recent">'+
-     '<div class="neo-recent-head"><h2>Conversas recentes</h2>'+
-      '<button type="button" class="neo-link" data-go="inbox">Ver todas ↗</button></div>'+
-     '<div class="neo-recent-items">'+(recentRows||
-       '<div class="neo-empty-recent">Suas conversas vão aparecer aqui assim que os canais receberem mensagens.</div>')+
-     '</div></section>'+
-   '</div>'+
-  '</div>';
- // Inline style attributes are blocked by the production CSP; set trusted
- // presentation-only CSSOM properties after rendering instead.
- view.querySelectorAll('.neo-bar-shape[data-height]').forEach(el=>{
-  el.style.height=String(Math.max(3,Math.min(108,Number(el.dataset.height)||3)))+'px';
- });
- const stepFill=view.querySelector('.neo-progress-mini [data-progress]');
- if(stepFill)stepFill.style.width=String(Math.max(0,Math.min(100,Number(stepFill.dataset.progress)||0)))+'%';
+   '</div></div></div>';
  bindNavWithin();
- view.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',async()=>{
-  const range=button.dataset.range;
-  if(!['12m','6m','3m','1m'].includes(range))return;
-  view.querySelectorAll('[data-range]').forEach(b=>{b.disabled=true;});
+ view.querySelectorAll('[data-range]').forEach(btn=>btn.addEventListener('click',async()=>{
+  const selected=btn.dataset.range;
+  if(!['1m','3m','6m'].includes(selected))return;
+  view.querySelectorAll('[data-range]').forEach(b=>b.disabled=true);
   try{
-   const result=await api('/api/dashboard/activity?range='+range);
+   const result=await api('/api/dashboard/activity?range='+selected);
    if(state.view!=='overview'||!$('#activityChart'))return;
-   const num=result.points.reduce((sum,p)=>sum+chartNumber(p.inbound)+chartNumber(p.outbound),0);
-   $('#activitySummary').innerHTML=e(num.toLocaleString('pt-BR'))+' <small>mensagens</small>';
-   $('#activitySubtitle').textContent='Mensagens recebidas e enviadas · últimos '+({'12m':'12 meses','6m':'6 meses','3m':'3 meses','1m':'30 dias'}[range]);
+   const count=(result.points||[]).reduce((n,p)=>n+chartNumber(p.inbound)+chartNumber(p.outbound),0);
+   $('#activitySummary').textContent=count.toLocaleString('pt-BR');
    $('#activityChart').innerHTML=renderActivityGraph(result);
    $('#chartTicks').innerHTML=activityTicks(result);
    view.querySelectorAll('[data-range]').forEach(b=>{
-    const active=b.dataset.range===range;b.classList.toggle('is-active',active);
-    b.setAttribute('aria-pressed',String(active));
+    const on=b.dataset.range===selected;b.classList.toggle('is-active',on);
+    b.setAttribute('aria-pressed',String(on));
    });
-  }catch(err){toast(errMsg(err),true);}
+  }catch(err){toast(errMsg(err),true)}
   finally{if(state.view==='overview')view.querySelectorAll('[data-range]').forEach(b=>b.disabled=false);}
  }));
 }
