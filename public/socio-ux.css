@@ -179,3 +179,9 @@
 @media(prefers-reduced-motion:reduce){
  #loginSubmit,.auth-password-toggle,.feature-choice,.catalog-product{transition:none!important;animation:none!important;scroll-behavior:auto!important}
 }
+
+/* Catálogo com filtros para lista populada */
+.catalog-filters{display:grid;grid-template-columns:minmax(0,2fr) minmax(170px,1fr);gap:12px;padding:12px 0 18px}
+.catalog-filters label{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:600;min-width:0}
+.catalog-filters input,.catalog-filters select{width:100%;min-width:0}
+@media(max-width:650px){.catalog-filters{grid-template-columns:minmax(0,1fr)}}
