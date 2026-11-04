@@ -637,9 +637,9 @@ async function handle(req,res){
  }
  // Inbox v2: tenant-bound WhatsApp-style management. Keep legacy API for
  // existing dashboards and migrations; never expose gateway send operations.
- if(pathname==='/api/inbox/v2'||pathname==='/api/inbox/capabilities'||
+ if(pathname==='/api/inbox/v2'||pathname==='/api/inbox/capabilities'||pathname==='/api/inbox/sync'||
     /^\/api\/conversations\/[a-f0-9-]{36}\/(?:ui|history|notes|forward-internal|messages\/[a-f0-9-]{36}\/ui)$/i.test(pathname)){
-  return await handleInboxApi({pathname,method,req,res,a,query,body,json,id,audit});
+  return await handleInboxApi({pathname,method,req,res,a,query,body,json,id,audit,pool});
  }
  if(method==='GET'&&pathname==='/api/inbox'){
   const r=await query("SELECT c.id,c.customer_name,c.customer_phone,c.status,c.last_message_at,ch.label AS channel_label,(SELECT m.body FROM messages m WHERE m.conversation_id=c.id AND m.tenant_id=$1 ORDER BY m.created_at DESC LIMIT 1) AS last_message FROM conversations c JOIN channels ch ON ch.id=c.channel_id WHERE c.tenant_id=$1 ORDER BY c.last_message_at DESC LIMIT 80",[a.active_tenant_id]);
