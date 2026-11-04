@@ -706,9 +706,17 @@ async function handle(req,res){
   const rawCnpj=String(data.cnpj||'').trim();
   const companyCnpj=rawCnpj?normalizeCnpj(rawCnpj):null;
   if(rawCnpj&&!validCnpj(companyCnpj))throw fail(422,'CNPJ inválido.');
-  const companyProfile=typeof data.companyProfile==='object'&&data.companyProfile&&!Array.isArray(data.companyProfile)?
-   {address:data.companyProfile.address||{},primaryActivity:String(data.companyProfile.primaryActivity||'').slice(0,150),
-    status:String(data.companyProfile.status||'').slice(0,70)}:{};
+  const candidate=typeof data.companyProfile==='object'&&data.companyProfile&&!Array.isArray(data.companyProfile)?
+   data.companyProfile:{};
+  const addr=candidate.address&&typeof candidate.address==='object'&&!Array.isArray(candidate.address)?candidate.address:{};
+  const companyProfile={
+   address:Object.fromEntries(['street','number','additional','neighborhood','city','state','postalCode']
+    .map(key=>[key,trimmed(addr[key]||'',key==='street'?130:100)])),
+   primaryActivity:trimmed(candidate.primaryActivity||'',150),
+   status:trimmed(candidate.status||'',70),
+   commercialPhone:trimmed(candidate.commercialPhone||data.companyPhone||'',30),
+   commercialEmail:trimmed(candidate.commercialEmail||data.companyEmail||'',150)
+  };
   const legalName=trimmed(data.legalName||'',200),tradeName=trimmed(data.tradeName||'',200);
   const raw=String(data.ownerPhone||'').trim(),phone=raw?normalizeLoginPhone(raw):null;
   if(raw&&!phone)throw fail(422,'Número do responsável inválido. Informe o DDD.');
