@@ -89,8 +89,10 @@ test('PostgreSQL: multi-tenant feature configs, quote intake and owner opt-in ar
  assert.equal((await listQuoteRequests(pool,b)).length,0);
  await assert.rejects(updateQuoteRequest(pool,b,entries[0].id,'resolved'),e=>e.status===404);
  await assert.rejects(setQuoteAlerts(pool,{role:'admin',active_tenant_id:a},true),e=>e.status===403);
- const enabled=await setQuoteAlerts(pool,{role:'owner',active_tenant_id:a},true);
+ const enabled=await setQuoteAlerts(pool,{role:'owner',active_tenant_id:a},true,{SOCIO_OUTBOUND_ENABLED:'true',WA_AKG_API_KEY:'fixture-key',WA_AKG_BASE_URL:'http://localhost'});
  assert.equal(enabled.enabled,true);
+ // Simulate the lead arriving AFTER the owner enabled alerts.
+ await pool.query("UPDATE quote_requests SET created_at=now()+interval '1 second' WHERE tenant_id=$1",[a]);
  let sent=0;
  const first=await processNextOwnerQuoteAlert(pool,{
   env:{SOCIO_OUTBOUND_ENABLED:'true',WA_AKG_API_KEY:'fixture-key',WA_AKG_BASE_URL:'http://localhost'},
