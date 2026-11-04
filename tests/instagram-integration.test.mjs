@@ -111,9 +111,10 @@ test('real ephemeral PostgreSQL: OAuth, isolation, HMAC, idempotency, 23h manual
  assert.equal((await pool.query('SELECT count(*)::int AS n FROM instagram_accounts')).rows[0].n,1);
  await assert.rejects(ingestInstagramWebhook(pool,rawEvent(),'sha256='+'0'.repeat(64),{env}),e=>e.status===403);
  assert.equal((await pool.query('SELECT count(*)::int AS n FROM messages')).rows[0].n,0);
- const first=await ingestInstagramWebhook(pool,rawEvent(),sign(rawEvent()),{env});
+ const inboundRaw=rawEvent();
+ const first=await ingestInstagramWebhook(pool,inboundRaw,sign(inboundRaw),{env});
  assert.equal(first.imported,1);
- const replay=await ingestInstagramWebhook(pool,rawEvent(),sign(rawEvent()),{env});
+ const replay=await ingestInstagramWebhook(pool,inboundRaw,sign(inboundRaw),{env});
  assert.equal(replay.imported,0);
  const conversation=(await pool.query("SELECT id,customer_phone FROM conversations WHERE tenant_id=$1",[alpha])).rows[0];
  assert.equal(conversation.customer_phone,'ig:1234512345');
@@ -146,8 +147,8 @@ test('real ephemeral PostgreSQL: OAuth, isolation, HMAC, idempotency, 23h manual
  const deleted=await pool.query('SELECT status,token_ciphertext FROM instagram_accounts WHERE channel_id=$1',[linked.channelId]);
  assert.equal(deleted.rows[0].status,'revoked');
  assert.equal(deleted.rows[0].token_ciphertext,null);
- const after=await ingestInstagramWebhook(pool,rawEvent('fixture-2'),'sha256='+
-  createHmac('sha256',env.INSTAGRAM_APP_SECRET).update(rawEvent('fixture-2')).digest('hex'),{env});
+ const revokedRaw=rawEvent('fixture-2');
+ const after=await ingestInstagramWebhook(pool,revokedRaw,sign(revokedRaw),{env});
  assert.equal(after.imported,0,'Revoked company cannot receive Instagram DMs');
  assert.equal(after.ignored,1);
 });
