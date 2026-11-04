@@ -18,8 +18,11 @@ export function checkMigrationConfiguration(sourceUrl,targetUrl,{allowLocalTest=
  const source=new URL(sourceUrl),target=new URL(targetUrl);
  if(!['postgres:','postgresql:'].includes(source.protocol)||!['postgres:','postgresql:'].includes(target.protocol))
   throw new Error('Only Postgres URLs are permitted');
- if(source.hostname===target.hostname&&source.pathname===target.pathname&&source.username===target.username)
+ if(source.hostname===target.hostname&&source.pathname===target.pathname&&
+   (source.port||'5432')===(target.port||'5432'))
   throw new Error('Source and target must be different databases');
+ if(/(^|\\.)supabase\\.co$|(^|\\.)pooler\\.supabase\\.com$/.test(source.hostname))
+  throw new Error('Source must not be a Supabase database');
  const supabase=/(^|\.)supabase\.co$|(^|\.)pooler\.supabase\.com$/.test(target.hostname);
  const localFixture=allowLocalTest&&['localhost','127.0.0.1'].includes(target.hostname)&&
   target.pathname.startsWith('/socio_migration_target_test_')&&source.pathname.startsWith('/socio_migration_source_test_')&&
