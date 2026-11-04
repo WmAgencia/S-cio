@@ -1,7 +1,7 @@
 
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
-const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training'};
+const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training',catalogSearch:'',catalogStock:'all'};
 const featureLabels={whatsapp:'Atendimento WhatsApp',catalog:'Produtos e serviços',quotes:'Orçamentos e pedidos',meta_ads:'Meta Ads',ai:'Inteligência Artificial',team:'Equipe'};
 const featureView={inbox:'whatsapp',products:'catalog',sales:'quotes',marketing:'meta_ads',training:'ai',team:'team'};
 const featureKeys=Object.keys(featureLabels);
@@ -581,7 +581,9 @@ async function products(selected=null){
  const productCards=list.length?'<div class="catalog-list">'+list.map(p=>{
   const stockedVariants=p.variants?.filter(v=>v.active!==false)||[];
   const available=p.active&&(stockedVariants.length?stockedVariants.some(v=>v.stock_quantity===null||v.stock_quantity>0):(p.stock_quantity===null||p.stock_quantity>0));
-  return '<button type="button" class="catalog-product '+(selected===p.id?'is-selected':'')+'" data-select-product="'+e(p.id)+'">'+
+  return '<button type="button" class="catalog-product '+(selected===p.id?'is-selected':'')+
+   '" data-catalog-item data-catalog-label="'+e((p.name||'')+' '+(p.sku||''))+
+   '" data-catalog-available="'+(available?'true':'false')+'" data-select-product="'+e(p.id)+'">'+
    '<div class="catalog-cover">'+photo(p)+'</div>'+
    '<div class="catalog-product-copy"><strong>'+e(p.name)+'</strong><small>'+e(p.sku||'Sem SKU')+' · '+e(p.media?.length||0)+' foto(s)</small>'+
    '<span>'+e(catalogPrice(p.price_cents))+'</span></div>'+
@@ -618,7 +620,12 @@ async function products(selected=null){
   '<button class="btn primary" id="newProduct">+ Novo produto</button>')+
   '<section class="card card-pad socio-catalog-clean">'+
    '<div class="socio-clean-head"><h2>Seu catálogo</h2><small>'+list.length+' produto(s) cadastrado(s)</small></div>'+
-   productCards+'</section>'+
+   (list.length?'<div class="catalog-filters"><label>Buscar produtos<input id="catalogSearch" type="search" maxlength="120" placeholder="Nome ou SKU" value="'+e(state.catalogSearch)+'"></label>'+
+    '<label>Disponibilidade<select id="catalogStock"><option value="all"'+(state.catalogStock==='all'?' selected':'')+'>Todos</option>'+
+    '<option value="available"'+(state.catalogStock==='available'?' selected':'')+'>Disponíveis</option>'+
+    '<option value="unavailable"'+(state.catalogStock==='unavailable'?' selected':'')+'>Sem estoque / inativos</option></select></label></div>':'')+
+   productCards+
+   '<p id="catalogNoResults" class="form-note hidden" role="status">Nenhum produto corresponde aos filtros. Tente outra busca.</p></section>'+
   '<div class="socio-popup-backdrop'+(modalOpen?'':' hidden')+'" id="productModal" role="presentation">'+
    '<section class="socio-popup-surface socio-product-popup" role="dialog" aria-modal="true" aria-labelledby="productFormTitle">'+
     '<div class="socio-popup-header"><div><small>CATÁLOGO DA EMPRESA</small>'+
@@ -654,6 +661,23 @@ async function products(selected=null){
   const btn=ev.target.closest('[data-remove-variant]');if(btn)btn.closest('[data-variant-row]').remove();
  });
  if(modalOpen)$('#productForm')?.elements?.name?.focus();
+ const applyCatalogFilters=()=>{
+  const needle=String(state.catalogSearch||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  let shown=0;
+  view.querySelectorAll('[data-catalog-item]').forEach(card=>{
+   const label=String(card.dataset.catalogLabel||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+   const available=card.dataset.catalogAvailable==='true';
+   const visible=label.includes(needle)&&(state.catalogStock==='all'||
+    (state.catalogStock==='available'&&available)||(state.catalogStock==='unavailable'&&!available));
+   card.classList.toggle('hidden',!visible);
+   if(visible)shown++;
+  });
+  const empty=$('#catalogNoResults');
+  if(empty)empty.classList.toggle('hidden',!list.length||shown>0);
+ };
+ $('#catalogSearch')?.addEventListener('input',ev=>{state.catalogSearch=ev.currentTarget.value;applyCatalogFilters();});
+ $('#catalogStock')?.addEventListener('change',ev=>{state.catalogStock=ev.currentTarget.value;applyCatalogFilters();});
+ applyCatalogFilters();
  view.querySelectorAll('[data-select-product]').forEach(btn=>btn.addEventListener('click',()=>products(btn.dataset.selectProduct)));
  $('#clearProduct')?.addEventListener('click',()=>products(null));
  $('#productForm').addEventListener('submit',async ev=>{
