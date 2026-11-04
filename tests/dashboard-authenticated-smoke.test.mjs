@@ -37,6 +37,10 @@ test('authenticated Sócio boot renders approved orange espresso dashboard and n
   '/api/dashboard':{openConversations:2,channels:1,products:4,imports:5,inboundMessages:9},
   '/api/waakg/channels':[{id:'example-channel',status:'connected',label:'Vendas'}],
   '/api/agent':{instructions:'Atenda com respeito.',enabled:false},
+  '/api/dashboard/activity?range=1m':{range:'1m',granularity:'day',points:[
+    {date:'2026-11-01',inbound:2,outbound:1},
+    {date:'2026-11-02',inbound:3,outbound:2}
+  ]},
   '/api/dashboard/activity?range=6m':{range:'6m',granularity:'month',points:[
     {date:'2026-08-01',inbound:2,outbound:1},
     {date:'2026-09-01',inbound:3,outbound:2}
