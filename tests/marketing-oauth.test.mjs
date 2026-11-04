@@ -92,7 +92,7 @@ test('OAuth provider redirects are allowlisted and secrets are never in URLs',as
  assert.equal(instagramHostedReady(env),true);
 });
 
-test('disposable Postgres OAuth Meta and Google: tenant ownership, one-use state, encrypted tokens and revoke',
+test('disposable Postgres Meta-only OAuth: tenant ownership, one-use state, encrypted tokens and revoke',
  {skip:!process.env.DATABASE_URL,timeout:100000},async t=>{
  const name='socio_oauth_test_'+randomBytes(6).toString('hex');
  const target=new URL(process.env.DATABASE_URL);target.pathname='/'+name;
@@ -137,13 +137,12 @@ test('disposable Postgres OAuth Meta and Google: tenant ownership, one-use state
  assert.equal((await listPipeboardOAuth(pool,b)).length,0);
  assert.equal((await listPipeboardOAuth(pool,a))[0].provider,'meta');
  assert.equal((await listPipeboardOAuth(pool,a))[0].last_read_status,'not_tested');
- const google=await startPipeboardOAuth(pool,a,'google',{env,request:mock.request});
- await finishPipeboardOAuth(pool,new URL(google.authorizationUrl).searchParams.get('state'),
-  'google-code-not-real-123456789',{env,request:mock.request});
- assert.deepEqual((await listPipeboardOAuth(pool,a)).map(g=>g.provider).sort(),['google','meta']);
+ await assert.rejects(startPipeboardOAuth(pool,a,'google',{env,request:mock.request}),
+  e=>e.status===422,'Retired Google Ads OAuth must be unavailable');
+ assert.deepEqual((await listPipeboardOAuth(pool,a)).map(g=>g.provider),['meta']);
  await assert.rejects(revokePipeboardOAuth(pool,b,'meta'),e=>e.status===404);
  assert.equal((await revokePipeboardOAuth(pool,a,'meta')).disconnected,true);
- assert.equal((await listPipeboardOAuth(pool,a)).length,1);
+ assert.equal((await listPipeboardOAuth(pool,a)).length,0);
  const revoked=await pool.query("SELECT token_ciphertext,last_read_status,last_account_count,last_checked_at FROM marketing_oauth_grants WHERE tenant_id=$1 AND provider='meta'",
   [tenantA]);
  assert.equal(revoked.rows[0].token_ciphertext,null);
@@ -230,8 +229,8 @@ test('read-only connection test keeps tenant scope and calls only account listin
  assert.deepEqual(calls.map(x=>x.method),['initialize','notifications/initialized','tools/list','tools/call']);
  assert.deepEqual(normalizeAdsAccounts({structuredContent:{resourceNames:['customers/1234567890']}},'google'),[{id:'1234567890',name:'1234567890'}]);
  assert.throws(()=>decodeMcpReply('{"id":1,"result":{"isError":true}}',1));
- await assert.rejects(testPipeboardConnection({query:async()=>({rowCount:0})},identity,'google',{env,request}),e=>e.status===409);
- await assert.rejects(testPipeboardConnection(pool,identity,'google',{env,request}),e=>e.status===503);
+ await assert.rejects(testPipeboardConnection({query:async()=>({rowCount:0})},identity,'google',{env,request}),e=>e.status===422);
+ await assert.rejects(testPipeboardConnection(pool,identity,'google',{env,request}),e=>e.status===422);
 });
 
  test('FastMCP string return wrappers preserve real Meta account data',async()=>{
