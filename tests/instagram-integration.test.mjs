@@ -65,12 +65,12 @@ test('real ephemeral PostgreSQL: OAuth, isolation, HMAC, idempotency, 23h manual
  const admin=new Client({connectionString:process.env.DATABASE_URL});
  await admin.connect();
  await admin.query('CREATE DATABASE '+name);
+ const pool=new Pool({connectionString:sourceUrl.href});
  t.after(async()=>{
+  await pool.end().catch(()=>{});
   await admin.query('DROP DATABASE IF EXISTS '+name+' WITH (FORCE)').catch(()=>{});
   await admin.end();
  });
- const pool=new Pool({connectionString:sourceUrl.href});
- t.after(()=>pool.end());
  await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
  const alpha=randomUUID(),beta=randomUUID(),userA=randomUUID(),userB=randomUUID();
  await pool.query('INSERT INTO tenants(id,name,slug) VALUES($1,$2,$3),($4,$5,$6)',
