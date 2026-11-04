@@ -1,7 +1,7 @@
 // Deterministic, resumable, tenant-scoped review of anonymized imports.
 // This does not claim to measure sales or scan WA-AKG messages.
 import {randomUUID} from 'node:crypto';
-import {grokKnowledgeDraft} from './xai-grok.mjs';
+import {groqKnowledgeDraft} from './groq-client.mjs';
 const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 export function inspectTrainingSource(input){
  const lines=String(input||'').split('\n').filter(x=>/^- Pessoa \d+:/.test(x)).slice(0,120);
@@ -75,9 +75,9 @@ export async function processNextAnalysisJob(pool){
   }
   const rows=await c.query('SELECT findings FROM training_job_items WHERE job_id=$1 AND tenant_id=$2 AND processed=true ORDER BY import_id',[job.id,job.tenant_id]);
   const base=compileTrainingKnowledge(rows.rows.map(x=>x.findings));
-  // Only de-identified aggregate signals go to xAI. Failure preserves the
-  // deterministic source; no Grok result is ever claimed if the key is absent.
-  const enhanced=await grokKnowledgeDraft(base);
+  // Only de-identified aggregate signals go to Groq. Failure preserves the
+  // deterministic source; no Groq result is ever claimed if the key is absent.
+  const enhanced=await groqKnowledgeDraft(base);
   const markdown=enhanced.markdown;
   const report={...base.report,analysisProvider:enhanced.provider};
 
