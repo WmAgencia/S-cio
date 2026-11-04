@@ -39,7 +39,7 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
   "JOIN channels ch ON ch.id=c.channel_id AND ch.tenant_id=c.tenant_id AND ch.provider='waakg' AND ch.status='connected' "+
   "WHERE st.handling_mode='ai_assist' AND st.ai_activated_at IS NOT NULL "+
   "AND c.status<>'resolved' AND m.direction='inbound' AND m.created_at>=st.ai_activated_at "+
-  "AND m.created_at<now()-interval '8 seconds' "+
+  "AND m.created_at<now()-interval '3 seconds' "+
   "AND NOT EXISTS(SELECT 1 FROM messages newer WHERE newer.tenant_id=m.tenant_id "+
   " AND newer.conversation_id=m.conversation_id AND newer.direction='inbound' AND newer.created_at>m.created_at) "+
   "AND NOT EXISTS(SELECT 1 FROM messages sent WHERE sent.tenant_id=m.tenant_id "+
