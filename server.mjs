@@ -14,6 +14,7 @@ import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
 import {processLiveInboxSync} from './inbox-live-sync.mjs';
 import {processNextAiReply} from './ai-replies.mjs';
+import {getOperationalReadiness} from './operational-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
 
@@ -513,6 +514,30 @@ async function handle(req,res){
   if(!result.rowCount)throw fail(404,'Produto não encontrado.');
   await audit(a,'product.updated',{productId:prodMatch[1]});
   return json(res,200,result.rows[0]);
+ }
+ // Tenant-owner operational checks: never return credentials or assert that a
+ // configured integration has passed a real end-to-end test.
+ if(method==='GET'&&pathname==='/api/ops/readiness'){
+  needRole(a,['owner','admin']);
+  const report=await getOperationalReadiness(pool,a.active_tenant_id);
+  return json(res,200,report);
+ }
+ if(method==='POST'&&pathname==='/api/ops/groq/test'){
+  needRole(a,['owner','admin']);
+  if(!limiter(simulationAttempts,'groq-health:'+a.active_tenant_id,600000,3))
+   throw fail(429,'Limite de testes Groq atingido. Tente novamente.');
+  if(!groqReady())throw fail(503,'GROQ_API_KEY ausente no servidor.');
+  const start=Date.now();
+  const test=await groqResponse({
+   instructions:'Você está verificando uma integração técnica. Responda em português, de forma muito curta.',
+   input:'Responda apenas confirmando que a integração de texto está respondendo.',
+   maxOutputTokens:280,timeoutMs:16000
+  });
+  if(!test.reply.trim())throw fail(503,'Groq não retornou uma resposta válida.');
+  const latencyMs=Date.now()-start;
+  await audit(a,'integration.groq.tested',{model:test.model,success:true});
+  return json(res,200,{ok:true,provider:'Groq',model:test.model,
+   responseVerified:true,latencyMs,checkedAt:new Date().toISOString()});
  }
  if(method==='GET'&&pathname==='/api/agent'){
   const r=await query('SELECT name,tone,instructions,knowledge_md,enabled,updated_at FROM agents WHERE tenant_id=$1',[a.active_tenant_id]);

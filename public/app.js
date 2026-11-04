@@ -706,6 +706,38 @@ async function agent(){
    msgs.scrollTop=msgs.scrollHeight;
   });
  });
+ const canInspect=state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role);
+ if(canInspect){
+  view.insertAdjacentHTML('beforeend',
+   '<section class="card card-pad socio-ops-panel">'+
+   '<div class="socio-clean-head"><div><h2>Verificação operacional</h2>'+
+   '<p class="form-note">Veja o que está configurado e teste o Groq sem enviar mensagens aos clientes.</p></div></div>'+
+   '<div class="socio-ops-actions"><button type="button" class="btn soft" id="checkSocioOps">Verificar operação</button>'+
+   '<button type="button" class="btn primary" id="testSocioGroq">Testar conexão Groq</button></div>'+
+   '<div id="socioOpsResult" role="status" aria-live="polite" class="socio-ops-result">'+
+   'Nenhuma verificação executada nesta sessão.</div></section>');
+  $('#checkSocioOps')?.addEventListener('click',()=>action(async()=>{
+   const btn=$('#checkSocioOps');btn.disabled=true;
+   try{
+    const result=await api('/api/ops/readiness');
+    $('#socioOpsResult').innerHTML='<div class="socio-ops-grid">'+
+     (result.checks||[]).map(check=>
+      '<div class="socio-ops-check"><span class="socio-ops-indicator '+e(check.status)+'" aria-hidden="true"></span>'+
+      '<div><strong>'+e(check.label)+'</strong><small>'+e(check.detail)+'</small></div></div>').join('')+
+     '</div><p class="form-note">'+e(result.numbers?.verified||0)+
+     ' WhatsApp(s) verificado(s). A presença da chave Groq não prova uma resposta real: use o botão de teste.</p>';
+   }finally{btn.disabled=false;}
+  }));
+  $('#testSocioGroq')?.addEventListener('click',()=>action(async()=>{
+   const btn=$('#testSocioGroq');btn.disabled=true;
+   try{
+    const r=await api('/api/ops/groq/test','POST',{});
+    $('#socioOpsResult').textContent='Groq respondeu ao teste: '+r.model+
+     ' · '+r.latencyMs+' ms. Nenhuma mensagem foi enviada ao WhatsApp.';
+    toast('Conexão Groq validada com resposta real.');
+   }finally{btn.disabled=false;}
+  }));
+ }
  mountAiGuideTabs();
 }
 async function inbox(){

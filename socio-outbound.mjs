@@ -74,11 +74,17 @@ export async function deliverToConversation(pool,{tenantId,conversationId,userId
   [randomUUID(),tenantId,conversationId,userId,clientRequestId,mode,body,replyToId]);
  if(!created.rowCount){
   const existing=await pool.query(
-   'SELECT id,status FROM message_outbox WHERE tenant_id=$1 AND client_request_id=$2',
+   'SELECT id,status,conversation_id,mode,body,reply_to_id FROM message_outbox WHERE tenant_id=$1 AND client_request_id=$2',
    [tenantId,clientRequestId]);
   if(!existing.rowCount)throw bad(409,'Solicitação já está registrada.');
-  return {id:existing.rows[0].id,status:existing.rows[0].status,
-   sent:existing.rows[0].status==='sent',reused:true};
+  const prior=existing.rows[0];
+  // A request ID is tied to the original tenant, conversation and exact payload.
+  // Reusing it for a different customer must NEVER be treated as a successful send.
+  if(prior.conversation_id!==conversationId||prior.mode!==mode||
+     prior.body!==body||(prior.reply_to_id||null)!==(replyToId||null))
+   throw bad(409,'Identificador de envio já foi usado para outra mensagem.');
+  return {id:prior.id,status:prior.status,
+   sent:prior.status==='sent',reused:true};
  }
  const outboxId=created.rows[0].id;
  const claimed=await pool.query(

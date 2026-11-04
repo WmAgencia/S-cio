@@ -135,6 +135,14 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const dashboardToday=await call('/api/dashboard','GET',undefined,adminCookie);
  assert.equal(dashboardToday.status,200);
  assert.equal(Number.isInteger(dashboardToday.result.messagesReceivedToday),true);
+ const readiness=await call('/api/ops/readiness','GET',undefined,adminCookie);
+ assert.equal(readiness.status,200,JSON.stringify(readiness.result));
+ assert.equal(readiness.result.numbers.verified,0,'No test phone is connected');
+ assert.equal(readiness.result.groq.tested,false,'Key presence is not a completed live test');
+ assert.equal(readiness.result.catalog.activeProducts,0);
+ const invalidGroqCheck=await call('/api/ops/groq/test','POST',{},adminCookie);
+ assert.equal(invalidGroqCheck.status,403,'Groq test requires a CSRF-protected session');
+
  const me=await call('/api/me','GET',undefined,adminCookie);
  assert.equal(me.result.user.platformOwner,true);
  const initialActivity=await call('/api/dashboard/activity?range=12m','GET',undefined,adminCookie);
@@ -256,6 +264,9 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const betaCookie=betaLogin.cookie.split(';')[0],betaCsrf=betaLogin.result.csrf;
  const unauthorizedCnpj=await call('/api/admin/cnpj?number=11222333000181','GET',undefined,betaCookie);
  assert.equal(unauthorizedCnpj.status,403,'CNPJ prefill is restricted to the master account');
+ const betaReadiness=await call('/api/ops/readiness','GET',undefined,betaCookie);
+ assert.equal(betaReadiness.status,200);
+ assert.equal(betaReadiness.result.catalog.activeProducts,0,'Tenant B should not see products from tenant A');
  const hiddenInbox=await call('/api/inbox/v2','GET',undefined,betaCookie);
  assert.equal(hiddenInbox.status,200);
  assert.equal(hiddenInbox.result.conversations.length,0,'Tenant B cannot see tenant A inbox');

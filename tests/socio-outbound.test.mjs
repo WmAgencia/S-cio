@@ -49,7 +49,9 @@ test('Manual outbound persists idempotency before sending, rejects mode AI under
    if(created)return {rowCount:0,rows:[]};
    created=true;return {rowCount:1,rows:[{id:requestId}]};
   }
-  if(sql.startsWith('SELECT id,status FROM message_outbox'))return {rowCount:1,rows:[{id:requestId,status:'sent'}]};
+  if(sql.startsWith('SELECT id,status,conversation_id,mode,body,reply_to_id FROM message_outbox'))return {
+   rowCount:1,rows:[{id:requestId,status:'sent',conversation_id:conversationId,
+    mode:'human',body:'Boa tarde!',reply_to_id:null}]};
   if(sql.includes("status='processing'"))return {rowCount:1,rows:[{id:requestId}]};
   return {rowCount:1,rows:[]};
  }};
@@ -61,6 +63,8 @@ test('Manual outbound persists idempotency before sending, rejects mode AI under
  const second=await deliverToConversation(pool,data);
  assert.equal(second.reused,true);
  assert.equal(count,1);
+ await assert.rejects(deliverToConversation(pool,{...data,text:'Outro conteúdo'}),
+  /Identificador de envio já foi usado/,'Same request ID cannot represent a different body');
  await assert.rejects(deliverToConversation(pool,{...data,mode:'ai',
   clientRequestId:'44444444-4444-4444-8444-444444444444'}),/IA não foi autorizada/);
 });
