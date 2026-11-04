@@ -33,9 +33,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-16
       - run: npm install --ignore-scripts --no-audit
       - run: node --check server.mjs && node --check lib.mjs && node --check public/app.js
       - run: node --check sales-commerce.mjs && node --check public/sales.js && node --check public/quote.js
+      - run: node --check team-permissions.mjs && node --check scripts/socio-encrypted-backup.mjs
       - run: node --check scripts/socio-supabase-migrate.mjs && node --check scripts/socio-provision-master.mjs && node --check scripts/socio-provision-railway-master.mjs
       - run: node --check waakg-socio/bootstrap.cjs && python3 -m py_compile waakg-socio/patch_readonly.py
       - run: npm test

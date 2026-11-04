@@ -444,3 +444,27 @@ CREATE TABLE IF NOT EXISTS sales_payment_events (
  provider text NOT NULL,
  processed_at timestamptz NOT NULL DEFAULT now()
 );
+
+
+-- Phase 4, additive authorization + tenant integrity hardening.
+-- Inactive team members cannot authenticate and all their sessions are revoked
+-- as part of the corresponding member-management transaction.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT true;
+CREATE UNIQUE INDEX IF NOT EXISTS socio_users_tenant_id_unique ON users(tenant_id,id);
+CREATE INDEX IF NOT EXISTS socio_users_tenant_status_idx ON users(tenant_id,active,role);
+CREATE INDEX IF NOT EXISTS socio_audit_tenant_recent ON audit(tenant_id,created_at DESC,id DESC);
+
+-- Enforce new writes at the database layer, not just in route handlers.
+-- NOT VALID is deliberate: avoid rejecting an existing production schema
+-- until the separately documented integrity preflight inspects old records.
+DO $socio_phase4_tenant_guards$
+BEGIN
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='socio_conversation_tenant_channel') THEN
+  ALTER TABLE conversations ADD CONSTRAINT socio_conversation_tenant_channel
+   FOREIGN KEY(tenant_id,channel_id) REFERENCES channels(tenant_id,id) NOT VALID;
+ END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='socio_message_tenant_conversation') THEN
+  ALTER TABLE messages ADD CONSTRAINT socio_message_tenant_conversation
+   FOREIGN KEY(tenant_id,conversation_id) REFERENCES conversations(tenant_id,id) NOT VALID;
+ END IF;
+END $socio_phase4_tenant_guards$;
