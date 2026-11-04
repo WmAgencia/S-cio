@@ -39,10 +39,15 @@ export async function sendGatewayText({sessionId,jid,text,env=process.env,fetchI
  }finally{clearTimeout(timer);}
 }
 export async function deliverToConversation(pool,{tenantId,conversationId,userId=null,mode='human',
- text,clientRequestId,replyToId=null,env=process.env,getStatus=getSessionStatus,send=sendGatewayText}){
+ text,clientRequestId,replyToId=null,kind='text',payloadFingerprint=null,sourceProductId=null,sourceMediaId=null,
+ env=process.env,getStatus=getSessionStatus,send=sendGatewayText}){
  if(!outboundEnabled(env))throw bad(503,'Envio indisponível até a validação de um WhatsApp conectado.');
  if(!uuid.test(conversationId)||!uuid.test(clientRequestId)||!['human','ai'].includes(mode)||
     (replyToId!==null&&!uuid.test(replyToId)))throw bad(422,'Identificador inválido.');
+ if(!['text','buttons','product'].includes(kind) ||
+   (kind!=='text'&&!/^[0-9a-f]{64}$/.test(payloadFingerprint||'')) ||
+   (kind==='product'&&(!uuid.test(sourceProductId||'')||!uuid.test(sourceMediaId||''))))
+  throw bad(422,'Tipo ou referência de envio inválida.');
  const body=textPayload(text);
  const record=await pool.query(
   "SELECT c.id,c.customer_phone,c.status,l.session_id,ch.phone AS linked_phone,"+
@@ -69,19 +74,23 @@ export async function deliverToConversation(pool,{tenantId,conversationId,userId
  if(!remote.connected||remote.connectedNumber!==String(c.linked_phone||'').replace(/\D/g,''))
   throw bad(409,'Sessão WhatsApp desconectada ou número divergente.');
  const created=await pool.query(
-  "INSERT INTO message_outbox(id,tenant_id,conversation_id,user_id,client_request_id,mode,body,reply_to_id,status) "+
-  "VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending') ON CONFLICT(tenant_id,client_request_id) DO NOTHING RETURNING id",
-  [randomUUID(),tenantId,conversationId,userId,clientRequestId,mode,body,replyToId]);
+  "INSERT INTO message_outbox(id,tenant_id,conversation_id,user_id,client_request_id,mode,body,reply_to_id,kind,payload_fingerprint,product_id,media_id,status) "+
+  "VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending') ON CONFLICT(tenant_id,client_request_id) DO NOTHING RETURNING id",
+  [randomUUID(),tenantId,conversationId,userId,clientRequestId,mode,body,replyToId,
+   kind,payloadFingerprint,sourceProductId,sourceMediaId]);
  if(!created.rowCount){
   const existing=await pool.query(
-   'SELECT id,status,conversation_id,mode,body,reply_to_id FROM message_outbox WHERE tenant_id=$1 AND client_request_id=$2',
+   'SELECT id,status,conversation_id,mode,body,reply_to_id,kind,payload_fingerprint,product_id,media_id FROM message_outbox WHERE tenant_id=$1 AND client_request_id=$2',
    [tenantId,clientRequestId]);
   if(!existing.rowCount)throw bad(409,'Solicitação já está registrada.');
   const prior=existing.rows[0];
   // A request ID is tied to the original tenant, conversation and exact payload.
   // Reusing it for a different customer must NEVER be treated as a successful send.
   if(prior.conversation_id!==conversationId||prior.mode!==mode||
-     prior.body!==body||(prior.reply_to_id||null)!==(replyToId||null))
+     prior.body!==body||(prior.reply_to_id||null)!==(replyToId||null)||
+     prior.kind!==kind||(prior.payload_fingerprint||null)!==(payloadFingerprint||null)||
+     (prior.product_id||null)!==(sourceProductId||null)||
+     (prior.media_id||null)!==(sourceMediaId||null))
    throw bad(409,'Identificador de envio já foi usado para outra mensagem.');
   return {id:prior.id,status:prior.status,
    sent:prior.status==='sent',reused:true};
