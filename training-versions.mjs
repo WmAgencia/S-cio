@@ -2,7 +2,7 @@
 // A tenant row lock serializes simultaneous approvals so the published
 // Markdown and the agent's active knowledge remain exactly in sync.
 const fail=(status,message)=>Object.assign(new Error(message),{status});
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
 export function validateKnowledgeMarkdown(markdown){
  if(typeof markdown!=='string'||markdown.length>22000||
