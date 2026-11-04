@@ -41,3 +41,22 @@ test('WhatsApp-like inbox has real keyboard/mouse/touch handlers and never claim
  assert.ok(html.indexOf('/inbox.css')>html.indexOf('/ember-theme.css'));
  assert.ok(html.indexOf('/inbox.js')<html.indexOf('/app.js'));
 });
+
+test('Sócio inbox offers exactly three handling filters, including both in Todas',()=>{
+ const js=readFileSync(new URL('../public/inbox.js',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../public/inbox.css',import.meta.url),'utf8');
+ const match=js.match(/const filters=\\[([\\s\\S]*?)\\];/);
+ assert(match,'Inbox must expose visible filters');
+ const list=[...match[1].matchAll(/\\['([^']+)','([^']+)'\\]/g)].map(x=>[x[1],x[2]]);
+ assert.deepEqual(list,[
+  ['all','Todas'],
+  ['ai_assist','IA respondendo'],
+  ['human','Humano respondendo']
+ ]);
+ assert.match(js,/handling_mode:'human'/);
+ assert.match(js,/handling_mode:'ai_assist'/);
+ assert.match(js,/Object\\.hasOwn\\(patch,'handling_mode'\\)\\)\\{[\\s\\S]*?await refreshList\\(\\)/);
+ assert.match(js,/data-inbox-connect>Conectar WhatsApp/);
+ assert.match(css,/grid-template-columns:repeat\\(3,minmax\\(0,1fr\\)\\)/);
+ assert.doesNotMatch(css,/\\.wa-filters\\{[^}]*overflow-x:auto/);
+});
