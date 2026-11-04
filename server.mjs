@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
 import {maintenanceEnabled,writesBlocked,workersBlocked} from './migration-guard.mjs';
+import {TABLES as MIGRATION_TABLES} from './scripts/socio-supabase-migrate.mjs';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier} from './lib.mjs';
 import {permissionsFor,requirePermission,allowedNewMemberRole,validateMemberPatch} from './team-permissions.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
@@ -35,7 +36,7 @@ if(!['public','socio_app'].includes(dbSchema)||(isSupabaseDb&&dbSchema!=='socio_
  process.exit(1);
 }
 const pool=new Pool({connectionString:DATABASE_URL,max:10,connectionTimeoutMillis:8000,idleTimeoutMillis:30000,
- options:dbSchema==='socio_app'?'-c search_path=socio_app,public':undefined});
+ options:dbSchema==='socio_app'?'-c search_path=socio_app,pg_catalog':undefined});
 const query=(sql,values=[])=>pool.query(sql,values);
 async function fullCatalog(tenantId){
  const [items,variants,media,campaigns]=await Promise.all([
@@ -1021,13 +1022,16 @@ async function main(){
  if(dbSchema==='socio_app'){
   // Private Supabase runtime is migrated explicitly; do not silently run
   // Railway's public DDL against a remotely managed Postgres project.
-  const expected=['tenants','users','sessions','channels','messages','sales_quotes',
-    'sales_orders','sales_payment_events','training_auto_runs'];
+  const expected=MIGRATION_TABLES;
   const check=await query(
    "SELECT table_name FROM information_schema.tables WHERE table_schema='socio_app' AND table_name=ANY($1::text[])",
    [expected]);
   const names=new Set(check.rows.map(x=>x.table_name));
   if(expected.some(name=>!names.has(name)))throw new Error('Private Supabase schema is incomplete');
+  const requiredColumns=await query(
+   "SELECT column_name FROM information_schema.columns WHERE table_schema='socio_app' "+
+   "AND table_name='users' AND column_name='active'");
+  if(!requiredColumns.rowCount)throw new Error('Private Supabase team schema is outdated');
  }else await query(schema);
  // Storage probe checks the real private S3 endpoint without touching customer files.
  if(mediaConfigured())void checkMediaStorage()
