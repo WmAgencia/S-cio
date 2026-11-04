@@ -3,7 +3,7 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
-import {startPipeboardOAuth,finishPipeboardOAuth,listPipeboardOAuth,revokePipeboardOAuth,oauthClientMetadata} from './marketing-oauth.mjs';
+import {startPipeboardOAuth,finishPipeboardOAuth,listPipeboardOAuth,revokePipeboardOAuth,oauthClientMetadata,testPipeboardConnection} from './marketing-oauth.mjs';
 import {instagramHostedReady,beginInstagramHosted,instagramHostedStatus,disconnectInstagramHosted} from './instagram-hosted.mjs';
 import {instagramLabHealth,connectPipeboard,registerGoogleAdsScript,ingestGoogleReport,listMarketing,disconnectMarketing,googleScriptTemplate} from './marketing-integrations.mjs';
 import {instagramReady,beginInstagramOAuth,completeInstagramOAuth,ingestInstagramWebhook,revokeInstagramAccount} from './instagram-integration.mjs';
@@ -114,6 +114,7 @@ const mutations=new Set(['POST','PUT','PATCH','DELETE']);
 async function handle(req,res){
  const pathname=new URL(req.url||'/', 'http://local').pathname;
  const method=req.method||'GET';
+ if(process.env.SOCIO_INSTAGRAM_ENABLED!=='true'&&(pathname.startsWith('/api/instagram/')||pathname==='/webhooks/instagram'))return json(res,404,{error:'Integração Instagram indisponível.'});
  res.setHeader('X-Content-Type-Options','nosniff');
  res.setHeader('Referrer-Policy','no-referrer');
  res.setHeader('X-Frame-Options','DENY');
@@ -291,6 +292,14 @@ async function handle(req,res){
   await audit(a,'marketing.oauth_started',{provider:result.provider});
   return json(res,200,result);
  }
+ const oauthTest=pathname.match(/^\/api\/marketing\/oauth\/(meta|google)\/test$/);
+ if(oauthTest&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  if(!limiter(authAttempts,'marketing-test:'+a.user_id,60000,6))throw fail(429,'Aguarde um minuto para testar novamente.');
+  const result=await testPipeboardConnection(pool,a,oauthTest[1]);
+  await audit(a,'marketing.connection_test',{provider:oauthTest[1],status:result.status,accounts:result.accounts.length});
+  return json(res,200,result);
+ }
  const oauthRevoke=pathname.match(/^\/api\/marketing\/oauth\/(meta|google)\/disconnect$/);
  if(oauthRevoke&&method==='POST'){
   requirePermission(a,'marketing.manage');
@@ -321,8 +330,7 @@ async function handle(req,res){
  // Company-level marketing integrations: read-only Meta/Google by default.
  if(method==='GET'&&pathname==='/api/marketing'){
   requirePermission(a,'marketing.read');
-  const [data,lab]=await Promise.all([listMarketing(pool,a),instagramLabHealth()]);
-  return json(res,200,{...data,instagramLab:lab});
+  return json(res,200,await listMarketing(pool,a));
  }
  if(method==='POST'&&pathname==='/api/marketing/meta/connect'){
   requirePermission(a,'marketing.manage');
