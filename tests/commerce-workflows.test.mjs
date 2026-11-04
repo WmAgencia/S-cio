@@ -91,3 +91,52 @@ test('navigation separates sales, estimates and business reports',()=>{
  assert.match(sales,/data-lead-chat/);
  assert.match(sales,/data-quote-send/);
 });
+
+test('quote send confirms WhatsApp destination and saves a single verified delivery',async()=>{
+ const events=[];const request=lead;
+ const db={async query(sql,args){
+  events.push(sql);
+  if(sql.includes('SELECT q.conversation_id'))return {rowCount:1,rows:[{
+   status:'open',customer_phone:'5515888888888',handling_mode:'human',
+   provider:'waakg',channel_status:'connected',session_id:'socio_test',
+   linked_phone:'5515999999999'
+  }]};
+  if(sql.includes("delivery_status='processing'"))return {rowCount:1,rows:[{
+   id:request,conversation_id:conversation,draft_text:'Material e serviço revisados',
+   draft_amount_cents:12345,customer_name:'Cliente teste'
+  }]};
+  return {rowCount:1,rows:[]};
+ }};
+ let delivered=0,content='';
+ const result=await sendQuoteDraft(db,tenant,request,lead,{
+  env:{SOCIO_OUTBOUND_ENABLED:'true',WA_AKG_API_KEY:'test',WA_AKG_BASE_URL:'https://example.org'},
+  getStatus:async()=>({connected:true,connectedNumber:'5515999999999'}),
+  deliver:async(_pool,args)=>{delivered++;content=args.text;
+   assert.equal(args.clientRequestId,request);
+   assert.equal(args.conversationId,conversation);
+   return {sent:true};
+  }
+ });
+ assert.equal(result.deliveryStatus,'sent');
+ assert.equal(delivered,1);
+ assert.match(content,/123,45/);
+ assert.ok(events.some(sql=>sql.includes("delivery_status='sent'")));
+});
+
+test('quote refuses invalid WhatsApp recipient before claiming the delivery',async()=>{
+ let claimed=false;
+ const db={async query(sql){
+  if(sql.includes('SELECT q.conversation_id'))return {rowCount:1,rows:[{
+   status:'open',customer_phone:'not-a-phone',handling_mode:'human',provider:'waakg',
+   channel_status:'connected',session_id:'socio_test',linked_phone:'5515999999999'
+  }]};
+  if(sql.includes("delivery_status='processing'"))claimed=true;
+  return {rows:[],rowCount:0};
+ }};
+ await assert.rejects(sendQuoteDraft(db,tenant,lead,lead,{
+  env:{SOCIO_OUTBOUND_ENABLED:'true',WA_AKG_API_KEY:'test',WA_AKG_BASE_URL:'https://example.org'},
+  getStatus:async()=>({connected:true,connectedNumber:'5515999999999'}),
+  deliver:async()=>{throw Error('should not send');}
+ }),/Número do cliente inválido/);
+ assert.equal(claimed,false);
+});
