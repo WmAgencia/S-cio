@@ -6,7 +6,7 @@
  function create({api,e,toast,view,changeView}){
   let conversations=[],active=null,thread=null,filter='all',search='',filterMessages='',selected=new Set();
   let reply=null,menuId=null,pointer=null,longTimer=null,refreshTimer=null,searchTimer=null,draftTimer=null;
-  let infoOpen=false,helpOpen=false,menuAt=null,team=null,lock=false,disposed=false,lastFetch=0;
+  let infoOpen=false,helpOpen=false,menuAt=null,team=null,lock=false,disposed=false,lastFetch=0,syncing=false,cancelSync=false;
   let prefs={fontScale:'normal',contrast:'normal',compact:false};
   try{const saved=JSON.parse(localStorage.getItem('socio-inbox-accessibility')||'{}');
    if(saved.fontScale==='large')prefs.fontScale='large';
@@ -49,7 +49,7 @@
     '<aside class="wa-inbox-side" aria-label="Lista de conversas">'+
      '<header class="wa-inbox-side-head"><div><span class="wa-inbox-eyebrow">SEU ATENDIMENTO</span>'+
       '<h1>Conversas <span id="inboxCount" aria-live="polite"></span></h1></div>'+
-      '<button type="button" class="wa-round-icon" id="inboxSettings" aria-label="Opções de acessibilidade" title="Acessibilidade">⚙</button></header>'+
+      '<div class="wa-side-head-buttons"><button type="button" class="wa-round-icon" data-inbox-sync aria-label="Sincronizar histórico de WhatsApps conectados" title="Sincronizar conversas">⟳</button>'+' <button type="button" class="wa-round-icon" id="inboxSettings" aria-label="Opções de acessibilidade" title="Acessibilidade">⚙</button></div></header>'+
      '<div class="wa-inbox-search">'+icon('⌕')+
       '<input id="inboxSearch" type="search" maxlength="90" placeholder="Buscar nome, número ou mensagem" autocomplete="off" aria-label="Pesquisar conversas" value="'+t(search,90)+'"></div>'+
      '<nav class="wa-filters" role="group" aria-label="Filtrar conversas">'+filters.map(([key,label])=>
@@ -409,7 +409,7 @@
     markup+'</div>';dialog.classList.remove('hidden');
    dialog.querySelector('button,input,select')?.focus();
   }
-  function closeDialog(){const dialog=byId('inboxDialog');if(dialog){dialog.classList.add('hidden');dialog.innerHTML='';}}
+  function closeDialog(){cancelSync=true;const dialog=byId('inboxDialog');if(dialog){dialog.classList.add('hidden');dialog.innerHTML='';}}
   function showHelp(){
    showDialog('<h2>Atalhos e acessibilidade</h2><p>Os gestos são opcionais; todas as ações também funcionam com o teclado e os botões.</p>'+
     '<div class="wa-help-grid">'+[
@@ -470,8 +470,62 @@
     }
    }catch{/* network recovery happens on the next tick */}
   }
+
+  async function chooseSync(){
+   if(syncing)return;
+   const linked=await api('/api/waakg/channels');
+   const available=Array.isArray(linked)?linked.filter(c=>c.status==='connected'):[];
+   if(!available.length){
+    toast('Nenhum WhatsApp conectado. Conecte um número por QR Code para sincronizar conversas.',true);
+    return;
+   }
+   showDialog('<h2>Sincronizar conversas do WhatsApp</h2>'+
+    '<p>Importa mensagens de texto disponíveis nos WhatsApps conectados desta empresa. '+ 
+    'O gateway limita a cobertura aos 50 contatos mais recentes e até 100 mensagens por contato neste processo. '+ 
+    'Mídias e grupos não são importados. Não envia mensagens.</p>'+
+    '<label>Número conectado<select id="inboxSyncChannel">'+
+     available.map(c=>'<option value="'+t(c.id)+'">'+t(c.label||c.phone,90)+'</option>').join('')+
+    '</select></label>'+
+    '<button type="button" class="btn primary wide" data-inbox-start-sync>Sincronizar histórico disponível</button>'+
+    '<div class="wa-sync-feedback" id="inboxSyncFeedback" role="status" aria-live="polite"></div>');
+  }
+  async function runSync(){
+   if(syncing)return;
+   const channel=byId('inboxSyncChannel')?.value;
+   if(!cleanId(channel))return;
+   syncing=true;cancelSync=false;
+   const start=byId('inboxDialog')?.querySelector('[data-inbox-start-sync]');
+   if(start)start.disabled=true;
+   const feedback=byId('inboxSyncFeedback');
+   let batches=0,scanned=0,added=0,more=false,partial=false;
+   try{
+    let offset=0;
+    do{
+     if(cancelSync||disposed)break;
+     if(feedback)feedback.textContent='Sincronizando até 5 conversas... '+scanned+' processadas.';
+     const data=await api('/api/inbox/sync','POST',{channelId:channel,offset});
+     if(!data.ok)throw new Error('O gateway não confirmou a sincronização.');
+     scanned+=data.chatsImported||0;added+=data.messagesImported||0;
+     more=data.hasMore;partial=partial||data.partialCoverage;
+     offset=data.nextOffset??0;batches++;
+     if(feedback)feedback.textContent=scanned+' conversa(s), '+added+' mensagem(ns) novas.';
+    }while(more&&batches<10);
+    await refreshList();
+    if(conversations.length&&!active)await open(conversations[0].id);
+    const result=scanned+' conversa(s) verificadas, '+added+' mensagem(ns) de texto importadas.'+
+     (partial?' Cobertura parcial, conforme os limites do gateway.':'');
+    if(feedback)feedback.textContent=result;
+    toast(result);
+    announce(result);
+   }catch(err){
+    if(feedback)feedback.textContent='Falha na sincronização: '+err.message;
+    toast(err.message,true);
+   }finally{syncing=false;if(start)start.disabled=false;}
+  }
   function onClick(ev){
    if(disposed)return;
+   if(ev.target.closest('[data-inbox-sync]')){chooseSync().catch(err=>toast(err.message,true));return;}
+   if(ev.target.closest('[data-inbox-start-sync]')){runSync();return;}
    const action=ev.target.closest('[data-chat-action]');
    if(action){ev.preventDefault();performChatAction(action.dataset.chatAction).catch(error=>toast(error.message,true));return;}
    const messageActionBtn=ev.target.closest('[data-message-action]');
