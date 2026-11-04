@@ -3,6 +3,7 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
+import {scanQuoteRequests,listQuoteRequests,updateQuoteRequest,setQuoteAlerts,processNextOwnerQuoteAlert} from './quote-requests.mjs';
 import {validateTenantFeatures,parseTenantFeatures,filterPermissions,assertApiFeature} from './tenant-features.mjs';
 import {startPipeboardOAuth,finishPipeboardOAuth,listPipeboardOAuth,revokePipeboardOAuth,oauthClientMetadata,testPipeboardConnection} from './marketing-oauth.mjs';
 import {instagramHostedReady,beginInstagramHosted,instagramHostedStatus,disconnectInstagramHosted} from './instagram-hosted.mjs';
@@ -642,6 +643,26 @@ async function handle(req,res){
   return json(res,201,r.rows[0]);
  }
 
+ if(method==='GET'&&pathname==='/api/sales/quote-requests'){
+  requirePermission(a,'sales.read');
+  return json(res,200,{requests:await listQuoteRequests(pool,a.active_tenant_id),
+   alertWhatsAppEnabled:a.quote_alert_whatsapp===true});
+ }
+ if(method==='PUT'&&pathname==='/api/sales/quote-alerts'){
+  requirePermission(a,'sales.manage');
+  const {data}=await body(req,1000);
+  const result=await setQuoteAlerts(pool,a,data.enabled);
+  await audit(a,'sales.quote_alerts.changed',{enabled:result.enabled});
+  return json(res,200,result);
+ }
+ const reqStatus=pathname.match(/^\/api\/sales\/quote-requests\/([a-f0-9-]{36})\/status$/);
+ if(reqStatus&&method==='PATCH'){
+  requirePermission(a,'sales.manage');
+  const {data}=await body(req,1000);
+  const result=await updateQuoteRequest(pool,a.active_tenant_id,reqStatus[1],data.status);
+  await audit(a,'sales.quote_request.updated',{requestId:result.id,status:result.status});
+  return json(res,200,result);
+ }
  if(method==='GET'&&pathname==='/api/sales'){
   requirePermission(a,'sales.read');
   return json(res,200,await listSales(pool,a.active_tenant_id));
@@ -1287,6 +1308,28 @@ async function main(){
   finally{liveSyncBusy=false;}
  },16000);
  liveSyncWorker.unref();
+ // Quote lead intake scans only recent inbound messages. It never sends any
+ // quote to the customer and cannot create a paid order automatically.
+ let quoteBusy=false;
+ const quoteWorker=setInterval(async()=>{
+  if(quoteBusy||workersBlocked())return;
+  quoteBusy=true;
+  try{await scanQuoteRequests(pool);}
+  catch(error){console.warn('[socio-quote-intake]',String(error?.code||'INTAKE_ERROR').slice(0,40));}
+  finally{quoteBusy=false;}
+ },15000);
+ quoteWorker.unref();
+ // Owner WhatsApp alerts only when the owner explicitly enabled the setting.
+ // Uncertain sends are marked permanently, never retried automatically.
+ let ownerAlertBusy=false;
+ const ownerAlertWorker=setInterval(async()=>{
+  if(ownerAlertBusy||workersBlocked())return;
+  ownerAlertBusy=true;
+  try{await processNextOwnerQuoteAlert(pool);}
+  catch(error){console.warn('[socio-quote-alert]',String(error?.code||'ALERT_ERROR').slice(0,40));}
+  finally{ownerAlertBusy=false;}
+ },12000);
+ ownerAlertWorker.unref();
  // AI only attempts replies if explicitly enabled, agent enabled and each
  // conversation handed over. Claims are durable to avoid duplicate messages.
  let replyBusy=false;
