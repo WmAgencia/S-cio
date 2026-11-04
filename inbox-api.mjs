@@ -88,9 +88,9 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
   const rateKey=tenant+':'+data.channelId+':'+offset,prev=inboxSyncLast.get(rateKey)||0;
   if(Date.now()-prev<2400)throw err(429,'Sincronização já solicitada. Tente novamente.');
   inboxSyncLast.set(rateKey,Date.now());
-  const c=await query(\`SELECT l.session_id,ch.id,ch.phone FROM waakg_links l
+  const c=await query(`SELECT l.session_id,ch.id,ch.phone FROM waakg_links l
    JOIN channels ch ON ch.tenant_id=l.tenant_id AND ch.id=l.channel_id
-   WHERE l.tenant_id=$1 AND l.channel_id=$2 AND ch.provider='waakg'\`,[tenant,data.channelId]);
+   WHERE l.tenant_id=$1 AND l.channel_id=$2 AND ch.provider='waakg'`,[tenant,data.channelId]);
   if(!c.rowCount)throw err(404,'Canal WhatsApp não encontrado nesta empresa.');
   const {session_id:sessionId,phone, id:channelId}=c.rows[0];
   const status=await getSessionStatus(sessionId);
@@ -108,24 +108,26 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
    const client=await pool.connect();
    try{
     await client.query('BEGIN');
-    const chat=await client.query(\`INSERT INTO conversations(id,tenant_id,channel_id,customer_phone,customer_name)
-     VALUES($1,$2,$3,$4,'') ON CONFLICT(tenant_id,channel_id,customer_phone)
-     DO UPDATE SET customer_phone=EXCLUDED.customer_phone RETURNING id\`,
-     [id(),tenant,channelId,customerPhone]);
+    const contactName=String(list.names?.[jid]||'').slice(0,100);
+    const chat=await client.query(`INSERT INTO conversations(id,tenant_id,channel_id,customer_phone,customer_name)
+     VALUES($1,$2,$3,$4,$5) ON CONFLICT(tenant_id,channel_id,customer_phone)
+     DO UPDATE SET customer_name=CASE WHEN conversations.customer_name='' THEN EXCLUDED.customer_name ELSE conversations.customer_name END
+     RETURNING id`,
+     [id(),tenant,channelId,customerPhone,contactName]);
     const conversationId=chat.rows[0].id;
     for(const m of normalized){
      // Provider identifiers never include the raw phone/JID or message content.
      const stable=createHash('sha256').update(sessionId+':'+jid+':'+m.identity).digest('hex');
      const providerId='waakg:'+stable;
-     const inserted=await client.query(\`INSERT INTO messages(id,tenant_id,conversation_id,direction,body,provider_id,created_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(tenant_id,provider_id) DO NOTHING RETURNING id\`,
+     const inserted=await client.query(`INSERT INTO messages(id,tenant_id,conversation_id,direction,body,provider_id,created_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(tenant_id,provider_id) DO NOTHING RETURNING id`,
       [id(),tenant,conversationId,m.direction,m.body,providerId,m.created_at]);
      messagesImported+=inserted.rowCount;
     }
     if(normalized.length){
-     await client.query(\`UPDATE conversations SET last_message_at=GREATEST(
+     await client.query(`UPDATE conversations SET last_message_at=GREATEST(
        last_message_at,(SELECT MAX(created_at) FROM messages WHERE tenant_id=$1 AND conversation_id=$2))
-       WHERE tenant_id=$1 AND id=$2\`,[tenant,conversationId]);
+       WHERE tenant_id=$1 AND id=$2`,[tenant,conversationId]);
     }
     await client.query('COMMIT');chatsImported++;
    }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}
