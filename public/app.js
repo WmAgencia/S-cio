@@ -622,6 +622,7 @@ async function training(){
  const run=auto.run,connected=waLinks.filter(c=>c.status==='connected');
  const percent=run?.percent??0;
  const draft=versions.find(v=>v.status==='draft'),published=versions.find(v=>v.status==='approved');
+ const archived=versions.filter(v=>v.status==='archived').sort((a,b)=>b.version-a.version).slice(0,10);
  const ongoing=run&&['scanning','analyzing'].includes(run.status);
  const status=run?.status==='scanning'?'Lendo conversas dos WhatsApps conectados':
   run?.status==='analyzing'?'Organizando o conhecimento e gerando Markdown':
@@ -647,6 +648,9 @@ async function training(){
    '<strong class="socio-train-percent">'+percentText+' analisado</strong>'+
    '<p class="form-note" role="status">'+e(status)+'</p>'+
    (run?.messagesImported?'<p class="form-note">'+e(run.messagesImported)+' mensagens de texto novas importadas neste treinamento.</p>':'')+
+   (run?.channels?'<p class="form-note">'+e(run.scanned||0)+' de '+e(run.channels)+' WhatsApp(s) sincronizado(s) · '+
+    e(run.processedChats||0)+' de '+e(run.totalChats||0)+' conversas disponíveis processadas.</p>':'')+
+   (run?.failedScans?'<p class="form-error">'+e(run.failedScans)+' sincronização(ões) falharam; revise a conexão e reinicie o treinamento.</p>':'')+
    (run?.partialCoverage?'<p class="form-note">Cobertura parcial: o gateway limita o histórico a 50 conversas por número e até 400 mensagens por conversa. Não representa todo o WhatsApp.</p>':'')+
    (run?.errorCode?'<p class="form-error">Erro: '+e(run.errorCode)+'</p>':'')+
    (!auto.groqConfigured?'<p class="form-note">A chave GROQ_API_KEY ainda não está configurada. A análise gera Markdown preliminar por regras; a síntese pelo Groq será habilitada quando a chave for instalada.</p>':
@@ -656,11 +660,27 @@ async function training(){
   (draft?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Markdown gerado · versão '+e(draft.version)+'</h2>'+
     '<span class="badge yellow">Aguardando aprovação</span></div>'+
     '<p class="form-note">'+e(draft.report?.summary||'Reveja o conteúdo antes de ativá-lo.')+'</p>'+
-    '<p class="form-note">Processamento: '+e(draft.report?.analysisProvider==='groq'?'Groq':draft.report?.analysisProvider==='deterministic_fallback'?'Síntese preliminar (Groq indisponível)':'Síntese preliminar')+'</p>'+
-    '<pre class="code-preview">'+e(draft.markdown||'')+'</pre>'+
-    '<button type="button" class="btn primary" id="analysisApprove" data-id="'+e(draft.id)+'">Aprovar Markdown</button></section>':'')+
+    '<p class="form-note">Origem: '+e(draft.report?.source==='connected_whatsapp_history'?'Conversas dos WhatsApps conectados (limite de histórico do gateway)':'Importações disponíveis da empresa')+
+    ' · '+e(draft.report?.sourcesIncluded??draft.report?.conversations??0)+' fonte(s) consideradas.</p>'+
+    (draft.report?.partialCoverage?'<p class="form-note">Cobertura parcial: o gateway ou o limite de fontes não permite declarar que todas as conversas foram analisadas.</p>':'')+
+    '<p class="form-note">Síntese: '+e(draft.report?.analysisProvider==='groq'?'Groq':draft.report?.analysisProvider==='deterministic_fallback'?'Regras locais (Groq indisponível)':'Regras locais')+'</p>'+
+    '<label class="socio-draft-label" for="trainingDraftMarkdown">Revise o Markdown antes da publicação</label>'+
+    '<textarea class="socio-training-editor" id="trainingDraftMarkdown" maxlength="22000" spellcheck="true" rows="13" '+(!canManage?'disabled':'')+'>'+e(draft.markdown||'')+'</textarea>'+
+    '<p class="form-note">Somente depois de aprovar o texto ele se torna conhecimento ativo da IA. Nunca inclui mensagens literais de clientes.</p>'+
+    (canManage?'<div class="socio-training-buttons"><button type="button" class="btn soft" id="saveTrainingDraft">Salvar revisão</button>'+
+      '<button type="button" class="btn primary" id="analysisApprove" data-id="'+e(draft.id)+'">Aprovar Markdown</button></div>':'')+
+    '</section>':'')+
   (published?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Conhecimento aprovado</h2><span class="badge green">Versão '+e(published.version)+'</span></div>'+
     '<pre class="code-preview">'+e(ag.knowledge_md||'')+'</pre></section>':'')+
+  (archived.length?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Histórico de versões</h2>'+
+    '<span class="badge gray">'+e(archived.length)+' arquivada(s)</span></div>'+
+    '<p class="form-note">Você pode recuperar uma versão aprovada anteriormente. O conteúdo anterior ficará arquivado para eventual retorno.</p>'+
+    '<div class="socio-training-version-list">'+archived.map(v=>
+      '<div class="socio-training-version"><div><strong>Versão '+e(v.version)+'</strong>'+
+      '<small>'+e(v.report?.summary||'Rascunho previamente aprovado')+'</small></div>'+
+      (canManage?'<button class="btn sm soft" type="button" data-restore-training="'+e(v.id)+'">Restaurar versão</button>':'')+
+      '</div>').join('')+'</div></section>':'')+
+
  '</div>';
  $('#startAutoTraining')?.addEventListener('click',()=>action(async()=>{
   const btn=$('#startAutoTraining');if(btn)btn.disabled=true;
@@ -672,11 +692,32 @@ async function training(){
   api,toast,canManage,
   onConnected:()=>state.view==='training'?training():Promise.resolve()
  }));
+ $('#trainingDraftMarkdown')?.addEventListener('input',()=>{
+  const approval=$('#analysisApprove');
+  if(approval)approval.disabled=$('#trainingDraftMarkdown').value!==draft.markdown;
+ });
+ $('#saveTrainingDraft')?.addEventListener('click',()=>action(async()=>{
+  const editor=$('#trainingDraftMarkdown');
+  if(!editor)return;
+  await api('/api/training/versions/'+draft.id,'PATCH',{markdown:editor.value});
+  toast('Markdown salvo como rascunho. Ainda não foi ativado na IA.');
+  await training();
+ }));
  $('#analysisApprove')?.addEventListener('click',()=>action(async()=>{
+  if($('#trainingDraftMarkdown')?.value!==draft.markdown)
+   throw Error('Salve a revisão antes de aprovar o Markdown.');
   await api('/api/training/versions/'+draft.id+'/approve','POST',{});
   toast('Markdown aprovado e disponível para a IA.');
   await training();
  }));
+ view.querySelectorAll('[data-restore-training]').forEach(btn=>btn.addEventListener('click',()=>action(async()=>{
+  const version=archived.find(v=>v.id===btn.dataset.restoreTraining);
+  if(!version)return;
+  if(!window.confirm('Restaurar a versão '+version.version+' como conhecimento ativo da IA?'))return;
+  await api('/api/training/versions/'+version.id+'/restore','POST',{});
+  toast('Versão '+version.version+' restaurada e aplicada ao agente.');
+  await training();
+ })));
  mountAiGuideTabs();
  if(ongoing)trainingTimer=setTimeout(()=>{
   if(state.view==='training'&&state.aiTab==='training')
