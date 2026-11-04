@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import {TABLES,checkMigrationConfiguration} from '../scripts/socio-supabase-migrate.mjs';
 import {validateMasterConfig} from '../scripts/socio-provision-master.mjs';
 
-test('Sócio migration covers all 23 production tables in dependency order',()=>{
- assert.equal(TABLES.length,23);
+test('Sócio migration covers all 25 production tables in dependency order',()=>{
+ assert.equal(TABLES.length,25);
  assert.equal(new Set(TABLES).size,TABLES.length);
  for(const [parent,child] of [['tenants','users'],['tenants','products'],['channels','conversations'],
   ['conversations','messages'],['training_jobs','training_job_items'],
   ['training_jobs','training_versions'],['imports','training_job_items'],
-  ['waakg_scans','waakg_scan_chats'],['products','product_variants'],['conversations','conversation_ui_state'],['messages','message_ui_state']]){
+  ['waakg_scans','waakg_scan_chats'],['products','product_variants'],['conversations','conversation_ui_state'],['messages','message_ui_state'],['messages','ai_reply_attempts'],['conversations','message_outbox']]){
   assert.ok(TABLES.indexOf(parent)<TABLES.indexOf(child),parent+' must be inserted before '+child);
  }
 });
