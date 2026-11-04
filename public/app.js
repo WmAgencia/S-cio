@@ -1250,15 +1250,48 @@ document.addEventListener('keydown',event=>{
 });
 initSidebarIcons();
 
+function bindPasswordToggle(inputId,buttonId){
+ const input=$('#'+inputId),button=$('#'+buttonId);
+ button?.addEventListener('click',()=>{
+  const revealed=input.type==='password';
+  input.type=revealed?'text':'password';
+  button.textContent=revealed?'Ocultar':'Mostrar';
+  button.setAttribute('aria-label',revealed?'Ocultar senha':'Mostrar senha');
+  button.setAttribute('aria-pressed',String(revealed));
+  input.focus();
+ });
+}
+bindPasswordToggle('loginPassword','toggleLoginPassword');
+bindPasswordToggle('setupPassword','toggleSetupPassword');
+$('#loginPassword')?.addEventListener('keyup',ev=>{
+ $('#loginCapsMessage')?.classList.toggle('hidden',!ev.getModifierState?.('CapsLock'));
+});
 $('#loginForm').addEventListener('submit',async ev=>{
- ev.preventDefault();$('#authError').textContent='';
- try{const data=await api('/api/login','POST',formValues(ev.currentTarget));state.csrf=data.csrf;await boot();}
- catch(err){$('#authError').textContent=errMsg(err);}
+ ev.preventDefault();
+ const form=ev.currentTarget,button=$('#loginSubmit'),progress=$('#loginProgress');
+ $('#authError').textContent='';
+ button.disabled=true;button.setAttribute('aria-busy','true');
+ progress?.classList.remove('hidden');
+ try{
+  const data=await api('/api/login','POST',formValues(form));
+  state.csrf=data.csrf;state.view='overview';await boot();
+ }catch(err){
+  $('#authError').textContent=errMsg(err);
+  form.elements.password?.focus();
+ }finally{
+  button.disabled=false;button.setAttribute('aria-busy','false');
+  progress?.classList.add('hidden');
+ }
 });
 $('#setupForm').addEventListener('submit',async ev=>{
  ev.preventDefault();$('#authError').textContent='';
- try{const data=await api('/api/setup','POST',formValues(ev.currentTarget));state.csrf=data.csrf;await boot();}
- catch(err){$('#authError').textContent=errMsg(err);}
+ const form=ev.currentTarget,button=form.querySelector('button[type="submit"]');
+ if(button){button.disabled=true;button.setAttribute('aria-busy','true');}
+ try{
+  const data=await api('/api/setup','POST',formValues(form));
+  state.csrf=data.csrf;state.view='overview';await boot();
+ }catch(err){$('#authError').textContent=errMsg(err);}
+ finally{if(button){button.disabled=false;button.setAttribute('aria-busy','false');}}
 });
 $$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{
  if(b.dataset.view==='training')state.aiTab='training';
