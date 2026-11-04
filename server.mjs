@@ -1231,6 +1231,16 @@ async function main(){
    "AND table_name='users' AND column_name='active'");
   if(!requiredColumns.rowCount)throw new Error('Private Supabase team schema is outdated');
  }else await query(schema);
+ // Google Ads was removed from this SaaS. Revoke any previously stored local
+ // authorizations and legacy script secrets, without deleting historic metrics.
+ // Idempotent: after the first successful deployment subsequent runs are no-ops.
+ await query("UPDATE marketing_oauth_attempts SET consumed_at=now() "+
+  "WHERE provider='google' AND consumed_at IS NULL");
+ await query("UPDATE marketing_oauth_grants SET status='disconnected',token_ciphertext=NULL,expires_at=NULL,"+
+  "last_read_status='not_tested',last_checked_at=NULL,last_account_count=0,updated_at=now() "+
+  "WHERE provider='google' AND (status<>'disconnected' OR token_ciphertext IS NOT NULL)");
+ await query("UPDATE marketing_connections SET status='disabled',secret_ciphertext=NULL,updated_at=now() "+
+  "WHERE provider='google_ads_scripts' AND (status<>'disabled' OR secret_ciphertext IS NOT NULL)");
  // Storage probe checks the real private S3 endpoint without touching customer files.
  if(mediaConfigured())void checkMediaStorage()
   .then(x=>console.info('[socio product media]',JSON.stringify(x)))
