@@ -68,8 +68,7 @@ test('marketing HTTP: owner/CSRF, signed Google Ads Scripts, replay and disconne
   body:JSON.stringify({provider:'unknown'})});
  assert.equal(invalidOauth.status,422);
  const instagramStatus=await fetch(base+'/api/instagram/hosted/status',{headers:{Cookie:cookie}});
- assert.equal(instagramStatus.status,200);
- assert.equal((await instagramStatus.json()).configured,false);
+ assert.equal(instagramStatus.status,404);
  const refusedCallback=await fetch(base+'/api/marketing/oauth/callback?state='+('0'.repeat(64))+
   '&code=some-test-code-123',{redirect:'manual'});
  assert.equal(refusedCallback.status,303);
@@ -79,7 +78,7 @@ test('marketing HTTP: owner/CSRF, signed Google Ads Scripts, replay and disconne
  const initial=await overview.json();
  assert.deepEqual(initial.connections,[]);
  assert.deepEqual(initial.reports,[]);
- assert.equal(initial.instagramLab.accountConnected,false);
+ assert.equal(initial.instagramLab,undefined);
  const withoutCsrf=await fetch(base+'/api/marketing/google/register',{
   method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json'},
   body:JSON.stringify({accountId:'1234567890',label:'Google Teste'})});
