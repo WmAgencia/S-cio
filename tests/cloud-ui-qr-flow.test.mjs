@@ -23,7 +23,7 @@ test('IA uses one sidebar entry with two functional tabs, preserving backend fun
  assert.match(js,/mountAiGuideTabs\(\);/);
  assert.match(js,/state\.aiTab==='agent'\?agent\(\):training\(\)/);
  assert.match(js,/if\(next==='agent'\)/);
- assert.match(js,/api\('\/api\/training\/jobs'/);
+ assert.match(js,/api\('\/api\/training\/auto'/);
  assert.match(js,/api\('\/api\/simulate'/);
 });
 test('WhatsApp onboarding is QR-first, with real status and no manual Meta ID form',()=>{
