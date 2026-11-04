@@ -88,7 +88,10 @@ export function productCaption(product){
   throw fail(409,'Produto indisponível no catálogo.');
  const money=(price/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
  const extras=(product.variants||[]).filter(v=>v.active!==false&&v.stock_quantity!==0).slice(0,5)
-  .map(v=>String(v.name).slice(0,45)).join(', ');
+  .map(v=>String(v.name).slice(0,45)+
+   (Number.isSafeInteger(v.price_cents)?' ('+
+     (v.price_cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})+')':'')
+  ).join(', ');
  return [name,money,description,extras?'Opções: '+extras:''].filter(Boolean).join('\n').slice(0,900);
 }
 export function productQuickReplies(productId){
