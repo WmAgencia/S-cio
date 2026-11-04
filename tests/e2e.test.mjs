@@ -6,7 +6,7 @@ import {createServer} from 'node:http';
 import {zipStore} from './zip-helper.mjs';
 import sharp from 'sharp';
 import {Client} from 'pg';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 const enabled=!!process.env.DATABASE_URL;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 test('real PostgreSQL: login, tenant isolation, imports and webhook signature protections',{skip:!enabled,timeout:65000},async t=>{
@@ -321,12 +321,30 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(duplicateAcrossTenants.status,409,'Two separate tenant users cannot claim one login phone');
 
  const betaCookie=betaLogin.cookie.split(';')[0],betaCsrf=betaLogin.result.csrf;
+ const betaSessionHash=createHash('sha256').update(decodeURIComponent(betaCookie.split('=')[1])).digest('hex');
+ // Even if a privileged database operation accidentally moves a session to
+ // another tenant, ordinary company members may not use that session.
+ await db.query('UPDATE sessions SET active_tenant_id=$2 WHERE token_hash=$1',
+  [betaSessionHash,me.result.tenant.id]);
+ assert.equal((await call('/api/me','GET',undefined,betaCookie)).status,401,
+  'Session tenant must match user tenant except platform owner');
+ await db.query('UPDATE sessions SET active_tenant_id=$2 WHERE token_hash=$1',
+  [betaSessionHash,foreign.result.id]);
+ assert.equal((await call('/api/me','GET',undefined,betaCookie)).status,200);
  // Phase 4: roles, permissions and session invalidation must be enforced by
  // the server on each request rather than just hidden UI controls.
+ const earlyIntegrity=await call('/api/ops/tenant-integrity','GET',undefined,betaCookie);
+ assert.equal(earlyIntegrity.status,200);
+ assert.equal(earlyIntegrity.result.preflightClean,true);
+ assert.equal(earlyIntegrity.result.totalMismatches,0);
  const initialTeam=await call('/api/team','GET',undefined,betaCookie);
  assert.equal(initialTeam.status,200);
  assert.equal(initialTeam.result.length,1);
  assert.equal(initialTeam.result[0].role,'owner');
+ const badInitialPassword=await call('/api/team','POST',{
+  name:'Senha fraca',email:'weak-phase4@example.test',role:'agent',password:'123'
+ },betaCookie,betaCsrf);
+ assert.equal(badInitialPassword.status,422);
  const noCsrfInvite=await call('/api/team','POST',{
   name:'Sem CSRF',email:'no-csrf@example.test',role:'agent',password:'SenhaTemporaria2026!'
  },betaCookie);
@@ -342,7 +360,7 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const employeeMe=await call('/api/me','GET',undefined,employeeCookie);
  assert.equal(employeeMe.status,200);
  assert(!employeeMe.result.user.permissions.includes('team.promote'));
- for(const endpoint of ['/api/team','/api/ops/audit','/api/sales','/api/agent','/api/training/auto','/api/training/versions','/api/imports','/api/waakg/scans']){
+ for(const endpoint of ['/api/team','/api/ops/audit','/api/ops/tenant-integrity','/api/sales','/api/agent','/api/training/auto','/api/training/versions','/api/imports','/api/waakg/scans']){
   const denied=await call(endpoint,'GET',undefined,employeeCookie);
   assert.equal(denied.status,403,'Attendant must not read '+endpoint);
  }
