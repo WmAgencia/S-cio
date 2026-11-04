@@ -222,6 +222,8 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
  if(method==='PATCH'&&route==='ui'){
   const {data}=await body(req);
   let clean;try{clean=validateUiPatch(data);}catch{throw err(422,'Configuração de conversa inválida.');}
+  if(conversation.channel_provider==='instagram'&&clean.handling_mode==='ai_assist')
+   throw err(403,'Respostas automáticas do Instagram não estão habilitadas.');
   if(Object.hasOwn(clean,'handling_mode'))clean.ai_activated_at=clean.handling_mode==='ai_assist'?new Date():null;
   if(Object.hasOwn(clean,'assigned_user_id')){
    if(!['owner','admin'].includes(a.role)&&!a.platform_owner)throw err(403,'Sem permissão para atribuir conversas.');
