@@ -29,7 +29,7 @@
   const initials=name=>String(name||'?').trim().slice(0,1).toUpperCase();
   const cleanId=value=>/^[0-9a-f-]{36}$/i.test(String(value||''))?String(value):'';
   const savedPrefs=()=>{try{localStorage.setItem('socio-inbox-accessibility',JSON.stringify(prefs));}catch{}};
-  const statusLabel=c=>c?.status==='resolved'?'Resolvida':c?.handling_mode==='ai_assist'?'IA auxiliando':c?.status==='human'?'Atendimento humano':'Em atendimento';
+  const statusLabel=c=>c?.handling_mode==='ai_assist'?'IA respondendo':'Humano respondendo';
   const current=()=>conversations.find(c=>c.id===active)||null;
   function clearTimers(){
    clearTimeout(searchTimer);clearTimeout(draftTimer);clearTimeout(longTimer);clearInterval(refreshTimer);
@@ -40,8 +40,7 @@
   }
   function layout(){
    const filters=[
-    ['all','Todas'],['unread','Não lidas'],['favorites','Favoritas'],['pinned','Fixadas'],
-    ['human','Humano'],['ai_assist','IA'],['resolved','Resolvidas'],['archived','Arquivadas']
+    ['all','Todas'],['ai_assist','IA respondendo'],['human','Humano respondendo']
    ];
    return '<section class="wa-inbox'+(prefs.contrast==='high'?' wa-high-contrast':'')+
     (prefs.fontScale==='large'?' wa-large-type':'')+(prefs.compact?' wa-compact':'')+
@@ -94,7 +93,7 @@
       '</button></div>';
    }).join(''):'<div class="wa-inbox-empty-list"><strong>Nenhuma conversa encontrada</strong>'+
     '<p>Conecte um WhatsApp para receber mensagens ou altere os filtros.</p>'+
-    '<button class="btn soft" type="button" data-inbox-go="channels">Gerenciar WhatsApps</button></div>';
+    '<button class="btn soft" type="button" data-inbox-connect>Conectar WhatsApp</button></div>';
   }
   function renderHeader(c){
    const name=c?.customer_name||c?.customer_phone||'Contato';
@@ -249,7 +248,10 @@
    if(thread)thread.preferences=result.preferences;
    if(!silent)toast('Preferências salvas.');
    renderList();
-   if(Object.hasOwn(patch,'handling_mode')){renderComposer();if(infoOpen)renderDetails();}
+   if(Object.hasOwn(patch,'handling_mode')){
+    renderComposer();if(infoOpen)renderDetails();
+    await refreshList();
+   }
   }
   async function saveDraft(){
    const input=byId('inboxDraft');if(!input||!active)return;
