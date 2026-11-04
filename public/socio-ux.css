@@ -113,3 +113,18 @@
  .wa-inbox-connect{padding:7px 8px;font-size:9px}
 }
 @media(prefers-reduced-motion:reduce){.socio-popup-backdrop{backdrop-filter:none}}
+
+/* Owner-only technical readiness, compact and consistent with espresso theme */
+.socio-ops-panel{margin-top:20px}
+.socio-ops-actions{display:flex;flex-wrap:wrap;gap:9px;margin:13px 0}
+.socio-ops-result{font-size:12px;line-height:1.5;color:#d1b09a;min-height:23px}
+.socio-ops-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:9px;margin-bottom:12px}
+.socio-ops-check{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid #70472a;
+ background:#332116;border-radius:11px}
+.socio-ops-check strong{font-size:11px;color:#f6dcc7;display:block}
+.socio-ops-check small{font-size:10px;color:#c2a48c;display:block;margin-top:3px}
+.socio-ops-indicator{width:9px;height:9px;flex:0 0 9px;border-radius:50%;margin-top:4px;background:#dfad55}
+.socio-ops-indicator.verified{background:#69d59e}
+.socio-ops-indicator.configured{background:#f4a456}
+.socio-ops-indicator.action_required{background:#e58a69}
+@media(max-width:640px){.socio-ops-actions .btn{flex:1;min-width:130px}}
