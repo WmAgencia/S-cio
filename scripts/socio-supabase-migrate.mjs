@@ -4,7 +4,7 @@ import {Client} from 'pg';
 import {createHash} from 'node:crypto';
 
 export const TABLES=Object.freeze([
- 'tenants','users','instagram_oauth_states','sessions','channels','instagram_accounts','products','agents','imports',
+ 'tenants','users','marketing_connections','marketing_report_receipts','marketing_daily_metrics','instagram_oauth_states','sessions','channels','instagram_accounts','products','agents','imports',
  'conversations','instagram_outbox','messages','audit','training_jobs','training_job_items',
  'training_versions','waakg_links','waakg_scans','waakg_scan_chats',
  'waakg_import_snapshots','product_variants','product_media','product_campaign_links',
