@@ -586,11 +586,19 @@ async function products(selected=null){
  const productCards=list.length?'<div class="catalog-list">'+list.map(p=>{
   const stockedVariants=p.variants?.filter(v=>v.active!==false)||[];
   const available=p.active&&(stockedVariants.length?stockedVariants.some(v=>v.stock_quantity===null||v.stock_quantity>0):(p.stock_quantity===null||p.stock_quantity>0));
-  return '<button type="button" class="catalog-product '+(selected===p.id?'is-selected':'')+'" data-select-product="'+e(p.id)+'">'+
+  const variants=Array.isArray(p.variants)?p.variants:[];
+  const imageCount=Array.isArray(p.media)?p.media.length:0;
+  const stockText=variants.length?variants.length+' variação(ões)':
+   p.stock_quantity===null?'Estoque não controlado':
+   Number(p.stock_quantity||0)+' em estoque';
+  return '<button type="button" class="catalog-product '+(selected===p.id?'is-selected':'')+'" data-select-product="'+e(p.id)+'" '+
+   'aria-label="Ver detalhes e editar '+e(p.name)+'" aria-haspopup="dialog">'+
    '<div class="catalog-cover">'+photo(p)+'</div>'+
-   '<div class="catalog-product-copy"><strong>'+e(p.name)+'</strong><small>'+e(p.sku||'Sem SKU')+' · '+e(p.media?.length||0)+' foto(s)</small>'+
-   '<span>'+e(catalogPrice(p.price_cents))+'</span></div>'+
-   '<span class="catalog-status '+(available?'yes':'no')+'">'+(available?'Ativo':'Indisponível')+'</span></button>';
+   '<div class="catalog-product-copy"><strong>'+e(p.name)+'</strong>'+
+   '<small>'+e(p.sku||'Sem SKU')+' · '+e(imageCount)+' foto(s)</small>'+
+   '<span class="catalog-price">'+e(catalogPrice(p.price_cents))+'</span>'+
+   '<small class="catalog-inventory">'+e(stockText)+'</small></div>'+
+   '<span class="catalog-status '+(available?'yes':'no')+'">'+(available?'Disponível':'Indisponível')+'</span></button>';
  }).join('')+'</div>':
  empty('▦','Seu catálogo está vazio','Cadastre um produto para incluir preço, variações e fotos.');
  const gallery=current?'<div class="catalog-gallery">'+current.media.map(m=>
@@ -658,7 +666,12 @@ async function products(selected=null){
  $('#newVariantRows')?.addEventListener('click',ev=>{
   const btn=ev.target.closest('[data-remove-variant]');if(btn)btn.closest('[data-variant-row]').remove();
  });
- if(modalOpen)$('#productForm')?.elements?.name?.focus();
+ if(modalOpen){
+  $('#productForm')?.elements?.name?.focus();
+  $('#productModal')?.addEventListener('keydown',event=>{
+   if(event.key==='Escape'){event.preventDefault();void products(null);}
+  });
+ }
  view.querySelectorAll('[data-select-product]').forEach(btn=>btn.addEventListener('click',()=>products(btn.dataset.selectProduct)));
  $('#clearProduct')?.addEventListener('click',()=>products(null));
  $('#productForm').addEventListener('submit',async ev=>{
