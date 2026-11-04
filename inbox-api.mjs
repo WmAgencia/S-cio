@@ -64,7 +64,19 @@ export function normalizeInboxRemoteText(rows,jid){
  const seen=new Set(),out=[];
  for(const m of rows.slice(0,100)){
   if(m?.remoteJid!==jid||!['TEXT','CONVERSATION','EXTENDEDTEXT',''].includes(String(m?.type||'').toUpperCase()))continue;
-  const body=typeof m?.content==='string'?m.content.trim():'';
+  let body=typeof m?.content==='string'?m.content.trim():'';
+  // WA-AKG normally stores the button label as TEXT, but some phones only
+  // return a Native Flow choice ID. Map ONLY our signed Socio option IDs.
+  const nativeChoice=body.match(/^🔘 \[(?:Interactive Response|Button Response|Button Reply)\]\s+(socio:[a-z0-9:_.-]+)$/i);
+  if(nativeChoice){
+   const key=nativeChoice[1].toLowerCase();
+   if(key==='socio:human')body='Falar com atendente';
+   else if(key==='socio:catalog')body='Ver produtos';
+   else if(key.startsWith('socio:interest:'))body='Tenho interesse';
+   else if(key.startsWith('socio:options:'))body='Ver opções';
+   else if(/^socio:reply:[a-z0-9-]{1,55}$/.test(key))
+    body=key.slice('socio:reply:'.length).replace(/-/g,' ');
+  }
   const when=safeTime(m?.timestamp),outgoing=m?.fromMe===true;
   if(!body||!when)continue;
   const token=String(m.keyId||m.id||'').slice(0,200);
