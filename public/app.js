@@ -2,7 +2,7 @@
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training'};
-const titles={overview:'Visão geral',inbox:'WhatsApp',marketing:'Anúncios e métricas',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas e orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
+const titles={overview:'Visão geral',inbox:'WhatsApp',marketing:'Meta Ads',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas e orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -444,7 +444,7 @@ async function marketing(){
     '</p>'+existing+
    '</section>';
  };
- view.innerHTML=heading('MARKETING','Anúncios e métricas.',
+ view.innerHTML=heading('META ADS','Meta Ads.',
   'Apenas conecte a sua conta. Sem códigos, scripts ou configurações de API.')+
   item('meta','Meta Ads','Conecte o Facebook e escolha as contas de anúncios que deseja autorizar.','pipeboard_meta')+
   '<section class="card" style="padding:22px">'+
