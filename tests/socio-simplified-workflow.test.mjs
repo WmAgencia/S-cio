@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {normalizeCnpj,validCnpj,mapCompanyRecord,lookupCompany} from '../cnpj-lookup.mjs';
-import {grokReady,grokResponse,grokKnowledgeDraft} from '../xai-grok.mjs';
+import {groqReady,groqResponse,groqKnowledgeDraft} from '../groq-client.mjs';
 import {startAutoTraining,autoTrainingStatus,processNextAutoTraining} from '../training-auto.mjs';
 const root=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
 
@@ -28,22 +28,26 @@ test('only plausible Brazilian company identifiers enter public lookup',async()=
  assert.equal('qsa' in record,false,'No private stakeholder data in tenant onboarding');
  await assert.rejects(lookupCompany('00000000000000',{fetchImpl:()=>{throw Error('Network should not be reached');}}),/inválido/);
 });
-test('Grok is xAI Responses, not Groq; absence of credential is fail-closed',async()=>{
- assert.equal(grokReady({}),false);
- await assert.rejects(grokResponse({input:'Olá',env:{}}),/XAI_API_KEY/);
- const env={XAI_API_KEY:'test-key-not-real-example-12345',XAI_MODEL:'grok-4.7'};
+test('Groq uses the same official provider/model as Prospector and fails safely without a key',async()=>{
+ assert.equal(groqReady({}),false);
+ await assert.rejects(groqResponse({instructions:'Teste',input:'Olá',env:{}}),/GROQ_API_KEY/);
+ const env={GROQ_API_KEY:'test-key-not-real-example-12345',GROQ_MODEL:'openai/gpt-oss-120b'};
  let request;
- const reply=await grokResponse({instructions:'Assistente de testes',input:'Bom dia',env,fetchImpl:async(url,opts)=>{
-  request={url,opts,body:JSON.parse(opts.body)};
-  return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:'Olá, como posso ajudar?'}]}]})};
+ const response=await groqResponse({instructions:'Assistente de testes',input:'Bom dia',env,fetchImpl:async(url,opts)=>{
+  request={url,body:JSON.parse(opts.body),headers:opts.headers};
+  return {ok:true,json:async()=>({choices:[{message:{content:'Olá, como posso ajudar?'}}]})};
  }});
- assert.equal(reply,'Olá, como posso ajudar?');
- assert.equal(request.url,'https://api.x.ai/v1/responses');
- assert.equal(request.body.model,'grok-4.7');
- assert.equal(request.body.store,false);
- assert(!request.url.includes('groq.com'));
- const fallback=await grokKnowledgeDraft({markdown:'# Rascunho\nConteúdo',report:{conversations:5},env:{}});
+ assert.equal(response.reply,'Olá, como posso ajudar?');
+ assert.equal(response.model,'openai/gpt-oss-120b');
+ assert.equal(request.url,'https://api.groq.com/openai/v1/chat/completions');
+ assert.equal(request.body.model,'openai/gpt-oss-120b');
+ assert.equal(request.body.messages[0].role,'system');
+ assert.equal(request.body.messages[1].role,'user');
+ assert.equal(request.body.stream,false);
+ assert.equal(request.headers.Authorization,'Bearer '+env.GROQ_API_KEY);
+ const fallback=await groqKnowledgeDraft({markdown:'# Rascunho\\nConteúdo',report:{conversations:5},env:{}});
  assert.equal(fallback.provider,'deterministic');
+ assert.equal(fallback.model,null);
 });
 test('one-button connected history pipeline is tenant scoped and read-only',async()=>{
  let started=false;
@@ -101,5 +105,5 @@ test('simplified UI has QR modal, no duplicate WhatsApp menu and master-only com
  assert.match(server,/path.*api\/admin\/cnpj/);
  assert.match(server,/startAutoTraining/);
  assert.match(server,/messagesReceivedToday/);
- assert.match(server,/grokResponse/);
+ assert.match(server,/groqResponse/);
 });
