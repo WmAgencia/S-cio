@@ -221,7 +221,17 @@ export function decodeMcpReply(raw,id){
  const lines=raw.split('\n').filter(x=>x.startsWith('data:')).map(x=>x.slice(5).trim());
  for(const line of lines.length?lines:[raw]){
   try{const parsed=JSON.parse(line);if(parsed.id===id){
-   if(parsed.error||parsed.result?.isError)throw bad(503,'O provedor recusou a leitura. Confira as contas autorizadas no Pipeboard.');
+   if(parsed.error||parsed.result?.isError){
+    const detail=JSON.stringify(parsed.error||parsed.result.content||'').toLowerCase();
+    const reason=/developer.?token/.test(detail)?'O provedor Google Ads informou um problema com o token de desenvolvedor.':
+     /not connected|no.*credential|connect.*google|not configured/.test(detail)?'O provedor não encontrou uma conexão Google Ads configurada para esta autorização.':
+     /permission.denied|permission denied|forbidden|access.denied/.test(detail)?'O provedor Google Ads informou falta de permissão de acesso.':
+     /expired|invalid.grant|invalid_grant/.test(detail)?'A autorização da plataforma expirou ou foi revogada no provedor.':
+     /quota|rate.limit|resource.exhausted/.test(detail)?'O provedor atingiu o limite de consultas.':
+     'O provedor recusou a leitura. Confira as contas autorizadas no Pipeboard.';
+    console.warn('[socio ads read diagnostic]',JSON.stringify({code:parsed.error?.code||null,reason}));
+    throw bad(503,reason);
+   }
    if(parsed.result)return parsed.result;
   }}catch(error){if(error.status)throw error;}
  }
