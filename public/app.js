@@ -3,11 +3,11 @@ const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training',catalogSearch:'',catalogStock:'all'};
 const featureLabels={whatsapp:'Atendimento WhatsApp',catalog:'Produtos e serviços',quotes:'Orçamentos e pedidos',meta_ads:'Meta Ads',ai:'Inteligência Artificial',team:'Equipe'};
-const featureView={inbox:'whatsapp',products:'catalog',sales:'quotes',marketing:'meta_ads',training:'ai',team:'team'};
+const featureView={inbox:'whatsapp',products:'catalog',sales:'quotes',quotes:'quotes',marketing:'meta_ads',training:'ai',team:'team'};
 const featureKeys=Object.keys(featureLabels);
 const featuresEnabled=()=>state.me?.tenant?.features||{};
 const featureAvailable=key=>featuresEnabled()[key]!==false;
-const titles={overview:'Visão geral',inbox:'WhatsApp',marketing:'Meta Ads',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas e orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
+const titles={overview:'Visão geral',inbox:'WhatsApp',marketing:'Meta Ads',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas',quotes:'Orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -30,6 +30,64 @@ async function api(path,method='GET',body){
  if(!resp.ok){if(resp.status===401&&state.me){state.me=null;boot();}throw new Error(data.error||'Falha ao acessar o servidor.');}
  return data;
 }
+
+// Tenant-scoped in-app commerce notifications. Only opaque IDs are stored locally.
+let commerceAlertTimer=null,commerceAlertBusy=false;
+async function pollCommerceAlerts(){
+ if(commerceAlertBusy||!state.me||!featureAvailable('quotes')||
+  !(state.me.user.permissions||[]).includes('sales.read'))return;
+ commerceAlertBusy=true;
+ try{
+  const result=await api('/api/sales/alerts');
+  const tenant=state.me.tenant.id;
+  const key='socio-commerce-seen:'+tenant;
+  let seen=[];
+  try{seen=JSON.parse(sessionStorage.getItem(key)||'[]');if(!Array.isArray(seen))seen=[];}catch{}
+  const known=new Set(seen);
+  const fresh=(result.items||[]).filter(item=>!known.has(item.kind+':'+item.id)).slice(0,3);
+  for(const item of result.items||[])known.add(item.kind+':'+item.id);
+  try{sessionStorage.setItem(key,JSON.stringify([...known].slice(-250)));}catch{}
+  const host=$('#commerceAlerts');
+  if(!host)return;
+  for(const item of fresh.reverse()){
+   const isSale=item.kind==='sale',products=Array.isArray(item.items)?item.items:[];
+   const summary=isSale?(products.length?products.map(x=>x.quantity+'× '+x.name).join(', '):
+    'Produtos e quantidade a confirmar'):(item.summary||'Solicitação de orçamento');
+   const total=isSale&&item.amount_cents!=null?' · '+brl(item.amount_cents):'';
+   const card=document.createElement('section');
+   card.className='commerce-alert';
+   card.setAttribute('role','status');
+   card.innerHTML='<div class="commerce-alert-top"><span>'+(isSale?'NOVA OPORTUNIDADE DE VENDA':'NOVO ORÇAMENTO')+
+    '</span><button type="button" class="commerce-alert-close" aria-label="Fechar notificação">×</button></div>'+
+    '<strong>'+e(item.customer_name||'Cliente')+'</strong>'+
+    '<small>'+e(item.customer_phone||'Número não informado')+'</small>'+
+    '<p>'+e(summary.slice(0,170))+e(total)+'</p>'+
+    '<div class="commerce-alert-actions"><button type="button" class="btn primary" data-open-alert>Ver '+(isSale?'venda':'orçamento')+'</button>'+
+    '<button type="button" class="btn soft" data-chat-alert>Conversar</button></div>';
+   card.querySelector('.commerce-alert-close').addEventListener('click',()=>card.remove());
+   card.querySelector('[data-open-alert]').addEventListener('click',async()=>{
+    card.remove();await changeView(isSale?'sales':'quotes');
+    const target=view.querySelector(isSale?'[data-intent="'+item.id+'"]':'[data-quote-prepare="'+item.id+'"]');
+    target?.scrollIntoView({block:'center',behavior:'smooth'});
+    if(isSale)target?.querySelector('[data-lead-expand]')?.click();
+   });
+   card.querySelector('[data-chat-alert]').addEventListener('click',()=>{card.remove();changeView('inbox',item.conversation_id);});
+   host.prepend(card);
+  }
+  while(host.children.length>3)host.lastElementChild.remove();
+ }catch(error){
+  // No false success pop-up for network errors; the queue remains in the database.
+  if(error.message&&!String(error.message).includes('Entre na sua conta'))console.warn('Alertas Sócio indisponíveis');
+ }finally{commerceAlertBusy=false;}
+}
+function startCommerceAlerts(){
+ clearInterval(commerceAlertTimer);
+ if(!state.me||!featureAvailable('quotes')||
+  !(state.me.user.permissions||[]).includes('sales.read'))return;
+ void pollCommerceAlerts();
+ commerceAlertTimer=setInterval(pollCommerceAlerts,12000);
+}
+
 function heading(eyebrow,title,description,action=''){
  return '<div class="view-heading"><div><span class="eyebrow">'+e(eyebrow)+'</span><h1>'+e(title)+'</h1><p>'+e(description)+'</p></div>'+action+'</div>';
 }
@@ -63,14 +121,14 @@ async function boot(){
    $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
    $('#teamNav')?.classList.toggle('hidden',!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner);
    const access=new Set(me.user.permissions||[]);
-   for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['marketing','marketing.read']]){
+   for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['quotes','sales.read'],['marketing','marketing.read']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
    for(const [section,feature] of Object.entries(featureView)){
     const nav=document.querySelector('.nav-item[data-view="'+section+'"]');
     if(nav)nav.classList.toggle('hidden',!featureAvailable(feature)||
      (section==='training'&&!access.has('training.manage'))||
-     (section==='sales'&&!access.has('sales.read'))||
+     ((section==='sales'||section==='quotes')&&!access.has('sales.read'))||
      (section==='marketing'&&!access.has('marketing.read')));
    }
    $('#teamNav')?.classList.toggle('hidden',!featureAvailable('team')||
@@ -114,7 +172,7 @@ async function boot(){
   }catch(error){state.me=null;state.csrf='';setupAuth(bootstrap.initialized);}
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
-async function changeView(next){
+async function changeView(next,conversationId=null){
  if(next!=='inbox'&&activeInbox){activeInbox.cleanup();activeInbox=null;}
  if(next==='channels')next='inbox';
  if(next==='agent'){state.aiTab='agent';next='training';}
@@ -124,7 +182,7 @@ async function changeView(next){
  if(featureView[next]&&!featureAvailable(featureView[next]))next='overview';
  const access=new Set(state.me?.user?.permissions||[]);
  if(next==='training'&&!access.has('training.manage'))next='overview';
- if(next==='sales'&&!access.has('sales.read'))next='overview';
+ if((next==='sales'||next==='quotes')&&!access.has('sales.read'))next='overview';
  if(next==='instagram')next='marketing';
  if(next==='marketing'&&!access.has('marketing.read'))next='overview';
  state.view=next;
@@ -135,9 +193,9 @@ async function changeView(next){
   if(next==='overview')await overview();
   if(next==='channels')await channels();
   if(next==='products')await products();
-  if(next==='sales')await window.SocioSales.render({api,e,toast,view,me:state.me,navigate:changeView});
+  if(next==='sales'||next==='quotes')await window.SocioSales.render({api,e,toast,view,me:state.me,navigate:changeView,mode:next});
   if(next==='training')await (state.aiTab==='agent'?agent():training());
-  if(next==='inbox')await inbox();
+  if(next==='inbox'){await inbox();if(conversationId)await openThread(conversationId);}
   if(next==='marketing')await marketing();
   if(next==='team')await team();
   if(next==='admin')await admin();
@@ -1223,7 +1281,7 @@ function renderCommandItems(){
  const names=Object.entries(titles).filter(([key,label])=>
   key!=='agent'&&key!=='channels'&&(!featureView[key]||featureAvailable(featureView[key]))&&
   (key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&
-  (key!=='sales'||(state.me?.user?.permissions||[]).includes('sales.read'))&&
+  (!['sales','quotes'].includes(key)||(state.me?.user?.permissions||[]).includes('sales.read'))&&
   (key!=='training'||(state.me?.user?.permissions||[]).includes('training.manage'))&&
   (key!=='team'||(state.me?.user?.permissions||[]).includes('team.read'))&&
   (key!=='admin'||state.me?.user.platformOwner)&&
@@ -1299,5 +1357,5 @@ $$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{
  if(b.dataset.view==='training')state.aiTab='training';
  changeView(b.dataset.view);
 }));
-$('#logoutBtn').addEventListener('click',async()=>{try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
+$('#logoutBtn').addEventListener('click',async()=>{clearInterval(commerceAlertTimer);$('#commerceAlerts').replaceChildren();try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
 boot();
