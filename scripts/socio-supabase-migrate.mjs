@@ -21,7 +21,7 @@ export function checkMigrationConfiguration(sourceUrl,targetUrl,{allowLocalTest=
  if(source.hostname===target.hostname&&source.pathname===target.pathname&&
    (source.port||'5432')===(target.port||'5432'))
   throw new Error('Source and target must be different databases');
- if(/(^|\\.)supabase\\.co$|(^|\\.)pooler\\.supabase\\.com$/.test(source.hostname))
+ if(source.hostname.endsWith('.supabase.co')||source.hostname.endsWith('.pooler.supabase.com'))
   throw new Error('Source must not be a Supabase database');
  const supabase=/(^|\.)supabase\.co$|(^|\.)pooler\.supabase\.com$/.test(target.hostname);
  const localFixture=allowLocalTest&&['localhost','127.0.0.1'].includes(target.hostname)&&
