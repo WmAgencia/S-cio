@@ -6,7 +6,7 @@
  function create({api,e,toast,view,changeView,openQr}){
   let conversations=[],active=null,thread=null,filter='all',search='',filterMessages='',selected=new Set();
   let reply=null,menuId=null,pointer=null,longTimer=null,refreshTimer=null,searchTimer=null,draftTimer=null;
-  let infoOpen=false,helpOpen=false,menuAt=null,team=null,lock=false,disposed=false,lastFetch=0,syncing=false,cancelSync=false,suppressClick=false;
+  let infoOpen=false,helpOpen=false,menuAt=null,team=null,lock=false,disposed=false,lastFetch=0,syncing=false,cancelSync=false,suppressClick=false,noteMode=false,sendKey=null,sendFingerprint=null;
   let prefs={fontScale:'normal',contrast:'normal',compact:false};
   try{const saved=JSON.parse(localStorage.getItem('socio-inbox-accessibility')||'{}');
    if(saved.fontScale==='large')prefs.fontScale='large';
@@ -142,24 +142,35 @@
   }
   function renderComposer(){
    const box=byId('inboxCompose');if(!box)return;
+   const enabled=thread?.capabilities?.whatsappSend===true;
+   const controlledByAi=current()?.handling_mode==='ai_assist';
+   const asNote=!enabled||controlledByAi||noteMode;
    const hasReply=reply&&thread?.messages.some(m=>m.id===reply.id);
+   const label=asNote?'Salvar nota interna':'Enviar mensagem pelo WhatsApp';
    box.innerHTML=
     '<div class="wa-compose-top">'+
      '<div class="wa-compose-ownership">'+
-      '<button type="button" data-chat-action="take" class="wa-mode-btn'+(current()?.handling_mode!=='ai_assist'?' active':'')+'">♙ Assumir conversa</button>'+
-      '<button type="button" data-chat-action="assist" class="wa-mode-btn'+(current()?.handling_mode==='ai_assist'?' active':'')+'">✳ Entregar para IA</button>'+
-     '</div><span class="wa-compose-disclaimer">Gateway em leitura: sem envio para WhatsApp</span></div>'+
-    (hasReply?'<div class="wa-reply-banner"><div><strong>Respondendo como nota interna</strong>'+
+      '<button type="button" data-chat-action="take" class="wa-mode-btn'+(!controlledByAi?' active':'')+'">♙ Assumir conversa</button>'+
+      '<button type="button" data-chat-action="assist" class="wa-mode-btn'+(controlledByAi?' active':'')+'">✳ Entregar para IA</button>'+
+     '</div><span class="wa-compose-disclaimer">'+
+      (!enabled?'Envio externo indisponível: gateway ainda não validado':
+       controlledByAi?'IA responsável · assuma para responder manualmente':
+       asNote?'Nota interna · não vai ao WhatsApp':'Envio pelo WhatsApp conectado')+
+      '</span></div>'+
+    (hasReply?'<div class="wa-reply-banner"><div><strong>'+(!asNote?'Respondendo no Sócio (citação local)':'Respondendo como nota interna')+'</strong>'+
       '<small>'+t(reply.body,155)+'</small></div>'+
       '<button type="button" class="wa-small-action" data-chat-action="cancel-reply" aria-label="Cancelar resposta">×</button></div>':'')+
     '<div class="wa-compose-row">'+
-     '<button type="button" class="wa-small-action wa-unsupported" data-chat-action="attach" aria-label="Anexar arquivo indisponível no gateway" title="Envio de anexos ainda não habilitado">＋</button>'+
-     '<textarea id="inboxDraft" aria-label="Escrever nota interna, não enviada ao WhatsApp" rows="1" maxlength="3000" placeholder="Nota interna para a equipe (não enviada ao cliente)">'+t(current()?.draft||'',3000)+'</textarea>'+
-     '<button type="button" class="wa-small-action wa-unsupported" data-chat-action="voice" aria-label="Gravar áudio indisponível no gateway" title="Áudio indisponível">♩</button>'+
-     '<button type="button" class="wa-compose-send" data-chat-action="save-note" aria-label="Salvar nota interna" title="Salvar nota interna">➤</button>'+
+     '<button type="button" class="wa-small-action wa-unsupported" data-chat-action="attach" aria-label="Anexar arquivo indisponível" title="Anexos serão habilitados após teste de mídia">＋</button>'+
+     '<textarea id="inboxDraft" aria-label="'+(asNote?'Escrever nota interna':'Mensagem para enviar ao WhatsApp')+
+      '" rows="1" maxlength="3000" placeholder="'+(asNote?'Nota interna da equipe (não enviada ao cliente)':'Escreva sua mensagem para o cliente...')+'">'+t(current()?.draft||'',3000)+'</textarea>'+
+     '<button type="button" class="wa-small-action wa-unsupported" data-chat-action="voice" aria-label="Áudio indisponível até validação" title="Áudio indisponível">♩</button>'+
+     '<button type="button" class="wa-compose-send" data-chat-action="submit-compose" aria-label="'+label+'" title="'+label+'">➤</button>'+
     '</div>'+
-    '<div class="wa-compose-foot"><span>Enter salva a nota · Shift + Enter quebra linha · Alt + R responde</span>'+
-      '<button type="button" class="wa-inline-link" data-chat-action="ai-suggest">✳ Sugerir resposta com IA</button></div>'+
+    '<div class="wa-compose-foot"><span>Enter '+(asNote?'salva nota':'envia mensagem')+' · Shift + Enter pula linha · Alt + R responde</span>'+
+      '<div class="wa-compose-extras">'+
+       (enabled&&!controlledByAi?'<button type="button" class="wa-inline-link" data-chat-action="toggle-notes">'+(noteMode?'Voltar ao WhatsApp':'Nota interna')+'</button>':'')+
+       '<button type="button" class="wa-inline-link" data-chat-action="ai-suggest">✳ Sugerir resposta</button></div></div>'+
     '<div class="wa-ai-suggestion hidden" id="inboxSuggestion" role="status" aria-live="polite"></div>';
   }
   function threadMarkup(c){
@@ -274,6 +285,31 @@
    }catch(error){toast(error.message,true);}
    finally{lock=false;}
   }
+  async function submitComposer(){
+   if(!thread?.capabilities?.whatsappSend||noteMode||current()?.handling_mode==='ai_assist')
+    return submitNote();
+   const input=byId('inboxDraft');
+   if(!input||lock)return;
+   const text=input.value.trim();if(!text)return input.focus();
+   if(!sendKey||sendFingerprint!==text){
+    sendKey=crypto.randomUUID();sendFingerprint=text;
+   }
+   lock=true;
+   try{
+    const result=await api('/api/conversations/'+active+'/send','POST',
+     {text,clientRequestId:sendKey,replyToMessageId:reply?.id||null});
+    if(!result.sent){
+     toast('Envio ainda não confirmado. Confira a situação antes de reenviar.',true);return;
+    }
+    reply=null;sendKey=null;sendFingerprint=null;
+    const c=current();if(c)c.draft='';
+    await setPref({draft:''},{silent:true});
+    await open(active,{background:true});
+    announce('WhatsApp aceitou a mensagem; a entrega ao dispositivo pode ocorrer depois.');
+    toast('Mensagem aceita pelo gateway WhatsApp.');
+   }catch(error){toast(error.message,true);}
+   finally{lock=false;}
+  }
   async function suggestion(input){
    const text=String(input||'').trim();
    if(!text){toast('Selecione uma mensagem para pedir uma sugestão à IA.');return;}
@@ -299,6 +335,8 @@
    if(action==='cancel-reply'){reply=null;renderComposer();return;}
    if(action==='more'){await loadMore();return;}
    if(action==='save-note'){await submitNote();return;}
+   if(action==='submit-compose'){await submitComposer();return;}
+   if(action==='toggle-notes'){noteMode=!noteMode;renderComposer();byId('inboxDraft')?.focus();return;}
    if(action==='take'){await setPref({handling_mode:'human'});return;}
    if(action==='assist'){await setPref({handling_mode:'ai_assist'});toast('IA habilitada para sugestões internas. Envio automático continua desativado.');return;}
    if(action==='pin'){await setPref({pinned:!c.pinned});return;}
@@ -359,7 +397,7 @@
   async function open(id,{background=false}={}){
    if(!cleanId(id)||disposed)return;
    const same=active===id;
-   if(!same){selected.clear();reply=null;infoOpen=false;filterMessages='';closeMenu();}
+   if(!same){selected.clear();reply=null;infoOpen=false;filterMessages='';noteMode=false;sendKey=null;sendFingerprint=null;closeMenu();}
    active=id;
    const item=current();if(!item)return;
    const result=await api('/api/conversations/'+id+'/history?limit=80');
@@ -587,6 +625,7 @@
     filterMessages=ev.target.value;renderMessageList({keepScroll:true});
    }
    if(ev.target.id==='inboxDraft'){
+    sendKey=null;sendFingerprint=null;
     const c=current();if(c)c.draft=ev.target.value.slice(0,3000);
     clearTimeout(draftTimer);draftTimer=setTimeout(()=>saveDraft().catch(()=>{}),750);
    }
@@ -619,7 +658,7 @@
    }
    if(ev.target.id==='inboxDraft'){
     if(ev.key==='Enter'&&!ev.shiftKey&&!ev.isComposing){
-     ev.preventDefault();submitNote();
+     ev.preventDefault();submitComposer();
     }
     return;
    }
