@@ -23,6 +23,7 @@ test('campaign associations are metadata, never verified OAuth connections',()=>
  assert.deepEqual(validateCampaign({provider:'meta_ads',campaignId:'120-2026',label:'Campanha 1'}),{provider:'meta_ads',campaignId:'120-2026',label:'Campanha 1'});
  assert.throws(()=>validateCampaign({provider:'tiktok',campaignId:'123'}),/inválida/);
  assert.throws(()=>validateCampaign({provider:'google_ads',campaignId:'https://somewhere/path'}),/inválida/);
+ assert.throws(()=>validateCampaign({provider:'google_ads',campaignId:'1234567890'}),/inválida/,'Google Ads campaigns must be unavailable');
 });
 test('AI grounding includes each official variant, stock and deterministic image suggestions only on exact product name',()=>{
  const products=[{id:product,name:'Pizza de Calabresa',price_cents:3990,stock_quantity:0,active:true,description:'Molho de tomate',
