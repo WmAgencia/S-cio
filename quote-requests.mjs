@@ -137,7 +137,7 @@ export async function saveQuoteDraft(pool,tenant,requestId,{text,amountCents}){
  if(!r.rowCount)throw bad(409,'Orçamento indisponível ou já enviado. Revise o histórico antes de continuar.');
  return r.rows[0];
 }
-export async function sendQuoteDraft(pool,tenant,requestId,userId,{env=process.env,deliver=deliverToConversation}={}){
+export async function sendQuoteDraft(pool,tenant,requestId,userId,{env=process.env,deliver=deliverToConversation,getStatus=getSessionStatus}={}){
  if(!uuid.test(String(requestId||'')))throw bad(422,'Solicitação inválida.');
  if(!outboundEnabled(env))throw bad(503,'Envio WhatsApp indisponível. O orçamento permanece salvo no Sócio.');
  // Preflight predictable refusal before claiming the one-time delivery id.
@@ -158,7 +158,7 @@ export async function sendQuoteDraft(pool,tenant,requestId,userId,{env=process.e
   throw bad(409,'Conecte um WhatsApp da empresa antes de enviar.');
  if(!/^\d{5,24}$/.test(String(connection.customer_phone||'')))
   throw bad(422,'Número do cliente inválido para envio.');
- const session=await getSessionStatus(connection.session_id).catch(()=>null);
+ const session=await getStatus(connection.session_id).catch(()=>null);
  if(!session?.connected||session.connectedNumber!==String(connection.linked_phone||'').replace(/\D/g,''))
   throw bad(409,'A conexão WhatsApp não está verificada. Atualize a sessão antes de enviar.');
 
