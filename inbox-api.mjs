@@ -1,3 +1,5 @@
+import {createHash} from 'node:crypto';
+import {gatewayRead,getSessionStatus,listAvailableChats,privateJid} from './waakg-adapter.mjs';
 // Tenant-scoped inbox interaction endpoints. No WhatsApp transmission is performed
 // here: the dedicated Sócio WA-AKG gateway is intentionally read-only.
 const uuid=/^[a-f\d]{8}-[a-f\d]{4}-[1-8][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
@@ -48,9 +50,93 @@ export function validReaction(value){return value===null||reactions.has(value);}
 const noteValid=text=>typeof text==='string'&&text.trim().length>0&&text.length<=3000;
 const isUuid=value=>typeof value==='string'&&uuid.test(value);
 const err=(status,message)=>Object.assign(new Error(message),{status});
-export async function handleInboxApi({pathname,method,req,res,a,query,body,json,id,audit}){
+const inboxSyncLast=new Map();
+const safeTime=raw=>{
+ const dt=new Date(typeof raw==='number'?(raw<1e12?raw*1000:raw):raw);
+ const value=dt.getTime();
+ return Number.isFinite(value)&&value>=946684800000&&value<=Date.now()+86400000?dt.toISOString():null;
+};
+export function normalizeInboxRemoteText(rows,jid){
+ if(!privateJid(jid)||!Array.isArray(rows))return [];
+ const seen=new Set(),out=[];
+ for(const m of rows.slice(0,100)){
+  if(m?.remoteJid!==jid||!['TEXT','CONVERSATION','EXTENDEDTEXT',''].includes(String(m?.type||'').toUpperCase()))continue;
+  const body=typeof m?.content==='string'?m.content.trim():'';
+  const when=safeTime(m?.timestamp),outgoing=m?.fromMe===true;
+  if(!body||!when)continue;
+  const token=String(m.keyId||m.id||'').slice(0,200);
+  const identity=token||when+':'+(outgoing?'out':'in')+':'+body;
+  if(seen.has(identity))continue;
+  seen.add(identity);
+  out.push({body:body.slice(0,4000),created_at:when,direction:outgoing?'outbound':'inbound',identity});
+ }
+ return out.sort((a,b)=>a.created_at.localeCompare(b.created_at));
+}
+
+export async function handleInboxApi({pathname,method,req,res,a,query,body,json,id,audit,pool}){
  const tenant=a.active_tenant_id;
  if(pathname==='/api/inbox/capabilities'&&method==='GET')return json(res,200,inboxCapabilities);
+
+ if(pathname==='/api/inbox/sync'&&method==='POST'){
+  if(!['owner','admin'].includes(a.role)&&!a.platform_owner)
+   throw err(403,'Somente proprietários e administradores podem sincronizar o WhatsApp.');
+  const {data}=await body(req);
+  if(!isUuid(data.channelId)||!Number.isInteger(data.offset||0)||
+     (data.offset||0)<0||(data.offset||0)>50)
+   throw err(422,'Canal ou posição de sincronização inválidos.');
+  const offset=data.offset||0;
+  const rateKey=tenant+':'+data.channelId,prev=inboxSyncLast.get(rateKey)||0;
+  if(Date.now()-prev<2400)throw err(429,'Sincronização já solicitada. Tente novamente.');
+  inboxSyncLast.set(rateKey,Date.now());
+  const c=await query(\`SELECT l.session_id,ch.id,ch.phone FROM waakg_links l
+   JOIN channels ch ON ch.tenant_id=l.tenant_id AND ch.id=l.channel_id
+   WHERE l.tenant_id=$1 AND l.channel_id=$2 AND ch.provider='waakg'\`,[tenant,data.channelId]);
+  if(!c.rowCount)throw err(404,'Canal WhatsApp não encontrado nesta empresa.');
+  const {session_id:sessionId,phone, id:channelId}=c.rows[0];
+  const status=await getSessionStatus(sessionId);
+  if(!status.connected||status.connectedNumber!==String(phone).replace(/\D/g,''))
+   throw err(409,'WhatsApp não está conectado ou número não foi confirmado.');
+  const list=await listAvailableChats(sessionId);
+  const jids=list.jids.slice(offset,offset+5);
+  let chatsImported=0,messagesImported=0;
+  for(const jid of jids){
+   if(!privateJid(jid)||!jid.endsWith('@s.whatsapp.net'))continue;
+   const customerPhone=jid.split('@')[0],params=new URLSearchParams({jid,limit:'100',page:'1'});
+   const remote=await gatewayRead('/api/messages/'+encodeURIComponent(sessionId)+'/search?'+params.toString());
+   if(!Array.isArray(remote.data))throw err(503,'Gateway retornou mensagens inválidas.');
+   const normalized=normalizeInboxRemoteText(remote.data,jid);
+   const client=await pool.connect();
+   try{
+    await client.query('BEGIN');
+    const chat=await client.query(\`INSERT INTO conversations(id,tenant_id,channel_id,customer_phone,customer_name)
+     VALUES($1,$2,$3,$4,'') ON CONFLICT(tenant_id,channel_id,customer_phone)
+     DO UPDATE SET customer_phone=EXCLUDED.customer_phone RETURNING id\`,
+     [id(),tenant,channelId,customerPhone]);
+    const conversationId=chat.rows[0].id;
+    for(const m of normalized){
+     // Provider identifiers never include the raw phone/JID or message content.
+     const stable=createHash('sha256').update(sessionId+':'+jid+':'+m.identity).digest('hex');
+     const providerId='waakg:'+stable;
+     const inserted=await client.query(\`INSERT INTO messages(id,tenant_id,conversation_id,direction,body,provider_id,created_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(tenant_id,provider_id) DO NOTHING RETURNING id\`,
+      [id(),tenant,conversationId,m.direction,m.body,providerId,m.created_at]);
+     messagesImported+=inserted.rowCount;
+    }
+    if(normalized.length){
+     await client.query(\`UPDATE conversations SET last_message_at=GREATEST(
+       last_message_at,(SELECT MAX(created_at) FROM messages WHERE tenant_id=$1 AND conversation_id=$2))
+       WHERE tenant_id=$1 AND id=$2\`,[tenant,conversationId]);
+    }
+    await client.query('COMMIT');chatsImported++;
+   }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}
+   finally{client.release();}
+  }
+  const hasMore=offset+5<list.jids.length,nextOffset=hasMore?offset+5:null;
+  await audit(a,'inbox.manual_history_sync',{channelId,chatsImported,messagesImported,
+   partialCoverage:list.partial||hasMore});
+  return json(res,200,{ok:true,chatsImported,messagesImported,hasMore,nextOffset,
+   partialCoverage:list.partial,readOnly:true,mediaImported:false});
+ }
  if(pathname==='/api/inbox/v2'&&method==='GET'){
   const url=new URL(req.url,'http://localhost');
   const search=(url.searchParams.get('search')||'').trim();
