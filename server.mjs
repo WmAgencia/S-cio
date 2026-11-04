@@ -649,7 +649,7 @@ async function handle(req,res){
   const [totals,daily]=await Promise.all([
    query("SELECT "+
     "(SELECT count(*)::int FROM sale_intents WHERE tenant_id=$1 AND created_at>=now()-interval '30 days') AS purchase_intents,"+
-    "(SELECT count(*)::int FROM sale_intents WHERE tenant_id=$1 AND status='pending') AS purchase_pending,"+
+    "(SELECT count(*)::int FROM sale_intents WHERE tenant_id=$1 AND status='pending' AND created_at>=now()-interval '30 days') AS purchase_pending,"+
     "(SELECT count(*)::int FROM sale_intents WHERE tenant_id=$1 AND status='completed' AND updated_at>=now()-interval '30 days') AS purchase_completed_manually,"+
     "(SELECT count(*)::int FROM quote_requests WHERE tenant_id=$1 AND created_at>=now()-interval '30 days') AS quote_requests,"+
     "(SELECT count(*)::int FROM quote_requests WHERE tenant_id=$1 AND delivery_status='sent' AND quote_sent_at>=now()-interval '30 days') AS quote_sent,"+
