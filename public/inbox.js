@@ -524,6 +524,7 @@
   }
   function onClick(ev){
    if(disposed)return;
+   if(ev.target.closest('#inboxSettings')){showHelp();return;}
    if(ev.target.closest('[data-inbox-sync]')){chooseSync().catch(err=>toast(err.message,true));return;}
    if(ev.target.closest('[data-inbox-start-sync]')){runSync();return;}
    const action=ev.target.closest('[data-chat-action]');
