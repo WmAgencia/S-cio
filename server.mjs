@@ -396,6 +396,7 @@ async function handle(req,res){
    status:remote.status,phoneVerified,phone:phoneVerified?remote.connectedNumber:null});
  }
  if(method==='GET'&&pathname==='/api/waakg/scans'){
+  requirePermission(a,'training.manage');
   const r=await query(
    'SELECT id,channel_id AS "channelId",status,total_chats AS "totalChats",processed_chats AS "processedChats",imported_chats AS "importedChats",imported_messages AS "importedMessages",partial_coverage AS "partialCoverage",truncated_chats AS "truncatedChats",error_code AS "errorCode",created_at AS "createdAt",updated_at AS "updatedAt" FROM waakg_scans WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 30',
    [a.active_tenant_id]);
@@ -721,6 +722,7 @@ async function handle(req,res){
   return json(res,200,{ok:true,versionId:knowledgeApprove[1],autoReply:false});
  }
  if(method==='GET'&&pathname==='/api/imports'){
+  requirePermission(a,'training.manage');
   const r=await query('SELECT id,filename,conversation_count,message_count,created_at FROM imports WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 100',[a.active_tenant_id]);return json(res,200,r.rows);
  }
  if(method==='POST'&&pathname==='/api/imports/zip'){
@@ -764,6 +766,7 @@ async function handle(req,res){
   return json(res,201,{id:item,messageCount:parsed.messageCount,speakers:parsed.speakers});
  }
  if(method==='POST'&&pathname==='/api/simulate'){
+  requirePermission(a,'training.manage');
   const key='simulate:'+a.user_id;
   if(!limiter(simulationAttempts,key,60000,12))throw fail(429,'Limite de testes por minuto atingido.');
   const {data}=await body(req);
@@ -854,6 +857,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/team'){
   needRole(a,['owner','admin']);const {data}=await body(req);
+  if(data.role==='admin')requirePermission(a,'team.promote');
   if(!emailOk(data.email)||!validText(data.name,100)||!allowedNewMemberRole(a,data.role))throw fail(422,'Dados de usuário ou permissão inválidos.');
   const raw=String(data.phone||'').trim(),phone=raw?normalizeLoginPhone(raw):null;
   if(raw&&!phone)throw fail(422,'Número de colaborador inválido. Informe o DDD.');
@@ -929,7 +933,14 @@ async function handle(req,res){
   needPlatform(a);const {data}=await body(req);
   const result=await query('SELECT id FROM tenants WHERE id=$1',[data.tenantId]);
   if(!result.rowCount)throw fail(404,'Empresa não encontrada.');
-  await query('UPDATE sessions SET active_tenant_id=$2 WHERE token_hash=$1',[a.token_hash,data.tenantId]);
+  const c=await pool.connect();
+  try{
+   await c.query('BEGIN');
+   await c.query('UPDATE sessions SET active_tenant_id=$2 WHERE token_hash=$1',[a.token_hash,data.tenantId]);
+   await c.query('INSERT INTO audit(id,tenant_id,actor_id,action,metadata) VALUES($1,$2,$3,$4,$5)',[
+    id(),a.active_tenant_id,a.user_id,'platform.tenant_switched',JSON.stringify({targetTenantId:data.tenantId})]);
+   await c.query('COMMIT');
+  }catch(error){await c.query('ROLLBACK').catch(()=>{});throw error;}finally{c.release();}
   return json(res,200,{ok:true});
  }
  throw fail(404,'Rota não encontrada.');
