@@ -61,7 +61,14 @@ async function boot(){
    for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['instagram','channels.manage']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
+   const instagramStatus=new URL(location.href).searchParams.get('instagram');
+   if(['connected','failed'].includes(instagramStatus)){
+    state.view='instagram';
+    history.replaceState(null,'',location.pathname);
+   }
    await changeView(state.view);
+   if(instagramStatus==='connected')toast('Instagram autorizado. Confirme a conexão nesta guia.');
+   if(instagramStatus==='failed')toast('A Meta não concluiu a autorização. Confira as permissões e tente novamente.',true);
   }catch(error){state.me=null;state.csrf='';setupAuth(bootstrap.initialized);}
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
