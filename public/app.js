@@ -63,6 +63,7 @@ async function boot(){
 }
 async function changeView(next){
  if(next!=='inbox'&&activeInbox){activeInbox.cleanup();activeInbox=null;}
+ if(next==='channels')next='inbox';
  if(next==='agent'){state.aiTab='agent';next='training';}
  else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
@@ -437,7 +438,7 @@ function catalogVariantRow(variant={}){
 }
 async function products(selected=null){
  const [list,storage]=await Promise.all([api('/api/products'),api('/api/products/storage')]);
- if(selected&&!list.some(p=>p.id===selected))selected=null;
+ if(selected&&selected!=='new'&&!list.some(p=>p.id===selected))selected=null;
  state.catalogProductId=selected&&selected!=='new'?selected:null;
  const current=list.find(p=>p.id===selected);
  const photo=p=>p.media?.length?'<img class="catalog-cover-image" src="'+e(p.media[0].url)+'" alt="'+e(p.media[0].alt||p.name)+'" loading="lazy">':
@@ -853,7 +854,7 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  key!=='agent'&&(key!=='admin'||state.me?.user.platformOwner)&&
+  key!=='agent'&&key!=='channels'&&(key!=='team'||!state.me?.user.platformOwner)&&(key!=='admin'||state.me?.user.platformOwner)&&
   (label.toLocaleLowerCase('pt-BR').includes(keyword)||key.includes(keyword)));
  const list=$('#commandList');
  list.innerHTML=names.length?names.map(([key,label])=>
