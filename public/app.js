@@ -663,6 +663,8 @@ async function training(){
     '<p class="form-note">Origem: '+e(draft.report?.source==='connected_whatsapp_history'?'Conversas dos WhatsApps conectados (limite de histórico do gateway)':'Importações disponíveis da empresa')+
     ' · '+e(draft.report?.sourcesIncluded??draft.report?.conversations??0)+' fonte(s) consideradas.</p>'+
     (draft.report?.partialCoverage?'<p class="form-note">Cobertura parcial: o gateway ou o limite de fontes não permite declarar que todas as conversas foram analisadas.</p>':'')+
+    (draft.report?.messagesAvailable?'<p class="form-note">Amostragem: '+e(draft.report.messages)+' mensagem(ns) consideradas de '+
+      e(draft.report.messagesAvailable)+' disponíveis nas fontes selecionadas. Máximo de 80 exemplos por conversa.</p>':'')+
     '<p class="form-note">Síntese: '+e(draft.report?.analysisProvider==='groq'?'Groq':draft.report?.analysisProvider==='deterministic_fallback'?'Regras locais (Groq indisponível)':'Regras locais')+'</p>'+
     '<label class="socio-draft-label" for="trainingDraftMarkdown">Revise o Markdown antes da publicação</label>'+
     '<textarea class="socio-training-editor" id="trainingDraftMarkdown" maxlength="22000" spellcheck="true" rows="13" '+(!canManage?'disabled':'')+'>'+e(draft.markdown||'')+'</textarea>'+
