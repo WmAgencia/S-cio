@@ -2,14 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const read=path=>readFileSync(new URL('../public/'+path,import.meta.url),'utf8');
-test('visual theme progressively upgrades to lavender without fictitious financial data',()=>{
- const old=read('neo-theme.css'),css=read('cloud-theme.css'),js=read('app.js'),html=read('index.html');
+test('visual theme progressively upgrades to approved espresso dark without fictitious financial data',()=>{
+ const old=read('neo-theme.css'),css=read('cloud-theme.css'),ember=read('ember-theme.css'),js=read('app.js'),html=read('index.html');
  assert.match(old,/\.neo-dashboard\{display:grid/);
  assert.match(css,/--bg:#e9e6f1/);
  assert.match(css,/\.lucid-dashboard/);
- assert.ok(html.indexOf('/cloud-theme.css')>html.indexOf('/app.css'),'light theme loads after base CSS');
+ assert.ok(html.indexOf('/cloud-theme.css')>html.indexOf('/app.css'),'base contrast CSS loads first');
+ assert.ok(html.indexOf('/ember-theme.css')>html.indexOf('/cloud-theme.css'),'approved dark theme loads last');
+ assert.match(ember,/--bg:#100907/);
+ assert.match(ember,/\.ember-dashboard/);
  assert.doesNotMatch(html,/href="\/neo-theme\.css"/);
- assert.match(js,/Movimento do atendimento/);
+ assert.match(js,/Atividade de conversas/);
  assert.match(js,/Mensagens recebidas e enviadas/);
  assert.match(js,/activityTicks\(trend\)/);
  assert.match(js,/api\('\/api\/inbox'/);
