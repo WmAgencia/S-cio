@@ -24,12 +24,12 @@ test('approved layout uses real tenant counts, three live chart filters and no f
  assert.match(js,/api\('\/api\/dashboard\/activity\?range=1m'/);
  for(const period of ['7d','1m','90d'])assert.match(js,new RegExp('data-range="'+period+'"'));
  assert.match(js,/status==='connected'/);
- assert.match(js,/qr\?\.ready/);
- assert.match(js,/data:image\\\//);
- assert.match(js,/Gerado ao conectar/);
- assert.match(js,/A leitura de conversas depende de autorização/);
- assert.match(js,/aria-label="QR Code disponível após iniciar a conexão"/);
- assert.match(js,/data-go="channels"/);
+ assert.match(js,/connectedWhatsApps/);
+ assert.match(js,/whatsappSummary/);
+ assert.match(js,/dashboardConnectWhatsApp/);
+ assert.match(js,/Conexão por QR Code/);
+ assert.match(js,/window\.SocioUX\.openQr/);
+ assert.doesNotMatch(load('index.html'),/data-view="channels"/);
  assert.match(js,/data-go="training"/);
  assert.match(js,/aiRow\('user','Personalidade'/);
  assert.match(js,/aiRow\('play','Testar IA'/);
