@@ -5,6 +5,17 @@
 
 SaaS multiempresa de atendimento e vendas. Projeto independente do Prospector: nunca compartilha banco, sessões ou informações de clientes com o sistema de prospecção.
 
+## Interface comercial — Vendas, Orçamentos e Relatórios (04/11/2026)
+
+A navegação separa três áreas:
+
+- **Vendas:** mensagens recebidas com intenção explícita de compra criam oportunidades por mensagem (idempotentes e isoladas por empresa). O card mostra nome, telefone, resumo e, somente quando reconhecidos sem ambiguidade, produto, quantidade e valor estimado do catálogo. Equipe pode editar os itens e quantidades com verificação de estoque, assumir a conversa e registrar acompanhamento/conclusão manual. Não equivale a venda paga.
+- **Orçamentos:** pedidos de orçamento geram cards com o texto solicitado; o operador pode criar um orçamento personalizado com descrição e valor, salvá-lo e pedir envio direto pelo WhatsApp. O botão só envia quando o gateway de saída foi habilitado, o canal/número foi verificado e a conversa está sob controle humano. Cada solicitação tem **um envio confirmado ou incerto**, sem retransmissão automática em caso de resultado ambíguo. As propostas versionadas por catálogo e seus links de aprovação continuam disponíveis.
+- **Relatórios:** painel independente com indicadores verificáveis de mensagens, oportunidades, orçamentos, pedidos e testes; nunca contabiliza intenção, pedido aprovado ou pagamento em sandbox como receita.
+- **Avisos no painel:** o navegador autenticado consulta novas oportunidades e orçamentos a cada 12 segundos e mostra até três notificações no alto à direita, com acesso ao card e à conversa. Vistos são guardados somente como identificadores na sessão da aba.
+
+**Limites operacionais:** classificação de intenção usa expressões inequívocas em mensagens recebidas e pode exigir revisão humana de frases ambíguas; não há confirmação automática de vendas ou transferências Pix. Nenhuma mensagem real foi enviada durante o desenvolvimento. Os envios só podem funcionar com WhatsApp conectado e com autorização de saída. A base oficial continua PostgreSQL Railway; a nova tabela `sale_intents` deve ser conciliada antes de qualquer migração para o Supabase privado.
+
 ## Funcionalidades entregues no MVP
 
 - Painel premium responsivo e acesso de proprietário, administrador e atendente.
