@@ -36,8 +36,14 @@
    </div>
    <form id="loginForm" class="form-stack">
     <label>E-mail ou número de celular<input name="identifier" type="text" required maxlength="255" autocomplete="username" placeholder="Seu e-mail ou celular com DDD"></label>
-    <label>Senha<input name="password" type="password" required autocomplete="current-password" placeholder="Sua senha"></label>
-    <button class="btn primary wide" type="submit">Entrar no Sócio <span>→</span></button>
+    <label for="loginPassword">Senha</label>
+    <div class="socio-password-field">
+     <input id="loginPassword" name="password" type="password" required autocomplete="current-password" placeholder="Sua senha" aria-describedby="loginCapsMessage">
+     <button id="toggleLoginPassword" class="socio-password-toggle" type="button" aria-label="Mostrar senha" aria-controls="loginPassword" aria-pressed="false">Mostrar</button>
+    </div>
+    <p id="loginCapsMessage" class="auth-caps-note hidden" role="status">Caps Lock está ativado.</p>
+    <button id="loginSubmit" class="btn primary wide" type="submit">Entrar no Sócio <span aria-hidden="true">→</span></button>
+    <p id="loginProgress" class="auth-progress hidden" role="status" aria-live="polite">Validando acesso seguro...</p>
    </form>
    <form id="setupForm" class="form-stack hidden">
     <div class="help-card">Configuração inicial exclusiva da Consecom. O token de instalação está nas variáveis seguras do Railway.</div>
@@ -46,10 +52,12 @@
     <label>Nome da empresa<input name="company" required maxlength="120" placeholder="Consecom Brasil"></label>
     <label>E-mail de administrador<input name="email" type="email" required autocomplete="username" placeholder="contato@empresa.com.br"></label>
     <label>Celular de acesso (opcional)<input name="phone" type="tel" maxlength="32" autocomplete="tel" placeholder="(15) 99999-9999"></label>
-    <label>Senha forte (mínimo 12 caracteres)<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="Crie sua senha"></label>
+    <label for="setupPassword">Senha forte (mínimo 12 caracteres)</label>
+    <div class="socio-password-field"><input id="setupPassword" name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="Crie sua senha">
+     <button id="toggleSetupPassword" class="socio-password-toggle" type="button" aria-label="Mostrar senha" aria-controls="setupPassword" aria-pressed="false">Mostrar</button></div>
     <button class="btn primary wide" type="submit">Criar conta principal <span>→</span></button>
    </form>
-   <p id="authError" class="form-error" role="alert"></p>
+   <p id="authError" class="form-error" role="alert" aria-live="assertive"></p>
    <div class="auth-footer">Protegido por autenticação e ambientes isolados por empresa.</div>
   </div>
  </div>

@@ -9,6 +9,7 @@ const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'sho
 const val=(form,k)=>String(new FormData(form).get(k)||'').trim();
 const errMsg=error=>String(error?.message||'Não foi possível concluir a solicitação.');
 const view=$('#view');
+const moduleEnabled=key=>state.me?.tenant?.features?.[key]!==false;
 let toastTimer,trainingTimer,waQrTimer;
 let activeInbox=null;
 
@@ -58,7 +59,7 @@ async function boot(){
    $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
    $('#teamNav')?.classList.toggle('hidden',!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner);
    const access=new Set(me.user.permissions||[]);
-   for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['marketing','marketing.read']]){
+   for(const [section,permission] of [['inbox','inbox.read'],['products','catalog.read'],['training','training.manage'],['sales','sales.read'],['marketing','marketing.read']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
    const marketingStatus=typeof location==='object'?new URL(location.href).searchParams.get('marketing'):null;
@@ -108,6 +109,8 @@ async function changeView(next){
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
  if(next==='admin'&&!state.me?.user.platformOwner)return;
  const access=new Set(state.me?.user?.permissions||[]);
+ if(next==='inbox'&&!access.has('inbox.read'))next='overview';
+ if(next==='products'&&!access.has('catalog.read'))next='overview';
  if(next==='training'&&!access.has('training.manage'))next='overview';
  if(next==='sales'&&!access.has('sales.read'))next='overview';
  if(next==='instagram')next='marketing';
@@ -120,7 +123,7 @@ async function changeView(next){
   if(next==='overview')await overview();
   if(next==='channels')await channels();
   if(next==='products')await products();
-  if(next==='sales')await window.SocioSales.render({api,e,toast,view});
+  if(next==='sales')await window.SocioSales.render({api,e,toast,view,me:state.me});
   if(next==='training')await (state.aiTab==='agent'?agent():training());
   if(next==='inbox')await inbox();
   if(next==='marketing')await marketing();
@@ -200,6 +203,22 @@ function emberIcon(kind){
  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(emberIcons[kind]||emberIcons.spark)+'</svg>';
 }
 async function overview(){
+ if(!moduleEnabled('whatsapp')){
+  const available=[
+   ['catalog','products','Produtos e serviços','Organize o catálogo, estoque e imagens.'],
+   ['metaAds','marketing','Meta Ads','Conecte e consulte suas contas de anúncios.'],
+   ['ai','training','Inteligência Artificial','Personalize seu agente e experimente o simulador.']
+  ].filter(([key])=>moduleEnabled(key));
+  view.innerHTML=heading('VISÃO GERAL','Seu espaço de trabalho.',
+   'Sua empresa vê apenas as funcionalidades ativadas.')+
+   '<div class="socio-feature-overview">'+
+   (available.length?available.map(([key,viewKey,label,detail])=>
+    '<button type="button" class="card card-pad socio-feature-link" data-go="'+viewKey+'">'+
+    '<strong>'+e(label)+'</strong><span>'+e(detail)+'</span><span aria-hidden="true">↗</span></button>').join(''):
+    '<div class="card card-pad"><strong>Espaço configurado</strong><p>Os módulos adicionais serão disponibilizados pela administração.</p></div>')+
+   '</div>';
+  bindNavWithin();return;
+ }
  const [d,trend,recent,links]=await Promise.all([
   api('/api/dashboard'),api('/api/dashboard/activity?range=1m'),api('/api/inbox'),api('/api/waakg/channels')
  ]);
@@ -299,6 +318,7 @@ async function overview(){
    '</section>'+
   '</div>'+
  '</div>';
+ if(!moduleEnabled('ai'))view.querySelector('.ember-ai-card')?.remove();
  bindNavWithin();
  $('#dashboardConnectWhatsApp')?.addEventListener('click',()=>window.SocioUX.openQr({
   api,toast,canManage:state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role),
@@ -566,11 +586,19 @@ async function products(selected=null){
  const productCards=list.length?'<div class="catalog-list">'+list.map(p=>{
   const stockedVariants=p.variants?.filter(v=>v.active!==false)||[];
   const available=p.active&&(stockedVariants.length?stockedVariants.some(v=>v.stock_quantity===null||v.stock_quantity>0):(p.stock_quantity===null||p.stock_quantity>0));
-  return '<button type="button" class="catalog-product '+(selected===p.id?'is-selected':'')+'" data-select-product="'+e(p.id)+'">'+
+  const variants=Array.isArray(p.variants)?p.variants:[];
+  const imageCount=Array.isArray(p.media)?p.media.length:0;
+  const stockText=variants.length?variants.length+' variação(ões)':
+   p.stock_quantity===null?'Estoque não controlado':
+   Number(p.stock_quantity||0)+' em estoque';
+  return '<button type="button" class="catalog-product '+(selected===p.id?'is-selected':'')+'" data-select-product="'+e(p.id)+'" '+
+   'aria-label="Ver detalhes e editar '+e(p.name)+'" aria-haspopup="dialog">'+
    '<div class="catalog-cover">'+photo(p)+'</div>'+
-   '<div class="catalog-product-copy"><strong>'+e(p.name)+'</strong><small>'+e(p.sku||'Sem SKU')+' · '+e(p.media?.length||0)+' foto(s)</small>'+
-   '<span>'+e(catalogPrice(p.price_cents))+'</span></div>'+
-   '<span class="catalog-status '+(available?'yes':'no')+'">'+(available?'Ativo':'Indisponível')+'</span></button>';
+   '<div class="catalog-product-copy"><strong>'+e(p.name)+'</strong>'+
+   '<small>'+e(p.sku||'Sem SKU')+' · '+e(imageCount)+' foto(s)</small>'+
+   '<span class="catalog-price">'+e(catalogPrice(p.price_cents))+'</span>'+
+   '<small class="catalog-inventory">'+e(stockText)+'</small></div>'+
+   '<span class="catalog-status '+(available?'yes':'no')+'">'+(available?'Disponível':'Indisponível')+'</span></button>';
  }).join('')+'</div>':
  empty('▦','Seu catálogo está vazio','Cadastre um produto para incluir preço, variações e fotos.');
  const gallery=current?'<div class="catalog-gallery">'+current.media.map(m=>
@@ -638,7 +666,12 @@ async function products(selected=null){
  $('#newVariantRows')?.addEventListener('click',ev=>{
   const btn=ev.target.closest('[data-remove-variant]');if(btn)btn.closest('[data-variant-row]').remove();
  });
- if(modalOpen)$('#productForm')?.elements?.name?.focus();
+ if(modalOpen){
+  $('#productForm')?.elements?.name?.focus();
+  $('#productModal')?.addEventListener('keydown',event=>{
+   if(event.key==='Escape'){event.preventDefault();void products(null);}
+  });
+ }
  view.querySelectorAll('[data-select-product]').forEach(btn=>btn.addEventListener('click',()=>products(btn.dataset.selectProduct)));
  $('#clearProduct')?.addEventListener('click',()=>products(null));
  $('#productForm').addEventListener('submit',async ev=>{
@@ -737,7 +770,7 @@ async function training(){
  clearTimeout(trainingTimer);
  const [auto,versions,waLinks,ag]=await Promise.all([
   api('/api/training/auto'),api('/api/training/versions'),
-  api('/api/waakg/channels'),api('/api/agent')
+  moduleEnabled('whatsapp')?api('/api/waakg/channels'):Promise.resolve([]),api('/api/agent')
  ]);
  const run=auto.run,connected=waLinks.filter(c=>c.status==='connected');
  const percent=run?.percent??0;
@@ -810,7 +843,7 @@ async function training(){
   toast('Ajustes do Markdown salvos. O conhecimento ainda não foi aprovado.');
   await training();
  }));
- $('[data-restore-version]').forEach(btn=>btn.addEventListener('click',()=>action(async()=>{
+ $$('[data-restore-version]').forEach(btn=>btn.addEventListener('click',()=>action(async()=>{
   await api('/api/training/versions/'+btn.dataset.restoreVersion+'/restore','POST',{});
   toast('Versão anterior restaurada como conhecimento ativo.');
   await training();
@@ -1009,18 +1042,54 @@ async function team(){
   });
  }));
 }
+
+const companyModuleLabels=[
+ ['whatsapp','WhatsApp','Atendimento, conversas e QR Code'],
+ ['catalog','Produtos e serviços','Cadastro, estoque e imagens'],
+ ['sales','Vendas e orçamentos','Solicitações, propostas e pedidos'],
+ ['ai','Inteligência Artificial','Treinamento, personalidade e respostas'],
+ ['metaAds','Meta Ads','Autorização e consulta de anúncios']
+];
+const companyModuleDefaults={whatsapp:true,catalog:true,sales:false,ai:true,metaAds:false};
+function moduleCheckboxes(features,prefix){
+ const flags=features||companyModuleDefaults;
+ return companyModuleLabels.map(([key,label,description])=>
+  '<label class="socio-module-choice"><input type="checkbox" name="feature_'+key+'" '+
+   (flags[key]===true?'checked':'')+'><span><strong>'+e(label)+'</strong>'+
+   '<small>'+e(description)+'</small></span></label>').join('');
+}
+function selectedModules(form){
+ const data=Object.fromEntries(companyModuleLabels.map(([key])=>[key,form.elements['feature_'+key].checked]));
+ if(data.sales&&(!data.catalog||!data.whatsapp))
+  throw new Error('Para liberar orçamentos, ative também Produtos e WhatsApp.');
+ return data;
+}
+function bindModuleDependencies(form){
+ form.addEventListener('change',ev=>{
+  if(!ev.target.name?.startsWith('feature_'))return;
+  const get=key=>form.elements['feature_'+key];
+  if(ev.target===get('sales')&&get('sales').checked){
+   get('catalog').checked=true;get('whatsapp').checked=true;
+  }else if(!get('whatsapp').checked||!get('catalog').checked){
+   get('sales').checked=false;
+  }
+ });
+}
+
 async function admin(){
  const tenants=await api('/api/admin/tenants');
  const rows=tenants.map(t=>
   '<tr><td><strong>'+e(t.name)+'</strong><div class="table-detail">'+
    e(t.cnpj||t.slug)+' · '+e(t.members)+' usuário(s)</div></td>'+
    '<td>'+badge(t.plan)+'</td><td>'+badge(t.status,t.status==='active'?'green':'gray')+'</td>'+
+   '<td><small>'+e(companyModuleLabels.filter(([key])=>(t.features||{})[key]!==false).length)+' módulo(s)</small> '+
+    '<button type="button" class="btn sm soft" data-module-edit="'+e(t.id)+'">Configurar</button></td>'+
    '<td><button class="btn sm ghost" data-switch="'+e(t.id)+'">'+
    (t.id===state.me.tenant.id?'Atual':'Acessar')+'</button></td></tr>').join('');
  view.innerHTML=heading('CONTROLE CONSECOM','Empresas.','Gerencie clientes e espaços independentes.',
   '<button type="button" class="btn primary" id="newCompany">+ Nova empresa</button>')+
  '<section class="card card-pad socio-list-panel"><div class="socio-clean-head"><h2>Empresas cadastradas</h2><small>'+tenants.length+' ambientes</small></div>'+
- '<div class="table-wrap"><table class="data-table"><thead><tr><th>Empresa</th><th>Plano</th><th>Situação</th><th>Acesso</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
+ '<div class="table-wrap"><table class="data-table"><thead><tr><th>Empresa</th><th>Plano</th><th>Situação</th><th>Funcionalidades</th><th>Acesso</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
  '<div class="socio-popup-backdrop hidden" id="companyModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="companyHeading">'+
   '<div class="socio-popup-header"><div><small>ADMINISTRAÇÃO MASTER</small><h2 id="companyHeading">Nova empresa</h2>'+
   '<p>Consulte o CNPJ para preencher os dados públicos automaticamente.</p></div>'+
@@ -1040,16 +1109,55 @@ async function admin(){
    '<label>E-mail do responsável (login)<input name="ownerEmail" required type="email" maxlength="255"></label>'+
    '<div class="catalog-pair"><label>Celular para login<input name="ownerPhone" type="tel" maxlength="32" placeholder="Com DDD"></label>'+
    '<label>Plano<select name="plan"><option value="essencial">Essencial</option><option value="equipe">Equipe</option><option value="voz">Voz</option></select></label></div>'+
+   '<fieldset class="socio-module-fieldset"><legend>Funcionalidades desta empresa</legend>'+
+    '<p class="form-note">Ative somente as áreas que este cliente utilizará. É possível alterar depois.</p>'+
+    '<div class="socio-module-grid">'+moduleCheckboxes(null,'create')+'</div></fieldset>'+
    '<label>Senha inicial (mínimo 12 caracteres)<input name="ownerPassword" required type="password" minlength="12" maxlength="128" autocomplete="new-password"></label>'+
    '<p class="form-note">O cadastro cria um ambiente separado. Cobrança não é ativada automaticamente.</p>'+
    '<button class="btn primary socio-full-btn" type="submit">Criar empresa</button>'+
-  '</form></section></div>';
+  '</form></section></div>'+
+ '<div class="socio-popup-backdrop hidden" id="featureModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="featuresTitle">'+
+   '<div class="socio-popup-header"><div><small>ACESSO POR EMPRESA</small><h2 id="featuresTitle">Funcionalidades</h2>'+
+   '<p id="featuresCompanyName">Escolha os módulos permitidos.</p></div>'+
+   '<button type="button" class="socio-popup-close" id="featuresClose" aria-label="Fechar configurações">×</button></div>'+
+   '<form id="featuresForm" class="form-stack"><div class="socio-module-grid" id="featureSelection"></div>'+
+    '<p class="form-note">Desativar uma área bloqueia seu acesso, sem apagar os dados e registros anteriores.</p>'+
+    '<button class="btn primary" type="submit">Salvar funcionalidades</button></form>'+
+ '</section></div>';
  const modal=$('#companyModal'),form=$('#tenantForm');
  let publicProfile=null;
+ bindModuleDependencies(form);
+ const featureModal=$('#featureModal'),featureForm=$('#featuresForm');
+ let selectedTenant=null;
  const open=()=>{modal.classList.remove('hidden');form.elements.cnpj.focus();};
  const close=()=>modal.classList.add('hidden');
  $('#newCompany').addEventListener('click',open);
  $('#companyClose').addEventListener('click',close);
+ const closeFeatures=()=>{featureModal.classList.add('hidden');selectedTenant=null;};
+ $('#featuresClose').addEventListener('click',closeFeatures);
+ featureModal.addEventListener('click',ev=>{if(ev.target===featureModal)closeFeatures();});
+ bindModuleDependencies(featureForm);
+ view.querySelectorAll('[data-module-edit]').forEach(button=>button.addEventListener('click',()=>{
+  selectedTenant=tenants.find(t=>t.id===button.dataset.moduleEdit)||null;
+  if(!selectedTenant)return;
+  $('#featuresCompanyName').textContent='Configure as funcionalidades de '+selectedTenant.name+'.';
+  $('#featureSelection').innerHTML=moduleCheckboxes(selectedTenant.features,'edit');
+  featureModal.classList.remove('hidden');
+  featureForm.elements['feature_whatsapp'].focus();
+ }));
+ featureForm.addEventListener('submit',ev=>{
+  ev.preventDefault();
+  if(!selectedTenant)return;
+  void action(async()=>{
+   const flags=selectedModules(featureForm);
+   const savedTenantId=selectedTenant.id;
+   await api('/api/admin/tenants/'+savedTenantId+'/features','PATCH',{features:flags});
+   toast('Funcionalidades atualizadas para esta empresa.');
+   closeFeatures();
+   if(savedTenantId===state.me.tenant.id)await boot();
+   else await admin();
+  });
+ });
  modal.addEventListener('click',ev=>{if(ev.target===modal)close();});
  $('#lookupCnpj').addEventListener('click',async()=>{
   const cnpj=form.elements.cnpj.value.replace(/\D/g,'');
@@ -1074,6 +1182,7 @@ async function admin(){
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();
   const data=formValues(form);
+  try{data.features=selectedModules(form);}catch(error){toast(errMsg(error),true);return;}
   data.companyProfile=publicProfile?.cnpj===data.cnpj.replace(/\D/g,'')?
    {address:publicProfile.address,primaryActivity:publicProfile.primaryActivity,status:publicProfile.status,
     commercialEmail:data.companyEmail,commercialPhone:data.companyPhone}:
@@ -1119,7 +1228,7 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  key!=='agent'&&key!=='channels'&&(key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&(key!=='team'||!state.me?.user.platformOwner)&&(key!=='admin'||state.me?.user.platformOwner)&&
+  key!=='agent'&&key!=='channels'&&(key!=='inbox'||(state.me?.user?.permissions||[]).includes('inbox.read'))&&(key!=='products'||(state.me?.user?.permissions||[]).includes('catalog.read'))&&(key!=='sales'||(state.me?.user?.permissions||[]).includes('sales.read'))&&(key!=='training'||(state.me?.user?.permissions||[]).includes('training.manage'))&&(key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&(key!=='team'||!state.me?.user.platformOwner)&&(key!=='admin'||state.me?.user.platformOwner)&&
   (label.toLocaleLowerCase('pt-BR').includes(keyword)||key.includes(keyword)));
  const list=$('#commandList');
  list.innerHTML=names.length?names.map(([key,label])=>
@@ -1154,15 +1263,48 @@ document.addEventListener('keydown',event=>{
 });
 initSidebarIcons();
 
+function bindPasswordToggle(inputId,buttonId){
+ const input=$('#'+inputId),button=$('#'+buttonId);
+ button?.addEventListener('click',()=>{
+  const revealed=input.type==='password';
+  input.type=revealed?'text':'password';
+  button.textContent=revealed?'Ocultar':'Mostrar';
+  button.setAttribute('aria-label',revealed?'Ocultar senha':'Mostrar senha');
+  button.setAttribute('aria-pressed',String(revealed));
+  input.focus();
+ });
+}
+bindPasswordToggle('loginPassword','toggleLoginPassword');
+bindPasswordToggle('setupPassword','toggleSetupPassword');
+$('#loginPassword')?.addEventListener('keyup',ev=>{
+ $('#loginCapsMessage')?.classList.toggle('hidden',!ev.getModifierState?.('CapsLock'));
+});
 $('#loginForm').addEventListener('submit',async ev=>{
- ev.preventDefault();$('#authError').textContent='';
- try{const data=await api('/api/login','POST',formValues(ev.currentTarget));state.csrf=data.csrf;await boot();}
- catch(err){$('#authError').textContent=errMsg(err);}
+ ev.preventDefault();
+ const form=ev.currentTarget,button=$('#loginSubmit'),progress=$('#loginProgress');
+ $('#authError').textContent='';
+ button.disabled=true;button.setAttribute('aria-busy','true');
+ progress?.classList.remove('hidden');
+ try{
+  const data=await api('/api/login','POST',formValues(form));
+  state.csrf=data.csrf;state.view='overview';await boot();
+ }catch(err){
+  $('#authError').textContent=errMsg(err);
+  form.elements.password?.focus();
+ }finally{
+  button.disabled=false;button.setAttribute('aria-busy','false');
+  progress?.classList.add('hidden');
+ }
 });
 $('#setupForm').addEventListener('submit',async ev=>{
  ev.preventDefault();$('#authError').textContent='';
- try{const data=await api('/api/setup','POST',formValues(ev.currentTarget));state.csrf=data.csrf;await boot();}
- catch(err){$('#authError').textContent=errMsg(err);}
+ const form=ev.currentTarget,button=form.querySelector('button[type="submit"]');
+ if(button){button.disabled=true;button.setAttribute('aria-busy','true');}
+ try{
+  const data=await api('/api/setup','POST',formValues(form));
+  state.csrf=data.csrf;state.view='overview';await boot();
+ }catch(err){$('#authError').textContent=errMsg(err);}
+ finally{if(button){button.disabled=false;button.setAttribute('aria-busy','false');}}
 });
 $$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{
  if(b.dataset.view==='training')state.aiTab='training';

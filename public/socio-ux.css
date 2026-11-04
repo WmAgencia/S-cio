@@ -148,3 +148,73 @@
 .socio-audit-line span{color:var(--muted,#8f7969);font-size:12px}
 @media(max-width:1000px){.socio-team-grid{grid-template-columns:1fr}}
 @media(max-width:680px){.socio-my-account{grid-template-columns:1fr}.socio-audit-line{align-items:flex-start}}
+
+
+/* Accessibility and interaction polish — respects the espresso design system. */
+.socio-password-field{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:stretch}
+.socio-password-field input{min-width:0;width:100%}
+.socio-password-toggle{min-height:44px;padding:0 14px;border:1px solid #94623d;border-radius:11px;
+ background:#422819;color:#ffe4ce;font-size:12px;font-weight:650;cursor:pointer;transition:background .16s ease,transform .16s ease}
+.socio-password-toggle:hover{background:#694025}
+.socio-password-toggle:active{transform:scale(.98)}
+.socio-password-toggle:focus-visible,.auth-panel :is(input,button):focus-visible{outline:2px solid #ffae69;outline-offset:3px}
+.auth-caps-note{color:#ffc18b;font-size:12px;margin:2px 0}
+.auth-progress{color:#eab489;font-size:12px;text-align:center;min-height:20px}
+#loginSubmit[aria-busy="true"],#setupForm button[aria-busy="true"]{opacity:.78;cursor:progress}
+.socio-module-fieldset{border:1px solid #724b35;border-radius:15px;padding:16px;margin:8px 0 14px;min-width:0}
+.socio-module-fieldset legend{font-size:13px;color:#ffe1bd;font-weight:700;padding:0 7px}
+.socio-module-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.socio-module-choice{display:flex!important;flex-direction:row!important;align-items:center;gap:11px!important;
+ padding:12px;border:1px solid #6d4935;border-radius:12px;background:#382318;cursor:pointer;min-width:0;
+ transition:border-color .16s ease,background .16s ease}
+.socio-module-choice:hover{background:#492c1d;border-color:#b17647}
+.socio-module-choice input[type="checkbox"]{width:19px!important;height:19px!important;flex:0 0 19px;accent-color:#f98936;min-width:19px;margin:0}
+.socio-module-choice span{display:flex;flex-direction:column;gap:3px;min-width:0}
+.socio-module-choice strong{color:#ffe8d6;font-size:12px;line-height:1.3}
+.socio-module-choice small{color:#c5a991;font-size:10px;line-height:1.35}
+.socio-module-choice:has(input:checked){border-color:#e78a41;background:#54331d}
+.socio-module-choice:focus-within{outline:2px solid #ffae69;outline-offset:3px}
+.socio-feature-overview{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:15px}
+.socio-feature-link{display:grid;gap:12px;text-align:left;color:#ffecdb!important;min-height:150px;cursor:pointer;
+ border:1px solid #815337!important;transition:border-color .18s ease,transform .18s ease}
+.socio-feature-link:hover{border-color:#e78a41!important;transform:translateY(-2px)}
+.socio-feature-link strong{font-size:17px}
+.socio-feature-link span{color:#d4b9a4;font-size:12px}
+.socio-feature-link span:last-child{justify-self:end;color:#ffc18b;font-size:21px}
+.socio-catalog-clean .catalog-list{grid-template-columns:repeat(auto-fill,minmax(min(100%,310px),1fr));gap:13px}
+.socio-catalog-clean .catalog-product{min-height:116px;align-items:center;gap:12px;
+ transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+.socio-catalog-clean .catalog-product:hover{transform:translateY(-2px);box-shadow:0 8px 24px #0000001a}
+.socio-catalog-clean .catalog-cover{width:82px;height:82px;flex-basis:82px}
+.socio-catalog-clean .catalog-cover img{object-fit:cover;width:100%;height:100%}
+.socio-catalog-clean .catalog-product-copy strong{font-size:13px;line-height:1.4;white-space:normal;max-height:2.8em;overflow:hidden}
+.socio-catalog-clean .catalog-price{font-size:15px;font-weight:750;color:#ffe1bf}
+.socio-catalog-clean .catalog-inventory{white-space:normal;color:#c6a68b;font-size:10px}
+.socio-catalog-clean .catalog-status{align-self:flex-start;max-width:102px;white-space:normal;text-align:center;line-height:1.2}
+.socio-quote-request-panel .socio-clean-head{align-items:center}
+.socio-quote-request{align-items:flex-start;gap:16px;flex-wrap:wrap}
+.socio-quote-request>div:first-child{min-width:0;flex:1}
+.socio-quote-request .sale-record-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.socio-quote-request .form-note{overflow-wrap:anywhere;max-width:70ch;margin:8px 0}
+.socio-quote-alerts{display:grid;gap:9px;margin-top:17px;border-top:1px solid #744a2f;padding-top:17px}
+.socio-quote-alerts strong{color:#f9d5b8;font-size:13px}
+.socio-quote-alerts .btn{justify-self:start}
+.socio-sales :is(button,input,select):focus-visible{outline:2px solid #ffae69;outline-offset:3px}
+.socio-sales :is(button,select,input){min-height:40px}
+.socio-sales .sale-item{min-width:0}
+.socio-sales .sale-item select{min-width:0}
+@media(max-width:800px){
+ .socio-module-grid{grid-template-columns:1fr}
+ .socio-catalog-clean .catalog-product{min-height:95px}
+ .socio-catalog-clean .catalog-cover{width:66px;height:66px;flex-basis:66px}
+ .socio-quote-request .sale-record-actions{width:100%}
+}
+@media(max-width:440px){
+ .socio-password-field{gap:6px}
+ .socio-password-toggle{padding:0 10px}
+ .socio-feature-overview{grid-template-columns:1fr}
+ .socio-quote-request .sale-record-actions button{flex:1;min-width:120px}
+}
+@media(prefers-reduced-motion:reduce){
+ .socio-password-toggle,.socio-module-choice,.socio-feature-link,.socio-catalog-clean .catalog-product{transition:none!important;transform:none!important}
+}
