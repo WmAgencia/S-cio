@@ -9,6 +9,7 @@ const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'sho
 const val=(form,k)=>String(new FormData(form).get(k)||'').trim();
 const errMsg=error=>String(error?.message||'Não foi possível concluir a solicitação.');
 const view=$('#view');
+const moduleEnabled=key=>state.me?.tenant?.features?.[key]!==false;
 let toastTimer,trainingTimer,waQrTimer;
 let activeInbox=null;
 
@@ -58,7 +59,7 @@ async function boot(){
    $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
    $('#teamNav')?.classList.toggle('hidden',!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner);
    const access=new Set(me.user.permissions||[]);
-   for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['marketing','marketing.read']]){
+   for(const [section,permission] of [['inbox','inbox.read'],['products','catalog.read'],['training','training.manage'],['sales','sales.read'],['marketing','marketing.read']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
    const marketingStatus=typeof location==='object'?new URL(location.href).searchParams.get('marketing'):null;
@@ -108,6 +109,8 @@ async function changeView(next){
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
  if(next==='admin'&&!state.me?.user.platformOwner)return;
  const access=new Set(state.me?.user?.permissions||[]);
+ if(next==='inbox'&&!access.has('inbox.read'))next='overview';
+ if(next==='products'&&!access.has('catalog.read'))next='overview';
  if(next==='training'&&!access.has('training.manage'))next='overview';
  if(next==='sales'&&!access.has('sales.read'))next='overview';
  if(next==='instagram')next='marketing';
@@ -200,6 +203,22 @@ function emberIcon(kind){
  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(emberIcons[kind]||emberIcons.spark)+'</svg>';
 }
 async function overview(){
+ if(!moduleEnabled('whatsapp')){
+  const available=[
+   ['catalog','products','Produtos e serviços','Organize o catálogo, estoque e imagens.'],
+   ['metaAds','marketing','Meta Ads','Conecte e consulte suas contas de anúncios.'],
+   ['ai','training','Inteligência Artificial','Personalize seu agente e experimente o simulador.']
+  ].filter(([key])=>moduleEnabled(key));
+  view.innerHTML=heading('VISÃO GERAL','Seu espaço de trabalho.',
+   'Sua empresa vê apenas as funcionalidades ativadas.')+
+   '<div class="socio-feature-overview">'+
+   (available.length?available.map(([key,viewKey,label,detail])=>
+    '<button type="button" class="card card-pad socio-feature-link" data-go="'+viewKey+'">'+
+    '<strong>'+e(label)+'</strong><span>'+e(detail)+'</span><span aria-hidden="true">↗</span></button>').join(''):
+    '<div class="card card-pad"><strong>Espaço configurado</strong><p>Os módulos adicionais serão disponibilizados pela administração.</p></div>')+
+   '</div>';
+  bindNavWithin();return;
+ }
  const [d,trend,recent,links]=await Promise.all([
   api('/api/dashboard'),api('/api/dashboard/activity?range=1m'),api('/api/inbox'),api('/api/waakg/channels')
  ]);
@@ -299,6 +318,7 @@ async function overview(){
    '</section>'+
   '</div>'+
  '</div>';
+ if(!moduleEnabled('ai'))view.querySelector('.ember-ai-card')?.remove();
  bindNavWithin();
  $('#dashboardConnectWhatsApp')?.addEventListener('click',()=>window.SocioUX.openQr({
   api,toast,canManage:state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role),
@@ -737,7 +757,7 @@ async function training(){
  clearTimeout(trainingTimer);
  const [auto,versions,waLinks,ag]=await Promise.all([
   api('/api/training/auto'),api('/api/training/versions'),
-  api('/api/waakg/channels'),api('/api/agent')
+  moduleEnabled('whatsapp')?api('/api/waakg/channels'):Promise.resolve([]),api('/api/agent')
  ]);
  const run=auto.run,connected=waLinks.filter(c=>c.status==='connected');
  const percent=run?.percent??0;
@@ -1119,7 +1139,7 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  key!=='agent'&&key!=='channels'&&(key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&(key!=='team'||!state.me?.user.platformOwner)&&(key!=='admin'||state.me?.user.platformOwner)&&
+  key!=='agent'&&key!=='channels'&&(key!=='inbox'||(state.me?.user?.permissions||[]).includes('inbox.read'))&&(key!=='products'||(state.me?.user?.permissions||[]).includes('catalog.read'))&&(key!=='sales'||(state.me?.user?.permissions||[]).includes('sales.read'))&&(key!=='training'||(state.me?.user?.permissions||[]).includes('training.manage'))&&(key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&(key!=='team'||!state.me?.user.platformOwner)&&(key!=='admin'||state.me?.user.platformOwner)&&
   (label.toLocaleLowerCase('pt-BR').includes(keyword)||key.includes(keyword)));
  const list=$('#commandList');
  list.innerHTML=names.length?names.map(([key,label])=>
