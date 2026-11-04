@@ -688,7 +688,7 @@ const sidebarIcons={
  logout:'<path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M14 7l5 5-5 5M9 12h10"/>'
 };
 function initSidebarIcons(){
- $('.nav-item[data-view],#logoutBtn').forEach(b=>{
+ $$('.nav-item[data-view],#logoutBtn').forEach(b=>{
   const kind=b.dataset.view||'logout';
   const holder=b.querySelector('.nav-symbol');
   if(!holder)return;
