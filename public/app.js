@@ -747,12 +747,84 @@ async function team(){
 }
 async function admin(){
  const tenants=await api('/api/admin/tenants');
- view.innerHTML=heading('CONTROLE CONSECOM','Empresas do Sócio.','Gerencie clientes, planos e ambientes independentes da plataforma.')+
- '<div class="two-pane"><div>'+panel('Empresas cadastradas',tenants.length+' ambiente(s) isolado(s).',
- '<div class="table-wrap"><table class="data-table"><thead><tr><th>Empresa</th><th>Plano</th><th>Acesso</th></tr></thead><tbody>'+tenants.map(t=>'<tr><td><strong>'+e(t.name)+'</strong><div class="table-detail">'+e(t.slug)+' · '+e(t.members)+' usuário(s)</div></td><td>'+badge(t.plan)+'</td><td><button class="btn sm ghost" data-switch="'+e(t.id)+'">'+(t.id===state.me.tenant.id?'Atual':'Acessar')+'</button></td></tr>').join('')+'</tbody></table></div>')+'</div>'+
- '<div class="card card-pad"><div class="section-title">Cadastrar empresa cliente</div><form id="tenantForm" class="form-stack"><label>Nome da empresa<input name="company" required maxlength="120" placeholder="Ex.: Pizzaria Bella"></label><label>Nome do responsável<input name="ownerName" required maxlength="100"></label><label>E-mail do responsável<input name="ownerEmail" required type="email"></label><label>Celular para login (opcional)<input name="ownerPhone" type="tel" maxlength="32" placeholder="(15) 99999-9999"></label><label>Plano<select name="plan"><option value="essencial">Essencial · R$129/mês</option><option value="equipe">Equipe</option><option value="voz">Voz (futuro)</option></select></label><label>Senha inicial (mín. 12 caracteres)<input type="password" name="ownerPassword" required minlength="12" maxlength="128" autocomplete="new-password"></label><button class="btn primary" type="submit">Criar espaço da empresa →</button><p class="form-note">O plano é um registro administrativo; cobranças e assinaturas ainda não são processadas automaticamente.</p></form></div></div>';
- $('#tenantForm').addEventListener('submit',async ev=>{ev.preventDefault();const d=formValues(ev.currentTarget);await action(async()=>{await api('/api/admin/tenants','POST',d);toast('Empresa cadastrada e isolada.');await admin();});});
- view.querySelectorAll('[data-switch]').forEach(b=>b.addEventListener('click',()=>action(async()=>{await api('/api/admin/switch','POST',{tenantId:b.dataset.switch});toast('Ambiente alterado.');state.view='overview';await boot();})));
+ const rows=tenants.map(t=>
+  '<tr><td><strong>'+e(t.name)+'</strong><div class="table-detail">'+
+   e(t.cnpj||t.slug)+' · '+e(t.members)+' usuário(s)</div></td>'+
+   '<td>'+badge(t.plan)+'</td><td>'+badge(t.status,t.status==='active'?'green':'gray')+'</td>'+
+   '<td><button class="btn sm ghost" data-switch="'+e(t.id)+'">'+
+   (t.id===state.me.tenant.id?'Atual':'Acessar')+'</button></td></tr>').join('');
+ view.innerHTML=heading('CONTROLE CONSECOM','Empresas.','Gerencie clientes e espaços independentes.',
+  '<button type="button" class="btn primary" id="newCompany">+ Nova empresa</button>')+
+ '<section class="card card-pad socio-list-panel"><div class="socio-clean-head"><h2>Empresas cadastradas</h2><small>'+tenants.length+' ambientes</small></div>'+
+ '<div class="table-wrap"><table class="data-table"><thead><tr><th>Empresa</th><th>Plano</th><th>Situação</th><th>Acesso</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
+ '<div class="socio-popup-backdrop hidden" id="companyModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="companyHeading">'+
+  '<div class="socio-popup-header"><div><small>ADMINISTRAÇÃO MASTER</small><h2 id="companyHeading">Nova empresa</h2>'+
+  '<p>Consulte o CNPJ para preencher os dados públicos automaticamente.</p></div>'+
+  '<button type="button" class="socio-popup-close" id="companyClose" aria-label="Fechar cadastro">×</button></div>'+
+  '<form id="tenantForm" class="form-stack">'+
+   '<div class="socio-cnpj-lookup"><label>CNPJ (opcional)<input name="cnpj" maxlength="18" placeholder="00.000.000/0000-00" inputmode="numeric"></label>'+
+   '<button type="button" class="btn soft" id="lookupCnpj">Buscar CNPJ</button></div>'+
+   '<p class="form-note" id="cnpjFeedback" role="status">A consulta é pública e pode ficar indisponível. Todos os dados podem ser preenchidos manualmente.</p>'+
+   '<label>Nome da empresa<input name="company" required maxlength="120" placeholder="Ex.: Pizzaria Bella"></label>'+
+   '<div class="catalog-pair"><label>Razão social<input name="legalName" maxlength="200"></label>'+
+   '<label>Nome fantasia<input name="tradeName" maxlength="200"></label></div>'+
+   '<div class="catalog-pair"><label>Telefone comercial<input name="companyPhone" maxlength="30" placeholder="Opcional"></label>'+
+   '<label>E-mail comercial<input name="companyEmail" maxlength="150" placeholder="Opcional"></label></div>'+
+   '<label>Endereço (informação pública do cadastro)<textarea name="companyAddress" rows="2" maxlength="500" placeholder="Rua, número, bairro, cidade e UF" readonly></textarea></label>'+
+   '<div class="socio-popup-divider"><span>ACESSO DO RESPONSÁVEL</span></div>'+
+   '<label>Nome do responsável<input name="ownerName" required maxlength="100"></label>'+
+   '<label>E-mail do responsável (login)<input name="ownerEmail" required type="email" maxlength="255"></label>'+
+   '<div class="catalog-pair"><label>Celular para login<input name="ownerPhone" type="tel" maxlength="32" placeholder="Com DDD"></label>'+
+   '<label>Plano<select name="plan"><option value="essencial">Essencial</option><option value="equipe">Equipe</option><option value="voz">Voz</option></select></label></div>'+
+   '<label>Senha inicial (mínimo 12 caracteres)<input name="ownerPassword" required type="password" minlength="12" maxlength="128" autocomplete="new-password"></label>'+
+   '<p class="form-note">O cadastro cria um ambiente separado. Cobrança não é ativada automaticamente.</p>'+
+   '<button class="btn primary socio-full-btn" type="submit">Criar empresa</button>'+
+  '</form></section></div>';
+ const modal=$('#companyModal'),form=$('#tenantForm');
+ let publicProfile=null;
+ const open=()=>{modal.classList.remove('hidden');form.elements.cnpj.focus();};
+ const close=()=>modal.classList.add('hidden');
+ $('#newCompany').addEventListener('click',open);
+ $('#companyClose').addEventListener('click',close);
+ modal.addEventListener('click',ev=>{if(ev.target===modal)close();});
+ $('#lookupCnpj').addEventListener('click',async()=>{
+  const cnpj=form.elements.cnpj.value.replace(/\D/g,'');
+  const feedback=$('#cnpjFeedback'),btn=$('#lookupCnpj');
+  if(cnpj.length!==14){feedback.textContent='Digite os 14 dígitos do CNPJ.';return;}
+  btn.disabled=true;feedback.textContent='Buscando dados públicos do CNPJ...';
+  try{
+   const result=await api('/api/admin/cnpj?number='+encodeURIComponent(cnpj));
+   publicProfile=result;
+   form.elements.company.value=result.company||result.legalName||'';
+   form.elements.legalName.value=result.legalName||'';
+   form.elements.tradeName.value=result.tradeName||'';
+   form.elements.companyPhone.value=result.phone||'';
+   form.elements.companyEmail.value=result.email||'';
+   const a=result.address||{};
+   form.elements.companyAddress.value=[a.street,a.number,a.additional,a.neighborhood,a.city,a.state,a.postalCode].filter(Boolean).join(', ');
+   feedback.textContent='Dados encontrados: '+(result.legalName||result.company)+'. Confira e complete o acesso do responsável.';
+  }catch(error){publicProfile=null;feedback.textContent=errMsg(error)+' Você pode preencher manualmente.';}
+  finally{btn.disabled=false;}
+ });
+ form.elements.cnpj.addEventListener('input',()=>{publicProfile=null;});
+ form.addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const data=formValues(form);
+  data.companyProfile=publicProfile?.cnpj===data.cnpj.replace(/\D/g,'')?
+   {address:publicProfile.address,primaryActivity:publicProfile.primaryActivity,status:publicProfile.status,
+    commercialEmail:data.companyEmail,commercialPhone:data.companyPhone}:
+   {commercialEmail:data.companyEmail,commercialPhone:data.companyPhone};
+  await action(async()=>{
+   await api('/api/admin/tenants','POST',data);
+   toast('Empresa cadastrada e ambiente criado com isolamento.');
+   close();await admin();
+  });
+ });
+ view.querySelectorAll('[data-switch]').forEach(b=>b.addEventListener('click',()=>action(async()=>{
+  await api('/api/admin/switch','POST',{tenantId:b.dataset.switch});
+  toast('Ambiente alterado.');
+  state.view='overview';await boot();
+ })));
 }
 async function action(fn){try{await fn();}catch(err){toast(errMsg(err),true);}}
 
