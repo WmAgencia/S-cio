@@ -142,14 +142,25 @@ export async function sendQuoteDraft(pool,tenant,requestId,userId,{env=process.e
  if(!outboundEnabled(env))throw bad(503,'Envio WhatsApp indisponível. O orçamento permanece salvo no Sócio.');
  // Preflight predictable refusal before claiming the one-time delivery id.
  const preflight=await pool.query(
-  "SELECT q.conversation_id,c.status,COALESCE(st.handling_mode,'human') AS handling_mode "+
+  "SELECT q.conversation_id,c.status,c.customer_phone,COALESCE(st.handling_mode,'human') AS handling_mode,"+
+  "ch.provider,ch.status AS channel_status,ch.phone AS linked_phone,w.session_id "+
   "FROM quote_requests q JOIN conversations c ON c.tenant_id=q.tenant_id AND c.id=q.conversation_id "+
+  "JOIN channels ch ON ch.tenant_id=c.tenant_id AND ch.id=c.channel_id "+
+  "LEFT JOIN waakg_links w ON w.tenant_id=ch.tenant_id AND w.channel_id=ch.id "+
   "LEFT JOIN conversation_ui_state st ON st.tenant_id=c.tenant_id AND st.conversation_id=c.id "+
   "WHERE q.tenant_id=$1 AND q.id=$2",[tenant,requestId]);
  if(!preflight.rowCount)throw bad(404,'Orçamento não encontrado.');
- if(preflight.rows[0].status==='resolved')throw bad(409,'Reabra a conversa antes de enviar.');
- if(preflight.rows[0].handling_mode!=='human')
+ const connection=preflight.rows[0];
+ if(connection.status==='resolved')throw bad(409,'Reabra a conversa antes de enviar.');
+ if(connection.handling_mode!=='human')
   throw bad(409,'Assuma a conversa no WhatsApp antes de enviar o orçamento.');
+ if(connection.provider!=='waakg'||connection.channel_status!=='connected'||!connection.session_id)
+  throw bad(409,'Conecte um WhatsApp da empresa antes de enviar.');
+ if(!/^\\d{5,24}$/.test(String(connection.customer_phone||'')))
+  throw bad(422,'Número do cliente inválido para envio.');
+ const session=await getSessionStatus(connection.session_id).catch(()=>null);
+ if(!session?.connected||session.connectedNumber!==String(connection.linked_phone||'').replace(/\\D/g,''))
+  throw bad(409,'A conexão WhatsApp não está verificada. Atualize a sessão antes de enviar.');
 
  const r=await pool.query(
   "UPDATE quote_requests SET delivery_status='processing',updated_at=now() "+
