@@ -11,7 +11,9 @@
 
 ## Provedor da IA
 
-**Grok = xAI, não Groq, nem ChatGPT.** O aplicativo usa `XAI_API_KEY` e opcionalmente `XAI_MODEL` (padrão `grok-4.7`) exclusivamente no backend, via `POST https://api.x.ai/v1/responses`. Nenhuma chave é enviada ao navegador. Sem chave, testes de personalidade exibem indisponibilidade e treinamento gera Markdown analítico determinístico identificado como preliminar, sem falsamente atribuir seu conteúdo ao Grok.
+**Groq (G-R-O-Q)** é o provedor de inferência e não é o Grok da xAI. O Sócio usa o mesmo endpoint e modelo padrão configurados no código do Prospector: `https://api.groq.com/openai/v1/chat/completions` e `openai/gpt-oss-120b`, com configuração opcional de `GROQ_MODEL`. Requer `GROQ_API_KEY` no servidor; não envia credenciais ao navegador.
+
+O Prospector já possui `GROQ_API_KEY` no Railway, mas o acesso via OAuth do conector retorna apenas o nome da variável, sem seu valor. Como os projetos são separados, referências nativas de variáveis do Railway não atravessam projetos. A chave deve ser configurada de maneira segura e privada no serviço `socio-app`; não adicione ao repositório, logs nem a chats. Sem a chave, os testes de personalidade mostram indisponibilidade e o treinamento produz um Markdown preliminar determinístico identificado como tal, nunca atribuído falsamente ao Groq.
 
 ## Histórico e privacidade
 
