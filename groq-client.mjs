@@ -20,7 +20,9 @@ export async function groqResponse({instructions,input,maxOutputTokens=450,env=p
    method:'POST',headers:{Authorization:'Bearer '+env.GROQ_API_KEY,'Content-Type':'application/json'},
    body:JSON.stringify({model,
     messages:[{role:'system',content:instructions},{role:'user',content:input}],
-    max_tokens:Math.max(80,Math.min(2200,Number(maxOutputTokens)||450)),stream:false}),
+    max_tokens:Math.max(240,Math.min(3200,Number(maxOutputTokens)||700)),
+    ...(model.startsWith('openai/gpt-oss-')?{reasoning_effort:'low'}:{}),
+    stream:false}),
    signal:controller.signal
   });
   if(!resp.ok)return {ok:false,status:resp.status};
