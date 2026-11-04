@@ -10,6 +10,8 @@
   const requests=leads.requests||[];
   const canConfigureAlerts=me?.user?.role==='owner'||me?.user?.platformOwner===true;
   const allowed=products.filter(p=>p.active);
+  const normalize=v=>String(v||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLocaleLowerCase('pt-BR').replace(/\\s+/g,' ').trim();
+  const mentionedProducts=summary=>allowed.filter(p=>normalize(p.name).length>=4&&normalize(summary).includes(normalize(p.name))).slice(0,8).map(p=>p.name);
   const money=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n||0)/100);
   const sale=revision?sales.quotes.find(q=>q.id===revision):null;
   if(revision&&!sale)revision=null;
@@ -35,6 +37,7 @@
    (requests.length?'<div class="quote-request-list">'+requests.map(q=>
     '<article class="quote-request-item"><div><strong>'+e(q.customer_name||q.customer_phone||'Cliente')+'</strong>'+
     '<p>'+e(q.summary||'Solicitação de orçamento').slice(0,500)+'</p>'+
+    (mentionedProducts(q.summary).length?'<p class="quote-mentioned-products"><strong>Produtos mencionados:</strong> '+e(mentionedProducts(q.summary).join(' · '))+'</p>':'')+
     '<small>'+e(q.status==='pending'?'Aguardando orçamento':q.status==='preparing'?'Em preparação':'Resolvido')+
      ' · '+e(new Date(q.created_at).toLocaleDateString('pt-BR'))+
      (q.alert_status==='sent'?' · Aviso enviado ao dono':q.alert_status==='unconfirmed'?' · Verifique aviso no WhatsApp':'')+'</small></div>'+
