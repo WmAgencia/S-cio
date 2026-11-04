@@ -10,7 +10,7 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[89ab0-9
 const clean=x=>String(x||'').trim();
 export function isQuoteRequest(text){
  const s=clean(text).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().slice(0,2000);
- if(!s||/\b(?:nao quero|nao preciso|dispenso|nao solicitei|cancele)\s+(?:um\s+|o\s+|esse\s+)?(?:orcamento|cotacao)\b/.test(s))return false;
+ if(!s||/\b(?:nao quero|nao preciso|dispenso|nao solicitei|cancele|ja tenho|ja recebi)\s+(?:(?:um|uma|o|esse|essa)\s+)?(?:orcamento|cotacao)\b/.test(s))return false;
  return /\b(?:orcamento|cotacao|quanto (?:custa|fica|sai)|(?:qual|quanto e)\s+(?:o\s+)?(?:preco|valor)|(?:me\s+)?(?:passa|mande|manda|envie|envia|prepara|prepare|faca|faz|quero|preciso)\s+(?:(?:um|uma|o|a|de)\s+)?(?:orcamento|cotacao|preco|valor)|(?:pode|poderia|consegue)\s+(?:me\s+)?(?:passar|enviar|fazer|preparar)\s+(?:um\s+|uma\s+)?(?:orcamento|cotacao))\b/.test(s);
 }
 export async function scanQuoteRequests(pool){
