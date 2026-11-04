@@ -9,7 +9,7 @@ const normalize=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
 export function isQuoteIntent(input){
  const text=normalize(input).slice(0,1500);
  if(!text)return false;
- if(/\b(nao\s+(?:quero|preciso|tenho interesse em)|sem\s+necessidade de)\s+(?:um\s+)?(?:orcamento|cotacao|proposta)\b/.test(text))return false;
+ if(/\b(?:nao\s+(?:quero|preciso|tenho interesse em)|sem\s+(?:necessidade\s+de\s+)?)\s*(?:de\s+|um\s+)?(?:orcamento|cotacao|proposta)\b/.test(text))return false;
  return /\b(orcamento|orcamentos|cotacao|cotar|pode orcar|fazer uma proposta comercial|quanto custa|quanto ficaria|qual (?:e |seria )?o valor|preciso de (?:um )?preco|queria (?:saber|ver) o preco|me passa (?:o )?(?:preco|valor)|quanto sai)\b/.test(text);
 }
 const safeExcerpt=s=>String(s||'').replace(/[\u0000-\u001f]+/g,' ').trim().slice(0,700);
