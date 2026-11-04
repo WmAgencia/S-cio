@@ -8,8 +8,8 @@ test('Sócio offers Inteligência Artificial as a separate product module',()=>{
  const js=source('../public/app.js');
  assert.match(html,/data-view="training"[^>]*>[^<]*<span[^>]*>[^<]*<\/span> Inteligência Artificial<\/button>/);
  assert.match(js,/training:'Inteligência Artificial'/);
- assert.match(js,/api\('\/api\/training\/jobs'/);
- assert.match(js,/\/api\/waakg\/scans/);
+ assert.match(js,/api\('\/api\/training\/auto'/);
+ assert.match(js,/api\('\/api\/waakg\/channels'/);
 });
 test('Sócio uses its own gateway and tenant boundaries, not Prospector infrastructure',()=>{
  const gateway=source('../waakg-adapter.mjs');
