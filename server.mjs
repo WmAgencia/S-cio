@@ -644,6 +644,26 @@ async function handle(req,res){
   return json(res,201,r.rows[0]);
  }
 
+ if(method==='GET'&&pathname==='/api/reports'){
+  requirePermission(a,'audit.read');
+  const [totals,daily]=await Promise.all([
+   query("SELECT "+
+    "(SELECT count(*)::int FROM sale_intents WHERE tenant_id=$1 AND created_at>=now()-interval '30 days') AS purchase_intents,"+
+    "(SELECT count(*)::int FROM sale_intents WHERE tenant_id=$1 AND status='pending') AS purchase_pending,"+
+    "(SELECT count(*)::int FROM sale_intents WHERE tenant_id=$1 AND status='completed' AND updated_at>=now()-interval '30 days') AS purchase_completed_manually,"+
+    "(SELECT count(*)::int FROM quote_requests WHERE tenant_id=$1 AND created_at>=now()-interval '30 days') AS quote_requests,"+
+    "(SELECT count(*)::int FROM quote_requests WHERE tenant_id=$1 AND delivery_status='sent' AND quote_sent_at>=now()-interval '30 days') AS quote_sent,"+
+    "(SELECT count(*)::int FROM sales_orders WHERE tenant_id=$1 AND created_at>=now()-interval '30 days') AS approved_orders,"+
+    "(SELECT count(*)::int FROM sales_orders WHERE tenant_id=$1 AND status='paid_test' AND created_at>=now()-interval '30 days') AS sandbox_payments,"+
+    "(SELECT count(*)::int FROM messages WHERE tenant_id=$1 AND direction='inbound' AND created_at>=now()-interval '30 days') AS inbound_messages",
+    [a.active_tenant_id]),
+   query("SELECT date_trunc('day',m.created_at)::date AS day,count(*)::int AS messages "+
+    "FROM messages m WHERE m.tenant_id=$1 AND m.direction='inbound' AND m.created_at>=now()-interval '14 days' "+
+    "GROUP BY 1 ORDER BY 1",[a.active_tenant_id])
+  ]);
+  return json(res,200,{periodDays:30,totals:totals.rows[0],
+   dailyMessages:daily.rows,note:'Intenção de compra, pedido aprovado e pagamento são eventos distintos. Pagamento de teste não é receita real.'});
+ }
  if(method==='GET'&&pathname==='/api/sales/intents'){
   requirePermission(a,'sales.read');
   return json(res,200,{intents:await listSaleIntents(pool,a.active_tenant_id)});
