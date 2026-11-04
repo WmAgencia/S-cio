@@ -413,7 +413,7 @@ async function instagram(){
     ' Não é necessário criar uma conta de desenvolvedor Meta para cada cliente.</p>')+
   '</section>'+
   '<section class="card" style="padding:20px;max-width:860px;margin-top:18px">'+
-   '<h3>Laboratório técnico isolado</h3>'+
+   '<h3>Instagram profissional — laboratório técnico isolado</h3>'+
    '<p class="form-note">aiograpi-rest: '+e(lab.reachable?'serviço privado online':
     lab.installed?'serviço indisponível':'não instalado')+'. '+
     'Esta API não oficial não oferece autorização OAuth da Meta e não acessa nenhuma conta real.</p>'+
