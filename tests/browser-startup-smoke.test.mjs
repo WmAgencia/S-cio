@@ -8,7 +8,7 @@ test('client startup initializes icons and reveals login on an unauthenticated v
  const elements=new Map();
  const node=(id)=>{
   if(!elements.has(id)){
-   const names=new Set(['authScreen','appShell','setupForm'].includes(id)?['hidden']:[]);
+   const names=new Set(['authScreen','appShell','setupForm'].includes(id.replace(/^id:/,''))?['hidden']:[]);
    elements.set(id,{
     innerHTML:'',textContent:'',dataset:{view:'overview'},style:{},
     classList:{
