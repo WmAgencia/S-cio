@@ -115,12 +115,19 @@
    const day=fullDate(m.created_at),prevDay=prior?fullDate(prior.created_at):null;
    const daySep=day!==prevDay?'<div class="wa-date-marker" role="separator">'+t(day)+'</div>':'';
    const body=String(m.body||'').trim()||'[Conteúdo não disponível]';
+   const productPhoto=m.content_kind==='product'&&
+    /^[a-f0-9-]{36}$/i.test(m.product_id||'')&&/^[a-f0-9-]{36}$/i.test(m.media_id||'')?
+    '<img class="wa-message-product-image" loading="lazy" alt="Foto do produto enviado" src="/api/products/'+
+     t(m.product_id)+'/media/'+t(m.media_id)+'/file">':'';
+   const typeLabel=m.content_kind==='product'?'Produto com foto e opções':
+    m.content_kind==='buttons'?'Mensagem com botões interativos':'';
    return daySep+'<div class="wa-message-row '+(self?'outgoing':note?'internal':'incoming')+'" data-message-id="'+t(m.id)+'" role="listitem">'+
     '<div class="wa-message-bubble'+(selected.has(m.id)?' selected':'')+
      (m.starred?' starred':'')+'" tabindex="0" role="group" data-message="'+t(m.id)+'"'+
      ' aria-label="'+t(author+', '+stamp(m.created_at)+': '+body,300)+'"'+
      ' title="Duplo clique para responder; clique para abrir opções; botão direito para mais ações">'+
-     quote+'<div class="wa-message-copy">'+t(body,5000)+'</div>'+
+     quote+(typeLabel?'<small class="wa-rich-label">'+t(typeLabel)+'</small>':'')+
+     productPhoto+'<div class="wa-message-copy">'+t(body,5000)+'</div>'+
      '<div class="wa-message-meta"><span>'+t(note?'Visível apenas à equipe':author)+'</span>'+
       (m.starred?'<span title="Favorita">★</span>':'')+
       '<time datetime="'+t(m.created_at)+'">'+t(stamp(m.created_at))+'</time></div>'+
