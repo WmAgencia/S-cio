@@ -1,0 +1,21 @@
+/* Scoped Sócio sales palette: Espresso, lightweight, mobile-first. */
+.socio-sales{display:grid;gap:18px;max-width:1320px;margin:auto}
+.sale-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+.socio-sales .card{min-width:0}
+.socio-sales h2{font-size:20px;margin:0 0 16px}
+.sale-label{font-weight:700;color:inherit;margin:12px 0 9px}
+.sale-item{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.5fr) 76px 40px;align-items:end;gap:8px;margin:10px 0}
+.sale-item select,.sale-item input,.sale-links input{width:100%;min-width:0;background:var(--card,#fffdfb);border:1px solid #ded1c6;border-radius:10px;color:inherit;padding:11px}
+.sale-item label{font-size:12px;color:#907b69}
+.sale-records{display:grid;gap:6px;max-height:570px;overflow:auto}
+.sale-record{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid rgba(140,104,75,.16)}
+.sale-record strong{display:block;font-size:14px}
+.sale-record small{display:block;margin:4px 0;color:var(--muted,#806d60)}
+.sale-record-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px}
+.sale-record-actions .btn{white-space:nowrap}
+.sale-state{font-size:12px;font-weight:700;text-align:right}
+.sale-links{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+.sale-links h2,.sale-links p{width:100%;margin-bottom:0}
+.sale-links input{flex:1 1 340px}
+@media(max-width:1050px){.sale-grid{grid-template-columns:1fr}}
+@media(max-width:640px){.sale-item{grid-template-columns:minmax(0,1fr) 80px 36px}.sale-item [data-sale-product]{grid-column:1/-1}.sale-record{align-items:flex-start;flex-direction:column}.sale-record-actions{justify-content:flex-start}}
