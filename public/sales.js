@@ -227,7 +227,7 @@
   const card=x=>{
    const items=Array.isArray(x.items)?x.items:[];
    const names=items.length?items.map(i=>i.quantity+'× '+i.name+(i.variantName?' · '+i.variantName:'')).join(', '):'Produtos e quantidades a confirmar';
-   return '<article class="commerce-lead-card" data-intent="'+e(x.id)+'">'+
+   return '<article class="commerce-lead-card" tabindex="0" aria-label="Oportunidade de compra de '+e(x.customer_name||'cliente')+'" data-intent="'+e(x.id)+'">'+
     '<div class="commerce-lead-main"><div class="commerce-lead-avatar">'+e((x.customer_name||'C').slice(0,1).toUpperCase())+'</div>'+
     '<div class="commerce-lead-copy"><span class="commerce-lead-eyebrow">'+
      e(x.status==='pending'?'Cliente quer comprar':x.status==='contacted'?'Atendimento iniciado':x.status==='completed'?'Concluída manualmente':'Descartada')+
@@ -284,6 +284,15 @@
   };
   view.querySelectorAll('[data-intent]').forEach(article=>{
    const item=intents.find(x=>x.id===article.dataset.intent);
+   article.addEventListener('click',event=>{
+    if(event.target.closest('button,input,select,textarea,form,[data-lead-detail]'))return;
+    article.querySelector('[data-lead-expand]')?.click();
+   });
+   article.addEventListener('keydown',event=>{
+    if(event.target===article&&(event.key==='Enter'||event.key===' ')){
+     event.preventDefault();article.querySelector('[data-lead-expand]')?.click();
+    }
+   });
    const form=article.querySelector('[data-lead-edit]');
    const container=form.querySelector('.commerce-lead-items');
    container.innerHTML=(item.items?.length?item.items:[{}]).map(row).join('');
