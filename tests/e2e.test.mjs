@@ -362,17 +362,64 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(versions.result[0].status,'draft');
  assert.equal(versions.result[0].report.salesValidated,false);
  assert.match(versions.result[0].markdown,/rascunho/);
+ const reviewed=versions.result[0].markdown+
+  '\n\n## Revisão do proprietário\nEsta revisão foi conferida no laboratório antes da aprovação do conhecimento.';
+ const saveRevision=await call('/api/training/versions/'+versions.result[0].id,'PATCH',
+  {markdown:reviewed},betaCookie,betaCsrf);
+ assert.equal(saveRevision.status,200,JSON.stringify(saveRevision.result));
+ const cannotEditOther=await call('/api/training/versions/00000000-0000-0000-0000-000000000001','PATCH',
+  {markdown:reviewed},betaCookie,betaCsrf);
+ assert.equal(cannotEditOther.status,409);
  const approval=await call('/api/training/versions/'+versions.result[0].id+'/approve','POST',{},betaCookie,betaCsrf);
  assert.equal(approval.status,200);
  assert.equal(approval.result.autoReply,false);
  const revised=await call('/api/agent','GET',undefined,betaCookie);
  assert.match(revised.result.knowledge_md,/Conhecimento do Sócio/);
+ assert.match(revised.result.knowledge_md,/Revisão do proprietário/);
+ const forbiddenEditApproved=await call('/api/training/versions/'+versions.result[0].id,'PATCH',
+  {markdown:reviewed},betaCookie,betaCsrf);
+ assert.equal(forbiddenEditApproved.status,409);
+ // Create and approve a second version, then safely restore the old one.
+ const secondJob=await call('/api/training/jobs','POST',{},betaCookie,betaCsrf);
+ assert.equal(secondJob.status,201);
+ let newJobDone=false;
+ for(let i=0;i<65;i++){
+  const result=await call('/api/training/jobs','GET',undefined,betaCookie);
+  if(result.result[0]?.id===secondJob.result.id&&result.result[0]?.status==='completed'){
+   newJobDone=true;break;
+  }
+  await sleep(220);
+ }
+ assert.equal(newJobDone,true,'Second training draft did not finish');
+ const secondVersions=await call('/api/training/versions','GET',undefined,betaCookie);
+ const newDraft=secondVersions.result.find(v=>v.status==='draft');
+ assert(newDraft&&newDraft.id!==versions.result[0].id);
+ const nextApproval=await call('/api/training/versions/'+newDraft.id+'/approve','POST',{},betaCookie,betaCsrf);
+ assert.equal(nextApproval.status,200);
+ const archivedBeforeRestore=await call('/api/training/versions','GET',undefined,betaCookie);
+ assert.equal(archivedBeforeRestore.result.find(v=>v.id===versions.result[0].id).status,'archived');
+ const restoredOld=await call('/api/training/versions/'+versions.result[0].id+'/restore','POST',
+  {},betaCookie,betaCsrf);
+ assert.equal(restoredOld.status,200,JSON.stringify(restoredOld.result));
+ assert.equal(restoredOld.result.restored,true);
+ const restoredAgent=await call('/api/agent','GET',undefined,betaCookie);
+ assert.equal(restoredAgent.result.knowledge_md,reviewed);
+ const restoredVersions=await call('/api/training/versions','GET',undefined,betaCookie);
+ assert.equal(restoredVersions.result.find(v=>v.id===versions.result[0].id).status,'approved');
+ assert.equal(restoredVersions.result.find(v=>v.id===newDraft.id).status,'archived');
+
  const wrongTenant=await call('/api/admin/switch','POST',{tenantId:me.result.tenant.id},adminCookie,csrf);
  assert.equal(wrongTenant.status,200);
  const alphaJobs=await call('/api/training/jobs','GET',undefined,adminCookie);
  assert.deepEqual(alphaJobs.result,[]);
  const otherTenantApprove=await call('/api/training/versions/'+versions.result[0].id+'/approve','POST',{},adminCookie,csrf);
  assert.equal(otherTenantApprove.status,409);
+ const otherTenantRestore=await call('/api/training/versions/'+versions.result[0].id+'/restore','POST',{},adminCookie,csrf);
+ assert.equal(otherTenantRestore.status,409);
+ const otherTenantRevise=await call('/api/training/versions/'+versions.result[0].id,'PATCH',
+  {markdown:reviewed},adminCookie,csrf);
+ assert.equal(otherTenantRevise.status,409);
+
 
 
  // WA-AKG historical imports are opt-in and read-only. Only the Consecom
