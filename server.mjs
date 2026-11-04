@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier} from './lib.mjs';
+import {permissionsFor,requirePermission,allowedNewMemberRole,validateMemberPatch} from './team-permissions.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
 import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
 import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
@@ -91,7 +92,7 @@ async function sessionFor(req){
  if(!match)return null;
  const token=decodeURIComponent(match[1]);
  if(!token||token.length>256)return null;
- const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.phone,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now()",[hashToken(token)]);
+ const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.phone,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true AND (u.platform_owner=true OR u.tenant_id=s.active_tenant_id)",[hashToken(token)]);
  return result.rows[0]||null;
 }
 async function createSession(userId,tenantId,res){
@@ -188,8 +189,8 @@ async function handle(req,res){
   const identity=loginIdentifier(data.identifier??data.email);
   const result=identity?await query(
    identity.type==='email'
-    ?'SELECT id,tenant_id,password_hash FROM users WHERE email=$1'
-    :'SELECT id,tenant_id,password_hash FROM users WHERE phone=$1',[identity.value]
+    ?'SELECT id,tenant_id,password_hash FROM users WHERE email=$1 AND active=true'
+    :'SELECT id,tenant_id,password_hash FROM users WHERE phone=$1 AND active=true',[identity.value]
   ):{rows:[]};
   const u=result.rows[0];
   if(!u||!(await verifyPassword(data.password||'',u.password_hash)))throw fail(401,'E-mail, número ou senha incorretos.');
@@ -203,7 +204,7 @@ async function handle(req,res){
   const csrf=req.headers['x-csrf-token'];
   if(!csrf||!secureEqual(String(csrf),a.csrf))throw fail(403,'Sessão sem validação de segurança.');
  }
- if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,platformOwner:a.platform_owner},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status},csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
+ if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,platformOwner:a.platform_owner,permissions:permissionsFor(a.role,a.platform_owner)},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status},csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
  // Changing a phone login identifier requires the signed-in user's current password.
  // Never infer this from the company's connected WhatsApp number.
  if(method==='POST'&&pathname==='/api/me/phone'){
@@ -220,6 +221,30 @@ async function handle(req,res){
   authAttempts.delete('phone-update:'+a.user_id);
   await audit(a,'auth.login_phone_updated',{configured:!!normalized});
   return json(res,200,{ok:true,phone:updated.rows[0].phone});
+ }
+ if(method==='POST'&&pathname==='/api/me/password'){
+  if(!limiter(authAttempts,'password-change:'+a.user_id,600000,7))
+   throw fail(429,'Muitas tentativas. Tente mais tarde.');
+  const {data}=await body(req,1200);
+  if(typeof data?.currentPassword!=='string'||typeof data?.newPassword!=='string'||
+    data.newPassword.length<12||data.newPassword.length>128||
+    data.newPassword===data.currentPassword)
+   throw fail(422,'A nova senha deve ter de 12 a 128 caracteres e ser diferente da anterior.');
+  const c=await pool.connect();
+  try{
+   await c.query('BEGIN');
+   const previous=await c.query('SELECT password_hash FROM users WHERE id=$1 AND active=true FOR UPDATE',[a.user_id]);
+   if(!previous.rowCount||!(await verifyPassword(data.currentPassword,previous.rows[0].password_hash)))
+    throw fail(401,'Senha atual incorreta.');
+   const encrypted=await hashPassword(data.newPassword);
+   await c.query('UPDATE users SET password_hash=$2 WHERE id=$1',[a.user_id,encrypted]);
+   await c.query('DELETE FROM sessions WHERE user_id=$1 AND token_hash<>$2',[a.user_id,a.token_hash]);
+   await c.query('INSERT INTO audit(id,tenant_id,actor_id,action,metadata) VALUES($1,$2,$3,$4,$5)',[
+    id(),a.active_tenant_id,a.user_id,'auth.password_changed',JSON.stringify({otherSessionsRevoked:true})]);
+   await c.query('COMMIT');
+   authAttempts.delete('password-change:'+a.user_id);
+   return json(res,200,{ok:true,otherSessionsRevoked:true});
+  }catch(e){await c.query('ROLLBACK').catch(()=>{});throw e;}finally{c.release();}
  }
  if(method==='POST'&&pathname==='/api/logout'){
   await query('DELETE FROM sessions WHERE token_hash=$1',[a.token_hash]);
@@ -424,6 +449,7 @@ async function handle(req,res){
  }
 
  if(method==='GET'&&pathname==='/api/sales'){
+  requirePermission(a,'sales.read');
   return json(res,200,await listSales(pool,a.active_tenant_id));
  }
  if(method==='POST'&&pathname==='/api/sales/quotes'){
@@ -583,6 +609,7 @@ async function handle(req,res){
    responseVerified:true,latencyMs,checkedAt:new Date().toISOString()});
  }
  if(method==='GET'&&pathname==='/api/agent'){
+  requirePermission(a,'training.manage');
   const r=await query('SELECT name,tone,instructions,knowledge_md,enabled,updated_at FROM agents WHERE tenant_id=$1',[a.active_tenant_id]);
   return json(res,200,r.rows[0]||{});
  }
@@ -593,6 +620,7 @@ async function handle(req,res){
   await audit(a,'agent.updated',{enabled:data.enabled});return json(res,200,r.rows[0]);
  }
  if(method==='GET'&&pathname==='/api/training/auto'){
+  requirePermission(a,'training.manage');
   return json(res,200,{run:await autoTrainingStatus(pool,a.active_tenant_id),groqConfigured:groqReady(),groqModel:groqModel()});
  }
  if(method==='POST'&&pathname==='/api/training/auto'){
@@ -611,6 +639,7 @@ async function handle(req,res){
   return json(res,200,result);
  }
  if(method==='GET'&&pathname==='/api/training/jobs'){
+  requirePermission(a,'training.manage');
   const r=await query("SELECT id,status,total_items AS \"totalItems\",processed_items AS \"processedItems\",report_json AS report,created_at AS \"createdAt\",updated_at AS \"updatedAt\" FROM training_jobs WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 12",[a.active_tenant_id]);
   return json(res,200,r.rows);
  }
@@ -634,6 +663,7 @@ async function handle(req,res){
   return json(res,200,result.rows[0]);
  }
  if(method==='GET'&&pathname==='/api/training/versions'){
+  requirePermission(a,'training.manage');
   const versions=await query('SELECT id,job_id AS "jobId",version,status,knowledge_md AS markdown,report_json AS report,created_at AS "createdAt",approved_at AS "approvedAt" FROM training_versions WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 15',[a.active_tenant_id]);
   return json(res,200,versions.rows);
  }
@@ -790,16 +820,62 @@ async function handle(req,res){
   }
  }
  if(method==='GET'&&pathname==='/api/team'){
-  const r=await query('SELECT id,name,email,phone,role,created_at FROM users WHERE tenant_id=$1 ORDER BY created_at',[a.active_tenant_id]);return json(res,200,r.rows);
+  requirePermission(a,'team.read');
+  const r=await query('SELECT id,name,email,phone,role,active,created_at FROM users WHERE tenant_id=$1 ORDER BY created_at',[a.active_tenant_id]);
+  return json(res,200,r.rows);
+ }
+ const teamMember=pathname.match(/^\/api\/team\/([0-9a-f-]{36})$/);
+ if(teamMember&&method==='PATCH'){
+  requirePermission(a,'team.manage');
+  const {data}=await body(req,2000),change=validateMemberPatch(data);
+  if(teamMember[1]===a.user_id)throw fail(403,'Você não pode alterar o próprio perfil por esta rota.');
+  const c=await pool.connect();
+  try{
+   await c.query('BEGIN');
+   const target=await c.query(
+    'SELECT id,role,active,platform_owner FROM users WHERE tenant_id=$1 AND id=$2 FOR UPDATE',
+    [a.active_tenant_id,teamMember[1]]);
+   if(!target.rowCount)throw fail(404,'Colaborador não encontrado nesta empresa.');
+   if(target.rows[0].role==='owner'||target.rows[0].platform_owner)
+    throw fail(403,'Não é possível alterar um proprietário por esta operação.');
+   const nextRole=change.changeRole?change.role:target.rows[0].role;
+   const nextActive=change.changeActive?change.active:target.rows[0].active;
+   const updated=await c.query(
+    'UPDATE users SET role=$3,active=$4 WHERE tenant_id=$1 AND id=$2 RETURNING id,name,email,phone,role,active',
+    [a.active_tenant_id,teamMember[1],nextRole,nextActive]);
+   if(!nextActive)await c.query('DELETE FROM sessions WHERE user_id=$1',[teamMember[1]]);
+   await c.query('INSERT INTO audit(id,tenant_id,actor_id,action,metadata) VALUES($1,$2,$3,$4,$5)',
+    [id(),a.active_tenant_id,a.user_id,'team.member_updated',
+      JSON.stringify({userId:teamMember[1],before:{role:target.rows[0].role,active:target.rows[0].active},
+       after:{role:nextRole,active:nextActive},sessionsRevoked:!nextActive})]);
+   await c.query('COMMIT');
+   return json(res,200,updated.rows[0]);
+  }catch(error){await c.query('ROLLBACK').catch(()=>{});throw error;}finally{c.release();}
  }
  if(method==='POST'&&pathname==='/api/team'){
   needRole(a,['owner','admin']);const {data}=await body(req);
-  if(!emailOk(data.email)||!validText(data.name,100)||!['admin','agent'].includes(data.role))throw fail(422,'Dados de usuário inválidos.');
+  if(!emailOk(data.email)||!validText(data.name,100)||!allowedNewMemberRole(a,data.role))throw fail(422,'Dados de usuário ou permissão inválidos.');
   const raw=String(data.phone||'').trim(),phone=raw?normalizeLoginPhone(raw):null;
   if(raw&&!phone)throw fail(422,'Número de colaborador inválido. Informe o DDD.');
   const hash=await hashPassword(data.password);
   const r=await query('INSERT INTO users(id,tenant_id,email,phone,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,name,email,phone,role',[id(),a.active_tenant_id,data.email.trim().toLowerCase(),phone,data.name.trim(),hash,data.role]);
   await audit(a,'team.invited',{userId:r.rows[0].id});return json(res,201,r.rows[0]);
+ }
+ if(method==='GET'&&pathname==='/api/ops/audit'){
+  requirePermission(a,'audit.read');
+  const u=new URL(req.url,'http://localhost');
+  const rawLimit=u.searchParams.get('limit')||'40',limit=Number(rawLimit);
+  if(!Number.isInteger(limit)||limit<1||limit>100)throw fail(422,'Limite de auditoria inválido.');
+  const before=u.searchParams.get('before');
+  if(before&&(before.length>35||!Number.isFinite(Date.parse(before))))
+   throw fail(422,'Data de auditoria inválida.');
+  const rows=await query(
+   "SELECT a.id,a.action,a.metadata,a.created_at,CASE WHEN u.tenant_id=a.tenant_id THEN u.name ELSE 'Administração Consecom' END AS actor "+
+   "FROM audit a LEFT JOIN users u ON u.id=a.actor_id "+
+   "WHERE a.tenant_id=$1 AND ($2::timestamptz IS NULL OR a.created_at<$2::timestamptz) "+
+   "ORDER BY a.created_at DESC,a.id DESC LIMIT $3",
+   [a.active_tenant_id,before?new Date(before).toISOString():null,limit]);
+  return json(res,200,{events:rows.rows,limit});
  }
  if(method==='GET'&&pathname==='/api/admin/cnpj'){
   needPlatform(a);
