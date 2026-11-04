@@ -127,3 +127,6 @@
 .report-note-grid p{color:#a98b7a;font-size:10px;line-height:1.5}
 @media(max-width:900px){.report-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.report-sections{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:480px){.report-kpi-grid{gap:9px}.report-kpi{padding:15px 12px}.report-kpi strong{font-size:27px}.report-note-grid{grid-template-columns:minmax(0,1fr)}}
+
+.quote-request-item .quote-mentioned-products{margin:10px 0 0;padding:8px 11px;border-radius:10px;background:#3d281a;border:1px solid #755039;color:#f3cfac;font-size:11px;line-height:1.6}
+.quote-mentioned-products strong{font-weight:750;color:#ffc58b}
