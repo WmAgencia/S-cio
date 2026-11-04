@@ -416,9 +416,12 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert(auditResult.result.events.some(x=>x.action==='auth.password_changed'));
  assert(auditResult.result.events.every(x=>x.actor!=='Atendente Teste'||x.action==='auth.password_changed'));
  assert.equal((await call('/api/ops/audit?limit=900','GET',undefined,betaCookie)).status,422);
+ const switchToOtherAudit=await call('/api/admin/switch','POST',{tenantId:me.result.tenant.id},adminCookie,csrf);
+ assert.equal(switchToOtherAudit.status,200);
  const foreignAudit=await call('/api/ops/audit','GET',undefined,adminCookie);
  assert.equal(foreignAudit.status,200);
  assert(!foreignAudit.result.events.some(x=>x.action==='auth.password_changed'),'Other tenant must not see member password changes');
+ await call('/api/admin/switch','POST',{tenantId:foreign.result.id},adminCookie,csrf);
 
  // Composite FKs must block cross-tenant relationships even if an unsafe
  // future route accidentally supplies a valid foreign UUID.
