@@ -1024,13 +1024,24 @@ async function team(){
   });
  }));
 }
+function featureChecks(flags={},prefix='feature-'){
+ return '<div class="feature-grid" role="group" aria-label="Funcionalidades da empresa">'+
+  featureKeys.map(key=>'<label class="feature-choice"><input type="checkbox" name="'+prefix+key+
+   '" '+(flags[key]!==false?'checked':'')+'><span><strong>'+e(featureLabels[key])+
+   '</strong><small>'+(key==='quotes'?'Precisa de WhatsApp e catálogo':key==='meta_ads'?'Conexão opcional via Pipeboard':'Ativar neste ambiente')+
+   '</small></span></label>').join('')+'</div>';
+}
+function selectedFeatures(form,prefix='feature-'){
+ return Object.fromEntries(featureKeys.map(key=>[key,form.elements[prefix+key]?.checked===true]));
+}
 async function admin(){
  const tenants=await api('/api/admin/tenants');
  const rows=tenants.map(t=>
   '<tr><td><strong>'+e(t.name)+'</strong><div class="table-detail">'+
    e(t.cnpj||t.slug)+' · '+e(t.members)+' usuário(s)</div></td>'+
    '<td>'+badge(t.plan)+'</td><td>'+badge(t.status,t.status==='active'?'green':'gray')+'</td>'+
-   '<td><button class="btn sm ghost" data-switch="'+e(t.id)+'">'+
+   '<td><button type="button" class="btn sm soft" data-feature-edit="'+e(t.id)+'">Funcionalidades</button> '+
+   '<button class="btn sm ghost" data-switch="'+e(t.id)+'">'+
    (t.id===state.me.tenant.id?'Atual':'Acessar')+'</button></td></tr>').join('');
  view.innerHTML=heading('CONTROLE CONSECOM','Empresas.','Gerencie clientes e espaços independentes.',
   '<button type="button" class="btn primary" id="newCompany">+ Nova empresa</button>')+
@@ -1055,9 +1066,20 @@ async function admin(){
    '<label>E-mail do responsável (login)<input name="ownerEmail" required type="email" maxlength="255"></label>'+
    '<div class="catalog-pair"><label>Celular para login<input name="ownerPhone" type="tel" maxlength="32" placeholder="Com DDD"></label>'+
    '<label>Plano<select name="plan"><option value="essencial">Essencial</option><option value="equipe">Equipe</option><option value="voz">Voz</option></select></label></div>'+
+   '<div class="socio-popup-divider"><span>FUNCIONALIDADES DA EMPRESA</span></div>'+
+   '<p class="form-note">Selecione somente os módulos contratados. Você poderá alterar depois.</p>'+
+   featureChecks()+
    '<label>Senha inicial (mínimo 12 caracteres)<input name="ownerPassword" required type="password" minlength="12" maxlength="128" autocomplete="new-password"></label>'+
    '<p class="form-note">O cadastro cria um ambiente separado. Cobrança não é ativada automaticamente.</p>'+
    '<button class="btn primary socio-full-btn" type="submit">Criar empresa</button>'+
+  '</form></section></div>'+
+  '<div class="socio-popup-backdrop hidden" id="featuresModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="featuresHeading">'+
+  '<div class="socio-popup-header"><div><small>CONFIGURAÇÕES DO CLIENTE</small><h2 id="featuresHeading">Funcionalidades</h2>'+
+  '<p>Os módulos desmarcados ficam ocultos e bloqueados também na API, sem apagar dados existentes.</p></div>'+
+  '<button type="button" id="featuresClose" class="socio-popup-close" aria-label="Fechar funcionalidades">×</button></div>'+
+  '<form id="featuresForm" class="form-stack">'+
+  '<div id="featuresChoices"></div>'+
+  '<button type="submit" class="btn primary socio-full-btn">Salvar funcionalidades</button>'+
   '</form></section></div>';
  const modal=$('#companyModal'),form=$('#tenantForm');
  let publicProfile=null;
@@ -1089,6 +1111,7 @@ async function admin(){
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();
   const data=formValues(form);
+  data.features=selectedFeatures(form);
   data.companyProfile=publicProfile?.cnpj===data.cnpj.replace(/\D/g,'')?
    {address:publicProfile.address,primaryActivity:publicProfile.primaryActivity,status:publicProfile.status,
     commercialEmail:data.companyEmail,commercialPhone:data.companyPhone}:
@@ -1098,6 +1121,33 @@ async function admin(){
    toast('Empresa cadastrada e ambiente criado com isolamento.');
    close();await admin();
   });
+ });
+ const featureModal=$('#featuresModal'),featureForm=$('#featuresForm');
+ let editingTenant=null;
+ const closeFeatures=()=>{featureModal.classList.add('hidden');editingTenant=null;};
+ $('#featuresClose').addEventListener('click',closeFeatures);
+ featureModal.addEventListener('click',ev=>{if(ev.target===featureModal)closeFeatures();});
+ view.querySelectorAll('[data-feature-edit]').forEach(b=>b.addEventListener('click',()=>{
+  const tenant=tenants.find(x=>x.id===b.dataset.featureEdit);
+  if(!tenant)return;
+  editingTenant=tenant.id;
+  $('#featuresHeading').textContent='Funcionalidades · '+tenant.name;
+  $('#featuresChoices').innerHTML=featureChecks(tenant.features,'edit-feature-');
+  featureModal.classList.remove('hidden');
+  $('#featuresClose').focus();
+ }));
+ featureForm.addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  if(!editingTenant)return;
+  const data={features:selectedFeatures(featureForm,'edit-feature-')};
+  const submit=featureForm.querySelector('[type="submit"]');
+  submit.disabled=true;
+  try{
+   await api('/api/admin/tenants/'+editingTenant+'/features','PUT',data);
+   toast('Funcionalidades atualizadas com sucesso.');
+   closeFeatures();await admin();
+  }catch(error){toast(errMsg(error),true);}
+  finally{submit.disabled=false;}
  });
  view.querySelectorAll('[data-switch]').forEach(b=>b.addEventListener('click',()=>action(async()=>{
   await api('/api/admin/switch','POST',{tenantId:b.dataset.switch});
