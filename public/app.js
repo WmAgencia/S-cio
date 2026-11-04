@@ -2,6 +2,11 @@
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training'};
+const featureLabels={whatsapp:'Atendimento WhatsApp',catalog:'Produtos e serviços',quotes:'Orçamentos e pedidos',meta_ads:'Meta Ads',ai:'Inteligência Artificial',team:'Equipe'};
+const featureView={inbox:'whatsapp',products:'catalog',sales:'quotes',marketing:'meta_ads',training:'ai',team:'team'};
+const featureKeys=Object.keys(featureLabels);
+const featuresEnabled=()=>state.me?.tenant?.features||{};
+const featureAvailable=key=>featuresEnabled()[key]!==false;
 const titles={overview:'Visão geral',inbox:'WhatsApp',marketing:'Meta Ads',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas e orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
@@ -61,6 +66,15 @@ async function boot(){
    for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['marketing','marketing.read']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
+   for(const [section,feature] of Object.entries(featureView)){
+    const nav=document.querySelector('.nav-item[data-view="'+section+'"]');
+    if(nav)nav.classList.toggle('hidden',!featureAvailable(feature)||
+     (section==='training'&&!access.has('training.manage'))||
+     (section==='sales'&&!access.has('sales.read'))||
+     (section==='marketing'&&!access.has('marketing.read')));
+   }
+   $('#teamNav')?.classList.toggle('hidden',!featureAvailable('team')||
+    (!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner));
    const marketingStatus=typeof location==='object'?new URL(location.href).searchParams.get('marketing'):null;
    const marketingProvider=typeof location==='object'?new URL(location.href).searchParams.get('provider'):null;
    if(['authorized','failed','cancelled'].includes(marketingStatus)){
@@ -107,6 +121,7 @@ async function changeView(next){
  else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
  if(next==='admin'&&!state.me?.user.platformOwner)return;
+ if(featureView[next]&&!featureAvailable(featureView[next]))next='overview';
  const access=new Set(state.me?.user?.permissions||[]);
  if(next==='training'&&!access.has('training.manage'))next='overview';
  if(next==='sales'&&!access.has('sales.read'))next='overview';
@@ -1119,7 +1134,12 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  key!=='agent'&&key!=='channels'&&(key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&(key!=='team'||!state.me?.user.platformOwner)&&(key!=='admin'||state.me?.user.platformOwner)&&
+  key!=='agent'&&key!=='channels'&&(!featureView[key]||featureAvailable(featureView[key]))&&
+  (key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&
+  (key!=='sales'||(state.me?.user?.permissions||[]).includes('sales.read'))&&
+  (key!=='training'||(state.me?.user?.permissions||[]).includes('training.manage'))&&
+  (key!=='team'||(state.me?.user?.permissions||[]).includes('team.read'))&&
+  (key!=='admin'||state.me?.user.platformOwner)&&
   (label.toLocaleLowerCase('pt-BR').includes(keyword)||key.includes(keyword)));
  const list=$('#commandList');
  list.innerHTML=names.length?names.map(([key,label])=>
