@@ -347,3 +347,27 @@ CREATE TABLE IF NOT EXISTS training_auto_runs (
 CREATE UNIQUE INDEX IF NOT EXISTS training_auto_one_active ON training_auto_runs(tenant_id)
  WHERE status IN ('scanning','analyzing');
 CREATE INDEX IF NOT EXISTS training_auto_recent ON training_auto_runs(tenant_id,created_at DESC);
+
+-- Outgoing delivery journal: prevents duplicate sends after retries/timeouts.
+-- No automatic retries of uncertain WhatsApp requests.
+ALTER TABLE conversation_ui_state ADD COLUMN IF NOT EXISTS ai_activated_at timestamptz;
+CREATE TABLE IF NOT EXISTS message_outbox (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ conversation_id uuid NOT NULL,
+ user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+ client_request_id uuid NOT NULL,
+ mode text NOT NULL CHECK(mode IN ('human','ai')),
+ body text NOT NULL CHECK(char_length(body) BETWEEN 1 AND 3000),
+ reply_to_id uuid,
+ status text NOT NULL DEFAULT 'pending'
+  CHECK(status IN ('pending','processing','sent','uncertain','cancelled')),
+ provider_id text,
+ error_code text,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(tenant_id,client_request_id),
+ FOREIGN KEY (tenant_id,conversation_id) REFERENCES conversations(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS message_outbox_tenant_status_idx ON message_outbox(tenant_id,status,created_at DESC);
+CREATE INDEX IF NOT EXISTS message_outbox_ai_conversation_idx ON message_outbox(tenant_id,conversation_id,created_at DESC) WHERE mode='ai';
