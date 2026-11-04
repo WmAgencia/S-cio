@@ -92,6 +92,9 @@ test('catalog populated UI includes photos, variants and statuses without emitti
  assert.match(html,/559,90/);
  assert.match(html,/Indisponível/);
  assert.match(html,/data-select-product/);
+ assert.match(html,/id="catalogSearch"/);
+ assert.match(html,/id="catalogStock"/);
+ assert.match(html,/id="catalogNoResults"/);
  assert.match(html,/Foto de produto/);
  assert.doesNotMatch(html,/Google Ads/);
  assert.equal(sim.node('id:authScreen').classList.contains('hidden'),true);
