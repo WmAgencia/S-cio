@@ -57,6 +57,10 @@ async function boot(){
    $('#userRole').textContent=me.user.platformOwner?'Administrador master':me.user.role==='owner'?'Proprietário':'Equipe da empresa';
    $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
    $('#teamNav')?.classList.toggle('hidden',!!me.user.platformOwner);
+   const access=new Set(me.user.permissions||[]);
+   for(const [section,permission] of [['training','training.manage'],['sales','sales.read']]){
+    document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
+   }
    await changeView(state.view);
   }catch(error){state.me=null;state.csrf='';setupAuth(bootstrap.initialized);}
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
@@ -69,6 +73,9 @@ async function changeView(next){
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
  if(next==='admin'&&!state.me?.user.platformOwner)return;
  if(next==='team'&&state.me?.user.platformOwner)return;
+ const access=new Set(state.me?.user?.permissions||[]);
+ if(next==='training'&&!access.has('training.manage'))next='overview';
+ if(next==='sales'&&!access.has('sales.read'))next='overview';
  state.view=next;
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
  $('#topTitle').textContent=titles[next]||'Sócio';
@@ -779,28 +786,95 @@ async function openThread(convId){
  return activeInbox.open(convId);
 }
 async function team(){
- const data=await api('/api/team');
- view.innerHTML=heading('PESSOAS','Sua equipe.','Convide colaboradores com acesso apenas aos dados da sua empresa.')+
- '<section class="card card-pad" style="margin-bottom:18px"><div class="section-title">Meu acesso ao Sócio</div>'+
- '<p class="form-note">Entre com e-mail ou celular cadastrado e sua senha. O número é pessoal do usuário; não utiliza o número de WhatsApp da empresa.</p>'+
- '<form id="myPhoneForm" class="form-stack" style="max-width:470px"><label>Meu celular com DDD (opcional)<input name="phone" type="tel" maxlength="32" autocomplete="tel" value="'+e(state.me?.user?.phone||'')+'" placeholder="(15) 99999-9999"></label>'+
- '<label>Senha atual para confirmar<input name="currentPassword" type="password" required autocomplete="current-password" placeholder="Sua senha atual"></label>'+
- '<button class="btn primary" type="submit">Salvar número de acesso</button><p class="form-note">Deixe o campo vazio e confirme a senha para remover o número. O login por e-mail continuará disponível.</p></form></section>'+
- '<div class="two-pane"><div>'+panel('Pessoas cadastradas',data.length+' usuário(s).',
- '<div class="table-wrap"><table class="data-table"><thead><tr><th>Nome</th><th>Acesso</th></tr></thead><tbody>'+data.map(u=>'<tr><td><strong>'+e(u.name)+'</strong><div class="table-detail">'+e(u.email)+(u.phone?' · '+e(u.phone):'')+'</div></td><td>'+badge(u.role==='owner'?'Proprietário':u.role==='admin'?'Administrador':'Atendente')+'</td></tr>').join('')+'</tbody></table></div>')+'</div>'+
- '<div class="card card-pad"><div class="section-title">Adicionar colaborador</div><form class="form-stack" id="teamForm"><label>Nome<input name="name" required maxlength="100"></label><label>E-mail<input name="email" type="email" required></label><label>Celular para login (opcional)<input name="phone" type="tel" maxlength="32" placeholder="(15) 99999-9999"></label><label>Permissão<select name="role"><option value="agent">Atendente</option><option value="admin">Administrador da empresa</option></select></label><label>Senha temporária (mín. 12 caracteres)<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label><button class="btn primary" type="submit">Cadastrar colaborador →</button><p class="form-note">Compartilhe a senha com segurança e peça que o usuário a altere. Recuperação automática de senha será adicionada em uma próxima versão.</p></form></div></div>';
+ const permissions=new Set(state.me?.user?.permissions||[]);
+ const mayView=permissions.has('team.read'),mayInvite=permissions.has('team.invite'),
+  mayManage=permissions.has('team.manage'),mayPromote=permissions.has('team.promote');
+ const [people,auditData]=await Promise.all([
+  mayView?api('/api/team'):Promise.resolve([]),
+  permissions.has('audit.read')?api('/api/ops/audit?limit=35'):Promise.resolve({events:[]})
+ ]);
+ const roleLabel=role=>role==='owner'?'Proprietário':role==='admin'?'Administrador':'Atendente';
+ const members=mayView?'<section class="card card-pad"><div class="section-title">Pessoas da empresa</div>'+
+  '<p class="form-note">Acesso inativo encerra todas as sessões existentes e bloqueia novos logins. Proprietários não podem ser desativados nesta tela.</p>'+
+  '<div class="table-wrap"><table class="data-table"><thead><tr><th>Colaborador</th><th>Permissão</th><th>Status</th><th>Ação</th></tr></thead><tbody>'+
+  people.map(member=>{
+   const protectedUser=member.role==='owner'||member.id===state.me.user.id;
+   return '<tr><td><strong>'+e(member.name)+'</strong><div class="table-detail">'+e(member.email)+'</div></td>'+
+    '<td>'+e(roleLabel(member.role))+'</td>'+
+    '<td>'+badge(member.active?'Ativo':'Inativo',member.active?'green':'gray')+'</td>'+
+    '<td><div class="socio-team-controls">'+(mayManage&&!protectedUser?
+      '<button type="button" class="btn sm soft" data-team-toggle="'+e(member.id)+'" data-team-active="'+(!member.active)+'">'+
+      (member.active?'Desativar':'Reativar')+'</button>'+
+      '<button type="button" class="btn sm ghost" data-team-role="'+e(member.id)+'" data-team-next-role="'+(member.role==='admin'?'agent':'admin')+'">'+
+      (member.role==='admin'?'Tornar atendente':'Tornar administrador')+'</button>':'<span class="form-note">—</span>')+
+    '</div></td></tr>';
+  }).join('')+'</tbody></table></div></section>':'';
+ const invite=mayInvite?'<section class="card card-pad"><div class="section-title">Novo colaborador</div>'+
+  '<form class="form-stack" id="teamForm"><label>Nome<input name="name" required maxlength="100"></label>'+
+  '<label>E-mail<input name="email" type="email" required></label>'+
+  '<label>Celular para login (opcional)<input name="phone" type="tel" maxlength="32" placeholder="(15) 99999-9999"></label>'+
+  '<label>Permissão<select name="role"><option value="agent">Atendente</option>'+
+  (mayPromote?'<option value="admin">Administrador da empresa</option>':'')+'</select></label>'+
+  '<label>Senha inicial (mínimo 12 caracteres)<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>'+
+  '<button type="submit" class="btn primary">Cadastrar colaborador</button>'+
+  '<p class="form-note">Informe a senha inicial por um canal seguro; o colaborador poderá trocá-la em Minha conta.</p></form></section>':'';
+ const log=permissions.has('audit.read')?
+  '<section class="card card-pad"><div class="section-title">Auditoria da empresa</div>'+
+  '<p class="form-note">Histórico de alterações de acesso, treinamento, catálogo e atendimento, sem mostrar segredos ou senhas.</p>'+
+  (auditData.events.length?'<div class="socio-audit-list">'+auditData.events.map(item=>
+   '<div class="socio-audit-line"><strong>'+e(item.action)+'</strong><span>'+e(item.actor||'Sistema')+
+   ' · '+e(date(item.created_at))+'</span></div>').join('')+'</div>':
+   '<p class="form-note">Nenhum evento registrado.</p>')+'</section>':'';
+ view.innerHTML=heading('ADMINISTRAÇÃO','Equipe e acessos.',
+  'Gerencie as permissões e a segurança da sua conta. Cada colaborador atua apenas na empresa autorizada.')+
+ '<section class="card card-pad" style="margin-bottom:18px"><div class="section-title">Minha conta</div>'+
+ '<div class="socio-my-account"><form id="myPhoneForm" class="form-stack">'+
+ '<label>Meu celular para login<input name="phone" type="tel" maxlength="32" autocomplete="tel" value="'+e(state.me?.user?.phone||'')+'" placeholder="(15) 99999-9999"></label>'+
+ '<label>Senha atual<input name="currentPassword" type="password" required autocomplete="current-password"></label>'+
+ '<button class="btn soft" type="submit">Salvar celular</button></form>'+
+ '<form id="passwordChangeForm" class="form-stack">'+
+ '<label>Senha atual<input name="currentPassword" type="password" required autocomplete="current-password"></label>'+
+ '<label>Nova senha (mínimo 12 caracteres)<input name="newPassword" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>'+
+ '<button type="submit" class="btn primary">Alterar senha e encerrar outras sessões</button></form></div></section>'+
+ (mayView?'<div class="socio-team-grid">'+members+invite+'</div>':'')+log;
  $('#myPhoneForm')?.addEventListener('submit',async ev=>{
-  ev.preventDefault();
-  const form=ev.currentTarget,data=formValues(form);
+  ev.preventDefault();const form=ev.currentTarget;
   await action(async()=>{
-   const result=await api('/api/me/phone','POST',data);
-   state.me.user.phone=result.phone;
-   form.elements.currentPassword.value='';
-   toast(result.phone?'Número vinculado à sua conta. Agora você pode entrar por e-mail ou celular.':'Número de acesso removido.');
-   await team();
+   const result=await api('/api/me/phone','POST',formValues(form));
+   state.me.user.phone=result.phone;toast('Dados de acesso atualizados.');await team();
   });
  });
- $('#teamForm').addEventListener('submit',async ev=>{ev.preventDefault();const d=formValues(ev.currentTarget);await action(async()=>{await api('/api/team','POST',d);toast('Colaborador cadastrado.');await team();});});
+ $('#passwordChangeForm')?.addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const form=ev.currentTarget;
+  await action(async()=>{
+   await api('/api/me/password','POST',formValues(form));
+   toast('Senha alterada. As outras sessões foram encerradas.');await team();
+  });
+ });
+ $('#teamForm')?.addEventListener('submit',async ev=>{
+  ev.preventDefault();const form=ev.currentTarget;
+  await action(async()=>{
+   await api('/api/team','POST',formValues(form));
+   toast('Colaborador cadastrado com acesso restrito à empresa.');await team();
+  });
+ });
+ $$('[data-team-toggle]').forEach(btn=>btn.addEventListener('click',async()=>{
+  const active=btn.dataset.teamActive==='true';
+  if(!active&&!confirm('Desativar este usuário e encerrar todas as suas sessões?'))return;
+  await action(async()=>{
+   await api('/api/team/'+btn.dataset.teamToggle,'PATCH',{active});
+   toast(active?'Acesso reativado.':'Acesso desativado e sessões encerradas.');await team();
+  });
+ }));
+ $$('[data-team-role]').forEach(btn=>btn.addEventListener('click',async()=>{
+  const nextRole=btn.dataset.teamNextRole;
+  if(!confirm('Alterar a permissão deste colaborador para '+roleLabel(nextRole)+'?'))return;
+  await action(async()=>{
+   await api('/api/team/'+btn.dataset.teamRole,'PATCH',{role:nextRole});
+   toast('Permissão atualizada.');await team();
+  });
+ }));
 }
 async function admin(){
  const tenants=await api('/api/admin/tenants');
