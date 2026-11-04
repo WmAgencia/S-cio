@@ -6,10 +6,7 @@ import {createHash,randomBytes,createHmac} from 'node:crypto';
 import {sealMarketingSecret,openMarketingSecret} from './marketing-integrations.mjs';
 
 const bad=(status,message)=>Object.assign(new Error(message),{status});
-const servers=Object.freeze({
- meta:'https://meta-ads.mcp.pipeboard.co/',
- google:'https://google-ads.mcp.pipeboard.co/'
-});
+const servers=Object.freeze({meta:'https://meta-ads.mcp.pipeboard.co/'});
 const site=env=>{
  const value=new URL(String(env.SOCIO_PUBLIC_URL||''));
  if(value.protocol!=='https:'||value.username||value.password||value.search||value.hash||
@@ -89,7 +86,7 @@ export async function probePipeboardOAuth(provider,{request=fetch}={}){
  }
 }
 
-export function marketingOAuthStatus(){return {meta:'ready',google:'ready',
+export function marketingOAuthStatus(){return {meta:'ready',
  connectionPortal:'https://pipeboard.co/connections'};}
 export async function startPipeboardOAuth(pool,identity,provider,{env=process.env,request=fetch}={}){
  if(!oauthSupported(provider))throw bad(422,'Plataforma inválida.');
@@ -141,6 +138,7 @@ export async function finishPipeboardOAuth(pool,state,code,{env=process.env,requ
   [sha(state)]);
  if(!used.rowCount)throw bad(403,'Autorização expirada ou já utilizada.');
  const row=used.rows[0];
+ if(!oauthSupported(row.provider))throw bad(410,'Esta plataforma não está mais disponível no Sócio.');
  const admin=await pool.query(
   "SELECT 1 FROM users WHERE id=$1 AND tenant_id=$2 AND active=true AND role IN ('owner','admin')",
   [row.user_id,row.tenant_id]);
@@ -191,7 +189,7 @@ export async function finishPipeboardOAuth(pool,state,code,{env=process.env,requ
 export async function listPipeboardOAuth(pool,identity){
  const r=await pool.query(
   "SELECT provider,status,expires_at,updated_at,last_checked_at,last_read_status,last_account_count FROM marketing_oauth_grants WHERE tenant_id=$1 "+
-  "AND status<>'disconnected' ORDER BY provider",[identity.active_tenant_id]);
+  "AND provider='meta' AND status<>'disconnected' ORDER BY provider",[identity.active_tenant_id]);
  return r.rows;
 }
 export async function revokePipeboardOAuth(pool,identity,provider){
@@ -212,10 +210,7 @@ export function oauthClientMetadata(env=process.env){
 
 // Only these account-listing operations may be used by the connection diagnostic.
 // Tool discovery never grants permission to execute an arbitrary advertised tool.
-const accountTools={
- meta:['mcp_meta_ads_get_ad_accounts','get_ad_accounts'],
- google:['list_google_ads_customers','mcp_google_ads_list_customers','list_customers','mcp_google_ads_list_accessible_customers','list_accessible_customers','mcp_google_ads_get_accounts','get_accounts','mcp_google_ads_list_accounts','list_accounts']
-};
+const accountTools={meta:['mcp_meta_ads_get_ad_accounts','get_ad_accounts']};
 export function decodeMcpReply(raw,id){
  if(typeof raw!=='string'||raw.length>4000000)throw bad(503,'Resposta do provedor fora do limite.');
  const lines=raw.split('\n').filter(x=>x.startsWith('data:')).map(x=>x.slice(5).trim());
