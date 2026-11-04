@@ -596,6 +596,28 @@ async function handle(req,res){
  }
  // Tenant-owner operational checks: never return credentials or assert that a
  // configured integration has passed a real end-to-end test.
+ if(method==='GET'&&pathname==='/api/ops/migration-readiness'){
+  requirePermission(a,'audit.read');
+  const metadata=await query(
+   "SELECT current_setting('server_version') AS version, current_schema() AS schema_name, "+
+   "(SELECT count(*)::int FROM information_schema.tables WHERE table_schema=$1 "+
+   " AND table_type='BASE TABLE') AS schema_table_count",[dbSchema]);
+  const state=metadata.rows[0],isTarget=dbSchema==='socio_app'&&isSupabaseDb;
+  const blockers=[];
+  if(!isTarget)blockers.push('O banco ativo continua no Railway: sem corte de produção autorizado.');
+  if(!maintenanceEnabled())blockers.push('A aplicação não está em modo de manutenção; gravações podem continuar.');
+  if(process.env.SOCIO_VERIFIED_BACKUP!=='YES')
+   blockers.push('Backup de produção íntegro não foi atestado no processo de migração.');
+  if(!process.env.SOCIO_SUPABASE_DATABASE_URL&&!isTarget)
+   blockers.push('Conexão PostgreSQL autenticada do Supabase não está configurada para o migrador.');
+  blockers.push('Falta validação externa do inventário de fotos S3 e gateway WA-AKG/MySQL.');
+  return json(res,200,{database:isTarget?'supabase_private':'railway',schema:state.schema_name,
+   postgresVersion:state.version,tableCount:state.schema_table_count,
+   maintenance:maintenanceEnabled(),backupConfirmationConfigured:process.env.SOCIO_VERIFIED_BACKUP==='YES',
+   destinationConfigured:!!process.env.SOCIO_SUPABASE_DATABASE_URL,
+   automaticCutoverEnabled:false,blockers,
+   note:'Diagnóstico não autoriza nem executa migração e não comprova backup ou restauração de produção.'});
+ }
  if(method==='GET'&&pathname==='/api/ops/readiness'){
   needRole(a,['owner','admin']);
   const report=await getOperationalReadiness(pool,a.active_tenant_id);
