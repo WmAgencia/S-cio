@@ -4,14 +4,14 @@
 import {spawn,execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {randomBytes,createCipheriv,createDecipheriv,scryptSync,createHash} from 'node:crypto';
-import {mkdtemp,rm,stat} from 'node:fs/promises';
+import {mkdtemp,rm,stat,readFile} from 'node:fs/promises';
 import {createReadStream,createWriteStream} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pipeline} from 'node:stream/promises';
 import {Transform,Writable} from 'node:stream';
 import {Client} from 'pg';
-import {S3Client,PutObjectCommand,GetObjectCommand,HeadObjectCommand} from '@aws-sdk/client-s3';
+import {S3Client,PutObjectCommand,GetObjectCommand,HeadObjectCommand,CreateMultipartUploadCommand,UploadPartCommand,CompleteMultipartUploadCommand,AbortMultipartUploadCommand} from '@aws-sdk/client-s3';
 
 const execFileAsync=promisify(execFile);
 const need=(v,label)=>{if(!v)throw new Error('Configuration missing: '+label);return v;};
@@ -29,7 +29,7 @@ if(!['postgres:','postgresql:'].includes(url.protocol)||!url.hostname||!url.path
  throw new Error('Invalid source database URL');
 if(url.hostname.endsWith('.supabase.co')||url.hostname.endsWith('.pooler.supabase.com'))
  throw new Error('Backup worker is tied to Railway source; refusing Supabase destination');
-const s3=new S3Client({endpoint,region,forcePathStyle:true,credentials:{accessKeyId,secretAccessKey},maxAttempts:2});
+const s3=new S3Client({endpoint,region,forcePathStyle:false,credentials:{accessKeyId,secretAccessKey},maxAttempts:2});
 const pgEnv={...process.env,PGHOST:url.hostname,PGPORT:url.port||'5432',
  PGDATABASE:decodeURIComponent(url.pathname.slice(1)),PGUSER:decodeURIComponent(url.username),
  PGPASSWORD:decodeURIComponent(url.password),PGCONNECT_TIMEOUT:'12',
@@ -55,6 +55,34 @@ async function authenticateFile(path,meta){
  d.setAuthTag(Buffer.from(meta.tag,'hex'));
  await pipeline(createReadStream(path),d,new Writable({write(chunk,encoding,done){done();}}));
 }
+async function uploadEncrypted(path,key,size){
+ // Buffer upload for small archives, multipart for larger archives.
+ // Never send plaintext or hold the whole database in memory.
+ if(size<=5*1024*1024){
+  await s3.send(new PutObjectCommand({Bucket:bucket,Key:key,
+   Body:await readFile(path),ContentLength:size,ContentType:'application/octet-stream'}));
+  return;
+ }
+ const created=await s3.send(new CreateMultipartUploadCommand({
+  Bucket:bucket,Key:key,ContentType:'application/octet-stream'}));
+ if(!created.UploadId)throw new Error('Multipart upload did not return an id');
+ const parts=[];let n=0;
+ try{
+  for await(const bytes of createReadStream(path,{highWaterMark:6*1024*1024})){
+   const part=await s3.send(new UploadPartCommand({
+    Bucket:bucket,Key:key,UploadId:created.UploadId,PartNumber:++n,
+    Body:bytes,ContentLength:bytes.length}));
+   if(!part.ETag)throw new Error('Multipart S3 upload missing part ETag');
+   parts.push({PartNumber:n,ETag:part.ETag});
+  }
+  await s3.send(new CompleteMultipartUploadCommand({
+   Bucket:bucket,Key:key,UploadId:created.UploadId,MultipartUpload:{Parts:parts}}));
+ }catch(error){
+  await s3.send(new AbortMultipartUploadCommand({Bucket:bucket,Key:key,UploadId:created.UploadId})).catch(()=>{});
+  throw error;
+ }
+}
+
 async function archiveList(path,meta){
  const d=createDecipheriv('aes-256-gcm',encryptionKey(meta.salt),Buffer.from(meta.iv,'hex'));
  d.setAuthTag(Buffer.from(meta.tag,'hex'));
@@ -99,8 +127,7 @@ async function main(){
    bytes,sha256:await sha256(encrypted),mediaIncluded:false,mysqlIncluded:false};
   await authenticateFile(encrypted,meta);
   await archiveList(encrypted,meta);
-  await s3.send(new PutObjectCommand({Bucket:bucket,Key:objectKey,
-   Body:createReadStream(encrypted),ContentLength:bytes,ContentType:'application/octet-stream'}));
+  await uploadEncrypted(encrypted,objectKey,bytes);
   const head=await s3.send(new HeadObjectCommand({Bucket:bucket,Key:objectKey}));
   if(Number(head.ContentLength)!==bytes)throw new Error('Remote archive length mismatch');
   const downloadedResponse=await s3.send(new GetObjectCommand({Bucket:bucket,Key:objectKey}));
