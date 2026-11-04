@@ -228,7 +228,7 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(markedRead.status,200);
  assert.equal(markedRead.result.preferences.marked_unread,false);
  const noSend=await call('/api/conversations/'+conversationId+'/send','POST',{text:'não enviar'},adminCookie,csrf);
- assert.equal(noSend.status,404,'No unapproved WhatsApp send endpoint exists');
+ assert.equal(noSend.status,503,'WhatsApp send must be disabled before explicit live verification');
 
  const alpha=await call('/api/products','POST',{name:'Site Institucional',description:'Site responsivo',priceCents:49700},adminCookie,csrf);
  assert.equal(alpha.status,201);
