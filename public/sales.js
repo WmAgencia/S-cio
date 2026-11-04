@@ -82,7 +82,7 @@
    (sales.paymentTestAvailable?'<p class="form-note">Stripe em modo de teste: habilitado. Isso não aceita pagamentos reais.</p>':
     '<p class="form-note">Pagamento: somente fluxos de aprovação. O checkout Stripe de teste permanece desativado até receber credenciais de sandbox.</p>')+
   '</div>';
-  const $=s=>view.querySelector(s), $=s=>[...view.querySelectorAll(s)];
+  const $=s=>view.querySelector(s), findAll=s=>[...view.querySelectorAll(s)];
   $('#goToCatalog')?.addEventListener('click',()=>navigate?.('products'));
   $('#quoteOwnerAlerts')?.addEventListener('change',async ev=>{
    const enabled=ev.currentTarget.checked;
@@ -122,19 +122,19 @@
    v.innerHTML=variants.length?'<option value="">Selecione a variação</option>'+variants.map(x=>'<option value="'+e(x.id)+'"'+(x.id===selected?' selected':'')+'>'+
     e(x.name)+' — '+money(x.price_cents)+'</option>').join(''):'<option value="">Padrão</option>';
   }
-  $$('#saleItems [data-sale-item]').forEach((row,i)=>syncVariants(row,items[i]?.variantId));
+  findAll('#saleItems [data-sale-item]').forEach((row,i)=>syncVariants(row,items[i]?.variantId));
   $('#saleItems').addEventListener('change',ev=>{
    const row=ev.target.closest('[data-sale-item]');
    if(row&&ev.target.matches('[data-sale-product]'))syncVariants(row);
   });
   $('#saleItems').addEventListener('click',ev=>{
    if(ev.target.closest('[data-sale-remove]')){
-    if($$('[data-sale-item]').length<=1)return toast('O orçamento precisa ter ao menos um item.',true);
+    if(findAll('[data-sale-item]').length<=1)return toast('O orçamento precisa ter ao menos um item.',true);
     ev.target.closest('[data-sale-item]').remove();
    }
   });
   $('#saleAdd').addEventListener('click',()=>{
-   if($$('[data-sale-item]').length>=15)return toast('Limite de 15 itens.',true);
+   if(findAll('[data-sale-item]').length>=15)return toast('Limite de 15 itens.',true);
    $('#saleItems').insertAdjacentHTML('beforeend',makeRow());
   });
   $('#saleForm').addEventListener('submit',async ev=>{
@@ -142,7 +142,7 @@
    try{
     const form=ev.currentTarget;
     const selected=form.elements.conversationId.value;
-    const rows=$$('[data-sale-item]').map(row=>({
+    const rows=findAll('[data-sale-item]').map(row=>({
      productId:row.querySelector('[data-sale-product]').value,
      variantId:row.querySelector('[data-sale-variant]').value||null,
      quantity:Number(row.querySelector('[data-sale-quantity]').value)
@@ -155,10 +155,10 @@
     await render({api,e,toast,view,me,navigate});
    }catch(err){toast(err.message,true)}
   });
-  $$('[data-sale-revise]').forEach(btn=>btn.addEventListener('click',()=>{
+  findAll('[data-sale-revise]').forEach(btn=>btn.addEventListener('click',()=>{
    revision=btn.dataset.saleRevise;requestedConversationId=null;activeRequestId=null;render({api,e,toast,view,me,navigate});
   }));
-  $$('[data-sale-issue]').forEach(btn=>btn.addEventListener('click',async()=>{
+  findAll('[data-sale-issue]').forEach(btn=>btn.addEventListener('click',async()=>{
    try{
     const info=await api('/api/sales/quotes/'+btn.dataset.saleIssue+'/issue','POST',{});
     linkToShare=location.origin+info.path;
@@ -166,7 +166,7 @@
     await render({api,e,toast,view,me,navigate});
    }catch(err){toast(err.message,true)}
   }));
-  $$('[data-sale-cancel]').forEach(btn=>btn.addEventListener('click',async()=>{
+  findAll('[data-sale-cancel]').forEach(btn=>btn.addEventListener('click',async()=>{
    if(!confirm('Cancelar este orçamento e invalidar seu link?'))return;
    try{
     await api('/api/sales/quotes/'+btn.dataset.saleCancel+'/cancel','POST',{});
