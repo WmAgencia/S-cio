@@ -6,6 +6,8 @@ RUN git init /app && cd /app && git remote add origin https://github.com/mrifqid
 WORKDIR /app
 COPY waakg-socio/patch_readonly.py /tmp/patch_readonly.py
 RUN python3 /tmp/patch_readonly.py
+COPY waakg-socio/patch_interactive.py /tmp/patch_interactive.py
+RUN python3 /tmp/patch_interactive.py
 RUN npm ci --legacy-peer-deps && npx prisma generate && npm run build && npm prune --omit=dev && npm install --no-save tsx typescript
 FROM node:22-bookworm-slim AS runner
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl libnss3 libglib2.0-0 libx11-6 libxext6 libasound2 libgbm1 libstdc++6 && rm -rf /var/lib/apt/lists/*
