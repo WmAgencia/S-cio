@@ -6,7 +6,7 @@
  function create({api,e,toast,view,changeView}){
   let conversations=[],active=null,thread=null,filter='all',search='',filterMessages='',selected=new Set();
   let reply=null,menuId=null,pointer=null,longTimer=null,refreshTimer=null,searchTimer=null,draftTimer=null;
-  let infoOpen=false,helpOpen=false,menuAt=null,team=null,lock=false,disposed=false,lastFetch=0,syncing=false,cancelSync=false;
+  let infoOpen=false,helpOpen=false,menuAt=null,team=null,lock=false,disposed=false,lastFetch=0,syncing=false,cancelSync=false,suppressClick=false;
   let prefs={fontScale:'normal',contrast:'normal',compact:false};
   try{const saved=JSON.parse(localStorage.getItem('socio-inbox-accessibility')||'{}');
    if(saved.fontScale==='large')prefs.fontScale='large';
@@ -524,6 +524,7 @@
   }
   function onClick(ev){
    if(disposed)return;
+   if(suppressClick){suppressClick=false;ev.preventDefault();return;}
    if(ev.target.closest('#inboxSettings')){showHelp();return;}
    if(ev.target.closest('[data-inbox-sync]')){chooseSync().catch(err=>toast(err.message,true));return;}
    if(ev.target.closest('[data-inbox-start-sync]')){runSync();return;}
@@ -594,6 +595,16 @@
   }
   function onKeyboard(ev){
    if(disposed)return;
+   const dialog=byId('inboxDialog');
+   if(ev.key==='Tab'&&dialog&&!dialog.classList.contains('hidden')){
+    const items=[...dialog.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')];
+    if(items.length){
+     const first=items[0],last=items[items.length-1];
+     if(ev.shiftKey&&document.activeElement===first){ev.preventDefault();last.focus();}
+     else if(!ev.shiftKey&&document.activeElement===last){ev.preventDefault();first.focus();}
+    }
+    return;
+   }
    const tag=ev.target.tagName;
    if(ev.key==='Escape'){
     if(!byId('inboxDialog')?.classList.contains('hidden'))closeDialog();
@@ -641,7 +652,9 @@
    clearTimeout(longTimer);
    if(ev.pointerType==='touch')longTimer=setTimeout(()=>{
     if(pointer&&pointer.id===bubble.dataset.message){
+     suppressClick=true;
      const rect=bubble.getBoundingClientRect();openMenu(pointer.id,{x:rect.left+20,y:rect.top+20});
+     setTimeout(()=>{suppressClick=false;},250);
      pointer=null;
     }
    },520);
@@ -651,7 +664,10 @@
    if(!pointer)return;
    const point=pointer;pointer=null;
    const dx=ev.clientX-point.x,dy=ev.clientY-point.y;
+   if(window.getSelection()?.toString())return;
    if(Math.abs(dx)>65&&Math.abs(dx)>Math.abs(dy)*1.5&&Date.now()-point.at<1300){
+    suppressClick=true;
+    setTimeout(()=>{suppressClick=false;},250);
     if(dx>0)replyTo(point.id);
     else openMenu(point.id,{x:ev.clientX,y:ev.clientY});
     ev.preventDefault();
