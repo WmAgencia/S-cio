@@ -1,7 +1,7 @@
 // Sócio phase 4: centrally described per-role capabilities.
 // Server routes must enforce permissions; the UI only reflects them.
 const owner=['inbox.read','inbox.write','catalog.read','catalog.manage','sales.read','sales.manage',
- 'channels.manage','training.manage','team.read','team.invite','team.manage','team.promote','audit.read'];
+ 'channels.manage','marketing.read','marketing.manage','training.manage','team.read','team.invite','team.manage','team.promote','audit.read'];
 const admin=owner.filter(x=>x!=='team.manage'&&x!=='team.promote');
 const agent=['inbox.read','inbox.write','catalog.read','account.manage'];
 const byRole={owner:[...owner,'account.manage'],admin:[...admin,'account.manage'],agent};

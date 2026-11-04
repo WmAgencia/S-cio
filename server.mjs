@@ -3,6 +3,7 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
+import {instagramLabHealth,connectPipeboard,registerGoogleAdsScript,ingestGoogleReport,listMarketing,disconnectMarketing,googleScriptTemplate} from './marketing-integrations.mjs';
 import {instagramReady,beginInstagramOAuth,completeInstagramOAuth,ingestInstagramWebhook,revokeInstagramAccount} from './instagram-integration.mjs';
 import {maintenanceEnabled,writesBlocked,workersBlocked} from './migration-guard.mjs';
 import {TABLES as MIGRATION_TABLES} from './scripts/socio-supabase-migrate.mjs';
@@ -175,6 +176,14 @@ async function handle(req,res){
   }
   return res.end();
  }
+ // Google Ads Scripts are authorized inside each account. Their reports are signed
+ // with a tenant-specific key and do not use browser cookies or CSRF.
+ const googleHook=pathname.match(/^\/webhooks\/google-ads\/([0-9a-f-]{36})$/i);
+ if(googleHook&&method==='POST'){
+  const {raw}=await body(req,130000);
+  const result=await ingestGoogleReport(pool,googleHook[1],raw,req.headers['x-socio-signature-256']);
+  return json(res,200,result);
+ }
  // Stripe server-to-server webhook validates its raw signature before using JSON.
  if(pathname==='/webhooks/stripe-test'&&method==='POST'){
   const {raw}=await body(req,160000);
@@ -246,6 +255,41 @@ async function handle(req,res){
   if(!csrf||!secureEqual(String(csrf),a.csrf))throw fail(403,'Sessão sem validação de segurança.');
  }
  if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,platformOwner:a.platform_owner,permissions:permissionsFor(a.role,a.platform_owner)},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status},csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
+ // Company-level marketing integrations: read-only Meta/Google by default.
+ if(method==='GET'&&pathname==='/api/marketing'){
+  requirePermission(a,'marketing.read');
+  const [data,lab]=await Promise.all([listMarketing(pool,a),instagramLabHealth()]);
+  return json(res,200,{...data,instagramLab:lab});
+ }
+ if(method==='POST'&&pathname==='/api/marketing/meta/connect'){
+  requirePermission(a,'marketing.manage');
+  if(!limiter(authAttempts,'pipeboard:'+a.user_id,600000,5))
+   throw fail(429,'Muitas tentativas de autenticação Pipeboard.');
+  const {data}=await body(req,23000);
+  const connection=await connectPipeboard(pool,a,data);
+  await audit(a,'marketing.pipeboard.verified',{connectionId:connection.id,accountId:connection.account_id});
+  return json(res,201,connection);
+ }
+ if(method==='POST'&&pathname==='/api/marketing/google/register'){
+  requirePermission(a,'marketing.manage');
+  if(!limiter(authAttempts,'google-script:'+a.user_id,600000,8))
+   throw fail(429,'Muitas tentativas de configuração de script.');
+  const {data}=await body(req,2000);
+  const connection=await registerGoogleAdsScript(pool,a,data);
+  await audit(a,'marketing.google_script.generated',{connectionId:connection.id,accountId:connection.account_id});
+  return json(res,201,{
+   id:connection.id,accountId:connection.account_id,status:connection.status,
+   script:googleScriptTemplate({endpoint:connection.endpoint,
+    accountId:connection.account_id,secret:connection.secret})
+  });
+ }
+ const marketingDisconnect=pathname.match(/^\/api\/marketing\/connections\/([0-9a-f-]{36})\/disconnect$/i);
+ if(marketingDisconnect&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  const result=await disconnectMarketing(pool,a,marketingDisconnect[1]);
+  await audit(a,'marketing.connection.disconnected',{connectionId:marketingDisconnect[1],provider:result.connection.provider});
+  return json(res,200,{ok:true,disconnected:true});
+ }
  // Instagram Login is available only to owners/admins. Access token and
  // webhook verification secrets never leave the server.
  if(method==='GET'&&pathname==='/api/instagram/config'){

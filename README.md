@@ -186,3 +186,8 @@ Sem aplicativo Instagram Login autorizado e suas credenciais em Railway, a
 funcionalidade permanece visível como **não configurada**. Não foram enviadas DMs
 reais ou feitas conexões não autorizadas. Configuração e limites:
 [docs/socio-instagram-phase6.md](docs/socio-instagram-phase6.md).
+
+
+## Instagram sem aplicativo Meta próprio + Meta Ads + Google Ads
+
+O painel Sócio agora inclui laboratório privado aiograpi-rest v6.0.0 (somente health até uma conta de teste autorizada), conexão de **leitura** Pipeboard Meta Ads por empresa e integração de relatórios Google Ads Scripts autenticados com HMAC. Nenhuma campanha é criada ou ativada; nenhum Instagram comercial é acessado automaticamente. Consulte [o guia de configuração](docs/socio-open-marketing-integrations.md) antes de usar com clientes. Produção continua no PostgreSQL Railway.
