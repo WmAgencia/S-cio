@@ -84,3 +84,9 @@ export function suggestedCatalogProduct(message,products=[]){
   text.includes(normalized(p.name)));
  return candidates.length===1?candidates[0].id:null;
 }
+
+export function wantsInteractiveMenu(message){
+ const input=String(message||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  .toLocaleLowerCase('pt-BR').replace(/\s+/g,' ').trim();
+ return /^(?:menu|mostrar (?:o )?menu|me (?:mostra|manda|envia) (?:o )?menu|quero (?:ver )?(?:as )?opcoes de atendimento|quero (?:ver )?(?:os )?botoes)$/.test(input);
+}
