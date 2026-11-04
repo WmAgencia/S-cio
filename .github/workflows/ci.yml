@@ -40,4 +40,6 @@ jobs:
       - run: node --check team-permissions.mjs && node --check scripts/socio-encrypted-backup.mjs
       - run: node --check scripts/socio-supabase-migrate.mjs && node --check scripts/socio-provision-master.mjs && node --check scripts/socio-provision-railway-master.mjs
       - run: node --check waakg-socio/bootstrap.cjs && python3 -m py_compile waakg-socio/patch_readonly.py
+      - run: node --check migration-guard.mjs && node --check scripts/socio-supabase-migrate.mjs
       - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
