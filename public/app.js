@@ -2,7 +2,7 @@
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training'};
-const titles={overview:'Visão geral',inbox:'WhatsApp',instagram:'Instagram',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas e orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
+const titles={overview:'Visão geral',inbox:'WhatsApp',instagram:'Instagram',marketing:'Anúncios e métricas',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas e orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -58,7 +58,7 @@ async function boot(){
    $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
    $('#teamNav')?.classList.toggle('hidden',!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner);
    const access=new Set(me.user.permissions||[]);
-   for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['instagram','channels.manage']]){
+   for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['instagram','channels.manage'],['marketing','marketing.read']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
    const instagramStatus=typeof location==='object'?new URL(location.href).searchParams.get('instagram'):null;
@@ -83,6 +83,7 @@ async function changeView(next){
  if(next==='training'&&!access.has('training.manage'))next='overview';
  if(next==='sales'&&!access.has('sales.read'))next='overview';
  if(next==='instagram'&&!access.has('channels.manage'))next='overview';
+ if(next==='marketing'&&!access.has('marketing.read'))next='overview';
  state.view=next;
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
  $('#topTitle').textContent=titles[next]||'Sócio';
@@ -95,6 +96,7 @@ async function changeView(next){
   if(next==='training')await (state.aiTab==='agent'?agent():training());
   if(next==='inbox')await inbox();
   if(next==='instagram')await instagram();
+  if(next==='marketing')await marketing();
   if(next==='team')await team();
   if(next==='admin')await admin();
  }catch(error){view.innerHTML=empty('!', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
@@ -383,53 +385,114 @@ async function channels(){
  }));
 }
 async function instagram(){
- const config=await api('/api/instagram/config');
- const accounts=await api('/api/instagram/accounts');
- const source=config.configured?'Conexão habilitada para receber autorização da Meta.':
-  'Conexão disponível após configurar o aplicativo na Meta. Nenhuma conta foi conectada.';
- const lines=accounts.length?accounts.map(account=>
-  '<div class="card card-pad" style="margin-bottom:12px">'+
-   '<div class="section-title">'+e(account.username?'@'+account.username:'Instagram')+'</div>'+
-   '<p class="form-note">Status: '+e(account.status==='connected'?'Conectado':'Desconectado')+
-   ' · Autorização: '+e(account.token_expires_at?date(account.token_expires_at):'sem token ativo')+'</p>'+
-   (account.status==='connected'?
-    '<button class="btn soft" type="button" data-ig-revoke="'+e(account.channel_id)+'">Desconectar conta</button>':
-    '<span class="form-note">Sem acesso a novas mensagens.</span>')+'</div>').join(''):
-  empty('◎','Nenhuma conta Instagram conectada',
-   'Cada empresa autoriza sua própria conta profissional. Mensagens de outras empresas não ficam acessíveis.');
+ const info=await api('/api/marketing');
+ const lab=info.instagramLab||{installed:false,reachable:false};
+ const status=lab.reachable?'Laboratório instalado e respondendo':
+  lab.installed?'Laboratório instalado — sem resposta no momento':'Laboratório não configurado';
  view.innerHTML=heading('CANAIS','Instagram.',
-  'Conecte a conta profissional da sua empresa e atenda mensagens recebidas com segurança.')+
-  '<section class="card card-pad" style="margin-bottom:18px">'+
-   '<div class="section-title">Instagram profissional</div>'+
-   '<p>'+e(source)+'</p>'+
-   '<p class="form-note">Permissões solicitadas: perfil comercial e gerenciamento de mensagens. '+
-   'Não é utilizada autorização para anúncios ou publicação de conteúdos.</p>'+
-   '<button class="btn primary" id="instagramConnect" '+(config.configured?'':'disabled')+
-   '>Conectar Instagram com autorização da Meta</button>'+
-   (!config.configured?'<p class="form-note">Aguardando cadastro de INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET, '+
-   'INSTAGRAM_WEBHOOK_VERIFY_TOKEN e URL pública nas variáveis seguras do Railway. '+
-   'Não é possível conectar sem a configuração oficial do aplicativo.</p>':'')+
-   '<p class="form-note">Callback OAuth: '+e(config.redirectUri||'Configuração pendente')+
-   ' · Webhook: '+e(config.webhookPath||'/webhooks/instagram')+'</p>'+
-  '</section>'+
-  '<section aria-label="Contas Instagram autorizadas">'+lines+'</section>'+
-  '<section class="card card-pad"><div class="section-title">Mensagens e privacidade</div>'+
-   '<p>Somente conversas iniciadas pelo cliente chegam ao atendimento. Respostas manuais exigem '+
-   'uma mensagem recebida recentemente, dentro da janela de atendimento. '+
-   'Envios automáticos e mensagens em massa não estão ativados no Instagram.</p>'+
-   '<button class="btn soft" id="instagramOpenInbox">Ver caixa de entrada</button></section>';
- $('#instagramOpenInbox')?.addEventListener('click',()=>changeView('inbox'));
- $('#instagramConnect')?.addEventListener('click',()=>action(async()=>{
-  const response=await api('/api/instagram/connect','POST',{});
-  if(!/^https:\/\/www\.instagram\.com\/oauth\/authorize\?/.test(response.authorizationUrl||''))
-   throw Error('Não foi possível iniciar autorização segura.');
-  window.location.assign(response.authorizationUrl);
+  'Preparação de acesso privado por conta de teste, sem Meta Developers.')+
+  '<div class="card" style="padding:24px;max-width:820px">'+
+   '<h2>aiograpi-rest 6.0.0</h2><p>'+e(status)+'</p>'+
+   '<p>O serviço está isolado na rede interna do Railway. Por enquanto, nenhuma conta do Instagram foi autenticada.'+
+   ' Não são realizadas publicações, Stories, Reels, DMs ou ações sobre perfis reais.</p>'+
+   '<p class="form-note">A API é não oficial e pode provocar desafios de autenticação, restrições de uso ou bloqueio de contas.'+
+   ' O primeiro login deve ser de uma conta de teste com autorização do titular.</p>'+
+   '<button id="checkInstagramLab" class="btn soft" type="button">Verificar serviço</button>'+
+   '<p class="form-note">A conexão oficial antiga fica desativada enquanto usamos a alternativa experimental.</p>'+
+  '</div>';
+ $('#checkInstagramLab')?.addEventListener('click',()=>action(async()=>{
+  await instagram();
+  toast('Verificação do laboratório atualizada.');
  }));
- view.querySelectorAll('[data-ig-revoke]').forEach(btn=>btn.addEventListener('click',()=>{
-  if(!confirm('Desconectar esta conta Instagram e impedir novas mensagens? O histórico autorizado será mantido.'))return;
+}
+
+async function marketing(){
+ const result=await api('/api/marketing');
+ const entries=result.connections||[],reports=result.reports||[];
+ const meta=entries.filter(x=>x.provider==='pipeboard_meta');
+ const google=entries.filter(x=>x.provider==='google_ads_scripts');
+ const status=x=>x.status==='verified'?'Leitura confirmada':x.status==='pending'?'Aguardando dados reais':'Desconectado';
+ const cards=xs=>xs.length?xs.map(x=>
+  '<div class="card" style="padding:14px;margin:8px 0">'+
+   '<strong>'+e(x.label)+'</strong><p class="form-note">Conta '+e(x.account_id)+
+   ' · '+e(status(x))+
+   (x.last_verified_at?' · Última confirmação '+e(date(x.last_verified_at)):'')+'</p>'+
+   (x.status==='disabled'?'':'<button type="button" class="btn soft" data-marketing-disconnect="'+e(x.id)+
+   '">Desconectar</button>')+'</div>').join(''):
+  '<p class="form-note">Nenhuma conta vinculada.</p>';
+ view.innerHTML=heading('MARKETING','Anúncios e métricas.',
+  'Integrações de leitura por empresa. Criações de campanhas e alterações de orçamento não estão habilitadas.')+
+  '<div class="card" style="padding:22px;margin-bottom:16px">'+
+   '<h2>Meta Ads — Pipeboard hospedado</h2>'+
+   '<p>Conecte um token Pipeboard autorizado para a conta de anúncios desta empresa.'+
+   ' O Sócio verifica apenas acesso de leitura antes de salvar a conexão.</p>'+
+   '<form id="metaConnect" class="form-stack" autocomplete="off">'+
+    '<label>ID da conta Meta Ads<input name="accountId" placeholder="act_1234567890" pattern="act_[0-9]{4,20}" required maxlength="24"></label>'+
+    '<label>Identificação<input name="label" required maxlength="90" placeholder="Anúncios da empresa"></label>'+
+    '<label>Token Pipeboard<input name="token" type="password" required autocomplete="off" minlength="32" placeholder="Token autorizado no Pipeboard"></label>'+
+    '<button type="submit" class="btn primary">Verificar acesso de leitura</button>'+
+   '</form><p class="form-note">Crie ou conecte sua conta em <a href="https://pipeboard.co/api-tokens" target="_blank" rel="noopener noreferrer">Pipeboard API Tokens</a>.'+
+   ' Use um token restrito somente à conta desta empresa; nunca reutilize um token master com acesso a todos os clientes.</p>'+
+   cards(meta)+'</div>'+
+  '<div class="card" style="padding:22px;margin-bottom:16px">'+
+   '<h2>Google Ads — Scripts</h2>'+
+   '<p>Sem token de desenvolvedor ou API hospedada. O proprietário autoriza o script diretamente na conta Google Ads.'+
+   ' Ele envia métricas agregadas com assinatura para este painel. Não altera campanhas.</p>'+
+   '<form id="googleScriptConnect" class="form-stack" autocomplete="off">'+
+    '<label>ID da conta Google Ads (10 dígitos, sem hífen)<input name="accountId" pattern="[0-9]{10}" maxlength="10" required placeholder="1234567890"></label>'+
+    '<label>Identificação<input name="label" required maxlength="90" placeholder="Google Ads da empresa"></label>'+
+    '<button class="btn primary" type="submit">Gerar script seguro</button>'+
+   '</form>'+
+   '<div id="googleScriptGenerated" class="hidden" aria-live="polite" style="margin:12px 0">'+
+    '<p class="form-note">Copie agora: por segurança, a chave só aparece nesta geração.'+
+    ' Coloque o código em Google Ads → Ferramentas → Ações em massa → Scripts, autorize, faça Preview e então execute.</p>'+
+    '<textarea id="googleScriptCode" rows="15" readonly aria-label="Script do Google Ads"></textarea>'+
+    '<button type="button" id="copyGoogleScript" class="btn soft">Copiar script</button>'+
+   '</div>'+cards(google)+'</div>'+
+  '<div class="card" style="padding:22px;margin-bottom:16px"><h2>Relatórios recebidos</h2>'+
+   (reports.length?'<div style="overflow-x:auto"><table class="table"><thead><tr><th>Dia</th><th>Campanha</th>'+
+    '<th>Impressões</th><th>Cliques</th><th>Gasto (moeda da conta)</th></tr></thead><tbody>'+
+    reports.slice(0,50).map(r=>'<tr><td>'+e(r.date?.slice(0,10))+'</td><td>'+e(r.campaign_name)+
+     '</td><td>'+e(r.impressions)+'</td><td>'+e(r.clicks)+'</td><td>'+
+     e((Number(r.cost_micros)/1000000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}))+
+     '</td></tr>').join('')+'</tbody></table></div>':
+     '<p class="form-note">Ainda não recebemos nenhuma métrica de uma conta autorizada.</p>')+
+   '</div>'+
+  '<div class="card" style="padding:20px"><h2>Proteção de contas</h2>'+
+   '<p>Contas e dados ficam restritos à empresa. Desconectar revoga a credencial guardada pelo Sócio.'+
+   ' Ações de publicação, alterações de anúncios e gastos precisam de fluxos separados com autorização.</p>'+
+  '</div>';
+ $('#metaConnect')?.addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const btn=ev.currentTarget.querySelector('button[type="submit"]');btn.disabled=true;
+  await action(async()=>{
+   await api('/api/marketing/meta/connect','POST',formValues(ev.currentTarget));
+   toast('Acesso de leitura Pipeboard confirmado.');await marketing();
+  });
+  btn.disabled=false;
+ });
+ $('#googleScriptConnect')?.addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const btn=ev.currentTarget.querySelector('button[type="submit"]');btn.disabled=true;
+  await action(async()=>{
+   const response=await api('/api/marketing/google/register','POST',formValues(ev.currentTarget));
+   // Do not re-render after creation: preserve the one-time script in memory
+   // only, so it is never stored in localStorage or included in a GET response.
+   $('#googleScriptCode').value=response.script;
+   $('#googleScriptGenerated').classList.remove('hidden');
+   toast('Script preparado. Copie o código e autorize na conta Google Ads.');
+  });
+  btn.disabled=false;
+ });
+ $('#copyGoogleScript')?.addEventListener('click',async()=>{
+  try{await navigator.clipboard.writeText($('#googleScriptCode').value);toast('Script copiado.');}
+  catch{toast('Selecione e copie manualmente o script.',true);}
+ });
+ view.querySelectorAll('[data-marketing-disconnect]').forEach(btn=>btn.addEventListener('click',()=>{
+  if(!confirm('Desconectar a integração? Novos dados não serão recebidos; o histórico será mantido.'))return;
   void action(async()=>{
-   await api('/api/instagram/accounts/'+btn.dataset.igRevoke+'/revoke','POST',{});
-   toast('Conta Instagram desconectada.');await instagram();
+   await api('/api/marketing/connections/'+btn.dataset.marketingDisconnect+'/disconnect','POST',{});
+   toast('Integração desconectada.');await marketing();
   });
  }));
 }
@@ -1044,6 +1107,7 @@ const sidebarIcons={
  overview:'<rect x="3" y="3" width="8" height="8" rx="1.7"/><rect x="13" y="3" width="8" height="8" rx="1.7"/><rect x="3" y="13" width="8" height="8" rx="1.7"/><rect x="13" y="13" width="8" height="8" rx="1.7"/>',
  inbox:'<path d="M4 4h16v12h-5l-3 3-3-3H4z"/><path d="M7 9h10M7 12h7"/>',
  instagram:'<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.6 6.7h.01"/>',
+ marketing:'<path d="M3 21V8l9-5 9 5v13M7 14v4M12 11v7M17 13v5"/>',
  channels:'<path d="M6 18c-2-1.7-3-4.1-3-6.6C3 6.6 6.7 3 12 3s9 3.6 9 8.4c0 4.5-3.7 8.6-9 8.6-1.6 0-3.2-.3-4.4-1L3 21z"/><path d="M9 9c.4 2.6 2.4 4.7 5 5l1.4-1.5"/>',
  products:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 10h18M10 3v18"/>',
  training:'<path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8m8.6 8.6 2.8 2.8M2 12h4m12 0h4M4.9 19.1l2.8-2.8m8.6-8.6 2.8-2.8"/><circle cx="12" cy="12" r="3.4"/>',
@@ -1066,7 +1130,7 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  key!=='agent'&&key!=='channels'&&(key!=='team'||!state.me?.user.platformOwner)&&(key!=='admin'||state.me?.user.platformOwner)&&
+  key!=='agent'&&key!=='channels'&&(key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&(key!=='team'||!state.me?.user.platformOwner)&&(key!=='admin'||state.me?.user.platformOwner)&&
   (label.toLocaleLowerCase('pt-BR').includes(keyword)||key.includes(keyword)));
  const list=$('#commandList');
  list.innerHTML=names.length?names.map(([key,label])=>
