@@ -163,7 +163,7 @@
    void render({api,e,toast,view,me}).then(()=>view.querySelector('#saleForm')?.scrollIntoView({block:'start',behavior:'smooth'}));
   }));
   for(const [dataKey,newStatus] of [['quoteComplete','done'],['quoteDismiss','dismissed']]){
-   $('[data-quote-'+(newStatus==='done'?'complete':'dismiss')+']').forEach(btn=>btn.addEventListener('click',async()=>{
+   $$('[data-quote-'+(newStatus==='done'?'complete':'dismiss')+']').forEach(btn=>btn.addEventListener('click',async()=>{
     if(newStatus==='dismissed'&&!confirm('Arquivar este pedido de orçamento?'))return;
     try{
      await api('/api/quote-requests/'+btn.dataset[dataKey]+'/status','POST',{status:newStatus});
