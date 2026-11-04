@@ -843,7 +843,7 @@ async function training(){
   toast('Ajustes do Markdown salvos. O conhecimento ainda não foi aprovado.');
   await training();
  }));
- $('[data-restore-version]').forEach(btn=>btn.addEventListener('click',()=>action(async()=>{
+ $$('[data-restore-version]').forEach(btn=>btn.addEventListener('click',()=>action(async()=>{
   await api('/api/training/versions/'+btn.dataset.restoreVersion+'/restore','POST',{});
   toast('Versão anterior restaurada como conhecimento ativo.');
   await training();
