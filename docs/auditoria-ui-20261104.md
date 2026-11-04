@@ -20,7 +20,7 @@ por movimento reduzido foram preservadas.
 | Mobile / acessibilidade | Novos painéis e modal careciam de estilos locais | Grade fluida, controles com foco visível, áreas clicáveis, \`prefers-reduced-motion\` e ações flexíveis |
 | Empresa sem determinado módulo | Sidebar ocultar não era suficiente: endpoints ainda respondiam | Coluna JSONB por tenant, checks para cada endpoint, permissões efetivas no login e menus filtrados |
 | Orçamentos solicitados pela IA | Não havia inbox de intenção e responsáveis precisavam procurar mensagens manualmente | Identificação de intenção em conversa real entregue à IA, fila com cliente, data, mensagem e ações de preparar, concluir ou arquivar |
-| Aviso ao dono | Não havia opt-in, nenhuma entrega segura via WhatsApp | Proprietário autoriza no seu próprio perfil, número verificado com DDD no cadastro, gateway vinculado à empresa, envio de **um único aviso** e estado \`sent\` / \`uncertain\`; sem reenvios ambíguos |
+| Aviso ao dono | Não havia opt-in, nenhuma entrega segura via WhatsApp | Proprietário autoriza no seu próprio perfil, número cadastrado no perfil com DDD, gateway vinculado à empresa, envio de **um único aviso** e estado \`sent\` / \`uncertain\`; sem reenvios ambíguos |
 | Orçamentos comerciais | IA não deve gerar proposta com inventário/preço alucinado | Orientação explícita: catálogo aprovado apenas, nenhuma proposta, cobrança ou link enviados automaticamente |
 
 ### Administração de funcionalidades por empresa
