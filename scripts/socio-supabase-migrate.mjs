@@ -112,12 +112,13 @@ export async function migrate({sourceUrl,targetUrl,apply=false,logger=console.lo
    "has_schema_privilege('authenticated','socio_app','USAGE') AS authenticated");
   if(access.rows[0].anon||access.rows[0].authenticated)
    throw new Error('Private target schema exposed to client roles');
-  const before={},keysByTable={};
+  const before={},keysByTable={},typesByTable={};
   for(const table of TABLES){
    const [originShape,targetShape,originPk,targetPk]=await Promise.all([
     tableShape(source,'public',table),tableShape(target,'socio_app',table),
     tablePk(source,'public',table),tablePk(target,'socio_app',table)]);
    keysByTable[table]=compareTableShape(table,originShape,targetShape,originPk,targetPk);
+   typesByTable[table]=Object.fromEntries(originShape.map(x=>[x.column_name,x.udt_name]));
    const size=await rowCount(source,'public',table);
    const destinationSize=await rowCount(target,'socio_app',table);
    if(destinationSize!==0)throw new Error('Target not empty; refusing overwrite: '+table);
@@ -135,7 +136,9 @@ export async function migrate({sourceUrl,targetUrl,apply=false,logger=console.lo
     const batch=await source.query('FETCH FORWARD 200 FROM '+qi(cursor));
     if(!batch.rows.length)break;
     for(const row of batch.rows){
-     const values=keys.map(k=>row[k]);
+     // pg serializes JS arrays as PostgreSQL arrays. JSON/JSONB arrays
+     // must be encoded as JSON text to preserve their exact values.
+     const values=keys.map(k=>['json','jsonb'].includes(typesByTable[table][k])?JSON.stringify(row[k]):row[k]);
      sourceSum=(sourceSum+BigInt('0x'+fingerprintRow(row)))%HASH_MOD;
      await target.query('INSERT INTO socio_app.'+qi(table)+' ('+keys.map(qi).join(',')+') VALUES ('+
       keys.map((_,i)=>'$'+(i+1)).join(',')+')',values);
