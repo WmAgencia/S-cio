@@ -5,6 +5,8 @@ import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {zipStore} from './zip-helper.mjs';
 import sharp from 'sharp';
+import {Client} from 'pg';
+import {randomUUID} from 'node:crypto';
 const enabled=!!process.env.DATABASE_URL;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 test('real PostgreSQL: login, tenant isolation, imports and webhook signature protections',{skip:!enabled,timeout:65000},async t=>{
@@ -91,6 +93,14 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.match(pageHtml,/href="\/cloud-theme\.css"/);
  assert.match(pageHtml,/href="\/ember-theme\.css"/);
  assert.ok(pageHtml.indexOf('/ember-theme.css')>pageHtml.indexOf('/cloud-theme.css'));
+ const inboxScript=await fetch(base+'/inbox.js');
+ assert.equal(inboxScript.status,200);
+ assert.match(inboxScript.headers.get('content-type')||'',/javascript/);
+ assert.match(await inboxScript.text(),/SocioInbox/);
+ const inboxCSS=await fetch(base+'/inbox.css');
+ assert.equal(inboxCSS.status,200);
+ assert.match(await inboxCSS.text(),/\.wa-inbox/);
+
 
 
  async function call(path,method='GET',data,cookie='',csrf=''){
@@ -142,6 +152,63 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(unknownNumber.status,401,'No fallback to company WhatsApp number');
  const duplicatePhone=await call('/api/me/phone','POST',{phone:'15999999911',currentPassword:'SenhaMuitoForte2026!'},adminCookie,csrf);
  assert.equal(duplicatePhone.status,200,'Same account can keep its phone');
+
+ // Real PostgreSQL inbox: migration, tenant isolation, notes, accessibility
+ // metadata and human/AI-assist state. No WhatsApp send is attempted.
+ const db=new Client({connectionString:process.env.DATABASE_URL});
+ await db.connect();t.after(()=>db.end());
+ const conversationId=randomUUID(),otherConversationId=randomUUID(),channelId=randomUUID(),messageId=randomUUID();
+ const ownerTenant=me.result.tenant.id;
+ await db.query("INSERT INTO channels(id,tenant_id,label,phone,provider) VALUES($1,$2,'Atendimento','5515890000000','manual')",[channelId,ownerTenant]);
+ for(const [convId,phone] of [[conversationId,'5515891111111'],[otherConversationId,'5515892222222']]){
+  await db.query("INSERT INTO conversations(id,tenant_id,channel_id,customer_name,customer_phone) VALUES($1,$2,$3,'Cliente de teste',$4)",[convId,ownerTenant,channelId,phone]);
+ }
+ await db.query("INSERT INTO messages(id,tenant_id,conversation_id,direction,body) VALUES($1,$2,$3,'inbound','Olá, preciso de ajuda')",[messageId,ownerTenant,conversationId]);
+ const inbox=await call('/api/inbox/v2','GET',undefined,adminCookie);
+ assert.equal(inbox.status,200,JSON.stringify(inbox.result));
+ assert.equal(inbox.result.conversations.length,2);
+ assert.equal(inbox.result.capabilities.whatsappSend,false);
+ const searchInbox=await call('/api/inbox/v2?search=preciso%20de%20ajuda','GET',undefined,adminCookie);
+ assert.equal(searchInbox.result.conversations.length,1);
+ const noCsrfInbox=await call('/api/conversations/'+conversationId+'/ui','PATCH',{pinned:true},adminCookie);
+ assert.equal(noCsrfInbox.status,403,'Conversation changes require CSRF');
+ const prefs=await call('/api/conversations/'+conversationId+'/ui','PATCH',
+  {pinned:true,favorite:true,marked_unread:true,labels:['VIP','Retorno'],draft:'Rascunho da equipe',handling_mode:'ai_assist'},
+  adminCookie,csrf);
+ assert.equal(prefs.status,200,JSON.stringify(prefs.result));
+ assert.equal(prefs.result.preferences.pinned,true);
+ assert.equal(prefs.result.preferences.handling_mode,'ai_assist');
+ const filtered=await call('/api/inbox/v2?filter=unread','GET',undefined,adminCookie);
+ assert.equal(filtered.status,200);
+ assert.equal(filtered.result.conversations.length,1);
+ const messageStatus=await call('/api/conversations/'+conversationId+'/messages/'+messageId+'/ui','PATCH',
+  {starred:true,reaction:'❤️'},adminCookie,csrf);
+ assert.equal(messageStatus.status,200,JSON.stringify(messageStatus.result));
+ assert.equal(messageStatus.result.internalOnly,true);
+ const note=await call('/api/conversations/'+conversationId+'/notes','POST',
+  {text:'Anotação de teste para a equipe',replyToMessageId:messageId},adminCookie,csrf);
+ assert.equal(note.status,201,JSON.stringify(note.result));
+ assert.equal(note.result.whatsappSent,false);
+ const history=await call('/api/conversations/'+conversationId+'/history?limit=1','GET',undefined,adminCookie);
+ assert.equal(history.status,200);
+ assert.equal(history.result.hasMore,true);
+ const historyFull=await call('/api/conversations/'+conversationId+'/history','GET',undefined,adminCookie);
+ assert.equal(historyFull.status,200);
+ assert.equal(historyFull.result.messages.length,2);
+ assert(historyFull.result.messages.some(m=>m.reply_to_id===messageId));
+ assert(historyFull.result.messages.some(m=>m.id===messageId&&m.starred===true&&m.reaction==='❤️'));
+ const forwarded=await call('/api/conversations/'+conversationId+'/forward-internal','POST',
+  {messageId,targetConversationId:otherConversationId},adminCookie,csrf);
+ assert.equal(forwarded.status,201);
+ assert.equal(forwarded.result.whatsappSent,false);
+ const otherHistory=await call('/api/conversations/'+otherConversationId+'/history','GET',undefined,adminCookie);
+ assert.equal(otherHistory.result.messages[0].direction,'note');
+ const markedRead=await call('/api/conversations/'+conversationId+'/ui','PATCH',{read:true},adminCookie,csrf);
+ assert.equal(markedRead.status,200);
+ assert.equal(markedRead.result.preferences.marked_unread,false);
+ const noSend=await call('/api/conversations/'+conversationId+'/send','POST',{text:'não enviar'},adminCookie,csrf);
+ assert.equal(noSend.status,404,'No unapproved WhatsApp send endpoint exists');
+
  const alpha=await call('/api/products','POST',{name:'Site Institucional',description:'Site responsivo',priceCents:49700},adminCookie,csrf);
  assert.equal(alpha.status,201);
  const alphaId=alpha.result.id;
@@ -166,6 +233,16 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(duplicateAcrossTenants.status,409,'Two separate tenant users cannot claim one login phone');
 
  const betaCookie=betaLogin.cookie.split(';')[0],betaCsrf=betaLogin.result.csrf;
+ const hiddenInbox=await call('/api/inbox/v2','GET',undefined,betaCookie);
+ assert.equal(hiddenInbox.status,200);
+ assert.equal(hiddenInbox.result.conversations.length,0,'Tenant B cannot see tenant A inbox');
+ const crossHistory=await call('/api/conversations/'+conversationId+'/history','GET',undefined,betaCookie);
+ assert.equal(crossHistory.status,404,'Tenant B cannot read tenant A history');
+ const crossPreferences=await call('/api/conversations/'+conversationId+'/ui','PATCH',{archived:true},betaCookie,betaCsrf);
+ assert.equal(crossPreferences.status,404,'Tenant B cannot modify tenant A preferences');
+ const crossFavorite=await call('/api/conversations/'+conversationId+'/messages/'+messageId+'/ui','PATCH',{starred:true},betaCookie,betaCsrf);
+ assert.equal(crossFavorite.status,404,'Tenant B cannot favorite tenant A messages');
+
  const forbidden=await call('/api/admin/tenants','GET',undefined,betaCookie);
  assert.equal(forbidden.status,403);
  const missingCsrf=await call('/api/products','POST',{name:'Produto',priceCents:500},betaCookie);
@@ -275,6 +352,21 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const bound=await call('/api/waakg/channels/link','POST',{sessionId:waSession,label:'Vendas 1',phone:waPhone},adminCookie,csrf);
  assert.equal(bound.status,201,JSON.stringify(bound.result));
  const waChannelId=bound.result.id;
+ const noCsrfSync=await call('/api/inbox/sync','POST',{channelId:waChannelId},betaCookie);
+ assert.equal(noCsrfSync.status,403,'Inbox sync must require CSRF');
+ const synced=await call('/api/inbox/sync','POST',{channelId:waChannelId,offset:0},betaCookie,betaCsrf);
+ assert.equal(synced.status,200,JSON.stringify(synced.result));
+ assert.equal(synced.result.chatsImported,1);
+ assert.equal(synced.result.messagesImported,3,'Only available text is imported; media stays excluded');
+ assert.equal(synced.result.readOnly,true);
+ const importedInbox=await call('/api/inbox/v2?search=Nome%20particular','GET',undefined,betaCookie);
+ assert.equal(importedInbox.status,200);
+ assert.equal(importedInbox.result.conversations.length,1);
+ assert.equal(importedInbox.result.conversations[0].customer_name,'Nome particular');
+ const importedHistory=await call('/api/conversations/'+importedInbox.result.conversations[0].id+'/history','GET',undefined,betaCookie);
+ assert.equal(importedHistory.status,200);
+ assert.equal(importedHistory.result.messages.length,3);
+ assert(importedHistory.result.messages.every(m=>m.direction!=='note'));
  const verified=await call('/api/waakg/channels/'+waChannelId+'/status','GET',undefined,betaCookie);
  assert.equal(verified.status,200);
  assert.equal(verified.result.connected,true);
@@ -304,6 +396,8 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  await call('/api/admin/switch','POST',{tenantId:me.result.tenant.id},adminCookie,csrf);
  const otherTenantLinks=await call('/api/waakg/channels','GET',undefined,adminCookie);
  assert.deepEqual(otherTenantLinks.result,[]);
+ const crossInboxSync=await call('/api/inbox/sync','POST',{channelId:waChannelId},adminCookie,csrf);
+ assert.equal(crossInboxSync.status,404,'Other tenants cannot pull WhatsApp conversations');
  const crossSync=await call('/api/waakg/scans','POST',{channelId:waChannelId},adminCookie,csrf);
  assert.equal(crossSync.status,404);
  const crossStatus=await call('/api/waakg/channels/'+waChannelId+'/status','GET',undefined,adminCookie);

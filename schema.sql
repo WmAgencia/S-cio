@@ -286,3 +286,40 @@ CREATE TABLE IF NOT EXISTS product_campaign_links (
  UNIQUE(tenant_id,product_id,provider,campaign_id)
 );
 CREATE INDEX IF NOT EXISTS product_campaign_links_tenant_product ON product_campaign_links(tenant_id,product_id);
+
+
+-- Conversas: tenant-owned operational metadata, never WhatsApp network actions.
+-- Keep cross-tenant foreign keys and preserve imported records.
+CREATE UNIQUE INDEX IF NOT EXISTS conversations_tenant_id_unique ON conversations(tenant_id,id);
+CREATE UNIQUE INDEX IF NOT EXISTS messages_tenant_id_unique ON messages(tenant_id,id);
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id uuid;
+CREATE INDEX IF NOT EXISTS messages_reply_ref_idx ON messages(tenant_id,reply_to_id) WHERE reply_to_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS conversation_ui_state (
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ conversation_id uuid NOT NULL,
+ pinned boolean NOT NULL DEFAULT false,
+ favorite boolean NOT NULL DEFAULT false,
+ archived boolean NOT NULL DEFAULT false,
+ muted boolean NOT NULL DEFAULT false,
+ marked_unread boolean NOT NULL DEFAULT false,
+ last_read_at timestamptz,
+ draft text NOT NULL DEFAULT '' CHECK (char_length(draft) <= 3000),
+ labels text[] NOT NULL DEFAULT ARRAY[]::text[],
+ assigned_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+ handling_mode text NOT NULL DEFAULT 'human' CHECK(handling_mode IN ('human','ai_assist')),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY (tenant_id,conversation_id),
+ FOREIGN KEY (tenant_id,conversation_id) REFERENCES conversations(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS conversation_ui_state_owner_idx ON conversation_ui_state(tenant_id,pinned,archived);
+CREATE TABLE IF NOT EXISTS message_ui_state (
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ message_id uuid NOT NULL,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ starred boolean NOT NULL DEFAULT false,
+ reaction text CHECK(reaction IS NULL OR char_length(reaction)<=16),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(tenant_id,message_id,user_id),
+ FOREIGN KEY(tenant_id,message_id) REFERENCES messages(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS message_ui_state_starred_idx ON message_ui_state(tenant_id,user_id,starred) WHERE starred=true;
