@@ -101,5 +101,23 @@ async function openQr({api,toast,onConnected,canManage=true}={}){
  document.addEventListener('keydown',x.keyHandler);
  q('[data-qr-close]').focus();
 }
+// Accessible escape/Tab behavior for the product and master company dialogs.
+document.addEventListener('keydown',ev=>{
+ const popup=document.querySelector('#productModal:not(.hidden),#companyModal:not(.hidden)');
+ if(!popup)return;
+ if(ev.key==='Escape'){
+  ev.preventDefault();
+  (popup.id==='productModal'?
+   popup.querySelector('#closeProductModal'):
+   popup.querySelector('#companyClose'))?.click();
+  return;
+ }
+ if(ev.key!=='Tab')return;
+ const controls=[...popup.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')]
+  .filter(x=>x.getClientRects().length>0);
+ if(!controls.length)return;
+ if(ev.shiftKey&&document.activeElement===controls[0]){ev.preventDefault();controls.at(-1).focus();}
+ else if(!ev.shiftKey&&document.activeElement===controls.at(-1)){ev.preventDefault();controls[0].focus();}
+});
 window.SocioUX={openQr,close};
 })();
