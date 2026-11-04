@@ -55,3 +55,5 @@ jobs:
       - run: docker run --rm --entrypoint /usr/local/bin/node socio-backup:ci --check backup-runner/run.mjs
       - run: docker run --rm --entrypoint /usr/local/bin/node socio-backup:ci --check backup-runner/restore.mjs
       - run: docker run --rm --entrypoint /usr/local/bin/node socio-backup:ci --check backup-runner/media.mjs
+      - run: docker run --rm --entrypoint /usr/local/bin/node socio-backup:ci --check backup-runner/mysql.mjs
+      - run: docker run --rm --entrypoint mariadb-dump socio-backup:ci --version
