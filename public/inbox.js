@@ -40,7 +40,7 @@
   }
   function layout(){
    const filters=[
-    ['all','Todas'],['whatsapp','WhatsApp'],['instagram','Instagram'],['ai_assist','IA respondendo'],['human','Humano respondendo']
+    ['all','Todas'],['ai_assist','IA respondendo'],['human','Humano respondendo']
    ];
    return '<section class="wa-inbox'+(prefs.contrast==='high'?' wa-high-contrast':'')+
     (prefs.fontScale==='large'?' wa-large-type':'')+(prefs.compact?' wa-compact':'')+
