@@ -590,11 +590,11 @@ async function products(selected=null){
    '<div class="row-actions"><button class="btn soft" id="addVariant" type="button">+ Adicionar variação</button><button class="btn primary" type="submit">Salvar variações</button></div></form></section>'+
   '<section class="card card-pad section-gap"><div class="section-title">Campanhas associadas</div>'+
    '<p class="form-note">Associação manual de referência. A conexão e os resultados da conta de anúncios ainda não foram verificados.</p>'+
-   (current.campaigns.length?'<div class="catalog-campaign-list">'+current.campaigns.map(c=>
-     '<div><strong>'+e(c.provider==='meta_ads'?'Meta Ads':'Google Ads')+'</strong> · '+e(c.label||c.campaign_id)+
+   (current.campaigns.some(c=>c.provider==='meta_ads')?'<div class="catalog-campaign-list">'+current.campaigns.filter(c=>c.provider==='meta_ads').map(c=>
+     '<div><strong>Meta Ads</strong> · '+e(c.label||c.campaign_id)+
      '<span class="form-note"> '+e(c.campaign_id)+' · Não verificada</span>'+
      '<button class="btn sm ghost" data-delete-campaign="'+e(c.id)+'">Remover</button></div>').join('')+'</div>':'')+
-   '<form id="catalogCampaignForm" class="form-stack"><label>Plataforma<select name="provider"><option value="meta_ads">Meta Ads</option><option value="google_ads">Google Ads</option></select></label>'+
+   '<form id="catalogCampaignForm" class="form-stack"><input type="hidden" name="provider" value="meta_ads"><p class="form-note">Plataforma: Meta Ads</p>'+
    '<label>ID da campanha<input name="campaignId" maxlength="150" required placeholder="Identificador na plataforma"></label>'+
    '<label>Nome interno<input name="label" maxlength="120" placeholder="Ex.: Campanha Black Friday"></label>'+
    '<button class="btn soft" type="submit">Associar campanha →</button></form></section>':'';
