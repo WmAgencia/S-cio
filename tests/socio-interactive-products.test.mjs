@@ -199,3 +199,35 @@ test('Clicking Falar com atendente hands over without a second auto reply',async
  assert.equal(handoffs,1);
  assert.equal(result.noMessageSent,true);
 });
+
+test('Groq-managed conversation sends the correct catalog photo on an explicit named product request',async()=>{
+ const activeEnv={...env,SOCIO_AUTOREPLY_ENABLED:'true',GROQ_API_KEY:'fake-sandbox-groq-key-not-real-123456789'};
+ let card,claims=0;
+ const tenant='11111111-1111-4111-8111-111111111111';
+ const conversation='22222222-2222-4222-8222-222222222222';
+ const pool={query:async(sql)=>{
+  if(sql.includes('FROM messages m JOIN conversation_ui_state'))
+   return {rowCount:1,rows:[{inbound_id:'33333333-3333-4333-8333-333333333333',
+    body:'Me envia uma foto do Sérum Telocapil',tenant_id:tenant,conversation_id:conversation,
+    tenant_name:'Loja',agent_name:'Sócio',tone:'Natural',instructions:'',knowledge_md:''}]};
+  if(sql.startsWith('INSERT INTO ai_reply_attempts')){claims++;return {rowCount:1,rows:[{id:'claim'}]};}
+  if(sql.includes('SELECT direction,body FROM messages'))return {rowCount:1,rows:[
+   {direction:'inbound',body:'Me envia uma foto do Sérum Telocapil'}]};
+  if(sql.includes('FROM products WHERE'))return {rowCount:1,rows:[
+   {id:productId,name:'Sérum Telocapil',active:true,stock_quantity:6,price_cents:5900}]};
+  if(sql.startsWith('UPDATE ai_reply_attempts'))return {rowCount:1,rows:[]};
+  throw Error('Unexpected SQL '+sql);
+ }};
+ const outcome=await processNextAiReply(pool,{env:activeEnv,
+  respond:async()=>{throw Error('One explicit product request must not trigger a second text send');},
+  deliver:async()=>{throw Error('Do not double-send');},
+  deliverProduct:async(_pool,params)=>{
+   card=params;return {sent:true,kind:'product'};
+  }});
+ assert.equal(outcome.productSent,true);
+ assert.equal(claims,1);
+ assert.equal(card.productId,productId);
+ assert.equal(card.tenantId,tenant);
+ assert.equal(card.conversationId,conversation);
+ assert.equal(card.mode,'ai');
+});
