@@ -621,12 +621,13 @@ async function training(){
  ]);
  const run=auto.run,connected=waLinks.filter(c=>c.status==='connected');
  const percent=run?.percent??0;
- const draft=versions.find(v=>v.status==='draft'),published=versions.find(v=>v.status==='approved');
+ const draft=versions.find(v=>v.status==='draft'),published=versions.find(v=>v.status==='approved'),archived=versions.filter(v=>v.status==='archived').slice(0,8);
  const ongoing=run&&['scanning','analyzing'].includes(run.status);
  const status=run?.status==='scanning'?'Lendo conversas dos WhatsApps conectados':
   run?.status==='analyzing'?'Organizando o conhecimento e gerando Markdown':
   run?.status==='completed'?'Análise concluída — conhecimento pronto para revisão':
   run?.status==='failed'?'Não foi possível concluir o treinamento':
+  run?.status==='cancelled'?'Treinamento cancelado':
   'Pronto para iniciar';
  const canManage=state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role);
  const percentText=ongoing||run?.status==='completed'?percent+'%':'0%';
@@ -642,6 +643,7 @@ async function training(){
     (!connected.length?'<span>Conecte seu WhatsApp para começar</span>':'')+'</div>'+
    '<button type="button" class="btn primary socio-train-cta" id="startAutoTraining" '+
     (!connected.length||ongoing||!canManage?'disabled':'')+'>Treinar</button>'+
+   (ongoing&&canManage?'<button type="button" class="btn soft" id="cancelAutoTraining">Cancelar treinamento</button>':'')+
    '<div class="socio-train-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+percent+'" aria-label="Progresso da análise">'+
     '<div class="progress-track"><div class="progress-fill" style="width:'+percent+'%"></div></div></div>'+
    '<strong class="socio-train-percent">'+percentText+' analisado</strong>'+
@@ -657,10 +659,16 @@ async function training(){
     '<span class="badge yellow">Aguardando aprovação</span></div>'+
     '<p class="form-note">'+e(draft.report?.summary||'Reveja o conteúdo antes de ativá-lo.')+'</p>'+
     '<p class="form-note">Processamento: '+e(draft.report?.analysisProvider==='groq'?'Groq':draft.report?.analysisProvider==='deterministic_fallback'?'Síntese preliminar (Groq indisponível)':'Síntese preliminar')+'</p>'+
-    '<pre class="code-preview">'+e(draft.markdown||'')+'</pre>'+
-    '<button type="button" class="btn primary" id="analysisApprove" data-id="'+e(draft.id)+'">Aprovar Markdown</button></section>':'')+
+    '<textarea id="knowledgeDraft" class="socio-knowledge-edit" rows="15" maxlength="22000" aria-label="Markdown de conhecimento para revisão" '+(!canManage?'readonly':'')+'>'+e(draft.markdown||'')+'</textarea>'+
+    (canManage?'<div class="socio-knowledge-actions"><button type="button" class="btn soft" id="analysisSave">Salvar ajustes</button>'+
+    '<button type="button" class="btn primary" id="analysisApprove" data-id="'+e(draft.id)+'">Aprovar Markdown</button></div>':'')+'</section>':'')+
   (published?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Conhecimento aprovado</h2><span class="badge green">Versão '+e(published.version)+'</span></div>'+
     '<pre class="code-preview">'+e(ag.knowledge_md||'')+'</pre></section>':'')+
+  (archived.length?'<section class="card card-pad socio-train-result"><h2>Histórico de versões</h2>'+
+   '<p class="form-note">Restaurar uma versão substitui somente o conhecimento ativo desta empresa.</p>'+
+   archived.map(v=>'<div class="socio-version-item"><span>Versão '+e(v.version)+' · arquivada</span>'+
+    (canManage?'<button type="button" class="btn soft" data-restore-version="'+e(v.id)+'">Restaurar</button>':'')+'</div>').join('')+
+   '</section>':'')+
  '</div>';
  $('#startAutoTraining')?.addEventListener('click',()=>action(async()=>{
   const btn=$('#startAutoTraining');if(btn)btn.disabled=true;
@@ -672,6 +680,21 @@ async function training(){
   api,toast,canManage,
   onConnected:()=>state.view==='training'?training():Promise.resolve()
  }));
+ $('#cancelAutoTraining')?.addEventListener('click',()=>action(async()=>{
+  await api('/api/training/auto/'+run.id+'/cancel','POST',{});
+  toast('Treinamento cancelado.');
+  await training();
+ }));
+ $('#analysisSave')?.addEventListener('click',()=>action(async()=>{
+  await api('/api/training/versions/'+draft.id+'/edit','POST',{markdown:$('#knowledgeDraft').value});
+  toast('Ajustes do Markdown salvos. O conhecimento ainda não foi aprovado.');
+  await training();
+ }));
+ $('[data-restore-version]').forEach(btn=>btn.addEventListener('click',()=>action(async()=>{
+  await api('/api/training/versions/'+btn.dataset.restoreVersion+'/restore','POST',{});
+  toast('Versão anterior restaurada como conhecimento ativo.');
+  await training();
+ })));
  $('#analysisApprove')?.addEventListener('click',()=>action(async()=>{
   await api('/api/training/versions/'+draft.id+'/approve','POST',{});
   toast('Markdown aprovado e disponível para a IA.');
