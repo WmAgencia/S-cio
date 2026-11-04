@@ -6,7 +6,7 @@
  function create({api,e,toast,view,changeView,openQr}){
   let conversations=[],active=null,thread=null,filter='all',search='',filterMessages='',selected=new Set();
   let reply=null,menuId=null,pointer=null,longTimer=null,refreshTimer=null,searchTimer=null,draftTimer=null;
-  let infoOpen=false,helpOpen=false,menuAt=null,team=null,lock=false,disposed=false,lastFetch=0,syncing=false,cancelSync=false,suppressClick=false,noteMode=false,sendKey=null,sendFingerprint=null;
+  let infoOpen=false,helpOpen=false,menuAt=null,team=null,lock=false,disposed=false,lastFetch=0,syncing=false,cancelSync=false,suppressClick=false,noteMode=false,sendKey=null,sendFingerprint=null,richAttempt=null;
   let prefs={fontScale:'normal',contrast:'normal',compact:false};
   try{const saved=JSON.parse(localStorage.getItem('socio-inbox-accessibility')||'{}');
    if(saved.fontScale==='large')prefs.fontScale='large';
@@ -170,8 +170,12 @@
     '<div class="wa-compose-foot"><span>Enter '+(asNote?'salva nota':'envia mensagem')+' · Shift + Enter pula linha · Alt + R responde</span>'+
       '<div class="wa-compose-extras">'+
        (enabled&&!controlledByAi?'<button type="button" class="wa-inline-link" data-chat-action="toggle-notes">'+(noteMode?'Voltar ao WhatsApp':'Nota interna')+'</button>':'')+
-       '<button type="button" class="wa-inline-link" data-chat-action="ai-suggest">✳ Sugerir resposta</button></div></div>'+
-    '<div class="wa-ai-suggestion hidden" id="inboxSuggestion" role="status" aria-live="polite"></div>';
+       '<button type="button" class="wa-inline-link" data-chat-action="ai-suggest">✳ Sugerir resposta</button>'+
+       (enabled&&!controlledByAi&&!noteMode?'<button type="button" class="wa-inline-link" data-chat-action="rich-buttons">▣ Botões</button>'+
+       '<button type="button" class="wa-inline-link" data-chat-action="rich-products">◈ Enviar produto</button>':'')+
+       '</div></div>'+
+    '<div class="wa-ai-suggestion hidden" id="inboxSuggestion" role="status" aria-live="polite"></div>'+
+    '<div class="wa-rich-panel hidden" id="inboxRichPanel" aria-live="polite"></div>';
   }
   function threadMarkup(c){
    return '<div class="wa-thread-container">'+renderHeader(c)+
@@ -310,6 +314,65 @@
    }catch(error){toast(error.message,true);}
    finally{lock=false;}
   }
+  async function openRichPanel(kind){
+   const el=byId('inboxRichPanel');
+   if(!el||current()?.handling_mode!=='human'||!thread?.capabilities?.whatsappSend){
+    return toast('Assuma uma conversa com WhatsApp conectado para enviar.',true);
+   }
+   el.classList.remove('hidden');
+   if(kind==='buttons'){
+    el.innerHTML='<div class="wa-rich-head"><strong>Botões rápidos</strong>'+
+     '<button type="button" class="wa-inline-link" data-chat-action="close-rich" aria-label="Fechar opções">×</button></div>'+
+     '<label>Pergunta<input id="waButtonsPrompt" maxlength="900" value="Como podemos ajudar?"></label>'+
+     '<div class="wa-rich-options"><label>Opção 1<input id="waButtonOne" maxlength="24" value="Ver produtos"></label>'+
+     '<label>Opção 2<input id="waButtonTwo" maxlength="24" value="Falar com atendente"></label>'+
+     '<label>Opção 3 (opcional)<input id="waButtonThree" maxlength="24" placeholder="Outra opção"></label></div>'+
+     '<button type="button" class="btn primary" data-chat-action="confirm-rich-buttons">Enviar botões</button>';
+    byId('waButtonsPrompt')?.focus();
+    return;
+   }
+   el.innerHTML='<div class="wa-rich-head"><strong>Escolha um produto cadastrado</strong>'+
+    '<button type="button" class="wa-inline-link" data-chat-action="close-rich" aria-label="Fechar produtos">×</button></div>'+
+    '<p>Carregando catálogo da empresa...</p>';
+   const list=await api('/api/products');
+   if(!el.isConnected||el.classList.contains('hidden'))return;
+   const products=list.filter(p=>p.active&&p.stockQuantity!==0&&p.stock_quantity!==0&&
+    Array.isArray(p.media)&&p.media.length);
+   el.innerHTML='<div class="wa-rich-head"><strong>Produtos disponíveis</strong>'+
+    '<button type="button" class="wa-inline-link" data-chat-action="close-rich" aria-label="Fechar produtos">×</button></div>'+
+    (products.length?'<div class="wa-rich-products">'+products.slice(0,60).map(p=>
+     '<button type="button" class="wa-rich-product" data-chat-action="confirm-rich-product" data-product-id="'+t(p.id)+'">'+
+      '<img src="'+t(p.media[0].url)+'" alt="" loading="lazy"><span><strong>'+t(p.name,100)+
+      '</strong><small>'+new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(p.price_cents/100)+
+      '</small></span><span>Enviar</span></button>').join('')+'</div>':
+      '<p>Nenhum produto ativo e disponível com foto. Cadastre uma foto no catálogo.</p>');
+  }
+  async function sendRich(kind,productId=null){
+   if(lock||!active||current()?.handling_mode!=='human')return;
+   const url=kind==='product'?'send-product':'send-interactive';
+   const input=kind==='buttons'?{
+    message:byId('waButtonsPrompt')?.value?.trim(),
+    choices:[byId('waButtonOne')?.value,byId('waButtonTwo')?.value,byId('waButtonThree')?.value]
+     .filter(x=>typeof x==='string'&&x.trim()).map(x=>x.trim())
+   }:{productId};
+   const fingerprint=JSON.stringify({kind,input,conversation:active});
+   if(!richAttempt||richAttempt.fingerprint!==fingerprint)
+    richAttempt={fingerprint,id:crypto.randomUUID()};
+   lock=true;
+   try{
+    const result=await api('/api/conversations/'+active+'/'+url,'POST',
+     {...input,clientRequestId:richAttempt.id});
+    if(!result.sent){
+     toast('Envio não confirmado. Confira no WhatsApp antes de reenviar.',true);
+     return;
+    }
+    richAttempt=null;
+    byId('inboxRichPanel')?.classList.add('hidden');
+    await open(active,{background:true});
+    toast(kind==='product'?'Produto enviado ao gateway WhatsApp.':'Botões enviados ao gateway WhatsApp.');
+   }catch(error){toast(error.message,true);}
+   finally{lock=false;}
+  }
   async function suggestion(input){
    const text=String(input||'').trim();
    if(!text){toast('Selecione uma mensagem para pedir uma sugestão à IA.');return;}
@@ -324,7 +387,7 @@
     announce('A IA gerou uma sugestão. Revise antes de enviar pelo seu canal autorizado.');
    }catch(error){box.textContent='Não foi possível gerar a sugestão: '+error.message;}
   }
-  async function performChatAction(action){
+  async function performChatAction(action,element=null){
    if(!active)return;
    const c=current();
    if(action==='back'){wrap()?.classList.remove('wa-show-thread');return;}
@@ -336,6 +399,11 @@
    if(action==='more'){await loadMore();return;}
    if(action==='save-note'){await submitNote();return;}
    if(action==='submit-compose'){await submitComposer();return;}
+   if(action==='rich-buttons'){await openRichPanel('buttons');return;}
+   if(action==='rich-products'){await openRichPanel('products');return;}
+   if(action==='confirm-rich-buttons'){await sendRich('buttons');return;}
+   if(action==='confirm-rich-product'){await sendRich('product',element?.dataset.productId);return;}
+   if(action==='close-rich'){byId('inboxRichPanel')?.classList.add('hidden');return;}
    if(action==='toggle-notes'){noteMode=!noteMode;renderComposer();byId('inboxDraft')?.focus();return;}
    if(action==='take'){await setPref({handling_mode:'human'});return;}
    if(action==='assist'){await setPref({handling_mode:'ai_assist'});toast(thread?.capabilities?.aiAutoReply?'Conversa entregue à IA; respostas seguem as configurações do agente.':'Conversa atribuída à IA. Automatização exige Groq configurado e ativação do envio.');return;}
@@ -397,7 +465,7 @@
   async function open(id,{background=false}={}){
    if(!cleanId(id)||disposed)return;
    const same=active===id;
-   if(!same){selected.clear();reply=null;infoOpen=false;filterMessages='';noteMode=false;sendKey=null;sendFingerprint=null;closeMenu();}
+   if(!same){selected.clear();reply=null;infoOpen=false;filterMessages='';noteMode=false;sendKey=null;sendFingerprint=null;richAttempt=null;closeMenu();}
    active=id;
    const item=current();if(!item)return;
    const result=await api('/api/conversations/'+id+'/history?limit=80');
@@ -570,7 +638,7 @@
    if(ev.target.closest('[data-inbox-sync]')){chooseSync().catch(err=>toast(err.message,true));return;}
    if(ev.target.closest('[data-inbox-start-sync]')){runSync();return;}
    const action=ev.target.closest('[data-chat-action]');
-   if(action){ev.preventDefault();performChatAction(action.dataset.chatAction).catch(error=>toast(error.message,true));return;}
+   if(action){ev.preventDefault();performChatAction(action.dataset.chatAction,action).catch(error=>toast(error.message,true));return;}
    const messageActionBtn=ev.target.closest('[data-message-action]');
    if(messageActionBtn&&menuId){ev.preventDefault();messageAction(messageActionBtn.dataset.messageAction,menuId).catch(error=>toast(error.message,true));return;}
    const more=ev.target.closest('[data-more]');
