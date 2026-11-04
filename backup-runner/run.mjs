@@ -14,6 +14,7 @@ import {Client} from 'pg';
 import {S3Client,PutObjectCommand,GetObjectCommand,HeadObjectCommand,CreateMultipartUploadCommand,UploadPartCommand,CompleteMultipartUploadCommand,AbortMultipartUploadCommand} from '@aws-sdk/client-s3';
 
 const execFileAsync=promisify(execFile);
+let stage='initialize';
 console.info('[socio-backup] starting encrypted PostgreSQL 18 snapshot');
 const need=(v,label)=>{if(!v)throw new Error('Configuration missing: '+label);return v;};
 const database=need(process.env.SOCIO_BACKUP_SOURCE_DATABASE_URL,'SOCIO_BACKUP_SOURCE_DATABASE_URL');
@@ -94,15 +95,18 @@ async function archiveList(path,meta){
  catch(error){job.proc.kill('SIGTERM');throw error;}
 }
 async function main(){
+ stage='database-connect';
  const db=new Client({connectionString:database,connectionTimeoutMillis:12000});
  await db.connect();
  try{
+  stage='database-version';
   const version=await db.query('SHOW server_version_num');
   const major=Math.floor(Number(version.rows[0].server_version_num)/10000);
   const {stdout}=await execFileAsync('pg_dump',['--version']);
   const dumpMajor=Number(stdout.match(/PostgreSQL\)\s+(\d+)/)?.[1]);
   if(major!==18||dumpMajor!==18)throw new Error('Postgres backup client/server must be v18');
  }finally{await db.end();}
+ stage='temp-directory';
  const folder=await mkdtemp(join(tmpdir(),'socio-dr-')),encrypted=join(folder,'archive.enc'),downloaded=join(folder,'roundtrip.enc');
  const createdAt=new Date().toISOString(),salt=randomBytes(16).toString('hex'),
   iv=randomBytes(12).toString('hex'),suffix=randomBytes(7).toString('hex');
@@ -117,19 +121,23 @@ async function main(){
  const objectKey='postgres/'+createdAt.slice(0,10)+'/socio-'+createdAt.replace(/[:.]/g,'-')+'-'+suffix+'.dump.enc';
  let job;
  try{
+  stage='pg-dump';
   job=start('pg_dump',['--format=custom','--no-owner','--no-privileges','--compress=6'],pgEnv);
   try{await Promise.all([
    pipeline(job.proc.stdout,limit,cipher,createWriteStream(encrypted,{flags:'wx',mode:0o600})),
    job.done
   ]);}
   catch(error){job.proc.kill('SIGTERM');throw error;}
+  stage='local-verification';
   const bytes=(await stat(encrypted)).size;
   const meta={format:'socio-disaster-v1',scope:'postgres',algorithm:'aes-256-gcm',
    createdAt,sourceMajor:18,salt,iv,tag:cipher.getAuthTag().toString('hex'),
    bytes,sha256:await sha256(encrypted),mediaIncluded:false,mysqlIncluded:false};
   await authenticateFile(encrypted,meta);
   await archiveList(encrypted,meta);
+  stage='s3-upload';
   await uploadEncrypted(encrypted,objectKey,bytes);
+  stage='s3-readback';
   const head=await s3.send(new HeadObjectCommand({Bucket:bucket,Key:objectKey}));
   if(Number(head.ContentLength)!==bytes)throw new Error('Remote archive length mismatch');
   const downloadedResponse=await s3.send(new GetObjectCommand({Bucket:bucket,Key:objectKey}));
@@ -137,6 +145,7 @@ async function main(){
   if((await sha256(downloaded))!==meta.sha256)throw new Error('Remote backup hash mismatch');
   await authenticateFile(downloaded,meta);
   await archiveList(downloaded,meta);
+  stage='publish-manifest';
   const manifest=Buffer.from(JSON.stringify({...meta,verifiedRemote:true,archiveKey:objectKey})+'\n');
   await s3.send(new PutObjectCommand({Bucket:bucket,Key:objectKey+'.json',
    Body:manifest,ContentLength:manifest.length,ContentType:'application/json'}));
@@ -150,6 +159,6 @@ async function main(){
 }
 main().catch(error=>{
  // Error messages cannot contain credentials or customer contents.
- console.error(JSON.stringify({ok:false,code:'BACKUP_FAILED',reason:String(error?.code||error?.message||'unknown').slice(0,110)}));
+ console.error(JSON.stringify({ok:false,code:'BACKUP_FAILED',stage,reason:String(error?.code||error?.message||'unknown').slice(0,110)}));
  process.exitCode=1;
 });
