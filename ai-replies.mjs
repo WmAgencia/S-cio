@@ -47,6 +47,14 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
   "ORDER BY m.created_at ASC LIMIT 1");
  if(!found.rowCount)return {processed:false};
  const m=found.rows[0],attemptId=randomUUID();
+ // Stop requests and requests for a person must hand the conversation back
+ // to the company without any automatic outbound message.
+ if(/\b(parar|pare|stop|descadastrar|não me envie|nao me envie|falar com (um )?humano|falar com (um )?atendente)\b/i.test(String(m.body||''))){
+  await pool.query("UPDATE conversation_ui_state SET handling_mode='human',ai_activated_at=NULL,updated_at=now() "+
+   "WHERE tenant_id=$1 AND conversation_id=$2 AND handling_mode='ai_assist'",
+   [m.tenant_id,m.conversation_id]);
+  return {processed:true,handedOff:true,noMessageSent:true};
+ }
  const created=await pool.query(
   "INSERT INTO ai_reply_attempts(id,tenant_id,conversation_id,inbound_message_id,status) "+
   "VALUES($1,$2,$3,$4,'generating') ON CONFLICT(tenant_id,inbound_message_id) DO NOTHING RETURNING id",
