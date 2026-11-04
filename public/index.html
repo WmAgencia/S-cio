@@ -36,8 +36,10 @@
    </div>
    <form id="loginForm" class="form-stack">
     <label>E-mail ou número de celular<input name="identifier" type="text" required maxlength="255" autocomplete="username" placeholder="Seu e-mail ou celular com DDD"></label>
-    <label>Senha<input name="password" type="password" required autocomplete="current-password" placeholder="Sua senha"></label>
-    <button class="btn primary wide" type="submit">Entrar no Sócio <span>→</span></button>
+    <label>Senha<div class="auth-password"><input id="loginPassword" name="password" type="password" required autocomplete="current-password" placeholder="Sua senha" aria-describedby="capsWarning">
+    <button id="togglePassword" class="auth-password-toggle" type="button" aria-controls="loginPassword" aria-pressed="false">Mostrar</button></div></label>
+    <p id="capsWarning" class="auth-caps-warning hidden" role="status">Caps Lock está ativado.</p>
+    <button class="btn primary wide" type="submit" id="loginSubmit">Entrar no Sócio <span aria-hidden="true">→</span></button>
    </form>
    <form id="setupForm" class="form-stack hidden">
     <div class="help-card">Configuração inicial exclusiva da Consecom. O token de instalação está nas variáveis seguras do Railway.</div>
