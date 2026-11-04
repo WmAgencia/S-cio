@@ -140,6 +140,17 @@ export async function saveQuoteDraft(pool,tenant,requestId,{text,amountCents}){
 export async function sendQuoteDraft(pool,tenant,requestId,userId,{env=process.env,deliver=deliverToConversation}={}){
  if(!uuid.test(String(requestId||'')))throw bad(422,'Solicitação inválida.');
  if(!outboundEnabled(env))throw bad(503,'Envio WhatsApp indisponível. O orçamento permanece salvo no Sócio.');
+ // Preflight predictable refusal before claiming the one-time delivery id.
+ const preflight=await pool.query(
+  "SELECT q.conversation_id,c.status,COALESCE(st.handling_mode,'human') AS handling_mode "+
+  "FROM quote_requests q JOIN conversations c ON c.tenant_id=q.tenant_id AND c.id=q.conversation_id "+
+  "LEFT JOIN conversation_ui_state st ON st.tenant_id=c.tenant_id AND st.conversation_id=c.id "+
+  "WHERE q.tenant_id=$1 AND q.id=$2",[tenant,requestId]);
+ if(!preflight.rowCount)throw bad(404,'Orçamento não encontrado.');
+ if(preflight.rows[0].status==='resolved')throw bad(409,'Reabra a conversa antes de enviar.');
+ if(preflight.rows[0].handling_mode!=='human')
+  throw bad(409,'Assuma a conversa no WhatsApp antes de enviar o orçamento.');
+
  const r=await pool.query(
   "UPDATE quote_requests SET delivery_status='processing',updated_at=now() "+
   "WHERE tenant_id=$1 AND id=$2 AND delivery_status='not_sent' AND status='preparing' "+
