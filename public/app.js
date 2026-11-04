@@ -2,7 +2,7 @@
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training'};
-const titles={overview:'Visão geral',inbox:'WhatsApp',marketing:'Anúncios e métricas',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas e orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
+const titles={overview:'Visão geral',inbox:'WhatsApp',marketing:'Meta Ads',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas e orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -70,7 +70,7 @@ async function boot(){
    await changeView(state.view);
    if(marketingStatus==='authorized'){
     toast('Login autorizado. Verificando contas de anúncios disponíveis...');
-    if(['meta','google'].includes(marketingProvider))void (async()=>{
+    if(marketingProvider==='meta')void (async()=>{
      const provider=marketingProvider;
      try{
       const result=await api('/api/marketing/oauth/'+provider+'/test','POST',{});
@@ -413,7 +413,7 @@ async function channels(){
 }
 async function marketing(){
  const [data,auth]=await Promise.all([api('/api/marketing'),api('/api/marketing/oauth')]);
- const grants=auth.grants||[],connections=data.connections||[],reports=data.reports||[];
+ const grants=(auth.grants||[]).filter(x=>x.provider==='meta'),connections=(data.connections||[]).filter(x=>x.provider==='pipeboard_meta'),reports=(data.reports||[]).filter(x=>x.provider==='pipeboard_meta');
  const scope=key=>grants.find(x=>x.provider===key&&x.status==='authorized');
  const accountCards=(provider,legacy)=>connections.filter(x=>x.provider===legacy&&x.status==='verified')
    .map(x=>'<p class="form-note">Conta com acesso de leitura verificado: '+e(x.label)+' · '+e(x.account_id)+'</p>').join('');
@@ -444,10 +444,9 @@ async function marketing(){
     '</p>'+existing+
    '</section>';
  };
- view.innerHTML=heading('MARKETING','Anúncios e métricas.',
+ view.innerHTML=heading('META ADS','Meta Ads.',
   'Apenas conecte a sua conta. Sem códigos, scripts ou configurações de API.')+
   item('meta','Meta Ads','Conecte o Facebook e escolha as contas de anúncios que deseja autorizar.','pipeboard_meta')+
-  item('google','Google Ads','Conecte sua conta Google e autorize o acesso às suas contas Google Ads.','google_ads_scripts')+
   '<section class="card" style="padding:22px">'+
    '<h2>Relatórios</h2>'+
    (reports.length?
@@ -591,11 +590,11 @@ async function products(selected=null){
    '<div class="row-actions"><button class="btn soft" id="addVariant" type="button">+ Adicionar variação</button><button class="btn primary" type="submit">Salvar variações</button></div></form></section>'+
   '<section class="card card-pad section-gap"><div class="section-title">Campanhas associadas</div>'+
    '<p class="form-note">Associação manual de referência. A conexão e os resultados da conta de anúncios ainda não foram verificados.</p>'+
-   (current.campaigns.length?'<div class="catalog-campaign-list">'+current.campaigns.map(c=>
-     '<div><strong>'+e(c.provider==='meta_ads'?'Meta Ads':'Google Ads')+'</strong> · '+e(c.label||c.campaign_id)+
+   (current.campaigns.some(c=>c.provider==='meta_ads')?'<div class="catalog-campaign-list">'+current.campaigns.filter(c=>c.provider==='meta_ads').map(c=>
+     '<div><strong>Meta Ads</strong> · '+e(c.label||c.campaign_id)+
      '<span class="form-note"> '+e(c.campaign_id)+' · Não verificada</span>'+
      '<button class="btn sm ghost" data-delete-campaign="'+e(c.id)+'">Remover</button></div>').join('')+'</div>':'')+
-   '<form id="catalogCampaignForm" class="form-stack"><label>Plataforma<select name="provider"><option value="meta_ads">Meta Ads</option><option value="google_ads">Google Ads</option></select></label>'+
+   '<form id="catalogCampaignForm" class="form-stack"><input type="hidden" name="provider" value="meta_ads"><p class="form-note">Plataforma: Meta Ads</p>'+
    '<label>ID da campanha<input name="campaignId" maxlength="150" required placeholder="Identificador na plataforma"></label>'+
    '<label>Nome interno<input name="label" maxlength="120" placeholder="Ex.: Campanha Black Friday"></label>'+
    '<button class="btn soft" type="submit">Associar campanha →</button></form></section>':'';

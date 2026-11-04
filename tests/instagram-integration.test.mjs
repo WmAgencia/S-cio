@@ -68,7 +68,8 @@ test('real ephemeral PostgreSQL: OAuth, isolation, HMAC, idempotency, 23h manual
  const pool=new Pool({connectionString:sourceUrl.href});
  t.after(async()=>{
   await pool.end().catch(()=>{});
-  await admin.query('DROP DATABASE IF EXISTS '+name+' WITH (FORCE)').catch(()=>{});
+  // Close the disposable pool cleanly; FORCE can race with late client socket events.
+  await admin.query('DROP DATABASE IF EXISTS '+name).catch(()=>{});
   await admin.end();
  });
  await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));

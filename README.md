@@ -1,5 +1,8 @@
 # Sócio — por Consecom
 
+> **Integração de anúncios vigente:** somente **Meta Ads via Pipeboard**. O Google Ads foi removido das conexões e da interface; credenciais locais antigas são desativadas sem apagar histórico. Consulte [o guia atualizado](docs/socio-conexao-um-clique.md).
+
+
 SaaS multiempresa de atendimento e vendas. Projeto independente do Prospector: nunca compartilha banco, sessões ou informações de clientes com o sistema de prospecção.
 
 ## Funcionalidades entregues no MVP

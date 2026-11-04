@@ -184,7 +184,7 @@ export async function listMarketing(pool,a){
  const [links,metrics]=await Promise.all([
   pool.query("SELECT id,provider,account_id,label,status,last_verified_at,created_at "+
    "FROM marketing_connections WHERE tenant_id=$1 ORDER BY created_at DESC",[a.active_tenant_id]),
-  pool.query("SELECT m.connection_id,m.date,m.campaign_name,m.impressions,m.clicks,m.cost_micros,m.conversions "+
+  pool.query("SELECT m.connection_id,c.provider,m.date,m.campaign_name,m.impressions,m.clicks,m.cost_micros,m.conversions "+
    "FROM marketing_daily_metrics m JOIN marketing_connections c ON c.id=m.connection_id AND c.tenant_id=m.tenant_id "+
    "WHERE m.tenant_id=$1 ORDER BY date DESC,m.campaign_name LIMIT 120",[a.active_tenant_id])
  ]);

@@ -5,7 +5,7 @@ import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
 import {startPipeboardOAuth,finishPipeboardOAuth,listPipeboardOAuth,revokePipeboardOAuth,oauthClientMetadata,testPipeboardConnection} from './marketing-oauth.mjs';
 import {instagramHostedReady,beginInstagramHosted,instagramHostedStatus,disconnectInstagramHosted} from './instagram-hosted.mjs';
-import {instagramLabHealth,connectPipeboard,registerGoogleAdsScript,ingestGoogleReport,listMarketing,disconnectMarketing,googleScriptTemplate} from './marketing-integrations.mjs';
+import {connectPipeboard,listMarketing,disconnectMarketing} from './marketing-integrations.mjs';
 import {instagramReady,beginInstagramOAuth,completeInstagramOAuth,ingestInstagramWebhook,revokeInstagramAccount} from './instagram-integration.mjs';
 import {maintenanceEnabled,writesBlocked,workersBlocked} from './migration-guard.mjs';
 import {TABLES as MIGRATION_TABLES} from './scripts/socio-supabase-migrate.mjs';
@@ -144,7 +144,7 @@ async function handle(req,res){
   if(!isDenied){
    try{
     const completed=await finishPipeboardOAuth(pool,qs.get('state'),qs.get('code'));
-    provider=['meta','google'].includes(completed.provider)?completed.provider:null;
+    provider=completed.provider==='meta'?'meta':null;
    }catch(error){
     console.warn('[marketing-oauth]',String(error?.status||'OAUTH_ERROR').slice(0,24));
     res.writeHead(303,{Location:'/?marketing=failed','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
@@ -203,14 +203,9 @@ async function handle(req,res){
   }
   return res.end();
  }
- // Google Ads Scripts are authorized inside each account. Their reports are signed
- // with a tenant-specific key and do not use browser cookies or CSRF.
- const googleHook=pathname.match(/^\/webhooks\/google-ads\/([0-9a-f-]{36})$/i);
- if(googleHook&&method==='POST'){
-  const {raw}=await body(req,130000);
-  const result=await ingestGoogleReport(pool,googleHook[1],raw,req.headers['x-socio-signature-256']);
-  return json(res,200,result);
- }
+ // Retired Google Ads Scripts receiver is intentionally closed.
+ if(/^\/webhooks\/google-ads\/[0-9a-f-]{36}$/i.test(pathname))
+  throw fail(410,'O conector Google Ads foi desativado.');
  // Stripe server-to-server webhook validates its raw signature before using JSON.
  if(pathname==='/webhooks/stripe-test'&&method==='POST'){
   const {raw}=await body(req,160000);
@@ -296,7 +291,7 @@ async function handle(req,res){
   await audit(a,'marketing.oauth_started',{provider:result.provider});
   return json(res,200,result);
  }
- const oauthTest=pathname.match(/^\/api\/marketing\/oauth\/(meta|google)\/test$/);
+ const oauthTest=pathname.match(/^\/api\/marketing\/oauth\/(meta)\/test$/);
  if(oauthTest&&method==='POST'){
   requirePermission(a,'marketing.manage');
   if(!limiter(authAttempts,'marketing-test:'+a.user_id,60000,6))throw fail(429,'Aguarde um minuto para testar novamente.');
@@ -304,7 +299,7 @@ async function handle(req,res){
   await audit(a,'marketing.connection_test',{provider:oauthTest[1],status:result.status,accounts:result.accounts.length});
   return json(res,200,result);
  }
- const oauthRevoke=pathname.match(/^\/api\/marketing\/oauth\/(meta|google)\/disconnect$/);
+ const oauthRevoke=pathname.match(/^\/api\/marketing\/oauth\/(meta)\/disconnect$/);
  if(oauthRevoke&&method==='POST'){
   requirePermission(a,'marketing.manage');
   const result=await revokePipeboardOAuth(pool,a,oauthRevoke[1]);
@@ -331,10 +326,23 @@ async function handle(req,res){
   await audit(a,'instagram.hosted_link_revoked');
   return json(res,200,result);
  }
- // Company-level marketing integrations: read-only Meta/Google by default.
+ // Google Ads has been retired from Sócio. Preserve historical records,
+ // but do not allow new credentials, OAuth checks or report ingestion.
+ if((pathname==='/api/marketing/google/register' ||
+     /^\/api\/marketing\/oauth\/google\/(test|disconnect)$/.test(pathname) ||
+     /^\/webhooks\/google-ads\/[0-9a-f-]{36}$/i.test(pathname)))
+  throw fail(410,'Google Ads não está mais disponível no Sócio.');
+ // Company-level Meta Ads integration: read-only by default.
  if(method==='GET'&&pathname==='/api/marketing'){
   requirePermission(a,'marketing.read');
-  return json(res,200,await listMarketing(pool,a));
+  const report=await listMarketing(pool,a);
+  // Google integrations are retired; retain historic SQL rows privately,
+  // but never surface them through the active company dashboard API.
+  return json(res,200,{
+   connections:report.connections.filter(c=>c.provider==='pipeboard_meta'),
+   reports:report.reports.filter(row=>row.provider==='pipeboard_meta'),
+   providers:{pipeboard_meta:report.providers.pipeboard_meta}
+  });
  }
  if(method==='POST'&&pathname==='/api/marketing/meta/connect'){
   requirePermission(a,'marketing.manage');
@@ -344,19 +352,6 @@ async function handle(req,res){
   const connection=await connectPipeboard(pool,a,data);
   await audit(a,'marketing.pipeboard.verified',{connectionId:connection.id,accountId:connection.account_id});
   return json(res,201,connection);
- }
- if(method==='POST'&&pathname==='/api/marketing/google/register'){
-  requirePermission(a,'marketing.manage');
-  if(!limiter(authAttempts,'google-script:'+a.user_id,600000,8))
-   throw fail(429,'Muitas tentativas de configuração de script.');
-  const {data}=await body(req,2000);
-  const connection=await registerGoogleAdsScript(pool,a,data);
-  await audit(a,'marketing.google_script.generated',{connectionId:connection.id,accountId:connection.account_id});
-  return json(res,201,{
-   id:connection.id,accountId:connection.account_id,status:connection.status,
-   script:googleScriptTemplate({endpoint:connection.endpoint,
-    accountId:connection.account_id,secret:connection.secret})
-  });
  }
  const marketingDisconnect=pathname.match(/^\/api\/marketing\/connections\/([0-9a-f-]{36})\/disconnect$/i);
  if(marketingDisconnect&&method==='POST'){
@@ -1236,6 +1231,16 @@ async function main(){
    "AND table_name='users' AND column_name='active'");
   if(!requiredColumns.rowCount)throw new Error('Private Supabase team schema is outdated');
  }else await query(schema);
+ // Google Ads was removed from this SaaS. Revoke any previously stored local
+ // authorizations and legacy script secrets, without deleting historic metrics.
+ // Idempotent: after the first successful deployment subsequent runs are no-ops.
+ await query("UPDATE marketing_oauth_attempts SET consumed_at=now() "+
+  "WHERE provider='google' AND consumed_at IS NULL");
+ await query("UPDATE marketing_oauth_grants SET status='disconnected',token_ciphertext=NULL,expires_at=NULL,"+
+  "last_read_status='not_tested',last_checked_at=NULL,last_account_count=0,updated_at=now() "+
+  "WHERE provider='google' AND (status<>'disconnected' OR token_ciphertext IS NOT NULL)");
+ await query("UPDATE marketing_connections SET status='disabled',secret_ciphertext=NULL,updated_at=now() "+
+  "WHERE provider='google_ads_scripts' AND (status<>'disabled' OR secret_ciphertext IS NOT NULL)");
  // Storage probe checks the real private S3 endpoint without touching customer files.
  if(mediaConfigured())void checkMediaStorage()
   .then(x=>console.info('[socio product media]',JSON.stringify(x)))

@@ -35,7 +35,7 @@ export function validateCampaign(data){
  const provider=data?.provider;
  const campaignId=cleanText(data?.campaignId,150);
  const label=data?.label==null?'':typeof data.label==='string'&&data.label.length<=120?data.label.trim():null;
- if(!['meta_ads','google_ads'].includes(provider)||!campaignId||!/^[A-Za-z0-9_.:-]{1,150}$/.test(campaignId)||label===null)
+ if(provider!=='meta_ads'||!campaignId||!/^[A-Za-z0-9_.:-]{1,150}$/.test(campaignId)||label===null)
   throw fault('Campanha inválida. Informe plataforma e identificador.');
  return {provider,campaignId,label};
 }
