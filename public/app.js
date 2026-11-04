@@ -109,8 +109,8 @@ function renderActivityGraph(data){
   return '<circle class="chart-node" cx="'+ins[0]+'" cy="'+ins[1]+'" r="3"><title>'+e(period+': '+chartNumber(item.inbound)+' recebidas')+'</title></circle>'+
    '<circle class="chart-node-green" cx="'+outs[0]+'" cy="'+outs[1]+'" r="2.3"><title>'+e(period+': '+chartNumber(item.outbound)+' enviadas')+'</title></circle>';
  }).join('');
- return '<svg role="img" aria-label="Atividade real do atendimento da empresa no período escolhido: mensagens recebidas em laranja e enviadas em verde" viewBox="0 0 795 190" preserveAspectRatio="none">'+
-  '<defs><linearGradient id="neoOrangeFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ed7a33" stop-opacity=".25"/><stop offset="100%" stop-color="#ed7a33" stop-opacity="0"/></linearGradient></defs>'+
+ return '<svg role="img" aria-label="Atividade real do atendimento da empresa no período escolhido: mensagens recebidas em roxo e enviadas em lilás" viewBox="0 0 795 190" preserveAspectRatio="none">'+
+  '<defs><linearGradient id="neoOrangeFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#9a85d8" stop-opacity=".25"/><stop offset="100%" stop-color="#9a85d8" stop-opacity="0"/></linearGradient></defs>'+
   grid+'<path d="'+fill+'" fill="url(#neoOrangeFill)"/>'+
   '<path class="chart-orange" d="'+plot(inbound)+'"/>'+
   '<path class="chart-green" d="'+plot(outbound)+'"/>'+markers+'</svg>';
