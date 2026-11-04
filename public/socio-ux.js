@@ -129,12 +129,12 @@ async function openQr({api,toast,onConnected,canManage=true}={}){
 }
 // Accessible escape/Tab behavior for the product and master company dialogs.
 document.addEventListener('keydown',ev=>{
- const popup=document.querySelector('#productModal:not(.hidden),#companyModal:not(.hidden)');
+ const popup=document.querySelector('#productModal:not(.hidden),#companyModal:not(.hidden),#featuresModal:not(.hidden)');
  if(!popup)return;
  if(ev.key==='Escape'){
   ev.preventDefault();
-  (popup.id==='productModal'?
-   popup.querySelector('#closeProductModal'):
+  (popup.id==='productModal'?popup.querySelector('#closeProductModal'):
+   popup.id==='featuresModal'?popup.querySelector('#featuresClose'):
    popup.querySelector('#companyClose'))?.click();
   return;
  }
