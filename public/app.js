@@ -135,7 +135,7 @@ async function changeView(next){
   if(next==='overview')await overview();
   if(next==='channels')await channels();
   if(next==='products')await products();
-  if(next==='sales')await window.SocioSales.render({api,e,toast,view});
+  if(next==='sales')await window.SocioSales.render({api,e,toast,view,me:state.me,navigate:changeView});
   if(next==='training')await (state.aiTab==='agent'?agent():training());
   if(next==='inbox')await inbox();
   if(next==='marketing')await marketing();
