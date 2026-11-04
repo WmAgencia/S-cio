@@ -92,3 +92,41 @@ Comandos: npm install, npm test e npm start.
 Limites de importação: `.txt` e `.md` até 700 KB por arquivo; ZIP até 2 MB, contendo até 25 arquivos de conversa e no máximo 2,5 MB descompactados no total. Arquivos de mídia são ignorados. Conversas são anonimizadas por padrões antes de gerar a referência Markdown; nomes de arquivos não entram no prompt de IA. A anonimização automática não substitui uma revisão humana.
 
 O teste e2e requer DATABASE_URL apontando para um Postgres descartável. O GitHub Actions provisiona esse Postgres automaticamente; não use banco de produção para rodar o teste de instalação.
+
+## Etapa 3 — Orçamentos versionados e pedidos supervisionados (04/11/2026)
+
+Na guia **Vendas e orçamentos**, o proprietário ou administrador seleciona uma
+**conversa existente** e até 15 itens do catálogo. O servidor confere a empresa,
+recalcula preços oficiais e estoque disponível, guarda um instantâneo dos itens
+e cria um rascunho. Não aceita preços arbitrários enviados pelo navegador.
+
+**Revisar** gera uma nova versão, invalida o link anterior e preserva o histórico.
+**Gerar link** devolve um endereço com token aleatório, validade de sete dias e
+aprovação exclusiva daquela proposta. A equipe deve enviar o link por um canal
+autorizado; o Sócio **não o dispara automaticamente**. A pessoa informa o nome e
+confirma os itens e valores. Uma aprovação repetida retorna o mesmo pedido;
+uma proposta aprovada não pode ser substituída. Recusar não cria pedido.
+
+A aprovação cria um pedido `pending_payment`, **não é pagamento, reserva de estoque,
+venda finalizada, comprovante nem confirmação de entrega**. O estoque é validado
+na aprovação, mas não reservado ou abatido pela aceitação. Equipes devem reconferir
+a disponibilidade antes do cumprimento. O sistema não gera links falsos de pagamento.
+
+Opcionalmente, chaves **Stripe `sk_test_`** e `whsec_`, junto de
+`SOCIO_PUBLIC_URL` HTTPS, habilitam checkout de teste para pedidos aprovados.
+O servidor rejeita `sk_live_`, somente aceita sessões `cs_test_`, usa idempotência,
+valida assinatura do webhook em `POST /webhooks/stripe-test`, tipo de evento,
+valor, moeda, ID e `livemode=false`. Pagamento confirmado nesse fluxo registra
+somente `paid_test`: **não há movimentação de dinheiro real nem baixa de estoque**.
+Não há reembolso automático de pagamentos reais ou sandbox.
+
+A futura ativação comercial de cobranças reais exige configuração por empresa,
+conta de pagamentos autorizada, recebedor correto, webhooks verificados, política de
+reembolso, conciliação, testes de ponta a ponta e aprovação explícita. Tampouco
+estão habilitados envio automático de imagens pelo WhatsApp ou reserva de estoque.
+
+### Testes
+`tests/sales-commerce.test.mjs` protege validações de entrada, modo sandbox e HMAC.
+`tests/e2e.test.mjs` executa PostgreSQL real efêmero, catálogo real de teste,
+versão invalidadora, token de cliente, aprovação idempotente e isolamento por tenant.
+Verificar GitHub Actions e healthcheck Railway após cada publicação.
