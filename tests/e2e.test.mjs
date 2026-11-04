@@ -321,6 +321,116 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(duplicateAcrossTenants.status,409,'Two separate tenant users cannot claim one login phone');
 
  const betaCookie=betaLogin.cookie.split(';')[0],betaCsrf=betaLogin.result.csrf;
+ // Phase 4: roles, permissions and session invalidation must be enforced by
+ // the server on each request rather than just hidden UI controls.
+ const initialTeam=await call('/api/team','GET',undefined,betaCookie);
+ assert.equal(initialTeam.status,200);
+ assert.equal(initialTeam.result.length,1);
+ assert.equal(initialTeam.result[0].role,'owner');
+ const noCsrfInvite=await call('/api/team','POST',{
+  name:'Sem CSRF',email:'no-csrf@example.test',role:'agent',password:'SenhaTemporaria2026!'
+ },betaCookie);
+ assert.equal(noCsrfInvite.status,403);
+ const invited=await call('/api/team','POST',{
+  name:'Atendente Teste',email:'agent-phase4@example.test',role:'agent',password:'SenhaAtendente2026!'
+ },betaCookie,betaCsrf);
+ assert.equal(invited.status,201,JSON.stringify(invited.result));
+ const employeeId=invited.result.id;
+ const employeeLogin=await call('/api/login','POST',{email:'agent-phase4@example.test',password:'SenhaAtendente2026!'});
+ assert.equal(employeeLogin.status,200);
+ const employeeCookie=employeeLogin.cookie.split(';')[0],employeeCsrf=employeeLogin.result.csrf;
+ const employeeMe=await call('/api/me','GET',undefined,employeeCookie);
+ assert.equal(employeeMe.status,200);
+ assert(!employeeMe.result.user.permissions.includes('team.promote'));
+ for(const endpoint of ['/api/team','/api/ops/audit','/api/sales','/api/agent','/api/training/auto','/api/training/versions']){
+  const denied=await call(endpoint,'GET',undefined,employeeCookie);
+  assert.equal(denied.status,403,'Attendant must not read '+endpoint);
+ }
+ const employeeCatalog=await call('/api/products','GET',undefined,employeeCookie);
+ assert.equal(employeeCatalog.status,200,'Attendant can read their company catalog');
+ const employeeBlockedCreate=await call('/api/products','POST',{name:'Proibido',priceCents:1},employeeCookie,employeeCsrf);
+ assert.equal(employeeBlockedCreate.status,403);
+ const employeeBlockedSwitch=await call('/api/admin/switch','POST',{tenantId:me.result.tenant.id},employeeCookie,employeeCsrf);
+ assert.equal(employeeBlockedSwitch.status,403,'Company agent cannot switch tenant');
+ const employeeCrossTenantNote=await call('/api/conversations/'+conversationId+'/notes','POST',{text:'Invasão'},employeeCookie,employeeCsrf);
+ assert.equal(employeeCrossTenantNote.status,404);
+
+ const newAdmin=await call('/api/team','POST',{
+  name:'Administrador Teste',email:'admin-phase4@example.test',role:'admin',password:'SenhaAdministrador2026!'
+ },betaCookie,betaCsrf);
+ assert.equal(newAdmin.status,201);
+ const adminTeamUserId=newAdmin.result.id;
+ const subordinateAdmin=await call('/api/login','POST',{email:'admin-phase4@example.test',password:'SenhaAdministrador2026!'});
+ assert.equal(subordinateAdmin.status,200);
+ const subordinateCookie=subordinateAdmin.cookie.split(';')[0],subordinateCsrf=subordinateAdmin.result.csrf;
+ const subordinateAttempt=await call('/api/team','POST',{
+  name:'Promovido indevidamente',email:'unauthorized-admin@example.test',role:'admin',password:'SenhaAdminNaoPermitido2026!'
+ },subordinateCookie,subordinateCsrf);
+ assert.equal(subordinateAttempt.status,422,'Tenant admins must not grant administrator privileges');
+ const subordinateEdit=await call('/api/team/'+employeeId,'PATCH',{role:'admin'},subordinateCookie,subordinateCsrf);
+ assert.equal(subordinateEdit.status,403,'Tenant admins cannot change another member role');
+ const ownerPromote=await call('/api/team/'+employeeId,'PATCH',{role:'admin'},betaCookie,betaCsrf);
+ assert.equal(ownerPromote.status,200);
+ assert.equal(ownerPromote.result.role,'admin');
+ const ownerDemote=await call('/api/team/'+employeeId,'PATCH',{role:'agent'},betaCookie,betaCsrf);
+ assert.equal(ownerDemote.status,200);
+ const ownDemote=await call('/api/team/'+initialTeam.result[0].id,'PATCH',{role:'agent'},betaCookie,betaCsrf);
+ assert.equal(ownDemote.status,403,'Owner cannot demote self');
+ const foreignRoleEdit=await call('/api/team/'+me.result.user.id,'PATCH',{role:'agent'},betaCookie,betaCsrf);
+ assert.equal(foreignRoleEdit.status,404,'Owner cannot change a member of another tenant');
+ const invalidPatch=await call('/api/team/'+employeeId,'PATCH',{platform_owner:true},betaCookie,betaCsrf);
+ assert.equal(invalidPatch.status,422);
+
+ const deactivated=await call('/api/team/'+employeeId,'PATCH',{active:false},betaCookie,betaCsrf);
+ assert.equal(deactivated.status,200);
+ assert.equal(deactivated.result.active,false);
+ const invalidatedSession=await call('/api/me','GET',undefined,employeeCookie);
+ assert.equal(invalidatedSession.status,401,'Deactivating an account invalidates existing sessions');
+ const blockedLogin=await call('/api/login','POST',{email:'agent-phase4@example.test',password:'SenhaAtendente2026!'});
+ assert.equal(blockedLogin.status,401,'Inactive users cannot sign back in');
+ const reactivated=await call('/api/team/'+employeeId,'PATCH',{active:true},betaCookie,betaCsrf);
+ assert.equal(reactivated.status,200);
+ const activeLogin=await call('/api/login','POST',{email:'agent-phase4@example.test',password:'SenhaAtendente2026!'});
+ assert.equal(activeLogin.status,200);
+ const activeCookie=activeLogin.cookie.split(';')[0],activeCsrf=activeLogin.result.csrf;
+ const anotherSession=await call('/api/login','POST',{email:'agent-phase4@example.test',password:'SenhaAtendente2026!'});
+ assert.equal(anotherSession.status,200);
+ const wrongPasswordChange=await call('/api/me/password','POST',{
+  currentPassword:'senha errada',newPassword:'SenhaNova2026!MuitoForte'
+ },activeCookie,activeCsrf);
+ assert.equal(wrongPasswordChange.status,401);
+ const passwordChanged=await call('/api/me/password','POST',{
+  currentPassword:'SenhaAtendente2026!',newPassword:'SenhaNova2026!MuitoForte'
+ },activeCookie,activeCsrf);
+ assert.equal(passwordChanged.status,200);
+ assert.equal(passwordChanged.result.otherSessionsRevoked,true);
+ const otherSessionRevoked=await call('/api/me','GET',undefined,anotherSession.cookie.split(';')[0]);
+ assert.equal(otherSessionRevoked.status,401,'Password rotation invalidates other sessions');
+ assert.equal((await call('/api/me','GET',undefined,activeCookie)).status,200,'Current session survives own password change');
+ assert.equal((await call('/api/login','POST',{email:'agent-phase4@example.test',password:'SenhaAtendente2026!'})).status,401);
+ assert.equal((await call('/api/login','POST',{email:'agent-phase4@example.test',password:'SenhaNova2026!MuitoForte'})).status,200);
+
+ const auditResult=await call('/api/ops/audit?limit=80','GET',undefined,betaCookie);
+ assert.equal(auditResult.status,200);
+ assert(auditResult.result.events.some(x=>x.action==='team.member_updated'));
+ assert(auditResult.result.events.some(x=>x.action==='auth.password_changed'));
+ assert(auditResult.result.events.every(x=>x.actor!=='Atendente Teste'||x.action==='auth.password_changed'));
+ assert.equal((await call('/api/ops/audit?limit=900','GET',undefined,betaCookie)).status,422);
+ const foreignAudit=await call('/api/ops/audit','GET',undefined,adminCookie);
+ assert.equal(foreignAudit.status,200);
+ assert(!foreignAudit.result.events.some(x=>x.action==='auth.password_changed'),'Other tenant must not see member password changes');
+
+ // Composite FKs must block cross-tenant relationships even if an unsafe
+ // future route accidentally supplies a valid foreign UUID.
+ await assert.rejects(
+  db.query("INSERT INTO conversations(id,tenant_id,channel_id,customer_phone) VALUES($1,$2,$3,'5515999000777')",
+   [randomUUID(),foreign.result.id,channelId]),
+  error=>error.code==='23503','Database must reject foreign-tenant channel');
+ await assert.rejects(
+  db.query("INSERT INTO messages(id,tenant_id,conversation_id,direction,body) VALUES($1,$2,$3,'inbound','not allowed')",
+   [randomUUID(),foreign.result.id,conversationId]),
+  error=>error.code==='23503','Database must reject foreign-tenant conversation messages');
+
  const unauthorizedCnpj=await call('/api/admin/cnpj?number=11222333000181','GET',undefined,betaCookie);
  assert.equal(unauthorizedCnpj.status,403,'CNPJ prefill is restricted to the master account');
  const betaReadiness=await call('/api/ops/readiness','GET',undefined,betaCookie);
