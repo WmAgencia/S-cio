@@ -249,67 +249,86 @@ async function overview(){
 }
 function bindNavWithin(){view.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>changeView(b.dataset.go)));}
 async function channels(){
- const [data,waConfig,linked]=await Promise.all([api('/api/channels'),api('/api/waakg/config'),api('/api/waakg/channels')]);
- view.innerHTML=heading('CANAIS DE ATENDIMENTO','Seus WhatsApps.','Cada número pode atender uma equipe diferente. A conexão deve ser autorizada no provedor.')+
- '<div class="two-pane"><div>'+panel('Números cadastrados',data.length+' canal(is) no seu espaço.',
- data.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>Canal</th><th>Conexão</th></tr></thead><tbody>'+data.map(c=>'<tr><td><strong>'+e(c.label)+'</strong><div class="table-detail pill-num">'+e(c.phone)+'</div></td><td>'+badge(c.status==='connected'?'Conectado':'Não conectado',c.status==='connected'?'green':'yellow')+'</td></tr>').join('')+'</tbody></table></div>':empty('◉','Nenhum número ainda','Cadastre o primeiro WhatsApp comercial da empresa.'))+
- '</div><div class="card card-pad"><div class="section-title">Adicionar WhatsApp</div><form id="channelForm" class="form-stack"><label>Nome para identificar<input name="label" required maxlength="90" placeholder="Ex.: Vendas • WhatsApp 1"></label><label>Número com DDD<input name="phone" required placeholder="5515999999999" inputmode="tel"></label><label>ID do número na WhatsApp Business Platform (validado pela Consecom)<input name="externalPhoneId" placeholder="Phone number ID da Meta"></label><div class="info-strip"><strong>Conexão segura</strong>Cadastrar o número não ativa respostas automáticas. Para receber mensagens reais será necessário concluir a configuração do webhook e da conta Meta.</div><button class="btn primary" type="submit">Cadastrar canal →</button></form></div></div>';
- if(!state.me.user.platformOwner) $('#channelForm').elements.externalPhoneId.disabled=true;
- $('#channelForm').addEventListener('submit',async ev=>{ev.preventDefault();const f=ev.currentTarget;const data=formValues(f);await action(async()=>{await api('/api/channels','POST',data);toast('Canal cadastrado. Ainda não conectado.');await channels();});});
- view.insertAdjacentHTML('beforeend',
-  '<div class="card card-pad section-gap"><div class="section-title">Conexão de WhatsApps por QR Code</div>'+
-  '<p class="form-note">Cada empresa conecta seus números por QR Code. O gateway exclusivo permanece em modo leitura: não envia nem responde mensagens.</p>'+
-  '<p class="form-note">'+(waConfig.configured?'Gateway configurado no servidor.':'Gateway do Sócio ainda não configurado pela Consecom.')+'</p>'+
-  (linked.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>WhatsApp</th><th>Controles</th></tr></thead><tbody>'+
-    linked.map(c=>'<tr><td><strong>'+e(c.label)+'</strong><div class="table-detail">'+e(c.phone?.startsWith('pending-')?'Aguardando QR Code':c.phone)+'</div></td>'+
-    '<td class="row-actions"><button class="btn sm soft" data-wa-qr="'+e(c.id)+'">QR</button>'+
-    '<button class="btn sm soft" data-wa-check="'+e(c.id)+'">Verificar</button>'+
-    '<button class="btn sm soft" data-wa-control="start" data-wa-id="'+e(c.id)+'">Reiniciar</button>'+
-    '<button class="btn sm soft" data-wa-control="stop" data-wa-id="'+e(c.id)+'">Pausar</button>'+
-    '<button class="btn sm soft" data-wa-control="logout" data-wa-id="'+e(c.id)+'">Desconectar</button>'+
-    '<span class="form-note" data-wa-state="'+e(c.id)+'"></span></td></tr>').join('')+'</tbody></table></div>':
-    '<p class="form-note">Nenhuma sessão WA-AKG vinculada a esta empresa.</p>')+
-  (waConfig.configured?'<form id="waakgSelfConnect" class="form-stack section-gap">'+
-   '<div class="section-title">Conectar novo número</div>'+
-   '<label>Nome do WhatsApp<input name="label" required maxlength="90" placeholder="Ex.: Loja Centro"></label>'+
-   '<p class="form-note">Ao criar, um QR Code aparecerá. Abra WhatsApp > Dispositivos conectados > Conectar dispositivo. A IA permanece desativada para envios.</p>'+
-   '<button class="btn primary">Gerar QR Code →</button></form>':'')+
-  (state.me.user.platformOwner&&waConfig.configured?
-    '<form id="waakgLinkForm" class="form-stack section-gap"><div class="section-title">Vincular sessão existente — Consecom</div>'+
-    '<label>Nome comercial<input name="label" required maxlength="90" placeholder="Vendas 1"></label>'+
-    '<label>Número conectado com DDI e DDD<input name="phone" required placeholder="5515999999999"></label>'+
-    '<label>ID da sessão WA-AKG já conectada<input name="sessionId" required placeholder="Identificador da sessão"></label>'+
-    '<button class="btn primary">Verificar número e vincular</button></form>':
-    '<p class="form-note">Conexão por QR está disponível para proprietários e administradores quando o gateway exclusivo estiver online.</p>')+
-  '<div id="waQrPanel" class="card card-pad section-gap hidden" style="max-width:430px"><div class="section-title">Conectar WhatsApp</div>'+
-   '<img id="waQrImage" width="280" height="280" alt="QR Code para conectar WhatsApp" style="display:none;max-width:100%;background:white;margin:16px auto">'+
-   '<p id="waQrHelp" class="form-note">Preparando QR Code...</p>'+
-   '<button class="btn soft" type="button" id="waQrClose">Fechar QR</button></div>'+
-  '</div>');
+ const [data,waConfig,linked]=await Promise.all([
+  api('/api/channels'),api('/api/waakg/config'),api('/api/waakg/channels')
+ ]);
+ const canManage=state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role);
+ const connected=linked.filter(c=>c.status==='connected').length;
+ const pending=linked.length-connected;
+ const legacy=data.filter(c=>!linked.some(x=>x.id===c.id));
+ const connectedList=linked.map(c=>{
+  const ok=c.status==='connected';
+  const phone=c.phone?.startsWith('pending-')?'Aguardando leitura do QR Code':c.phone;
+  return '<div class="wa-number-row"><div class="wa-number-icon">'+(ok?'✓':'◌')+'</div>'+
+   '<div class="wa-number-info"><strong>'+e(c.label)+'</strong><small>'+e(phone)+'</small></div>'+
+   '<span class="badge '+(ok?'green':'yellow')+'">'+(ok?'Conectado':'Aguardando')+'</span>'+
+   '<div class="wa-number-actions">'+
+   '<button class="btn sm soft" type="button" data-wa-check="'+e(c.id)+'">Verificar</button>'+
+   (canManage?
+    '<button class="btn sm soft" type="button" data-wa-qr="'+e(c.id)+'">'+(ok?'QR':'Ver QR')+'</button>'+
+    '<button class="btn sm ghost" type="button" data-wa-control="start" data-wa-id="'+e(c.id)+'">Reconectar</button>'+
+    '<button class="btn sm ghost" type="button" data-wa-control="logout" data-wa-id="'+e(c.id)+'">Desconectar</button>':'')+
+   '</div><span class="wa-number-feedback" data-wa-state="'+e(c.id)+'" aria-live="polite"></span></div>';
+ }).join('');
+ view.innerHTML=heading('CANAIS DE ATENDIMENTO','Conecte seus WhatsApps.','Um QR Code por número, com acesso exclusivo aos dados da sua empresa.')+
+ '<div class="wa-status-strip"><div><span class="wa-status-dot"></span><strong>'+e(connected)+'</strong><small>Conectados</small></div>'+
+ '<div><span class="wa-status-dot amber"></span><strong>'+e(pending)+'</strong><small>Aguardando QR</small></div>'+
+ '<div><span class="wa-status-dot gray"></span><strong>'+e(linked.length)+'</strong><small>Sessões vinculadas</small></div></div>'+
+ '<div class="wa-layout"><section class="card card-pad wa-setup">'+
+ '<div class="wa-setup-heading"><span class="wa-setup-icon">▣</span><div><h2>Conectar via QR Code</h2>'+
+ '<p>Use o WhatsApp do celular para autorizar esta conexão.</p></div></div>'+
+ '<div class="wa-steps"><div><b>1</b><span>Abra <strong>WhatsApp</strong> no celular.</span></div>'+
+ '<div><b>2</b><span>Entre em <strong>Dispositivos conectados</strong> e escolha <strong>Conectar dispositivo</strong>.</span></div>'+
+ '<div><b>3</b><span>Aponte a câmera para o QR Code exibido no Sócio.</span></div></div>'+
+ (canManage&&waConfig.configured?
+ '<form id="waakgSelfConnect" class="form-stack wa-connect-form">'+
+ '<label>Nome para identificar este WhatsApp<input name="label" required maxlength="90" placeholder="Ex.: Atendimento principal" autocomplete="off"></label>'+
+ '<button class="btn primary wide" type="submit">Gerar QR Code <span>↗</span></button></form>':
+ '<div class="info-strip">'+(!waConfig.configured?
+ 'O serviço de conexão do Sócio está indisponível no momento.':'Somente proprietários e administradores podem conectar novos números.')+'</div>')+
+ '<div id="waQrPanel" class="wa-qr-panel hidden" aria-live="polite"><h3>Escaneie para conectar</h3>'+
+ '<img id="waQrImage" class="wa-qr-image" width="270" height="270" alt="QR Code de conexão WhatsApp" style="display:none">'+
+ '<p id="waQrHelp" class="form-note">Preparando QR Code...</p>'+
+ '<button class="btn soft" type="button" id="waQrClose">Fechar QR Code</button></div>'+
+ '</section><section class="card card-pad wa-list"><div class="wa-list-head"><div><h2>Seus números</h2>'+
+ '<p>Gerencie os WhatsApps já vinculados ao espaço.</p></div><span class="badge gray">'+e(linked.length)+' total</span></div>'+
+ '<div class="wa-number-list">'+(connectedList||empty('▣','Nenhum WhatsApp conectado','Gere o primeiro QR Code ao lado para começar.'))+'</div>'+
+ (legacy.length?'<details class="wa-legacy"><summary>'+e(legacy.length)+' cadastro(s) antigos sem sessão QR</summary>'+
+ '<p class="form-note">Estes cadastros não significam uma conexão ativa. Para autorizar um WhatsApp, use o QR Code.</p>'+
+ '<div>'+legacy.map(c=>'<div class="wa-legacy-item">'+e(c.label)+' · '+e(c.phone)+'</div>').join('')+'</div></details>':'')+
+ '<p class="form-note wa-readonly">A conexão por QR permite leitura e análise do histórico disponível. O envio automático de mensagens permanece desativado.</p>'+
+ '</section></div>';
  $('#waakgSelfConnect')?.addEventListener('submit',async ev=>{
-  ev.preventDefault();const label=val(ev.currentTarget,'label');
-  await action(async()=>{const channel=await api('/api/waakg/channels/connect','POST',{label});
-   toast('WhatsApp preparado.');await channels();await showWaQr(channel.id);});
- });
- $('#waQrClose')?.addEventListener('click',()=>{clearTimeout(waQrTimer);$('#waQrPanel').classList.add('hidden');});
- view.querySelectorAll('[data-wa-qr]').forEach(button=>button.addEventListener('click',()=>showWaQr(button.dataset.waQr)));
- view.querySelectorAll('[data-wa-control]').forEach(button=>button.addEventListener('click',async()=>{
-  const id=button.dataset.waId,control=button.dataset.waControl;
-  if(control==='logout'&&!confirm('Desconectar este WhatsApp e apagar a autenticação da sessão no gateway?'))return;
-  await action(async()=>{await api('/api/waakg/channels/'+id+'/'+control,'POST',{});
-   toast(control==='logout'?'WhatsApp desconectado.':'Comando enviado ao gateway.');
+  ev.preventDefault();
+  const label=val(ev.currentTarget,'label');
+  await action(async()=>{
+   const channel=await api('/api/waakg/channels/connect','POST',{label});
+   toast('Sessão criada. Escaneie o QR para conectar.');
    await channels();
-   if(control==='start')await showWaQr(id);
+   await showWaQr(channel.id);
   });
- }));
- $('#waakgLinkForm')?.addEventListener('submit',async ev=>{
-  ev.preventDefault();const data=formValues(ev.currentTarget);
-  await action(async()=>{await api('/api/waakg/channels/link','POST',data);toast('Sessão validada e vinculada.');await channels();});
  });
+ $('#waQrClose')?.addEventListener('click',()=>{
+  clearTimeout(waQrTimer);$('#waQrPanel').classList.add('hidden');
+ });
+ view.querySelectorAll('[data-wa-qr]').forEach(button=>button.addEventListener('click',()=>showWaQr(button.dataset.waQr)));
  view.querySelectorAll('[data-wa-check]').forEach(button=>button.addEventListener('click',async()=>{
-  const id=button.dataset.waCheck,stateEl=view.querySelector('[data-wa-state="'+id+'"]');
-  try{const remote=await api('/api/waakg/channels/'+id+'/status');stateEl.textContent=remote.connected?'Conectado e verificado':'Desconectado ou número divergente';}
-  catch(err){stateEl.textContent=errMsg(err);}
+  const id=button.dataset.waCheck;
+  const feedback=view.querySelector('[data-wa-state="'+id+'"]');
+  try{
+   const status=await api('/api/waakg/channels/'+id+'/status');
+   feedback.textContent=status.connected?'Conexão verificada':'Aguardando conexão ou número divergente';
+  }catch(err){feedback.textContent=errMsg(err);}
+ }));
+ view.querySelectorAll('[data-wa-control]').forEach(button=>button.addEventListener('click',async()=>{
+  const id=button.dataset.waId,command=button.dataset.waControl;
+  if(command==='logout'&&!confirm('Desconectar este WhatsApp e apagar a sessão autorizada?'))return;
+  await action(async()=>{
+   await api('/api/waakg/channels/'+id+'/'+command,'POST',{});
+   toast(command==='logout'?'WhatsApp desconectado.':'Solicitação enviada ao gateway.');
+   await channels();
+   if(command==='start')await showWaQr(id);
+  });
  }));
 }
 async function showWaQr(channelId){
@@ -323,8 +342,10 @@ async function showWaQr(channelId){
   try{
    const status=await api('/api/waakg/channels/'+channelId+'/status');
    if(status.connected){
-    clearTimeout(waQrTimer);help.textContent='Conectado e número verificado. Nenhuma resposta automática foi ativada.';
-    image.style.display='none';toast('WhatsApp conectado com sucesso!');
+    clearTimeout(waQrTimer);
+    image.style.display='none';
+    toast('WhatsApp conectado e número verificado!');
+    await channels();
     return;
    }
    const qr=await api('/api/waakg/channels/'+channelId+'/qr');
