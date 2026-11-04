@@ -9,7 +9,7 @@ export const RECOMMENDED_NEW_FEATURES=Object.freeze({
 });
 const forbidden=message=>Object.assign(new Error(message),{status:422});
 export function normalizeTenantFeatures(input,{fallback=DEFAULT_TENANT_FEATURES}={}){
- if(input===undefined||input===null)return {...fallback};
+ if(input===undefined||input===null){if(fallback===null)throw forbidden('Selecione os módulos da empresa.');return {...fallback};}
  if(typeof input!=='object'||Array.isArray(input)||
     Object.keys(input).some(k=>!TENANT_FEATURE_KEYS.includes(k))||
     TENANT_FEATURE_KEYS.some(k=>typeof input[k]!=='boolean'))
