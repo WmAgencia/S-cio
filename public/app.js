@@ -637,7 +637,7 @@ async function training(){
    '<span class="eyebrow">APRENDIZADO E ANÁLISES</span>'+
    '<div class="socio-train-emblem">✳</div>'+
    '<h2>Seu Sócio aprende com suas conversas.</h2>'+
-   '<p>Com um clique, analisamos as conversas disponíveis nos WhatsApps conectados da empresa e criamos um Markdown de conhecimento para sua aprovação.</p>'+
+   '<p>Com um clique, analisamos amostras das conversas disponíveis nos WhatsApps conectados da empresa e criamos um Markdown para sua aprovação. O histórico é limitado pelo gateway.</p>'+
    '<div class="socio-train-accounts">'+connected.map(c=>
     '<span class="socio-train-account"><span class="socio-green-dot"></span>'+e(c.label||c.phone||'WhatsApp')+'</span>').join('')+
     (!connected.length?'<span>Conecte seu WhatsApp para começar</span>':'')+'</div>'+
@@ -645,7 +645,7 @@ async function training(){
     (!connected.length||ongoing||!canManage?'disabled':'')+'>Treinar</button>'+
    '<div class="socio-train-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+percent+'" aria-label="Progresso da análise">'+
     '<div class="progress-track"><div class="progress-fill" style="width:'+percent+'%"></div></div></div>'+
-   '<strong class="socio-train-percent">'+percentText+' analisado</strong>'+
+   '<strong class="socio-train-percent">'+percentText+' da amostra processada</strong>'+
    '<p class="form-note" role="status">'+e(status)+'</p>'+
    (run?.messagesImported?'<p class="form-note">'+e(run.messagesImported)+' mensagens de texto novas importadas neste treinamento.</p>':'')+
    (run?.channels?'<p class="form-note">'+e(run.scanned||0)+' de '+e(run.channels)+' WhatsApp(s) sincronizado(s) · '+
