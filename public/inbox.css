@@ -30,10 +30,10 @@
 .wa-inbox-search input{flex:1;width:100%;border:0!important;outline:0!important;background:transparent!important;
  box-shadow:none!important;font-size:11px;color:#f7ebdf;padding:5px 0}
 .wa-inbox-search input::placeholder{color:#aa8c7a}
-.wa-filters{display:flex;gap:6px;flex:0 0 auto;align-items:center;overflow-x:auto;padding:0 14px 14px;
- scrollbar-width:thin;scrollbar-color:#6f452b transparent}
-.wa-filters button{white-space:nowrap;border-radius:17px;border:1px solid #51372a;background:#312017;color:#c0a58f;
- font-size:10px;font-weight:600;padding:7px 11px;min-height:30px}
+.wa-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;flex:0 0 auto;
+ align-items:stretch;overflow:visible;padding:0 14px 14px}
+.wa-filters button{white-space:normal;line-height:1.2;text-align:center;border-radius:17px;border:1px solid #51372a;background:#312017;color:#c0a58f;
+ font-size:10px;font-weight:600;padding:8px 6px;min-height:34px}
 .wa-filters button.active{background:#ea7b2d;color:#fff;border-color:#ff9b58}
 .wa-filters button:hover:not(.active){background:#4a3020;color:#fff}
 .wa-inbox-items{overflow:auto;flex:1;min-height:0;overscroll-behavior:contain;scrollbar-color:#68452e transparent;scrollbar-width:thin}
