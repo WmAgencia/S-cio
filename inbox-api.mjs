@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {gatewayRead,getSessionStatus,listAvailableChats,privateJid} from './waakg-adapter.mjs';
+import {outboundEnabled,canAutoReply,deliverToConversation} from './socio-outbound.mjs';
 // Tenant-scoped inbox interaction endpoints. No WhatsApp transmission is performed
 // here: the dedicated Sócio WA-AKG gateway is intentionally read-only.
 const uuid=/^[a-f\d]{8}-[a-f\d]{4}-[1-8][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
@@ -46,6 +47,7 @@ export function validateUiPatch(data){
  if(!Object.keys(clean).length)throw new Error('PATCH_INVALID');
  return clean;
 }
+export const inboxRuntimeCapabilities=()=>({...inboxCapabilities,whatsappSend:outboundEnabled(),aiAutoReply:canAutoReply(),readOnlyGateway:!outboundEnabled()});
 export function validReaction(value){return value===null||reactions.has(value);}
 const noteValid=text=>typeof text==='string'&&text.trim().length>0&&text.length<=3000;
 const isUuid=value=>typeof value==='string'&&uuid.test(value);
@@ -75,7 +77,7 @@ export function normalizeInboxRemoteText(rows,jid){
 
 export async function handleInboxApi({pathname,method,req,res,a,query,body,json,id,audit,pool}){
  const tenant=a.active_tenant_id;
- if(pathname==='/api/inbox/capabilities'&&method==='GET')return json(res,200,inboxCapabilities);
+ if(pathname==='/api/inbox/capabilities'&&method==='GET')return json(res,200,inboxRuntimeCapabilities());
 
  if(pathname==='/api/inbox/sync'&&method==='POST'){
   if(!['owner','admin'].includes(a.role)&&!a.platform_owner)
@@ -181,9 +183,9 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
     AND ($3<>'resolved' OR c.status='resolved')
     ORDER BY COALESCE(st.pinned,false) DESC,c.last_message_at DESC,c.id
     LIMIT 150`,[tenant,search,filter]);
-  return json(res,200,{conversations:result.rows,capabilities:inboxCapabilities,limitedTo:150});
+  return json(res,200,{conversations:result.rows,capabilities:inboxRuntimeCapabilities(),limitedTo:150});
  }
- const match=pathname.match(/^\/api\/conversations\/([a-f\d-]{36})\/(ui|history|notes|forward-internal|messages\/([a-f\d-]{36})\/ui)$/i);
+ const match=pathname.match(/^\/api\/conversations\/([a-f\d-]{36})\/(ui|history|notes|send|forward-internal|messages\/([a-f\d-]{36})\/ui)$/i);
  if(!match)return false;
  const conversationId=match[1],route=match[2],messageId=match[3];
  if(!isUuid(conversationId)||messageId&&!isUuid(messageId))throw err(404,'Conversa não encontrada.');
@@ -210,11 +212,12 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
     FROM conversation_ui_state WHERE tenant_id=$1 AND conversation_id=$2`,[tenant,conversationId]);
   return json(res,200,{conversation,preferences:pref.rows[0]||{},
    messages:selected,hasMore:more,
-   nextCursor:more&&selected.length?selected[0].created_at:null,capabilities:inboxCapabilities});
+   nextCursor:more&&selected.length?selected[0].created_at:null,capabilities:inboxRuntimeCapabilities()});
  }
  if(method==='PATCH'&&route==='ui'){
   const {data}=await body(req);
   let clean;try{clean=validateUiPatch(data);}catch{throw err(422,'Configuração de conversa inválida.');}
+  if(Object.hasOwn(clean,'handling_mode'))clean.ai_activated_at=clean.handling_mode==='ai_assist'?new Date():null;
   if(Object.hasOwn(clean,'assigned_user_id')){
    if(!['owner','admin'].includes(a.role)&&!a.platform_owner)throw err(403,'Sem permissão para atribuir conversas.');
    if(clean.assigned_user_id!==null){
@@ -230,6 +233,18 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
   if(['handling_mode','assigned_user_id','labels'].some(key=>Object.hasOwn(clean,key)))
    await audit(a,'inbox.conversation_preferences',{conversationId,fields:Object.keys(clean).filter(x=>x!=='draft')});
   return json(res,200,{ok:true,preferences:updated.rows[0]});
+ }
+ if(method==='POST'&&route==='send'){
+  if(!outboundEnabled())throw err(503,'Envio de mensagens indisponível até a validação do WhatsApp.');
+  const {data}=await body(req);
+  if(typeof data?.text!=='string'||typeof data?.clientRequestId!=='string')
+   throw err(422,'Mensagem ou identificador ausente.');
+  const sent=await deliverToConversation(pool,{
+   tenantId:tenant,conversationId,userId:a.user_id,mode:'human',
+   text:data.text,clientRequestId:data.clientRequestId,replyToId:data.replyToMessageId||null
+  });
+  if(sent.sent&&!sent.reused)await audit(a,'inbox.whatsapp.text_sent',{conversationId,outboxId:sent.id});
+  return json(res,sent.sent?201:202,{...sent,channel:'whatsapp'});
  }
  if(method==='POST'&&route==='notes'){
   const {data}=await body(req);
