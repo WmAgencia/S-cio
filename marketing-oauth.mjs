@@ -217,7 +217,7 @@ const accountTools={
  google:['mcp_google_ads_list_customers','list_customers','mcp_google_ads_list_accessible_customers','list_accessible_customers','mcp_google_ads_get_accounts','get_accounts','mcp_google_ads_list_accounts','list_accounts']
 };
 export function decodeMcpReply(raw,id){
- if(typeof raw!=='string'||raw.length>500000)throw bad(503,'Resposta do provedor fora do limite.');
+ if(typeof raw!=='string'||raw.length>4000000)throw bad(503,'Resposta do provedor fora do limite.');
  const lines=raw.split('\n').filter(x=>x.startsWith('data:')).map(x=>x.slice(5).trim());
  for(const line of lines.length?lines:[raw]){
   try{const parsed=JSON.parse(line);if(parsed.id===id){
@@ -273,7 +273,7 @@ export async function testPipeboardConnection(pool,identity,provider,{env=proces
  await rpc('notifications/initialized',undefined,true);
  const discovery=await rpc('tools/list',{});
  const tool=(discovery.tools||[]).find(x=>accountTools[provider].includes(x.name));
- if(!tool)throw bad(503,'O provedor não oferece a consulta de contas esperada. A autorização permanece salva.');
+ if(!tool)throw bad(503,'Consulta de contas disponível no provedor: '+(discovery.tools||[]).filter(x=>/account|customer/i.test(x.name)).map(x=>x.name).slice(0,12).join(', '));
  const args=provider==='meta'?{user_id:'me',limit:200}:{};
  const required=tool.inputSchema?.required||[];
  if(required.some(x=>!Object.hasOwn(args,x)))throw bad(503,'A consulta de contas exige uma configuração adicional no provedor.');
