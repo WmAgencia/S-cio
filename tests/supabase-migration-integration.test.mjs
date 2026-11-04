@@ -73,4 +73,31 @@ test('28-table migration: read-only preflight, exact copies, fingerprints, and r
   assert.equal(Number((await validate.query('SELECT count(*) AS n FROM socio_app.sales_payment_events')).rows[0].n),1);
  }finally{await validate.end();}
  await assert.rejects(migrate(options),/Target not empty/,'Second copy must not overwrite already migrated records');
+ // Recreate only the *disposable target* to simulate a downstream constraint
+ // failure after prior tables have been inserted in the same transaction.
+ const broken=new Client({connectionString:targetUrl.href});
+ await broken.connect();
+ try{
+  await broken.query('DROP SCHEMA socio_app CASCADE');
+  await broken.query('CREATE SCHEMA socio_app');
+  await broken.query('SET search_path TO socio_app,public');
+  await broken.query(schema);
+  await broken.query('ALTER TABLE socio_app.products ADD CONSTRAINT test_block_product_value CHECK(price_cents<100)');
+ }finally{await broken.end();}
+ await assert.rejects(migrate({...options,apply:true}),/check constraint/);
+ const checked=new Client({connectionString:targetUrl.href});
+ await checked.connect();
+ try{
+  const tenants=await checked.query('SELECT count(*)::int AS n FROM socio_app.tenants');
+  assert.equal(tenants.rows[0].n,0,'Migration failure must atomically roll back already copied tenants');
+  const orders=await checked.query('SELECT count(*)::int AS n FROM socio_app.sales_orders');
+  assert.equal(orders.rows[0].n,0,'Migration failure cannot expose partial orders');
+ }finally{await checked.end();}
+ const stillSource=new Client({connectionString:sourceUrl.href});
+ await stillSource.connect();
+ try{
+  const tenants=await stillSource.query('SELECT count(*)::int AS n FROM tenants');
+  assert.equal(tenants.rows[0].n,2,'Failed migration must not mutate the source');
+ }finally{await stillSource.end();}
+
 });
