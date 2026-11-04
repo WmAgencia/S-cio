@@ -2,7 +2,7 @@
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training'};
-const titles={overview:'Visão geral',inbox:'WhatsApp',instagram:'Instagram',marketing:'Anúncios e métricas',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas e orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
+const titles={overview:'Visão geral',inbox:'WhatsApp',marketing:'Anúncios e métricas',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas e orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -58,7 +58,7 @@ async function boot(){
    $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
    $('#teamNav')?.classList.toggle('hidden',!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner);
    const access=new Set(me.user.permissions||[]);
-   for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['instagram','channels.manage'],['marketing','marketing.read']]){
+   for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['marketing','marketing.read']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
    const marketingStatus=typeof location==='object'?new URL(location.href).searchParams.get('marketing'):null;
@@ -66,18 +66,10 @@ async function boot(){
     state.view='marketing';
     if(typeof history==='object')history.replaceState(null,'',location.pathname);
    }
-   const instagramStatus=typeof location==='object'?new URL(location.href).searchParams.get('instagram'):null;
-   if(['connected','failed','return'].includes(instagramStatus)){
-    state.view='instagram';
-    if(typeof history==='object')history.replaceState(null,'',location.pathname);
-   }
    await changeView(state.view);
    if(marketingStatus==='authorized')toast('Login Pipeboard autorizado. Confira o acesso às contas escolhidas.');
    if(marketingStatus==='failed')toast('Não foi possível concluir autorização. Confira a conta e tente novamente.',true);
    if(marketingStatus==='cancelled')toast('Autorização cancelada; nenhuma conta foi alterada.');
-   if(instagramStatus==='return')toast('Verifique se o Instagram foi conectado à sua empresa.');
-   if(instagramStatus==='connected')toast('Instagram autorizado. Confirme a conexão nesta guia.');
-   if(instagramStatus==='failed')toast('A Meta não concluiu a autorização. Confira as permissões e tente novamente.',true);
   }catch(error){state.me=null;state.csrf='';setupAuth(bootstrap.initialized);}
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
@@ -91,7 +83,7 @@ async function changeView(next){
  const access=new Set(state.me?.user?.permissions||[]);
  if(next==='training'&&!access.has('training.manage'))next='overview';
  if(next==='sales'&&!access.has('sales.read'))next='overview';
- if(next==='instagram'&&!access.has('channels.manage'))next='overview';
+ if(next==='instagram')next='marketing';
  if(next==='marketing'&&!access.has('marketing.read'))next='overview';
  state.view=next;
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
@@ -104,7 +96,6 @@ async function changeView(next){
   if(next==='sales')await window.SocioSales.render({api,e,toast,view});
   if(next==='training')await (state.aiTab==='agent'?agent():training());
   if(next==='inbox')await inbox();
-  if(next==='instagram')await instagram();
   if(next==='marketing')await marketing();
   if(next==='team')await team();
   if(next==='admin')await admin();
@@ -393,48 +384,6 @@ async function channels(){
   });
  }));
 }
-async function instagram(){
- const [info,account]=await Promise.all([api('/api/marketing'),api('/api/instagram/hosted/status')]);
- const lab=info.instagramLab||{installed:false,reachable:false};
- view.innerHTML=heading('CANAIS','Instagram.',
-  'Um clique para autorizar a sua conta com segurança, sem entregar sua senha ao Sócio.')+
-  '<section class="card" style="padding:24px;max-width:860px">'+
-   '<h2>Conectar conta do Instagram</h2>'+
-   '<p>'+e(account.linked?'Conta do Instagram autorizada e vinculada à sua empresa.':
-    account.configured?'Conecte a conta profissional pelo login oficial, na página segura do parceiro.':
-    'A conexão por login oficial está sendo preparada com um parceiro autorizado para empresas.')+'</p>'+
-   (account.linked?
-    '<button type="button" class="btn soft" id="disconnectHostedInstagram">Desconectar Instagram</button>':
-    '<button type="button" class="btn primary" id="connectHostedInstagram" '+(account.configured?'':'disabled')+
-    '>Conectar Instagram</button>')+
-   (account.configured?
-    '<p class="form-note">Você será direcionado à autorização segura do Instagram e retornará ao Sócio.</p>':
-    '<p class="form-note">Nenhum login pode ser iniciado até a agência habilitar a integração hospedada.'+
-    ' Não é necessário criar uma conta de desenvolvedor Meta para cada cliente.</p>')+
-  '</section>'+
-  '<section class="card" style="padding:20px;max-width:860px;margin-top:18px">'+
-   '<h3>Instagram profissional — laboratório técnico isolado</h3>'+
-   '<p class="form-note">aiograpi-rest: '+e(lab.reachable?'serviço privado online':
-    lab.installed?'serviço indisponível':'não instalado')+'. '+
-    'Esta API não oficial não oferece autorização OAuth da Meta e não acessa nenhuma conta real.</p>'+
-  '</section>';
- $('#connectHostedInstagram')?.addEventListener('click',()=>action(async()=>{
-  const response=await api('/api/instagram/hosted/connect','POST',{});
-  const url=new URL(response.authorizationUrl);
-  if(url.protocol!=='https:'||url.hostname!=='profile.ayrshare.com')
-   throw Error('Destino de autorização Instagram não autorizado.');
-  window.location.assign(url.toString());
- }));
- $('#disconnectHostedInstagram')?.addEventListener('click',()=>{
-  if(!confirm('Desvincular o Instagram desta empresa?'))return;
-  void action(async()=>{
-   await api('/api/instagram/hosted/disconnect','POST',{});
-   toast('Instagram desconectado.');
-   await instagram();
-  });
- });
-}
-
 async function marketing(){
  const [data,auth]=await Promise.all([api('/api/marketing'),api('/api/marketing/oauth')]);
  const grants=auth.grants||[],connections=data.connections||[],reports=data.reports||[];
@@ -454,7 +403,8 @@ async function marketing(){
     'Ainda não autorizado no Sócio.')+'</p>'+
    '<button type="button" class="btn primary" data-marketing-oauth="'+key+'">'+
     (valid?'Reconectar '+e(label):'Conectar '+e(label))+'</button> '+
-   (valid?'<button type="button" class="btn soft" data-marketing-oauth-revoke="'+key+'">Desconectar</button>':'')+
+   (valid?'<button type="button" class="btn soft" data-marketing-test="'+key+'">Testar conexão</button> <button type="button" class="btn soft" data-marketing-oauth-revoke="'+key+'">Desconectar</button>':'')+
+   '<div data-marketing-result="'+key+'" role="status" aria-live="polite"></div>'+
    '<p class="form-note">Login em janela segura, sem senha ou token colado no Sócio. '+
     'Após autorizar, selecione as contas em '+
     '<a href="https://pipeboard.co/connections" rel="noopener noreferrer" target="_blank">Gerenciar contas no Pipeboard</a>.'+
@@ -484,6 +434,15 @@ async function marketing(){
   if(target.protocol!=='https:'||!(/(^|\.)pipeboard\.co$/.test(target.hostname)))
    throw Error('O destino da autorização não é confiável.');
   window.location.assign(target.toString());
+ })));
+ view.querySelectorAll('[data-marketing-test]').forEach(btn=>btn.addEventListener('click',()=>action(async()=>{
+  const target=view.querySelector('[data-marketing-result="'+btn.dataset.marketingTest+'"]');
+  btn.disabled=true;target.textContent='Verificando acesso às contas...';
+  try{
+   const result=await api('/api/marketing/oauth/'+btn.dataset.marketingTest+'/test','POST',{});
+   target.textContent=result.message;
+   if(result.accounts?.length)target.innerHTML='<p>'+e(result.message)+'</p><ul>'+result.accounts.map(x=>'<li>'+e(x.name)+' · '+e(x.id)+'</li>').join('')+'</ul>';
+  }catch(error){target.textContent=errMsg(error);}finally{btn.disabled=false;}
  })));
  view.querySelectorAll('[data-marketing-oauth-revoke]').forEach(btn=>btn.addEventListener('click',()=>{
   if(!confirm('Revogar a autorização desta plataforma no Sócio?'))return;
