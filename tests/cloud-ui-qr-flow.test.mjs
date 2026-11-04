@@ -1,0 +1,41 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const source=name=>readFileSync(new URL('../public/'+name,import.meta.url),'utf8');
+test('Sócio clean layout uses pale lavender, white canvas and purple accents',()=>{
+ const css=source('cloud-theme.css'),html=source('index.html');
+ assert.match(html,/href="\/cloud-theme\.css"/);
+ assert.match(css,/--bg:#e9e6f1/);
+ assert.match(css,/--surface:#fff/);
+ assert.match(css,/--purple:#806bd2/);
+ assert.match(css,/\.lucid-dashboard/);
+ assert.match(css,/\.lucid-body-grid/);
+ assert.match(css,/@media\(max-width:780px\)/);
+ assert.match(css,/\.auth-panel\{background:#fff/);
+});
+test('IA uses one sidebar entry with two functional tabs, preserving backend functions',()=>{
+ const html=source('index.html'),js=source('app.js');
+ assert.match(html,/data-view="training"[^>]*>[^<]*<span[^>]*>[^<]*<\/span> Inteligência Artificial<\/button>/);
+ assert.doesNotMatch(html,/data-view="agent"/);
+ assert.match(js,/data-ai-tab="training"/);
+ assert.match(js,/data-ai-tab="agent"/);
+ assert.match(js,/function mountAiGuideTabs\(/);
+ assert.match(js,/mountAiGuideTabs\(\);/);
+ assert.match(js,/state\.aiTab==='agent'\?agent\(\):training\(\)/);
+ assert.match(js,/if\(next==='agent'\)/);
+ assert.match(js,/api\('\/api\/training\/jobs'/);
+ assert.match(js,/api\('\/api\/simulate'/);
+});
+test('WhatsApp onboarding is QR-first, with real status and no manual Meta ID form',()=>{
+ const js=source('app.js');
+ const chunk=js.slice(js.indexOf('async function channels(){'),js.indexOf('async function showWaQr('));
+ assert.match(chunk,/waakgSelfConnect/);
+ assert.match(chunk,/api\('\/api\/waakg\/channels\/connect'/);
+ assert.match(chunk,/showWaQr\(channel\.id\)/);
+ assert.match(chunk,/data-wa-check/);
+ assert.match(chunk,/data-wa-control/);
+ assert.match(chunk,/id="waQrPanel"/);
+ assert.doesNotMatch(chunk,/id="channelForm"/);
+ assert.doesNotMatch(chunk,/waakgLinkForm/);
+ assert.match(js,/api\('\/api\/waakg\/channels\/'\+channelId\+'\/qr'/);
+});

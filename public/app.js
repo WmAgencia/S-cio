@@ -1,7 +1,7 @@
 
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
-const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null};
+const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training'};
 const titles={overview:'Visão geral',inbox:'Conversas',channels:'WhatsApps',products:'Produtos e serviços',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
@@ -60,6 +60,8 @@ async function boot(){
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
 async function changeView(next){
+ if(next==='agent'){state.aiTab='agent';next='training';}
+ else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
  if(next==='admin'&&!state.me?.user.platformOwner)return;
  state.view=next;
@@ -70,8 +72,7 @@ async function changeView(next){
   if(next==='overview')await overview();
   if(next==='channels')await channels();
   if(next==='products')await products();
-  if(next==='training')await training();
-  if(next==='agent')await agent();
+  if(next==='training')await (state.aiTab==='agent'?agent():training());
   if(next==='inbox')await inbox();
   if(next==='team')await team();
   if(next==='admin')await admin();
@@ -108,8 +109,8 @@ function renderActivityGraph(data){
   return '<circle class="chart-node" cx="'+ins[0]+'" cy="'+ins[1]+'" r="3"><title>'+e(period+': '+chartNumber(item.inbound)+' recebidas')+'</title></circle>'+
    '<circle class="chart-node-green" cx="'+outs[0]+'" cy="'+outs[1]+'" r="2.3"><title>'+e(period+': '+chartNumber(item.outbound)+' enviadas')+'</title></circle>';
  }).join('');
- return '<svg role="img" aria-label="Atividade real do atendimento da empresa no período escolhido: mensagens recebidas em laranja e enviadas em verde" viewBox="0 0 795 190" preserveAspectRatio="none">'+
-  '<defs><linearGradient id="neoOrangeFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ed7a33" stop-opacity=".25"/><stop offset="100%" stop-color="#ed7a33" stop-opacity="0"/></linearGradient></defs>'+
+ return '<svg role="img" aria-label="Atividade real do atendimento da empresa no período escolhido: mensagens recebidas em roxo e enviadas em lilás" viewBox="0 0 795 190" preserveAspectRatio="none">'+
+  '<defs><linearGradient id="neoOrangeFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#9a85d8" stop-opacity=".25"/><stop offset="100%" stop-color="#9a85d8" stop-opacity="0"/></linearGradient></defs>'+
   grid+'<path d="'+fill+'" fill="url(#neoOrangeFill)"/>'+
   '<path class="chart-orange" d="'+plot(inbound)+'"/>'+
   '<path class="chart-green" d="'+plot(outbound)+'"/>'+markers+'</svg>';
@@ -132,183 +133,193 @@ function dashboardBars(data){
    '<span class="neo-bar-label">'+e(shortPeriodLabel(p,'month'))+'</span></div>';
  }).join('');
 }
+
 async function overview(){
- const [d,ag,trend,months,recent]=await Promise.all([
-  api('/api/dashboard'),api('/api/agent'),
-  api('/api/dashboard/activity?range=12m'),
-  api('/api/dashboard/activity?range=6m'),
-  api('/api/inbox')
+ const [d,ag,trend,recent]=await Promise.all([
+  api('/api/dashboard'),api('/api/agent'),api('/api/dashboard/activity?range=6m'),api('/api/inbox')
  ]);
  state.dashboard=d;
- const steps=[d.channels>0,d.products>0,d.imports>=10,!!ag.instructions,!!ag.enabled];
- const done=steps.filter(Boolean).length;
- const total=trend.points.reduce((sum,p)=>sum+chartNumber(p.inbound)+chartNumber(p.outbound),0);
- const monthTotal=months.points.reduce((sum,p)=>sum+chartNumber(p.inbound)+chartNumber(p.outbound),0);
- const latest=Array.isArray(recent)?recent.slice(0,3):[];
- const recentRows=latest.map(item=>{
-  const initials=String(item.customer_name||item.customer_phone||'?').trim().slice(0,1).toUpperCase();
-  const status=item.status==='resolved'?'Resolvida':item.status==='human'?'Humano':'Aberta';
-  const time=item.last_message_at?date(item.last_message_at):'Sem data';
-  return '<button class="neo-recent-row" type="button" data-go="inbox" aria-label="Abrir conversas">'+
-   '<span class="neo-recent-icon'+(item.status==='open'?' green':'')+'">'+e(initials)+'</span>'+
-   '<span class="neo-recent-text"><strong>'+e(item.customer_name||item.customer_phone||'Cliente')+'</strong>'+
-   '<small>'+e(item.channel_label||'WhatsApp')+' · '+e(time)+'</small></span>'+
-   '<span class="neo-recent-status">'+e(status)+'</span></button>';
- }).join('');
+ const steps=[
+  {label:'Conectar WhatsApp',desc:'Leia o QR Code para vincular seu número.',view:'channels',done:d.channels>0},
+  {label:'Cadastrar catálogo',desc:'Organize serviços e preços oficiais.',view:'products',done:d.products>0},
+  {label:'Ensinar sua IA',desc:'Importe conversas e personalize a comunicação.',view:'training',done:d.imports>=10&&!!ag.instructions},
+  {label:'Testar o Sócio',desc:'Experimente respostas antes de ativar.',view:'agent',done:!!ag.enabled}
+ ];
+ const done=steps.filter(x=>x.done).length;
+ const userFirst=(state.me?.user?.name||'').trim().split(/\s+/)[0]||'seu time';
+ const recentItems=Array.isArray(recent)?recent.slice(0,4):[];
+ const activityTotal=(trend.points||[]).reduce((n,p)=>n+chartNumber(p.inbound)+chartNumber(p.outbound),0);
+ const quickStat=(icon,label,value,detail,style)=>{
+  return '<div class="lucid-kpi '+style+'"><div class="lucid-kpi-top"><span class="lucid-kpi-icon">'+icon+'</span>'+
+   '<span class="lucid-kpi-accent" aria-hidden="true">◦ ◦ ◦</span></div>'+
+   '<div class="lucid-kpi-name">'+e(label)+'</div>'+
+   '<div class="lucid-kpi-number">'+e(value)+'</div>'+
+   '<div class="lucid-kpi-detail">'+e(detail)+'</div></div>';
+ };
  view.innerHTML=
-  '<div class="neo-dashboard">'+
-   '<div class="neo-left-col">'+
-    '<section class="neo-surface neo-chart-card" aria-label="Indicadores do atendimento">'+
-     '<div class="neo-card-head"><div><div class="neo-kicker">Atividade de atendimento</div>'+
-      '<div id="activitySummary" class="neo-big-number">'+e(total.toLocaleString('pt-BR'))+
-      ' <small>mensagens</small></div>'+
-      '<div id="activitySubtitle" class="neo-chart-sub">Mensagens recebidas e enviadas · últimos 12 meses</div></div>'+
-      '<div class="neo-range-list" role="group" aria-label="Período do gráfico">'+
-       '<button type="button" class="neo-range is-active" data-range="12m" aria-pressed="true">1 ano</button>'+
-       '<button type="button" class="neo-range" data-range="6m" aria-pressed="false">6 meses</button>'+
-       '<button type="button" class="neo-range" data-range="3m" aria-pressed="false">3 meses</button>'+
-       '<button type="button" class="neo-range" data-range="1m" aria-pressed="false">1 mês</button>'+
-      '</div></div>'+
-     '<div id="activityChart" class="neo-chart-canvas">'+renderActivityGraph(trend)+'</div>'+
-     '<div id="chartTicks" class="neo-month-ticks">'+activityTicks(trend)+'</div>'+
-     '<div class="neo-chart-footer"><div class="neo-chart-key">'+
-      '<span><i></i> Recebidas</span><span><i class="green"></i> Enviadas</span></div>'+
-      '<span class="neo-chart-footnote">Dados reais da empresa selecionada</span></div>'+
+ '<div class="lucid-dashboard">'+
+  '<div class="lucid-welcome"><div><span class="lucid-overline">PAINEL DA SUA EMPRESA</span>'+
+   '<h1>Bem-vindo de volta, '+e(userFirst)+' <span class="lucid-wave">✳</span></h1>'+
+   '<p>Seu atendimento, sua equipe e sua inteligência em um só lugar.</p></div>'+
+   '<button type="button" class="btn soft lucid-welcome-action" data-go="channels">Conectar WhatsApp <span>↗</span></button></div>'+
+  '<div class="lucid-topstats">'+
+   quickStat('▤','Conversas abertas',Number(d.openConversations||0).toLocaleString('pt-BR'),
+    'Acompanhe os atendimentos em andamento.','lucid-stat-lilac')+
+   quickStat('◉','WhatsApps cadastrados',Number(d.channels||0).toLocaleString('pt-BR'),
+    'Números associados ao espaço.','lucid-stat-peach')+
+   quickStat('✳','Mensagens recebidas',Number(d.inboundMessages||0).toLocaleString('pt-BR'),
+    'Histórico registrado na plataforma.','lucid-stat-silver')+
+  '</div>'+
+  '<div class="lucid-body-grid"><div class="lucid-main-stack">'+
+   '<section class="lucid-card lucid-chart-panel">'+
+    '<div class="lucid-card-heading"><div><span class="lucid-overline">ATIVIDADE</span><h2>Movimento do atendimento</h2>'+
+     '<p>Mensagens recebidas e enviadas ao longo do tempo.</p></div>'+
+    '<div class="lucid-filter" role="group" aria-label="Período do gráfico">'+
+     '<button type="button" data-range="1m" aria-pressed="false">30 dias</button>'+
+     '<button type="button" data-range="3m" aria-pressed="false">3 meses</button>'+
+     '<button type="button" data-range="6m" class="is-active" aria-pressed="true">6 meses</button></div></div>'+
+    '<div class="lucid-chart-headline"><strong id="activitySummary">'+e(activityTotal.toLocaleString('pt-BR'))+'</strong>'+
+     '<span>mensagens no período</span></div>'+
+    '<div class="neo-chart-canvas lucid-line-chart" id="activityChart">'+renderActivityGraph(trend)+'</div>'+
+    '<div id="chartTicks" class="neo-month-ticks lucid-chart-ticks">'+activityTicks(trend)+'</div>'+
+    '<div class="lucid-chart-legend"><span><i></i> Recebidas</span><span><i></i> Enviadas</span>'+
+     '<small>Dados da empresa selecionada</small></div>'+
+   '</section>'+
+   '<div class="lucid-bottom-grid">'+
+    '<section class="lucid-card lucid-setup-panel"><div class="lucid-card-heading"><div><span class="lucid-overline">CONFIGURAÇÃO</span>'+
+    '<h2>Primeiros passos</h2><p>Prepare seu espaço no seu ritmo.</p></div>'+
+    '<span class="lucid-progress-label">'+done+'/'+steps.length+'</span></div>'+
+    '<progress class="lucid-progress" value="'+done+'" max="'+steps.length+'">'+done+' de '+steps.length+'</progress>'+
+    '<div class="lucid-checklist">'+steps.map((step,i)=>
+      '<button class="lucid-check-row" type="button" data-go="'+e(step.view)+'"><span class="lucid-check-number '+(step.done?'done':'')+'">'+
+       (step.done?'✓':String(i+1).padStart(2,'0'))+'</span><span><strong>'+e(step.label)+'</strong>'+
+       '<small>'+e(step.desc)+'</small></span><b>↗</b></button>').join('')+'</div></section>'+
+    '<section class="lucid-card lucid-intelligence-panel"><div class="lucid-ai-symbol">✳</div>'+
+     '<span class="lucid-overline">INTELIGÊNCIA ARTIFICIAL</span><h2>Uma IA que aprende com seu negócio.</h2>'+
+     '<p>Traga suas conversas reais, aprove o conhecimento e teste como o Sócio responde.</p>'+
+     '<div class="lucid-ai-stats"><span><b>'+e(d.imports)+'</b> conversas de referência</span>'+
+     '<span><b>'+e(d.products)+'</b> produtos cadastrados</span></div>'+
+     '<button class="btn primary" type="button" data-go="training">Explorar inteligência <span>↗</span></button></section>'+
+   '</div></div>'+
+   '<div class="lucid-side-stack">'+
+    '<section class="lucid-card lucid-whatsapp-panel"><div class="lucid-side-icon">◉</div>'+
+     '<span class="lucid-overline">CONEXÃO</span><h2>Seu WhatsApp, no seu Sócio.</h2>'+
+     '<p>Conecte escaneando um QR Code. Sem configurar identificadores manualmente.</p>'+
+     '<div class="lucid-mini-count"><strong>'+e(d.channels)+'</strong><span>número(s) cadastrados</span></div>'+
+     '<button class="btn primary wide" type="button" data-go="channels">Conectar via QR Code <span>↗</span></button></section>'+
+    '<section class="lucid-card lucid-recent-panel"><div class="lucid-card-heading"><div><span class="lucid-overline">EM TEMPO REAL</span>'+
+     '<h2>Conversas recentes</h2></div><button class="lucid-link" type="button" data-go="inbox">Ver todas ↗</button></div>'+
+     (recentItems.length?'<div class="lucid-conversations">'+recentItems.map((item,i)=>
+      '<button type="button" class="lucid-conversation" data-go="inbox">'+
+       '<span class="lucid-avatar lucid-avatar-'+i%4+'">'+e((item.customer_name||item.customer_phone||'C').trim().slice(0,1).toUpperCase())+'</span>'+
+       '<span class="lucid-conversation-copy"><strong>'+e(item.customer_name||item.customer_phone||'Cliente')+'</strong>'+
+       '<small>'+e(item.channel_label||'WhatsApp')+' · '+e(item.last_message_at?date(item.last_message_at):'Sem data')+'</small></span>'+
+       '<span class="lucid-conversation-state">'+e(item.status==='resolved'?'Resolvida':'Abrir')+'</span></button>').join('')+'</div>':
+       '<p class="lucid-empty-note">Suas conversas aparecerão aqui assim que houver mensagens.</p>')+
     '</section>'+
-    '<div class="neo-bottom-grid">'+
-     '<section class="neo-surface neo-promo">'+
-      '<div class="neo-promo-content"><h2>Seu Sócio.<br>Sempre presente.</h2>'+
-       '<p>Atenda melhor, aprenda com suas conversas e faça cada contato valer mais.</p>'+
-       '<div class="neo-promo-bubbles"><span>S</span><span>C</span><span>✳</span></div>'+
-       '<div class="neo-progress-mini"><span data-progress="'+Math.round(done/steps.length*100)+'"></span></div>'+
-       '<p>'+done+' de '+steps.length+' etapas de preparação concluídas</p></div>'+
-       '<button class="neo-promo-action" type="button" data-go="training">Explorar inteligência artificial ↗</button>'+
-     '</section>'+
-     '<section class="neo-surface neo-bars">'+
-       '<div class="neo-card-titlebar"><div><h2>Movimento mensal</h2>'+
-        '<div class="neo-small-growth">'+e(monthTotal.toLocaleString('pt-BR'))+' mensagens</div>'+
-        '<p class="neo-small-desc">Evolução dos últimos 6 meses</p></div>'+
-        '<span class="neo-chart-footnote">Atendimentos</span></div>'+
-       '<div class="neo-bars-body">'+dashboardBars(months)+'</div>'+
-      '</section>'+
-    '</div>'+
-    '<div class="neo-trust-foot"><span>Seu negócio, seus dados, suas conversas.</span><b>Sócio · Consecom</b></div>'+
-   '</div>'+
-   '<div class="neo-right-col">'+
-    '<section class="neo-side-orange" aria-label="Resumo do seu espaço">'+
-     '<div class="neo-card-titlebar"><span class="neo-kicker">Seus canais</span>'+
-      '<button class="neo-top-actions" type="button" data-go="channels">+ Adicionar</button></div>'+
-     '<div class="neo-visual-stack">'+
-      '<div class="neo-preview-strip"><b>SÓCIO</b><small>'+e(d.products)+' produtos e serviços ativos</small></div>'+
-      '<div class="neo-preview-card">'+
-       '<div class="neo-brand">WhatsApp</div>'+
-       '<span class="neo-channel-label">Canais cadastrados</span>'+
-       '<div class="neo-channel-value">'+e(d.channels)+'</div>'+
-       '<div class="neo-channel-caption">● '+e(d.openConversations)+' conversas abertas</div>'+
-      '</div></div>'+
-     '<div class="neo-orange-buttons">'+
-      '<button type="button" data-go="channels">↗ WhatsApps</button>'+
-      '<button type="button" data-go="inbox">↗ Conversas</button></div>'+
-    '</section>'+
-    '<section class="neo-surface neo-recent">'+
-     '<div class="neo-recent-head"><h2>Conversas recentes</h2>'+
-      '<button type="button" class="neo-link" data-go="inbox">Ver todas ↗</button></div>'+
-     '<div class="neo-recent-items">'+(recentRows||
-       '<div class="neo-empty-recent">Suas conversas vão aparecer aqui assim que os canais receberem mensagens.</div>')+
-     '</div></section>'+
-   '</div>'+
-  '</div>';
- // Inline style attributes are blocked by the production CSP; set trusted
- // presentation-only CSSOM properties after rendering instead.
- view.querySelectorAll('.neo-bar-shape[data-height]').forEach(el=>{
-  el.style.height=String(Math.max(3,Math.min(108,Number(el.dataset.height)||3)))+'px';
- });
- const stepFill=view.querySelector('.neo-progress-mini [data-progress]');
- if(stepFill)stepFill.style.width=String(Math.max(0,Math.min(100,Number(stepFill.dataset.progress)||0)))+'%';
+   '</div></div></div>';
  bindNavWithin();
- view.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',async()=>{
-  const range=button.dataset.range;
-  if(!['12m','6m','3m','1m'].includes(range))return;
-  view.querySelectorAll('[data-range]').forEach(b=>{b.disabled=true;});
+ view.querySelectorAll('[data-range]').forEach(btn=>btn.addEventListener('click',async()=>{
+  const selected=btn.dataset.range;
+  if(!['1m','3m','6m'].includes(selected))return;
+  view.querySelectorAll('[data-range]').forEach(b=>b.disabled=true);
   try{
-   const result=await api('/api/dashboard/activity?range='+range);
+   const result=await api('/api/dashboard/activity?range='+selected);
    if(state.view!=='overview'||!$('#activityChart'))return;
-   const num=result.points.reduce((sum,p)=>sum+chartNumber(p.inbound)+chartNumber(p.outbound),0);
-   $('#activitySummary').innerHTML=e(num.toLocaleString('pt-BR'))+' <small>mensagens</small>';
-   $('#activitySubtitle').textContent='Mensagens recebidas e enviadas · últimos '+({'12m':'12 meses','6m':'6 meses','3m':'3 meses','1m':'30 dias'}[range]);
+   const count=(result.points||[]).reduce((n,p)=>n+chartNumber(p.inbound)+chartNumber(p.outbound),0);
+   $('#activitySummary').textContent=count.toLocaleString('pt-BR');
    $('#activityChart').innerHTML=renderActivityGraph(result);
    $('#chartTicks').innerHTML=activityTicks(result);
    view.querySelectorAll('[data-range]').forEach(b=>{
-    const active=b.dataset.range===range;b.classList.toggle('is-active',active);
-    b.setAttribute('aria-pressed',String(active));
+    const on=b.dataset.range===selected;b.classList.toggle('is-active',on);
+    b.setAttribute('aria-pressed',String(on));
    });
-  }catch(err){toast(errMsg(err),true);}
+  }catch(err){toast(errMsg(err),true)}
   finally{if(state.view==='overview')view.querySelectorAll('[data-range]').forEach(b=>b.disabled=false);}
  }));
 }
 function bindNavWithin(){view.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>changeView(b.dataset.go)));}
 async function channels(){
- const [data,waConfig,linked]=await Promise.all([api('/api/channels'),api('/api/waakg/config'),api('/api/waakg/channels')]);
- view.innerHTML=heading('CANAIS DE ATENDIMENTO','Seus WhatsApps.','Cada número pode atender uma equipe diferente. A conexão deve ser autorizada no provedor.')+
- '<div class="two-pane"><div>'+panel('Números cadastrados',data.length+' canal(is) no seu espaço.',
- data.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>Canal</th><th>Conexão</th></tr></thead><tbody>'+data.map(c=>'<tr><td><strong>'+e(c.label)+'</strong><div class="table-detail pill-num">'+e(c.phone)+'</div></td><td>'+badge(c.status==='connected'?'Conectado':'Não conectado',c.status==='connected'?'green':'yellow')+'</td></tr>').join('')+'</tbody></table></div>':empty('◉','Nenhum número ainda','Cadastre o primeiro WhatsApp comercial da empresa.'))+
- '</div><div class="card card-pad"><div class="section-title">Adicionar WhatsApp</div><form id="channelForm" class="form-stack"><label>Nome para identificar<input name="label" required maxlength="90" placeholder="Ex.: Vendas • WhatsApp 1"></label><label>Número com DDD<input name="phone" required placeholder="5515999999999" inputmode="tel"></label><label>ID do número na WhatsApp Business Platform (validado pela Consecom)<input name="externalPhoneId" placeholder="Phone number ID da Meta"></label><div class="info-strip"><strong>Conexão segura</strong>Cadastrar o número não ativa respostas automáticas. Para receber mensagens reais será necessário concluir a configuração do webhook e da conta Meta.</div><button class="btn primary" type="submit">Cadastrar canal →</button></form></div></div>';
- if(!state.me.user.platformOwner) $('#channelForm').elements.externalPhoneId.disabled=true;
- $('#channelForm').addEventListener('submit',async ev=>{ev.preventDefault();const f=ev.currentTarget;const data=formValues(f);await action(async()=>{await api('/api/channels','POST',data);toast('Canal cadastrado. Ainda não conectado.');await channels();});});
- view.insertAdjacentHTML('beforeend',
-  '<div class="card card-pad section-gap"><div class="section-title">Conexão de WhatsApps por QR Code</div>'+
-  '<p class="form-note">Cada empresa conecta seus números por QR Code. O gateway exclusivo permanece em modo leitura: não envia nem responde mensagens.</p>'+
-  '<p class="form-note">'+(waConfig.configured?'Gateway configurado no servidor.':'Gateway do Sócio ainda não configurado pela Consecom.')+'</p>'+
-  (linked.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>WhatsApp</th><th>Controles</th></tr></thead><tbody>'+
-    linked.map(c=>'<tr><td><strong>'+e(c.label)+'</strong><div class="table-detail">'+e(c.phone?.startsWith('pending-')?'Aguardando QR Code':c.phone)+'</div></td>'+
-    '<td class="row-actions"><button class="btn sm soft" data-wa-qr="'+e(c.id)+'">QR</button>'+
-    '<button class="btn sm soft" data-wa-check="'+e(c.id)+'">Verificar</button>'+
-    '<button class="btn sm soft" data-wa-control="start" data-wa-id="'+e(c.id)+'">Reiniciar</button>'+
-    '<button class="btn sm soft" data-wa-control="stop" data-wa-id="'+e(c.id)+'">Pausar</button>'+
-    '<button class="btn sm soft" data-wa-control="logout" data-wa-id="'+e(c.id)+'">Desconectar</button>'+
-    '<span class="form-note" data-wa-state="'+e(c.id)+'"></span></td></tr>').join('')+'</tbody></table></div>':
-    '<p class="form-note">Nenhuma sessão WA-AKG vinculada a esta empresa.</p>')+
-  (waConfig.configured?'<form id="waakgSelfConnect" class="form-stack section-gap">'+
-   '<div class="section-title">Conectar novo número</div>'+
-   '<label>Nome do WhatsApp<input name="label" required maxlength="90" placeholder="Ex.: Loja Centro"></label>'+
-   '<p class="form-note">Ao criar, um QR Code aparecerá. Abra WhatsApp > Dispositivos conectados > Conectar dispositivo. A IA permanece desativada para envios.</p>'+
-   '<button class="btn primary">Gerar QR Code →</button></form>':'')+
-  (state.me.user.platformOwner&&waConfig.configured?
-    '<form id="waakgLinkForm" class="form-stack section-gap"><div class="section-title">Vincular sessão existente — Consecom</div>'+
-    '<label>Nome comercial<input name="label" required maxlength="90" placeholder="Vendas 1"></label>'+
-    '<label>Número conectado com DDI e DDD<input name="phone" required placeholder="5515999999999"></label>'+
-    '<label>ID da sessão WA-AKG já conectada<input name="sessionId" required placeholder="Identificador da sessão"></label>'+
-    '<button class="btn primary">Verificar número e vincular</button></form>':
-    '<p class="form-note">Conexão por QR está disponível para proprietários e administradores quando o gateway exclusivo estiver online.</p>')+
-  '<div id="waQrPanel" class="card card-pad section-gap hidden" style="max-width:430px"><div class="section-title">Conectar WhatsApp</div>'+
-   '<img id="waQrImage" width="280" height="280" alt="QR Code para conectar WhatsApp" style="display:none;max-width:100%;background:white;margin:16px auto">'+
-   '<p id="waQrHelp" class="form-note">Preparando QR Code...</p>'+
-   '<button class="btn soft" type="button" id="waQrClose">Fechar QR</button></div>'+
-  '</div>');
+ const [data,waConfig,linked]=await Promise.all([
+  api('/api/channels'),api('/api/waakg/config'),api('/api/waakg/channels')
+ ]);
+ const canManage=state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role);
+ const connected=linked.filter(c=>c.status==='connected').length;
+ const pending=linked.length-connected;
+ const legacy=data.filter(c=>!linked.some(x=>x.id===c.id));
+ const connectedList=linked.map(c=>{
+  const ok=c.status==='connected';
+  const phone=c.phone?.startsWith('pending-')?'Aguardando leitura do QR Code':c.phone;
+  return '<div class="wa-number-row"><div class="wa-number-icon">'+(ok?'✓':'◌')+'</div>'+
+   '<div class="wa-number-info"><strong>'+e(c.label)+'</strong><small>'+e(phone)+'</small></div>'+
+   '<span class="badge '+(ok?'green':'yellow')+'">'+(ok?'Conectado':'Aguardando')+'</span>'+
+   '<div class="wa-number-actions">'+
+   '<button class="btn sm soft" type="button" data-wa-check="'+e(c.id)+'">Verificar</button>'+
+   (canManage?
+    '<button class="btn sm soft" type="button" data-wa-qr="'+e(c.id)+'">'+(ok?'QR':'Ver QR')+'</button>'+
+    '<button class="btn sm ghost" type="button" data-wa-control="start" data-wa-id="'+e(c.id)+'">Reconectar</button>'+
+    '<button class="btn sm ghost" type="button" data-wa-control="logout" data-wa-id="'+e(c.id)+'">Desconectar</button>':'')+
+   '</div><span class="wa-number-feedback" data-wa-state="'+e(c.id)+'" aria-live="polite"></span></div>';
+ }).join('');
+ view.innerHTML=heading('CANAIS DE ATENDIMENTO','Conecte seus WhatsApps.','Um QR Code por número, com acesso exclusivo aos dados da sua empresa.')+
+ '<div class="wa-status-strip"><div><span class="wa-status-dot"></span><strong>'+e(connected)+'</strong><small>Conectados</small></div>'+
+ '<div><span class="wa-status-dot amber"></span><strong>'+e(pending)+'</strong><small>Aguardando QR</small></div>'+
+ '<div><span class="wa-status-dot gray"></span><strong>'+e(linked.length)+'</strong><small>Sessões vinculadas</small></div></div>'+
+ '<div class="wa-layout"><section class="card card-pad wa-setup">'+
+ '<div class="wa-setup-heading"><span class="wa-setup-icon">▣</span><div><h2>Conectar via QR Code</h2>'+
+ '<p>Use o WhatsApp do celular para autorizar esta conexão.</p></div></div>'+
+ '<div class="wa-steps"><div><b>1</b><span>Abra <strong>WhatsApp</strong> no celular.</span></div>'+
+ '<div><b>2</b><span>Entre em <strong>Dispositivos conectados</strong> e escolha <strong>Conectar dispositivo</strong>.</span></div>'+
+ '<div><b>3</b><span>Aponte a câmera para o QR Code exibido no Sócio.</span></div></div>'+
+ (canManage&&waConfig.configured?
+ '<form id="waakgSelfConnect" class="form-stack wa-connect-form">'+
+ '<label>Nome para identificar este WhatsApp<input name="label" required maxlength="90" placeholder="Ex.: Atendimento principal" autocomplete="off"></label>'+
+ '<button class="btn primary wide" type="submit">Gerar QR Code <span>↗</span></button></form>':
+ '<div class="info-strip">'+(!waConfig.configured?
+ 'O serviço de conexão do Sócio está indisponível no momento.':'Somente proprietários e administradores podem conectar novos números.')+'</div>')+
+ '<div id="waQrPanel" class="wa-qr-panel hidden" aria-live="polite"><h3>Escaneie para conectar</h3>'+
+ '<img id="waQrImage" class="wa-qr-image" width="270" height="270" alt="QR Code de conexão WhatsApp" style="display:none">'+
+ '<p id="waQrHelp" class="form-note">Preparando QR Code...</p>'+
+ '<button class="btn soft" type="button" id="waQrClose">Fechar QR Code</button></div>'+
+ '</section><section class="card card-pad wa-list"><div class="wa-list-head"><div><h2>Seus números</h2>'+
+ '<p>Gerencie os WhatsApps já vinculados ao espaço.</p></div><span class="badge gray">'+e(linked.length)+' total</span></div>'+
+ '<div class="wa-number-list">'+(connectedList||empty('▣','Nenhum WhatsApp conectado','Gere o primeiro QR Code ao lado para começar.'))+'</div>'+
+ (legacy.length?'<details class="wa-legacy"><summary>'+e(legacy.length)+' cadastro(s) antigos sem sessão QR</summary>'+
+ '<p class="form-note">Estes cadastros não significam uma conexão ativa. Para autorizar um WhatsApp, use o QR Code.</p>'+
+ '<div>'+legacy.map(c=>'<div class="wa-legacy-item">'+e(c.label)+' · '+e(c.phone)+'</div>').join('')+'</div></details>':'')+
+ '<p class="form-note wa-readonly">A conexão por QR permite leitura e análise do histórico disponível. O envio automático de mensagens permanece desativado.</p>'+
+ '</section></div>';
  $('#waakgSelfConnect')?.addEventListener('submit',async ev=>{
-  ev.preventDefault();const label=val(ev.currentTarget,'label');
-  await action(async()=>{const channel=await api('/api/waakg/channels/connect','POST',{label});
-   toast('WhatsApp preparado.');await channels();await showWaQr(channel.id);});
- });
- $('#waQrClose')?.addEventListener('click',()=>{clearTimeout(waQrTimer);$('#waQrPanel').classList.add('hidden');});
- view.querySelectorAll('[data-wa-qr]').forEach(button=>button.addEventListener('click',()=>showWaQr(button.dataset.waQr)));
- view.querySelectorAll('[data-wa-control]').forEach(button=>button.addEventListener('click',async()=>{
-  const id=button.dataset.waId,control=button.dataset.waControl;
-  if(control==='logout'&&!confirm('Desconectar este WhatsApp e apagar a autenticação da sessão no gateway?'))return;
-  await action(async()=>{await api('/api/waakg/channels/'+id+'/'+control,'POST',{});
-   toast(control==='logout'?'WhatsApp desconectado.':'Comando enviado ao gateway.');
+  ev.preventDefault();
+  const label=val(ev.currentTarget,'label');
+  await action(async()=>{
+   const channel=await api('/api/waakg/channels/connect','POST',{label});
+   toast('Sessão criada. Escaneie o QR para conectar.');
    await channels();
-   if(control==='start')await showWaQr(id);
+   await showWaQr(channel.id);
   });
- }));
- $('#waakgLinkForm')?.addEventListener('submit',async ev=>{
-  ev.preventDefault();const data=formValues(ev.currentTarget);
-  await action(async()=>{await api('/api/waakg/channels/link','POST',data);toast('Sessão validada e vinculada.');await channels();});
  });
+ $('#waQrClose')?.addEventListener('click',()=>{
+  clearTimeout(waQrTimer);$('#waQrPanel').classList.add('hidden');
+ });
+ view.querySelectorAll('[data-wa-qr]').forEach(button=>button.addEventListener('click',()=>showWaQr(button.dataset.waQr)));
  view.querySelectorAll('[data-wa-check]').forEach(button=>button.addEventListener('click',async()=>{
-  const id=button.dataset.waCheck,stateEl=view.querySelector('[data-wa-state="'+id+'"]');
-  try{const remote=await api('/api/waakg/channels/'+id+'/status');stateEl.textContent=remote.connected?'Conectado e verificado':'Desconectado ou número divergente';}
-  catch(err){stateEl.textContent=errMsg(err);}
+  const id=button.dataset.waCheck;
+  const feedback=view.querySelector('[data-wa-state="'+id+'"]');
+  try{
+   const status=await api('/api/waakg/channels/'+id+'/status');
+   feedback.textContent=status.connected?'Conexão verificada':'Aguardando conexão ou número divergente';
+  }catch(err){feedback.textContent=errMsg(err);}
+ }));
+ view.querySelectorAll('[data-wa-control]').forEach(button=>button.addEventListener('click',async()=>{
+  const id=button.dataset.waId,command=button.dataset.waControl;
+  if(command==='logout'&&!confirm('Desconectar este WhatsApp e apagar a sessão autorizada?'))return;
+  await action(async()=>{
+   await api('/api/waakg/channels/'+id+'/'+command,'POST',{});
+   toast(command==='logout'?'WhatsApp desconectado.':'Solicitação enviada ao gateway.');
+   await channels();
+   if(command==='start')await showWaQr(id);
+  });
  }));
 }
 async function showWaQr(channelId){
@@ -322,8 +333,10 @@ async function showWaQr(channelId){
   try{
    const status=await api('/api/waakg/channels/'+channelId+'/status');
    if(status.connected){
-    clearTimeout(waQrTimer);help.textContent='Conectado e número verificado. Nenhuma resposta automática foi ativada.';
-    image.style.display='none';toast('WhatsApp conectado com sucesso!');
+    clearTimeout(waQrTimer);
+    image.style.display='none';
+    toast('WhatsApp conectado e número verificado!');
+    await channels();
     return;
    }
    const qr=await api('/api/waakg/channels/'+channelId+'/qr');
@@ -496,6 +509,23 @@ async function products(selected=state.catalogProductId){
   toast('Associação removida.');await products(current.id);
  })));
 }
+
+function mountAiGuideTabs(){
+ if(state.view!=='training')return;
+ const selected=state.aiTab==='agent'?'agent':'training';
+ const tabs='<div class="ai-guide-head"><div class="ai-guide-title"><span class="eyebrow">CENTRAL DE INTELIGÊNCIA</span>'+
+ '<h1>Inteligência artificial</h1><p>Treine, configure e teste o seu Sócio em um só lugar.</p></div>'+
+ '<div class="ai-guide-tabs" role="tablist" aria-label="Áreas da inteligência artificial">'+
+ '<button type="button" role="tab" data-ai-tab="training" aria-selected="'+(selected==='training')+'" class="'+(selected==='training'?'active':'')+'">Aprendizado e análises</button>'+
+ '<button type="button" role="tab" data-ai-tab="agent" aria-selected="'+(selected==='agent')+'" class="'+(selected==='agent'?'active':'')+'">Personalidade e testes</button></div></div>';
+ view.insertAdjacentHTML('afterbegin',tabs);
+ // The content inside each tab retains its original API calls and handlers.
+ view.querySelectorAll('[data-ai-tab]').forEach(button=>button.addEventListener('click',()=>{
+  if(button.dataset.aiTab===state.aiTab)return;
+  state.aiTab=button.dataset.aiTab;changeView('training');
+ }));
+}
+
 async function training(){
  clearTimeout(trainingTimer);
  const [list,ag,jobs,versions,waConfig,waLinks,waScans]=await Promise.all([
@@ -545,7 +575,7 @@ async function training(){
   (published?'<p class="form-note">Última versão aprovada: '+e(published.version)+'. A publicação não ativa envios automáticos.</p>':'')+
   '</section>';
 
- view.innerHTML=heading('INTELIGÊNCIA ARTIFICIAL','O Sócio aprende com as conversas.','Envie 10 a 20 atendimentos que deram certo. O Sócio extrai exemplos de linguagem sem usar os dados para treinar um modelo compartilhado.')+
+ view.innerHTML=
  waCard+trainingCard+
  '<div class="two-pane train"><div class="card card-pad"><div class="section-title">Importar conversas de sucesso</div><div class="file-drop"><span class="file-icon">⇧</span><strong>Escolha conversas .txt, .md ou .zip</strong><small>Múltiplos arquivos · até 700 KB por texto ou 2 MB por ZIP</small><input type="file" id="importInput" accept=".txt,.md,.zip,text/plain,text/markdown,application/zip" multiple aria-label="Escolher conversas"></div><p class="form-note">No WhatsApp: abra a conversa → Exportar conversa → Sem mídia. Você também pode enviar o ZIP da exportação diretamente, sem extraí-lo.</p><div class="info-strip"><strong>Privacidade em primeiro lugar</strong>Utilize conversas que sua empresa está autorizada a tratar. Telefones, e-mails e documentos numéricos são mascarados; nomes de participantes são substituídos por identificadores genéricos.</div><div id="importFeedback" class="form-note"></div></div>'+
  '<div>'+panel('Base de experiência',list.length+' conversa(s) importada(s).',
@@ -595,11 +625,12 @@ async function training(){
   await training();
   if(errors.length)$('#importFeedback').textContent=errors.join(' | ');
  });
+ mountAiGuideTabs();
 }
 async function agent(){
  const ag=await api('/api/agent');
  const missing=!state.me.groqConfigured;
- view.innerHTML=heading('A INTELIGÊNCIA DA SUA EMPRESA','Conheça seu Sócio.','Defina como ele fala, o que pode fazer e como deve se comportar.')+
+ view.innerHTML=
  '<div class="two-pane train"><div class="card card-pad"><div class="section-title">Identidade e comportamento</div><form id="agentForm" class="form-stack"><label>Nome do agente<input name="name" required maxlength="80" value="'+e(ag.name||'Sócio')+'"></label><label>Tom de voz<input name="tone" required maxlength="300" value="'+e(ag.tone||'Profissional e natural')+'"></label><label>Instruções e limites<textarea name="instructions" required maxlength="6000" rows="8">'+e(ag.instructions||'')+'</textarea></label><label>Modo operacional<select name="enabled"><option value="false"'+(!ag.enabled?' selected':'')+'>Em preparação</option><option value="true"'+(ag.enabled?' selected':'')+'>Preparado para integrar (não envia sozinho)</option></select></label><button type="submit" class="btn primary">Salvar personalidade →</button><p class="form-note">Marcar como preparado não conecta um WhatsApp ou libera envios automáticos.</p></form></div>'+
  '<div class="card"><div class="panel-head"><div><h2>Laboratório de conversas</h2><p>Faça perguntas como se fosse um cliente.</p></div>'+badge('Simulação','gray')+'</div><div class="messages-preview" id="simulationMessages"><div class="bubble">Olá! Este é seu laboratório. Configure produtos e treinamento e faça uma pergunta para experimentar a personalidade do seu Sócio.</div></div><form class="chat-compose" id="simulateForm"><input name="message" required maxlength="1200" placeholder="Ex.: Quais serviços vocês oferecem?" autocomplete="off"><button type="submit" class="btn primary">Enviar ↗</button></form>'+(missing?'<div class="info-strip" style="margin:14px">Conecte GROQ_API_KEY nas variáveis do Railway para ativar respostas reais no simulador.</div>':'')+'</div></div>';
  $('#agentForm').addEventListener('submit',async ev=>{ev.preventDefault();const d=formValues(ev.currentTarget);await action(async()=>{await api('/api/agent','PUT',{...d,enabled:d.enabled==='true'});toast('Personalidade atualizada.');await agent();});});
@@ -619,6 +650,7 @@ async function agent(){
    msgs.scrollTop=msgs.scrollHeight;
   });
  });
+ mountAiGuideTabs();
 }
 async function inbox(){
  const data=await api('/api/inbox');
@@ -701,7 +733,7 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  (key!=='admin'||state.me?.user.platformOwner)&&
+  key!=='agent'&&(key!=='admin'||state.me?.user.platformOwner)&&
   (label.toLocaleLowerCase('pt-BR').includes(keyword)||key.includes(keyword)));
  const list=$('#commandList');
  list.innerHTML=names.length?names.map(([key,label])=>
@@ -746,6 +778,9 @@ $('#setupForm').addEventListener('submit',async ev=>{
  try{const data=await api('/api/setup','POST',formValues(ev.currentTarget));state.csrf=data.csrf;await boot();}
  catch(err){$('#authError').textContent=errMsg(err);}
 });
-$$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>changeView(b.dataset.view)));
+$$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{
+ if(b.dataset.view==='training')state.aiTab='training';
+ changeView(b.dataset.view);
+}));
 $('#logoutBtn').addEventListener('click',async()=>{try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
 boot();

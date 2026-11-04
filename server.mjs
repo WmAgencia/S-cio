@@ -108,7 +108,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:!!process.env.GROQ_API_KEY});
  }
- if(method==='GET'&&['/','/index.html','/app.js','/app.css','/neo-theme.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/app.js','/app.css','/neo-theme.css','/cloud-theme.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -224,7 +224,7 @@ async function handle(req,res){
  // WA-AKG is a server-side, read-only integration. It does not expose the
  // shared gateway key or allow tenants to claim arbitrary gateway sessions.
  if(method==='GET'&&pathname==='/api/waakg/config'){
-  return json(res,200,{configured:gatewayConfigured(),mode:'read_only',selfService:false,
+  return json(res,200,{configured:gatewayConfigured(),mode:'read_only',selfService:true,
    limitations:'Até 50 conversas retornadas pelo gateway por sessão; até 400 mensagens por conversa. Histórico antigo pode não estar disponível.'});
  }
  if(method==='GET'&&pathname==='/api/waakg/channels'){

@@ -77,6 +77,14 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
   await sleep(200);
  }
  assert.ok(ready,'server did not start: '+logs);
+ const lavenderCSS=await fetch(base+'/cloud-theme.css');
+ assert.equal(lavenderCSS.status,200,'Lavender stylesheet must be served in production');
+ assert.match(lavenderCSS.headers.get('content-type')||'',/text\/css/);
+ assert.match(await lavenderCSS.text(),/\.lucid-dashboard/);
+ const loginPage=await fetch(base+'/');
+ assert.equal(loginPage.status,200);
+ assert.match(await loginPage.text(),/href="\/cloud-theme\.css"/);
+
  async function call(path,method='GET',data,cookie='',csrf=''){
   const headers={Origin:base};
   if(data!==undefined)headers['Content-Type']='application/json';
