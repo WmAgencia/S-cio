@@ -78,6 +78,17 @@ async function authMetadata(provider,request){
  return {metadata,resource};
 }
 export function oauthSupported(provider){return Object.hasOwn(servers,provider);}
+export async function probePipeboardOAuth(provider,{request=fetch}={}){
+ if(!oauthSupported(provider))return {supported:false,discovered:false,method:null};
+ try{
+  const {metadata}=await authMetadata(provider,request);
+  return {supported:true,discovered:true,
+   method:metadata.registration_endpoint?'DCR':'CIMD'};
+ }catch(error){
+  return {supported:true,discovered:false,method:null,errorStatus:Number(error?.status||503)};
+ }
+}
+
 export function marketingOAuthStatus(){return {meta:'ready',google:'ready',
  connectionPortal:'https://pipeboard.co/connections'};}
 export async function startPipeboardOAuth(pool,identity,provider,{env=process.env,request=fetch}={}){
