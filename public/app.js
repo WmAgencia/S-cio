@@ -7,7 +7,7 @@ const featureView={inbox:'whatsapp',products:'catalog',sales:'quotes',quotes:'qu
 const featureKeys=Object.keys(featureLabels);
 const featuresEnabled=()=>state.me?.tenant?.features||{};
 const featureAvailable=key=>featuresEnabled()[key]!==false;
-const titles={overview:'Visão geral',inbox:'WhatsApp',marketing:'Meta Ads',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas',quotes:'Orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
+const titles={overview:'Visão geral',reports:'Relatórios',inbox:'WhatsApp',marketing:'Meta Ads',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas',quotes:'Orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -121,7 +121,7 @@ async function boot(){
    $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
    $('#teamNav')?.classList.toggle('hidden',!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner);
    const access=new Set(me.user.permissions||[]);
-   for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['quotes','sales.read'],['marketing','marketing.read']]){
+   for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['quotes','sales.read'],['reports','audit.read'],['marketing','marketing.read']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
    for(const [section,feature] of Object.entries(featureView)){
@@ -183,6 +183,7 @@ async function changeView(next,conversationId=null){
  const access=new Set(state.me?.user?.permissions||[]);
  if(next==='training'&&!access.has('training.manage'))next='overview';
  if((next==='sales'||next==='quotes')&&!access.has('sales.read'))next='overview';
+ if(next==='reports'&&!access.has('audit.read'))next='overview';
  if(next==='instagram')next='marketing';
  if(next==='marketing'&&!access.has('marketing.read'))next='overview';
  state.view=next;
@@ -191,6 +192,7 @@ async function changeView(next,conversationId=null){
  setLoading();
  try{
   if(next==='overview')await overview();
+   if(next==='reports')await reports();
   if(next==='channels')await channels();
   if(next==='products')await products();
   if(next==='sales'||next==='quotes')await window.SocioSales.render({api,e,toast,view,me:state.me,navigate:changeView,mode:next});
@@ -995,6 +997,40 @@ async function agent(){
  }
  mountAiGuideTabs();
 }
+async function reports(){
+ const report=await api('/api/reports');
+ const t=report.totals||{};
+ const cards=[
+  ['Mensagens recebidas',t.inbound_messages,'WhatsApp · últimos 30 dias'],
+  ['Oportunidades de compra',t.purchase_intents,'Intenções detectadas, não vendas pagas'],
+  ['Aguardando atendimento',t.purchase_pending,'Solicitações de compra abertas'],
+  ['Orçamentos solicitados',t.quote_requests,'Pedidos identificados no período'],
+  ['Orçamentos enviados',t.quote_sent,'Envios confirmados no gateway'],
+  ['Pedidos aprovados',t.approved_orders,'Não significa pagamento confirmado']
+ ];
+ const days=Array.isArray(report.dailyMessages)?report.dailyMessages:[];
+ const max=Math.max(1,...days.map(d=>Number(d.messages||0)));
+ view.innerHTML='<section class="socio-reports">'+
+  heading('INTELIGÊNCIA OPERACIONAL','Relatórios','Indicadores reais dos últimos 30 dias, sem confundir oportunidade, orçamento e pagamento.')+
+  '<div class="report-kpi-grid">'+cards.map(([name,count,sub])=>
+   '<article class="card report-kpi"><small>'+e(name)+'</small><strong>'+e(count??0)+'</strong><p>'+e(sub)+'</p></article>').join('')+'</div>'+
+  '<div class="report-sections"><section class="card card-pad"><h2>Atividade de mensagens</h2>'+
+   '<p class="form-note">Volume diário de mensagens recebidas nos últimos 14 dias.</p>'+
+   (days.length?'<div class="report-bars" role="img" aria-label="Mensagens recebidas por dia">'+days.map(d=>{
+    const n=Number(d.messages||0),width=Math.max(2,Math.round(n/max*100));
+    const stamp=new Date(String(d.day).slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
+    return '<div class="report-bar-row"><span>'+e(stamp)+'</span><div class="report-bar-track"><i style="width:'+width+'%"></i></div><strong>'+e(n)+'</strong></div>';
+   }).join('')+'</div>':'<p class="form-note">Nenhuma mensagem recebida no período.</p>')+
+  '</section><section class="card card-pad"><h2>Interpretação dos dados</h2>'+
+   '<p class="form-note">O Sócio registra intenções de compra, orçamentos enviados e pedidos aprovados separadamente. Valores estimados não entram como faturamento.</p>'+
+   '<div class="report-note-grid"><div><small>Concluídas manualmente</small><strong>'+e(t.purchase_completed_manually||0)+'</strong>'+
+    '<p>Requer conferência financeira pela equipe.</p></div>'+
+    '<div><small>Pagamentos de teste</small><strong>'+e(t.sandbox_payments||0)+'</strong>'+
+    '<p>Transações sandbox, sem receita real.</p></div></div>'+
+   '<p class="form-note">Para medir receita real será necessário conectar e conciliar um meio de pagamento autorizado.</p>'+
+  '</section></div></section>';
+}
+
 async function inbox(){
  if(!window.SocioInbox)throw new Error('Módulo de conversas não foi carregado. Recarregue a página.');
  if(activeInbox)activeInbox.cleanup();
@@ -1281,6 +1317,7 @@ function renderCommandItems(){
  const names=Object.entries(titles).filter(([key,label])=>
   key!=='agent'&&key!=='channels'&&(!featureView[key]||featureAvailable(featureView[key]))&&
   (key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&
+  (key!=='reports'||(state.me?.user?.permissions||[]).includes('audit.read'))&&
   (!['sales','quotes'].includes(key)||(state.me?.user?.permissions||[]).includes('sales.read'))&&
   (key!=='training'||(state.me?.user?.permissions||[]).includes('training.manage'))&&
   (key!=='team'||(state.me?.user?.permissions||[]).includes('team.read'))&&
