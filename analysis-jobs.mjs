@@ -1,6 +1,7 @@
 // Deterministic, resumable, tenant-scoped review of anonymized imports.
 // This does not claim to measure sales or scan WA-AKG messages.
 import {randomUUID} from 'node:crypto';
+import {grokKnowledgeDraft} from './xai-grok.mjs';
 const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 export function inspectTrainingSource(input){
  const lines=String(input||'').split('\n').filter(x=>/^- Pessoa \d+:/.test(x)).slice(0,120);
@@ -73,7 +74,13 @@ export async function processNextAnalysisJob(pool){
    return {processed:true,jobId:job.id};
   }
   const rows=await c.query('SELECT findings FROM training_job_items WHERE job_id=$1 AND tenant_id=$2 AND processed=true ORDER BY import_id',[job.id,job.tenant_id]);
-  const {markdown,report}=compileTrainingKnowledge(rows.rows.map(x=>x.findings));
+  const base=compileTrainingKnowledge(rows.rows.map(x=>x.findings));
+  // Only de-identified aggregate signals go to xAI. Failure preserves the
+  // deterministic source; no Grok result is ever claimed if the key is absent.
+  const enhanced=await grokKnowledgeDraft(base);
+  const markdown=enhanced.markdown;
+  const report={...base.report,analysisProvider:enhanced.provider};
+
   const version=await c.query('SELECT COALESCE(MAX(version),0)+1 AS version FROM training_versions WHERE tenant_id=$1',[job.tenant_id]);
   await c.query("INSERT INTO training_versions(id,tenant_id,job_id,version,status,knowledge_md,report_json) VALUES($1,$2,$3,$4,'draft',$5,$6)",
    [randomUUID(),job.tenant_id,job.id,version.rows[0].version,markdown,JSON.stringify(report)]);
