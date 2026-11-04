@@ -37,8 +37,8 @@ const pgEnv={...process.env,PGHOST:url.hostname,PGPORT:url.port||'5432',
  PGDATABASE:decodeURIComponent(url.pathname.slice(1)),PGUSER:decodeURIComponent(url.username),
  PGPASSWORD:decodeURIComponent(url.password),PGCONNECT_TIMEOUT:'12',
  PGSSLMODE:url.searchParams.get('sslmode')||'prefer'};
-function start(name,args,env){
- const proc=spawn(name,args,{env,stdio:['ignore','pipe','pipe']});
+function start(name,args,env,stdin='ignore'){
+ const proc=spawn(name,args,{env,stdio:[stdin,'pipe','pipe']});
  let stderr='';
  proc.stderr.on('data',x=>{stderr+=x.toString();stderr=stderr.slice(-300)});
  const done=new Promise((resolve,reject)=>{
@@ -89,7 +89,7 @@ async function uploadEncrypted(path,key,size){
 async function archiveList(path,meta){
  const d=createDecipheriv('aes-256-gcm',encryptionKey(meta.salt),Buffer.from(meta.iv,'hex'));
  d.setAuthTag(Buffer.from(meta.tag,'hex'));
- const job=start('pg_restore',['--list'],pgEnv);
+ const job=start('pg_restore',['--list'],pgEnv,'pipe');
  job.proc.stdout.resume();
  try{await Promise.all([pipeline(createReadStream(path),d,job.proc.stdin),job.done]);}
  catch(error){job.proc.kill('SIGTERM');throw error;}
