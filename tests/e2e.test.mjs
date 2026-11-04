@@ -474,6 +474,37 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const knowledgeAfterSync=await call('/api/agent','GET',undefined,betaCookie);
  assert(!knowledgeAfterSync.result.knowledge_md.includes('Gostaria de fazer um pedido'),
   'WA-AKG imports must remain out of active agent knowledge until approval');
+ // Real PostgreSQL + simulated WA-AKG: scan the same connected channel
+ // again; this time the previous fingerprint is unchanged, so the auto
+ // training must reuse its snapshot but exclude unrelated uploaded imports.
+ const autoStart=await call('/api/training/auto','POST',{},betaCookie,betaCsrf);
+ assert.equal(autoStart.status,201,JSON.stringify(autoStart.result));
+ assert.equal(autoStart.result.connectedChannels,1);
+ const autoDuplicate=await call('/api/training/auto','POST',{},betaCookie,betaCsrf);
+ assert.equal(autoDuplicate.status,409,'One automatic training at a time per company');
+ let autoReady=null,autoError=null;
+ for(let i=0;i<110;i++){
+  const next=await call('/api/training/auto','GET',undefined,betaCookie);
+  assert.equal(next.status,200);
+  if(next.result.run?.status==='completed'){autoReady=next.result.run;break;}
+  if(next.result.run?.status==='failed'){autoError=next.result.run;break;}
+  await sleep(220);
+ }
+ assert(autoReady,'Automatic WA-AKG training failed or stalled: '+JSON.stringify(autoError));
+ assert.equal(autoReady.percent,100);
+ assert.equal(autoReady.channels,1);
+ assert.equal(autoReady.source,'available_waakg_text');
+ const autoVersions=await call('/api/training/versions','GET',undefined,betaCookie);
+ const autoDraft=autoVersions.result.find(v=>v.jobId===autoReady.jobId);
+ assert(autoDraft,'Auto training did not create a Markdown draft for its job');
+ assert.equal(autoDraft.status,'draft');
+ assert.equal(autoDraft.report.source,'connected_whatsapp_history');
+ assert.equal(autoDraft.report.sourcesIncluded,1,'Only current WhatsApp snapshot is used');
+ assert.equal(autoDraft.report.salesValidated,false);
+ const stillApproved=await call('/api/agent','GET',undefined,betaCookie);
+ assert.equal(stillApproved.result.knowledge_md,reviewed,
+  'Auto training must never replace approved knowledge by itself');
+
  await call('/api/admin/switch','POST',{tenantId:me.result.tenant.id},adminCookie,csrf);
  const otherTenantLinks=await call('/api/waakg/channels','GET',undefined,adminCookie);
  assert.deepEqual(otherTenantLinks.result,[]);
