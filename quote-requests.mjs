@@ -53,10 +53,11 @@ export async function updateQuoteRequest(pool,tenantId,id,status){
  if(!r.rowCount)throw bad(404,'Pedido de orçamento não encontrado nesta empresa.');
  return r.rows[0];
 }
-export async function setQuoteAlerts(pool,auth,enabled){
+export async function setQuoteAlerts(pool,auth,enabled,env=process.env){
  if(typeof enabled!=='boolean')throw bad(422,'Configuração de notificação inválida.');
  if(auth.role!=='owner'&&!auth.platform_owner)throw bad(403,'Somente o proprietário pode ativar alertas no WhatsApp.');
  if(enabled){
+  if(!outboundEnabled(env))throw bad(503,'Envio WhatsApp do Sócio ainda não está liberado neste ambiente.');
   const r=await pool.query(
    "SELECT phone FROM users WHERE tenant_id=$1 AND role='owner' AND active=true AND phone IS NOT NULL "+
    "ORDER BY created_at LIMIT 1",[auth.active_tenant_id]);
@@ -67,7 +68,7 @@ export async function setQuoteAlerts(pool,auth,enabled){
    [auth.active_tenant_id]);
   if(!available.rowCount)throw bad(409,'Conecte um WhatsApp da empresa para ativar os alertas.');
  }
- await pool.query("UPDATE tenants SET quote_alert_whatsapp=$2 WHERE id=$1",
+ await pool.query("UPDATE tenants SET quote_alert_whatsapp=$2,quote_alert_enabled_at=CASE WHEN $2=true THEN now() ELSE NULL END WHERE id=$1",
   [auth.active_tenant_id,enabled]);
  return {enabled};
 }
@@ -79,7 +80,9 @@ export async function processNextOwnerQuoteAlert(pool,{
   "SELECT q.id,q.tenant_id,q.conversation_id,q.customer_name,q.customer_phone,q.summary,t.name AS company_name "+
   "FROM quote_requests q JOIN tenants t ON t.id=q.tenant_id "+
   "WHERE q.alert_status='pending' AND q.status IN ('pending','preparing') "+
-  "AND t.quote_alert_whatsapp=true AND COALESCE((t.features->>'quotes')::boolean,true)=true "+
+  "AND t.quote_alert_whatsapp=true AND t.quote_alert_enabled_at IS NOT NULL "+
+  "AND q.created_at>=t.quote_alert_enabled_at "+
+  "AND COALESCE((t.features->>'quotes')::boolean,true)=true "+
   "ORDER BY q.created_at LIMIT 1"
  );
  if(!queued.rowCount)return {processed:false};
