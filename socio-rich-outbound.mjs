@@ -46,7 +46,7 @@ export async function loadCatalogCard(pool,tenantId,productId,{readImage=getPriv
   [tenantId,productId]);
  if(!media.rowCount)throw fail(409,'Cadastre uma foto do produto antes de enviar pelo WhatsApp.');
  const variants=await pool.query(
-  'SELECT name,stock_quantity,active FROM product_variants WHERE tenant_id=$1 AND product_id=$2 ORDER BY created_at LIMIT 10',
+  'SELECT name,price_cents,stock_quantity,active FROM product_variants WHERE tenant_id=$1 AND product_id=$2 ORDER BY created_at LIMIT 10',
   [tenantId,productId]);
  const photo=media.rows[0];
  if(photo.content_type!=='image/jpeg')throw fail(422,'A foto do catálogo deve estar em JPEG.');
