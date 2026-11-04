@@ -65,8 +65,10 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
   [attemptId,status,reason]);
  try{
   const [history,products]=await Promise.all([
+   // Internal notes belong to staff only and must never be passed to a customer-facing model.
    pool.query("SELECT direction,body FROM messages WHERE tenant_id=$1 AND conversation_id=$2 "+
-    "ORDER BY created_at DESC LIMIT 18",[m.tenant_id,m.conversation_id]),
+    "AND direction IN ('inbound','outbound') ORDER BY created_at DESC LIMIT 18",
+    [m.tenant_id,m.conversation_id]),
    pool.query("SELECT name,price_cents,stock_quantity FROM products WHERE tenant_id=$1 AND active=true ORDER BY created_at DESC LIMIT 40",
     [m.tenant_id])
   ]);
