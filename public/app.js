@@ -1029,18 +1029,54 @@ async function team(){
   });
  }));
 }
+
+const companyModuleLabels=[
+ ['whatsapp','WhatsApp','Atendimento, conversas e QR Code'],
+ ['catalog','Produtos e serviços','Cadastro, estoque e imagens'],
+ ['sales','Vendas e orçamentos','Solicitações, propostas e pedidos'],
+ ['ai','Inteligência Artificial','Treinamento, personalidade e respostas'],
+ ['metaAds','Meta Ads','Autorização e consulta de anúncios']
+];
+const companyModuleDefaults={whatsapp:true,catalog:true,sales:false,ai:true,metaAds:false};
+function moduleCheckboxes(features,prefix){
+ const flags=features||companyModuleDefaults;
+ return companyModuleLabels.map(([key,label,description])=>
+  '<label class="socio-module-choice"><input type="checkbox" name="feature_'+key+'" '+
+   (flags[key]===true?'checked':'')+'><span><strong>'+e(label)+'</strong>'+
+   '<small>'+e(description)+'</small></span></label>').join('');
+}
+function selectedModules(form){
+ const data=Object.fromEntries(companyModuleLabels.map(([key])=>[key,form.elements['feature_'+key].checked]));
+ if(data.sales&&(!data.catalog||!data.whatsapp))
+  throw new Error('Para liberar orçamentos, ative também Produtos e WhatsApp.');
+ return data;
+}
+function bindModuleDependencies(form){
+ form.addEventListener('change',ev=>{
+  if(!ev.target.name?.startsWith('feature_'))return;
+  const get=key=>form.elements['feature_'+key];
+  if(ev.target===get('sales')&&get('sales').checked){
+   get('catalog').checked=true;get('whatsapp').checked=true;
+  }else if(!get('whatsapp').checked||!get('catalog').checked){
+   get('sales').checked=false;
+  }
+ });
+}
+
 async function admin(){
  const tenants=await api('/api/admin/tenants');
  const rows=tenants.map(t=>
   '<tr><td><strong>'+e(t.name)+'</strong><div class="table-detail">'+
    e(t.cnpj||t.slug)+' · '+e(t.members)+' usuário(s)</div></td>'+
    '<td>'+badge(t.plan)+'</td><td>'+badge(t.status,t.status==='active'?'green':'gray')+'</td>'+
+   '<td><small>'+e(companyModuleLabels.filter(([key])=>(t.features||{})[key]!==false).length)+' módulo(s)</small> '+
+    '<button type="button" class="btn sm soft" data-module-edit="'+e(t.id)+'">Configurar</button></td>'+
    '<td><button class="btn sm ghost" data-switch="'+e(t.id)+'">'+
    (t.id===state.me.tenant.id?'Atual':'Acessar')+'</button></td></tr>').join('');
  view.innerHTML=heading('CONTROLE CONSECOM','Empresas.','Gerencie clientes e espaços independentes.',
   '<button type="button" class="btn primary" id="newCompany">+ Nova empresa</button>')+
  '<section class="card card-pad socio-list-panel"><div class="socio-clean-head"><h2>Empresas cadastradas</h2><small>'+tenants.length+' ambientes</small></div>'+
- '<div class="table-wrap"><table class="data-table"><thead><tr><th>Empresa</th><th>Plano</th><th>Situação</th><th>Acesso</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
+ '<div class="table-wrap"><table class="data-table"><thead><tr><th>Empresa</th><th>Plano</th><th>Situação</th><th>Funcionalidades</th><th>Acesso</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
  '<div class="socio-popup-backdrop hidden" id="companyModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="companyHeading">'+
   '<div class="socio-popup-header"><div><small>ADMINISTRAÇÃO MASTER</small><h2 id="companyHeading">Nova empresa</h2>'+
   '<p>Consulte o CNPJ para preencher os dados públicos automaticamente.</p></div>'+
@@ -1060,16 +1096,54 @@ async function admin(){
    '<label>E-mail do responsável (login)<input name="ownerEmail" required type="email" maxlength="255"></label>'+
    '<div class="catalog-pair"><label>Celular para login<input name="ownerPhone" type="tel" maxlength="32" placeholder="Com DDD"></label>'+
    '<label>Plano<select name="plan"><option value="essencial">Essencial</option><option value="equipe">Equipe</option><option value="voz">Voz</option></select></label></div>'+
+   '<fieldset class="socio-module-fieldset"><legend>Funcionalidades desta empresa</legend>'+
+    '<p class="form-note">Ative somente as áreas que este cliente utilizará. É possível alterar depois.</p>'+
+    '<div class="socio-module-grid">'+moduleCheckboxes(null,'create')+'</div></fieldset>'+
    '<label>Senha inicial (mínimo 12 caracteres)<input name="ownerPassword" required type="password" minlength="12" maxlength="128" autocomplete="new-password"></label>'+
    '<p class="form-note">O cadastro cria um ambiente separado. Cobrança não é ativada automaticamente.</p>'+
    '<button class="btn primary socio-full-btn" type="submit">Criar empresa</button>'+
-  '</form></section></div>';
+  '</form></section></div>'+
+ '<div class="socio-popup-backdrop hidden" id="featureModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="featuresTitle">'+
+   '<div class="socio-popup-header"><div><small>ACESSO POR EMPRESA</small><h2 id="featuresTitle">Funcionalidades</h2>'+
+   '<p id="featuresCompanyName">Escolha os módulos permitidos.</p></div>'+
+   '<button type="button" class="socio-popup-close" id="featuresClose" aria-label="Fechar configurações">×</button></div>'+
+   '<form id="featuresForm" class="form-stack"><div class="socio-module-grid" id="featureSelection"></div>'+
+    '<p class="form-note">Desativar uma área bloqueia seu acesso, sem apagar os dados e registros anteriores.</p>'+
+    '<button class="btn primary" type="submit">Salvar funcionalidades</button></form>'+
+ '</section></div>';
  const modal=$('#companyModal'),form=$('#tenantForm');
  let publicProfile=null;
+ bindModuleDependencies(form);
+ const featureModal=$('#featureModal'),featureForm=$('#featuresForm');
+ let selectedTenant=null;
  const open=()=>{modal.classList.remove('hidden');form.elements.cnpj.focus();};
  const close=()=>modal.classList.add('hidden');
  $('#newCompany').addEventListener('click',open);
  $('#companyClose').addEventListener('click',close);
+ const closeFeatures=()=>{featureModal.classList.add('hidden');selectedTenant=null;};
+ $('#featuresClose').addEventListener('click',closeFeatures);
+ featureModal.addEventListener('click',ev=>{if(ev.target===featureModal)closeFeatures();});
+ bindModuleDependencies(featureForm);
+ view.querySelectorAll('[data-module-edit]').forEach(button=>button.addEventListener('click',()=>{
+  selectedTenant=tenants.find(t=>t.id===button.dataset.moduleEdit)||null;
+  if(!selectedTenant)return;
+  $('#featuresCompanyName').textContent='Configure as funcionalidades de '+selectedTenant.name+'.';
+  $('#featureSelection').innerHTML=moduleCheckboxes(selectedTenant.features,'edit');
+  featureModal.classList.remove('hidden');
+  featureForm.elements['feature_whatsapp'].focus();
+ }));
+ featureForm.addEventListener('submit',ev=>{
+  ev.preventDefault();
+  if(!selectedTenant)return;
+  void action(async()=>{
+   const flags=selectedModules(featureForm);
+   await api('/api/admin/tenants/'+selectedTenant.id+'/features','PATCH',{features:flags});
+   toast('Funcionalidades atualizadas para esta empresa.');
+   closeFeatures();
+   if(selectedTenant.id===state.me.tenant.id)await boot();
+   else await admin();
+  });
+ });
  modal.addEventListener('click',ev=>{if(ev.target===modal)close();});
  $('#lookupCnpj').addEventListener('click',async()=>{
   const cnpj=form.elements.cnpj.value.replace(/\D/g,'');
@@ -1094,6 +1168,7 @@ async function admin(){
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();
   const data=formValues(form);
+  try{data.features=selectedModules(form);}catch(error){toast(errMsg(error),true);return;}
   data.companyProfile=publicProfile?.cnpj===data.cnpj.replace(/\D/g,'')?
    {address:publicProfile.address,primaryActivity:publicProfile.primaryActivity,status:publicProfile.status,
     commercialEmail:data.companyEmail,commercialPhone:data.companyPhone}:
