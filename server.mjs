@@ -3,6 +3,7 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
+import {instagramReady,beginInstagramOAuth,completeInstagramOAuth,ingestInstagramWebhook,revokeInstagramAccount} from './instagram-integration.mjs';
 import {maintenanceEnabled,writesBlocked,workersBlocked} from './migration-guard.mjs';
 import {TABLES as MIGRATION_TABLES} from './scripts/socio-supabase-migrate.mjs';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier} from './lib.mjs';
@@ -143,6 +144,37 @@ async function handle(req,res){
   throw fail(403,'Verificação rejeitada.');
  }
  if(pathname==='/webhooks/whatsapp'&&method==='POST')return receiveWhatsApp(req,res);
+ // Instagram has a separate verified webhook; it can never claim WA-AKG channels.
+ if(pathname==='/webhooks/instagram'&&method==='GET'){
+  const url=new URL(req.url,'http://local');
+  const challenge=url.searchParams.get('hub.challenge')||'';
+  if(url.searchParams.get('hub.mode')==='subscribe'&&
+   process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN&&
+   secureEqual(url.searchParams.get('hub.verify_token'),process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN)&&
+   /^\d{1,100}$/.test(challenge)){
+   res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'});
+   return res.end(challenge);
+  }
+  throw fail(403,'Verificação Instagram rejeitada.');
+ }
+ if(pathname==='/webhooks/instagram'&&method==='POST'){
+  const {raw}=await body(req,250000);
+  const result=await ingestInstagramWebhook(pool,raw,req.headers['x-hub-signature-256']);
+  return json(res,200,result);
+ }
+ // OAuth callback is server-to-server; CSRF lives in the one-use hashed state
+ // stored with the initiating authorized user, not in a cross-site cookie.
+ if(pathname==='/api/instagram/oauth/callback'&&method==='GET'){
+  const url=new URL(req.url,'http://local');
+  try{
+   await completeInstagramOAuth(pool,url.searchParams.get('state'),url.searchParams.get('code'));
+   res.writeHead(303,{'Location':'/?instagram=connected','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
+  }catch(error){
+   console.warn('[instagram-oauth]',String(error?.status||'PROVIDER_ERROR').slice(0,20));
+   res.writeHead(303,{'Location':'/?instagram=failed','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
+  }
+  return res.end();
+ }
  // Stripe server-to-server webhook validates its raw signature before using JSON.
  if(pathname==='/webhooks/stripe-test'&&method==='POST'){
   const {raw}=await body(req,160000);
@@ -214,6 +246,36 @@ async function handle(req,res){
   if(!csrf||!secureEqual(String(csrf),a.csrf))throw fail(403,'Sessão sem validação de segurança.');
  }
  if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,platformOwner:a.platform_owner,permissions:permissionsFor(a.role,a.platform_owner)},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status},csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
+ // Instagram Login is available only to owners/admins. Access token and
+ // webhook verification secrets never leave the server.
+ if(method==='GET'&&pathname==='/api/instagram/config'){
+  return json(res,200,{configured:instagramReady(),redirectUri:process.env.SOCIO_PUBLIC_URL?
+   process.env.SOCIO_PUBLIC_URL.replace(/\/$/,'')+'/api/instagram/oauth/callback':null,
+   webhookPath:'/webhooks/instagram',requiresProfessionalAccount:true,
+   outboundPolicy:'Only human replies after a recent incoming message',permissionsRequired:[
+    'instagram_business_basic','instagram_business_manage_messages']});
+ }
+ if(method==='GET'&&pathname==='/api/instagram/accounts'){
+  requirePermission(a,'channels.manage');
+  const r=await query(
+   "SELECT i.channel_id,i.username,i.status,i.token_expires_at,i.created_at,ch.label "+
+   "FROM instagram_accounts i JOIN channels ch ON ch.id=i.channel_id AND ch.tenant_id=i.tenant_id "+
+   "WHERE i.tenant_id=$1 ORDER BY i.created_at DESC",[a.active_tenant_id]);
+  return json(res,200,r.rows);
+ }
+ if(method==='POST'&&pathname==='/api/instagram/connect'){
+  requirePermission(a,'channels.manage');
+  if(!limiter(authAttempts,'instagram-oauth:'+a.user_id,600000,5))
+   throw fail(429,'Muitas tentativas de conexão Instagram.');
+  const result=await beginInstagramOAuth(pool,a.active_tenant_id,a.user_id);
+  await audit(a,'instagram.oauth_initiated');
+  return json(res,200,result);
+ }
+ const igRevoke=pathname.match(/^\/api\/instagram\/accounts\/([0-9a-f-]{36})\/revoke$/);
+ if(igRevoke&&method==='POST'){
+  requirePermission(a,'channels.manage');
+  return json(res,200,await revokeInstagramAccount(pool,a.active_tenant_id,a.user_id,igRevoke[1]));
+ }
  // Changing a phone login identifier requires the signed-in user's current password.
  // Never infer this from the company's connected WhatsApp number.
  if(method==='POST'&&pathname==='/api/me/phone'){
