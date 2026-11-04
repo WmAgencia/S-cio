@@ -16,6 +16,7 @@ import {processLiveInboxSync} from './inbox-live-sync.mjs';
 import {processNextAiReply} from './ai-replies.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
+import {createQuote,issueQuote,cancelQuote,publicQuote,approveQuote,declineQuote,listSales,createTestCheckout,processStripeTestEvent} from './sales-commerce.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
 
 const PORT=Number(process.env.PORT||3000);
@@ -120,7 +121,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/quote.html','/quote.js','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -132,7 +133,30 @@ async function handle(req,res){
   throw fail(403,'Verificação rejeitada.');
  }
  if(pathname==='/webhooks/whatsapp'&&method==='POST')return receiveWhatsApp(req,res);
+ // Stripe server-to-server webhook validates its raw signature before using JSON.
+ if(pathname==='/webhooks/stripe-test'&&method==='POST'){
+  const {raw}=await body(req,160000);
+  const result=await processStripeTestEvent(pool,raw,req.headers['stripe-signature']);
+  return json(res,200,result);
+ }
  if(mutations.has(method))sameOrigin(req);
+ // Opaque buyer approval link; no access to unrelated tenant records.
+ const publicQuotePath=pathname.match(/^\/api\/public\/quotes\/([a-f0-9]{64})$/);
+ if(publicQuotePath&&method==='GET'){
+  return json(res,200,await publicQuote(pool,publicQuotePath[1]));
+ }
+ const publicQuoteAction=pathname.match(/^\/api\/public\/quotes\/([a-f0-9]{64})\/(accept|decline|checkout)$/);
+ if(publicQuoteAction&&method==='POST'){
+  const [,token,action]=publicQuoteAction;
+  if(!limiter(simulationAttempts,'buyer:'+token.slice(0,20),60000,12))
+   throw fail(429,'Muitas solicitações neste orçamento.');
+  if(action==='accept'){
+   const {data}=await body(req,8000);
+   return json(res,200,await approveQuote(pool,token,data.buyerName,data.agree===true));
+  }
+  if(action==='decline')return json(res,200,await declineQuote(pool,token));
+  return json(res,200,await createTestCheckout(pool,token));
+ }
  if(method==='POST'&&pathname==='/api/setup'){
   if(!limiter(authAttempts,'setup:'+clientIp(req),600000,8))throw fail(429,'Muitas tentativas.');
   const {data}=await body(req);
@@ -399,6 +423,25 @@ async function handle(req,res){
   return json(res,201,r.rows[0]);
  }
 
+ if(method==='GET'&&pathname==='/api/sales'){
+  return json(res,200,await listSales(pool,a.active_tenant_id));
+ }
+ if(method==='POST'&&pathname==='/api/sales/quotes'){
+  needRole(a,['owner','admin']);
+  const {data}=await body(req,15000);
+  const quote=await createQuote(pool,a.active_tenant_id,a.user_id,data);
+  await audit(a,'sales.quote.created',{quoteId:quote.id,seriesId:quote.series_id,version:quote.version});
+  return json(res,201,quote);
+ }
+ const salesAction=pathname.match(/^\/api\/sales\/quotes\/([a-f0-9-]{36})\/(issue|cancel)$/);
+ if(salesAction&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const result=salesAction[2]==='issue'?
+   await issueQuote(pool,a.active_tenant_id,salesAction[1]):
+   await cancelQuote(pool,a.active_tenant_id,salesAction[1]);
+  await audit(a,'sales.quote.'+salesAction[2],{quoteId:salesAction[1]});
+  return json(res,200,result);
+ }
  if(method==='GET'&&pathname==='/api/products'){
   return json(res,200,await fullCatalog(a.active_tenant_id));
  }
