@@ -1,7 +1,7 @@
 
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
-const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null};
+const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training'};
 const titles={overview:'Visão geral',inbox:'Conversas',channels:'WhatsApps',products:'Produtos e serviços',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
@@ -60,6 +60,8 @@ async function boot(){
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
 async function changeView(next){
+ if(next==='agent'){state.aiTab='agent';next='training';}
+ else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
  if(next==='admin'&&!state.me?.user.platformOwner)return;
  state.view=next;
@@ -70,8 +72,7 @@ async function changeView(next){
   if(next==='overview')await overview();
   if(next==='channels')await channels();
   if(next==='products')await products();
-  if(next==='training')await training();
-  if(next==='agent')await agent();
+  if(next==='training')await (state.aiTab==='agent'?agent():training());
   if(next==='inbox')await inbox();
   if(next==='team')await team();
   if(next==='admin')await admin();
@@ -496,6 +497,23 @@ async function products(selected=state.catalogProductId){
   toast('Associação removida.');await products(current.id);
  })));
 }
+
+function mountAiGuideTabs(){
+ if(state.view!=='training')return;
+ const selected=state.aiTab==='agent'?'agent':'training';
+ const tabs='<div class="ai-guide-head"><div class="ai-guide-title"><span class="eyebrow">CENTRAL DE INTELIGÊNCIA</span>'+
+ '<h1>Inteligência artificial</h1><p>Treine, configure e teste o seu Sócio em um só lugar.</p></div>'+
+ '<div class="ai-guide-tabs" role="tablist" aria-label="Áreas da inteligência artificial">'+
+ '<button type="button" role="tab" data-ai-tab="training" aria-selected="'+(selected==='training')+'" class="'+(selected==='training'?'active':'')+'">Aprendizado e análises</button>'+
+ '<button type="button" role="tab" data-ai-tab="agent" aria-selected="'+(selected==='agent')+'" class="'+(selected==='agent'?'active':'')+'">Personalidade e testes</button></div></div>';
+ view.insertAdjacentHTML('afterbegin',tabs);
+ // The content inside each tab retains its original API calls and handlers.
+ view.querySelectorAll('[data-ai-tab]').forEach(button=>button.addEventListener('click',()=>{
+  if(button.dataset.aiTab===state.aiTab)return;
+  state.aiTab=button.dataset.aiTab;changeView('training');
+ }));
+}
+
 async function training(){
  clearTimeout(trainingTimer);
  const [list,ag,jobs,versions,waConfig,waLinks,waScans]=await Promise.all([
@@ -595,6 +613,7 @@ async function training(){
   await training();
   if(errors.length)$('#importFeedback').textContent=errors.join(' | ');
  });
+ mountAiGuideTabs();
 }
 async function agent(){
  const ag=await api('/api/agent');
@@ -619,6 +638,7 @@ async function agent(){
    msgs.scrollTop=msgs.scrollHeight;
   });
  });
+ mountAiGuideTabs();
 }
 async function inbox(){
  const data=await api('/api/inbox');
@@ -701,7 +721,7 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  (key!=='admin'||state.me?.user.platformOwner)&&
+  key!=='agent'&&(key!=='admin'||state.me?.user.platformOwner)&&
   (label.toLocaleLowerCase('pt-BR').includes(keyword)||key.includes(keyword)));
  const list=$('#commandList');
  list.innerHTML=names.length?names.map(([key,label])=>
@@ -746,6 +766,9 @@ $('#setupForm').addEventListener('submit',async ev=>{
  try{const data=await api('/api/setup','POST',formValues(ev.currentTarget));state.csrf=data.csrf;await boot();}
  catch(err){$('#authError').textContent=errMsg(err);}
 });
-$$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>changeView(b.dataset.view)));
+$$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{
+ if(b.dataset.view==='training')state.aiTab='training';
+ changeView(b.dataset.view);
+}));
 $('#logoutBtn').addEventListener('click',async()=>{try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
 boot();
