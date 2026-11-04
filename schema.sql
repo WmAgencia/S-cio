@@ -371,3 +371,21 @@ CREATE TABLE IF NOT EXISTS message_outbox (
 );
 CREATE INDEX IF NOT EXISTS message_outbox_tenant_status_idx ON message_outbox(tenant_id,status,created_at DESC);
 CREATE INDEX IF NOT EXISTS message_outbox_ai_conversation_idx ON message_outbox(tenant_id,conversation_id,created_at DESC) WHERE mode='ai';
+
+-- Exactly one automatic reply attempt per inbound message, regardless of
+-- application restarts or replicas; a failed attempt needs human review.
+CREATE TABLE IF NOT EXISTS ai_reply_attempts (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ conversation_id uuid NOT NULL,
+ inbound_message_id uuid NOT NULL,
+ status text NOT NULL DEFAULT 'generating'
+  CHECK(status IN ('generating','sent','failed','cancelled')),
+ reason text,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ finished_at timestamptz,
+ UNIQUE(tenant_id,inbound_message_id),
+ FOREIGN KEY(tenant_id,conversation_id) REFERENCES conversations(tenant_id,id) ON DELETE CASCADE,
+ FOREIGN KEY(tenant_id,inbound_message_id) REFERENCES messages(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS ai_reply_attempts_recent ON ai_reply_attempts(tenant_id,conversation_id,created_at DESC);
