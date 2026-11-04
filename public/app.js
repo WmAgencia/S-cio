@@ -70,7 +70,7 @@ async function boot(){
    await changeView(state.view);
    if(marketingStatus==='authorized'){
     toast('Login autorizado. Verificando contas de anúncios disponíveis...');
-    if(['meta','google'].includes(marketingProvider))void (async()=>{
+    if(marketingProvider==='meta')void (async()=>{
      const provider=marketingProvider;
      try{
       const result=await api('/api/marketing/oauth/'+provider+'/test','POST',{});
@@ -413,7 +413,7 @@ async function channels(){
 }
 async function marketing(){
  const [data,auth]=await Promise.all([api('/api/marketing'),api('/api/marketing/oauth')]);
- const grants=auth.grants||[],connections=data.connections||[],reports=data.reports||[];
+ const grants=(auth.grants||[]).filter(x=>x.provider==='meta'),connections=(data.connections||[]).filter(x=>x.provider==='pipeboard_meta'),reports=(data.reports||[]).filter(x=>x.provider==='pipeboard_meta');
  const scope=key=>grants.find(x=>x.provider===key&&x.status==='authorized');
  const accountCards=(provider,legacy)=>connections.filter(x=>x.provider===legacy&&x.status==='verified')
    .map(x=>'<p class="form-note">Conta com acesso de leitura verificado: '+e(x.label)+' · '+e(x.account_id)+'</p>').join('');
@@ -447,7 +447,6 @@ async function marketing(){
  view.innerHTML=heading('MARKETING','Anúncios e métricas.',
   'Apenas conecte a sua conta. Sem códigos, scripts ou configurações de API.')+
   item('meta','Meta Ads','Conecte o Facebook e escolha as contas de anúncios que deseja autorizar.','pipeboard_meta')+
-  item('google','Google Ads','Conecte sua conta Google e autorize o acesso às suas contas Google Ads.','google_ads_scripts')+
   '<section class="card" style="padding:22px">'+
    '<h2>Relatórios</h2>'+
    (reports.length?
