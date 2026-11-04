@@ -1,10 +1,13 @@
 /* Sócio Phase 3: supervised quote and sales management; never auto sends. */
 (function(){
  'use strict';
- let revision=null,linkToShare='';
- async function render({api,e,toast,view}){
-  const [sales,products,contacts]=await Promise.all([api('/api/sales'),api('/api/products'),api('/api/inbox')]);
+ let revision=null,linkToShare='',requestToPrepare=null;
+ async function render({api,e,toast,view,me}){
+  const [sales,products,contacts,quoteRequests]=await Promise.all([api('/api/sales'),api('/api/products'),api('/api/inbox'),api('/api/quote-requests')]);
   const allowed=products.filter(p=>p.active);
+  const waiting=quoteRequests.requests||[];
+  if(requestToPrepare&&!waiting.some(q=>q.id===requestToPrepare))requestToPrepare=null;
+  const relatedRequest=requestToPrepare?waiting.find(q=>q.id===requestToPrepare):null;
   const money=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n||0)/100);
   const sale=revision?sales.quotes.find(q=>q.id===revision):null;
   if(revision&&!sale)revision=null;
@@ -24,7 +27,7 @@
    '<p>Escolha produtos reais, compartilhe o link de aprovação e acompanhe seus pedidos. Nenhum envio ou cobrança é automático.</p></div></div>'+
    '<div class="sale-grid"><section class="card card-pad"><h2>'+(activeQuote?'Revisar orçamento · versão '+e(activeQuote.version):'Criar orçamento')+'</h2>'+
     '<form id="saleForm" class="form-stack"><label>Conversa do cliente<select name="conversationId" required>'+
-     '<option value="">Selecione uma conversa</option>'+contacts.map(c=>'<option value="'+e(c.id)+'"'+(activeQuote?.conversation_id===c.id?' selected':'')+'>'+
+     '<option value="">Selecione uma conversa</option>'+contacts.map(c=>'<option value="'+e(c.id)+'"'+((activeQuote?.conversation_id||relatedRequest?.conversation_id)===c.id?' selected':'')+'>'+
      e(c.customer_name||c.customer_phone)+' · '+e(c.channel_label||'WhatsApp')+'</option>').join('')+'</select></label>'+
      '<div class="sale-label">Itens do catálogo</div><div id="saleItems">'+items.map(makeRow).join('')+'</div>'+
      '<div class="row-actions"><button type="button" class="btn soft" id="saleAdd">+ Adicionar item</button>'+
@@ -46,6 +49,36 @@
        '<button class="btn sm ghost" data-sale-cancel="'+e(q.id)+'">Cancelar</button>':'')+
       '</div></div>').join('')+'</div>':'<p class="form-note">Nenhum orçamento emitido.</p>')+
    '</section></div>'+
+   '<section class="card card-pad socio-quote-request-panel" id="quoteRequestPanel">'+
+    '<div class="socio-clean-head"><div><h2>Pedidos de orçamento recebidos</h2>'+
+    '<p class="form-note">A IA identifica pedidos reais nas conversas que foram entregues a ela. A equipe confirma produtos, valores e condições antes de responder.</p></div>'+
+    '<small>'+e(quoteRequests.pendingCount||0)+' pendente(s)</small></div>'+
+    (waiting.length?'<div class="sale-records">'+waiting.map(q=>
+     '<div class="sale-record socio-quote-request" data-quote-request="'+e(q.id)+'">'+
+     '<div><strong>'+e(q.customer_name||q.customer_phone||'Cliente')+'</strong>'+
+     '<small>'+e(new Date(q.created_at).toLocaleString('pt-BR'))+' · '+
+      e(q.status==='pending'?'Aguardando preparação':q.status==='preparing'?'Em preparação':q.status==='done'?'Concluído':'Arquivado')+'</small>'+
+     '<p class="form-note">'+e(q.request_excerpt||'Pedido de orçamento')+'</p>'+
+     '<small>Aviso ao proprietário: '+e(q.alert_status==='sent'?'confirmado no WhatsApp':
+      q.alert_status==='uncertain'?'envio não confirmado; confira o WhatsApp':
+      q.alert_status==='pending'?'aguardando envio':q.alert_status==='unavailable'?'não entregue; veja no sistema':
+      'aviso dentro do Sócio')+'</small></div>'+
+     '<div class="sale-record-actions">'+
+     (['pending','preparing'].includes(q.status)?'<button type="button" class="btn sm primary" data-quote-prepare="'+e(q.id)+'">Preparar orçamento</button>'+
+      '<button type="button" class="btn sm soft" data-quote-complete="'+e(q.id)+'">Concluir</button>'+
+      '<button type="button" class="btn sm ghost" data-quote-dismiss="'+e(q.id)+'">Arquivar</button>':'')+
+     '</div></div>').join('')+'</div>':
+     '<p class="form-note">Nenhum pedido de orçamento identificado pela IA. Eles aparecerão aqui, sem enviar propostas automaticamente.</p>')+
+    '<div class="socio-quote-alerts"><strong>Notificação de orçamento no WhatsApp do proprietário</strong>'+
+     '<p class="form-note">'+(quoteRequests.alerts?.enabled?
+      'Ativada para '+e(quoteRequests.alerts.ownerPhoneMasked||'o celular do proprietário')+'.':
+      'Desativada. Você continuará vendo todos os pedidos nesta página.')+'</p>'+
+     (me?.user?.role==='owner'&&!me.user.platformOwner?
+      '<button type="button" class="btn soft" id="quoteAlertToggle">'+
+       (quoteRequests.alerts?.enabled?'Desativar avisos':'Ativar avisos no meu WhatsApp')+'</button>':
+      '<p class="form-note">Somente o proprietário, autenticado na própria empresa, pode autorizar avisos para seu celular cadastrado.</p>')+
+    '</div>'+
+   '</section>'+
    '<section class="card card-pad"><h2>Pedidos</h2><p class="form-note">Pedido aprovado não significa pagamento confirmado ou mercadoria reservada.</p>'+
     (sales.orders.length?'<div class="sale-records">'+sales.orders.map(o=>
      '<div class="sale-record"><div><strong>'+e(o.customer_name)+'</strong><small>'+money(o.amount_cents)+
@@ -96,6 +129,11 @@
     await api('/api/sales/quotes','POST',{
      conversationId:selected,items:rows,...(activeQuote?{seriesId:activeQuote.series_id}:{})
     });
+    if(requestToPrepare){
+     try{await api('/api/quote-requests/'+requestToPrepare+'/status','POST',{status:'preparing'});}
+     catch{toast('Rascunho criado. Atualize manualmente o status da solicitação.',true);}
+     requestToPrepare=null;
+    }
     revision=null;linkToShare='';
     toast('Orçamento salvo como rascunho. Gere um link antes de enviar.');
     await render({api,e,toast,view});
@@ -120,6 +158,29 @@
     linkToShare='';await render({api,e,toast,view});
    }catch(err){toast(err.message,true)}
   }));
+  $('[data-quote-prepare]').forEach(btn=>btn.addEventListener('click',()=>{
+   requestToPrepare=btn.dataset.quotePrepare;revision=null;linkToShare='';
+   void render({api,e,toast,view,me}).then(()=>view.querySelector('#saleForm')?.scrollIntoView({block:'start',behavior:'smooth'}));
+  }));
+  for(const [dataKey,newStatus] of [['quoteComplete','done'],['quoteDismiss','dismissed']]){
+   $('[data-quote-'+(newStatus==='done'?'complete':'dismiss')+']').forEach(btn=>btn.addEventListener('click',async()=>{
+    if(newStatus==='dismissed'&&!confirm('Arquivar este pedido de orçamento?'))return;
+    try{
+     await api('/api/quote-requests/'+btn.dataset[dataKey]+'/status','POST',{status:newStatus});
+     toast(newStatus==='done'?'Pedido concluído.':'Pedido arquivado.');
+     await render({api,e,toast,view,me});
+    }catch(err){toast(err.message,true);}
+   }));
+  }
+  $('#quoteAlertToggle')?.addEventListener('click',async()=>{
+   const enabled=!quoteRequests.alerts?.enabled;
+   if(enabled&&!confirm('Você confirma que é o proprietário do celular cadastrado e deseja receber avisos de pedidos de orçamento por WhatsApp?'))return;
+   try{
+    await api('/api/quote-requests/alerts','POST',{enabled});
+    toast(enabled?'Avisos de orçamento ativados.':'Avisos de orçamento desativados.');
+    await render({api,e,toast,view,me});
+   }catch(err){toast(err.message,true);}
+  });
   $('#saleCopy').addEventListener('click',async()=>{
    if(!linkToShare)return toast('Gere um link primeiro.',true);
    try{await navigator.clipboard.writeText(linkToShare);toast('Link copiado.');}
