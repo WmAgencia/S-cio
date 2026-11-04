@@ -97,6 +97,8 @@ export async function connectPipeboard(pool,a,{accountId,label,token},opts={}){
 }
 export async function registerGoogleAdsScript(pool,a,{accountId,label},env=process.env){
  if(!googleAccount(accountId)||!safeLabel(label))throw fail(422,'Número da conta Google Ads inválido (10 dígitos).');
+ const publicUrl=String(env.SOCIO_PUBLIC_URL||'').replace(/\/$/,'');
+ if(!/^https:\/\/[a-z0-9.-]+$/i.test(publicUrl))throw fail(503,'URL pública HTTPS não configurada.');
  const secret=randomBytes(42).toString('base64url');
  const secretCiphertext=sealMarketingSecret(secret,env);
  const result=await pool.query(
@@ -108,8 +110,7 @@ export async function registerGoogleAdsScript(pool,a,{accountId,label},env=proce
   [randomUUID(),a.active_tenant_id,accountId,label.trim(),secretCiphertext,a.user_id]);
  const connection=result.rows[0];
  // Return the newly rotated secret once; never expose it in a GET endpoint.
- const publicUrl=String(env.SOCIO_PUBLIC_URL||'').replace(/\/$/,'');
- if(!/^https:\/\/[a-z0-9.-]+$/i.test(publicUrl))throw fail(503,'URL pública HTTPS não configurada.');
+
  return {...connection,secret,endpoint:publicUrl+'/webhooks/google-ads/'+connection.id};
 }
 export function verifyGoogleReport(raw,signature,connection,payload,now=Date.now(),env=process.env){
