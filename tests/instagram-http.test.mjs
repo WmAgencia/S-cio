@@ -23,7 +23,7 @@ test('HTTP Instagram: one-use OAuth launch, signed webhook, role/CSRF and opt-in
    WA_AKG_BASE_URL:'',WA_AKG_API_KEY:'',
    SOCIO_LIVE_SYNC_ENABLED:'false',SOCIO_AUTOREPLY_ENABLED:'false',SOCIO_OUTBOUND_ENABLED:'false',
    SETUP_TOKEN:setupToken,INSTAGRAM_APP_ID:'1234567890',
-   INSTAGRAM_APP_SECRET:secret,INSTAGRAM_WEBHOOK_VERIFY_TOKEN:'instagram-fixture-verify',
+   SOCIO_INSTAGRAM_ENABLED:'true',INSTAGRAM_APP_SECRET:secret,INSTAGRAM_WEBHOOK_VERIFY_TOKEN:'instagram-fixture-verify',
    SOCIO_PUBLIC_URL:'https://socio.example.test',
    CHANNEL_ENCRYPTION_KEY:'integration-test-channel-encryption-key-2026'},
   stdio:['ignore','pipe','pipe']
@@ -39,9 +39,9 @@ test('HTTP Instagram: one-use OAuth launch, signed webhook, role/CSRF and opt-in
  }
  assert(ready,'server did not become ready: '+logs);
  const home=await (await fetch(base+'/')).text();
- assert(home.includes('data-view="instagram"'));
+ assert(!home.includes('data-view="instagram"'));
  const client=await (await fetch(base+'/app.js')).text();
- assert(client.includes('Instagram profissional'));
+ assert(!client.includes('Conectar Instagram'));
  const setup=await fetch(base+'/api/setup',{method:'POST',headers:{'content-type':'application/json'},
   body:JSON.stringify({setupToken,name:'Gestor Instagram',company:'Empresa Instagram',
    email:'ig-owner@test.example',password:'StrongPassword!2026Unique'})});
