@@ -140,15 +140,19 @@ async function handle(req,res){
  if(method==='GET'&&pathname==='/api/marketing/oauth/callback'){
   const qs=new URL(req.url,'http://local').searchParams;
   const isDenied=Boolean(qs.get('error'));
+  let provider=null;
   if(!isDenied){
-   try{await finishPipeboardOAuth(pool,qs.get('state'),qs.get('code'));}
-   catch(error){
+   try{
+    const completed=await finishPipeboardOAuth(pool,qs.get('state'),qs.get('code'));
+    provider=['meta','google'].includes(completed.provider)?completed.provider:null;
+   }catch(error){
     console.warn('[marketing-oauth]',String(error?.status||'OAUTH_ERROR').slice(0,24));
     res.writeHead(303,{Location:'/?marketing=failed','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
     return res.end();
    }
   }
-  res.writeHead(303,{Location:isDenied?'/?marketing=cancelled':'/?marketing=authorized',
+  res.writeHead(303,{Location:isDenied?'/?marketing=cancelled':
+   '/?marketing=authorized'+(provider?'&provider='+provider:''),
    'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
   return res.end();
  }
