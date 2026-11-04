@@ -654,7 +654,7 @@ async function training(){
    (run?.partialCoverage?'<p class="form-note">Cobertura parcial: o gateway limita o histórico a 50 conversas por número e até 400 mensagens por conversa. Não representa todo o WhatsApp.</p>':'')+
    (run?.errorCode?'<p class="form-error">Erro: '+e(run.errorCode)+'</p>':'')+
    (!auto.groqConfigured?'<p class="form-note">A chave GROQ_API_KEY ainda não está configurada. A análise gera Markdown preliminar por regras; a síntese pelo Groq será habilitada quando a chave for instalada.</p>':
-    '<p class="form-note">Síntese pelo Groq habilitada. O conhecimento continua como rascunho até sua aprovação.</p>')+
+    '<p class="form-note">Chave Groq detectada. A análise tenta usar o Groq e registra quando precisa gerar a síntese por regras locais. O conhecimento exige aprovação.</p>')+
    (!connected.length?'<button type="button" class="btn soft" id="trainConnectWhatsApp">+ Conectar WhatsApp</button>':'')+
   '</section>'+
   (draft?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Markdown gerado · versão '+e(draft.version)+'</h2>'+
@@ -669,9 +669,11 @@ async function training(){
     '<p class="form-note">Somente depois de aprovar o texto ele se torna conhecimento ativo da IA. Nunca inclui mensagens literais de clientes.</p>'+
     (canManage?'<div class="socio-training-buttons"><button type="button" class="btn soft" id="saveTrainingDraft">Salvar revisão</button>'+
       '<button type="button" class="btn primary" id="analysisApprove" data-id="'+e(draft.id)+'">Aprovar Markdown</button></div>':'')+
+    '<button type="button" class="btn sm ghost" data-export-training="'+e(draft.id)+'">Baixar rascunho .md</button>'+
     '</section>':'')+
   (published?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Conhecimento aprovado</h2><span class="badge green">Versão '+e(published.version)+'</span></div>'+
-    '<pre class="code-preview">'+e(ag.knowledge_md||'')+'</pre></section>':'')+
+    '<pre class="code-preview">'+e(ag.knowledge_md||'')+'</pre>'+
+    '<button type="button" class="btn sm ghost" data-export-training="'+e(published.id)+'">Baixar conhecimento .md</button></section>':'')+
   (archived.length?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Histórico de versões</h2>'+
     '<span class="badge gray">'+e(archived.length)+' arquivada(s)</span></div>'+
     '<p class="form-note">Você pode recuperar uma versão aprovada anteriormente. O conteúdo anterior ficará arquivado para eventual retorno.</p>'+
@@ -709,6 +711,16 @@ async function training(){
   await api('/api/training/versions/'+draft.id+'/approve','POST',{});
   toast('Markdown aprovado e disponível para a IA.');
   await training();
+ }));
+ view.querySelectorAll('[data-export-training]').forEach(btn=>btn.addEventListener('click',()=>{
+  const selected=versions.find(v=>v.id===btn.dataset.exportTraining);
+  if(!selected)return;
+  const content=selected.id===draft?.id?($('#trainingDraftMarkdown')?.value||selected.markdown):selected.markdown;
+  const blob=new Blob([content],{type:'text/markdown;charset=utf-8'});
+  const url=URL.createObjectURL(blob),download=document.createElement('a');
+  download.href=url;download.download='socio-conhecimento-v'+selected.version+'.md';
+  document.body.appendChild(download);download.click();download.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
  }));
  view.querySelectorAll('[data-restore-training]').forEach(btn=>btn.addEventListener('click',()=>action(async()=>{
   const version=archived.find(v=>v.id===btn.dataset.restoreTraining);
