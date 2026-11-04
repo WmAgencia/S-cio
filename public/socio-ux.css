@@ -128,3 +128,11 @@
 .socio-ops-indicator.configured{background:#f4a456}
 .socio-ops-indicator.action_required{background:#e58a69}
 @media(max-width:640px){.socio-ops-actions .btn{flex:1;min-width:130px}}
+
+/* Scoped training review: keep Markdown editable without losing readability. */
+.socio-knowledge-edit{display:block;width:100%;min-height:280px;padding:16px;border:1px solid var(--border,rgba(120,100,80,.2));border-radius:14px;background:var(--surface,#fffaf6);color:inherit;font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;resize:vertical;overflow-wrap:anywhere}
+.socio-knowledge-edit:focus{outline:2px solid rgba(189,112,65,.45);outline-offset:2px}
+.socio-knowledge-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.socio-version-item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(120,100,80,.13)}
+.socio-version-item:last-child{border-bottom:0}
+@media(max-width:640px){.socio-version-item{align-items:flex-start}.socio-knowledge-edit{min-height:320px}}

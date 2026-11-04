@@ -90,12 +90,22 @@ export async function processNextAnalysisJob(pool){
   return {processed:true,completed:true,jobId:job.id};
  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
 }
-export async function createTrainingAnalysis(pool,tenantId){
+export async function createTrainingAnalysis(pool,tenantId,{scanIds=null}={}){
  const c=await pool.connect(),jobId=randomUUID();
  try{
   await c.query('BEGIN');
-  const imports=await c.query('SELECT id FROM imports WHERE tenant_id=$1 ORDER BY created_at ASC LIMIT 200',[tenantId]);
-  if(!imports.rowCount){const e=new Error('Importe pelo menos uma conversa antes da análise.');e.status=422;throw e;}
+  // Automatic training only analyzes the latest known snapshot for each chat
+  // actually enumerated by the selected WA-AKG scans. Never mix unrelated
+  // manual imports or other tenant channels into the automatic draft.
+  const imports=scanIds?await c.query(
+   "SELECT DISTINCT ON (s.channel_id,s.jid_hash) s.import_id AS id "+
+   "FROM waakg_import_snapshots s JOIN waakg_scan_chats ch ON "+
+   "ch.tenant_id=s.tenant_id AND ch.channel_id=s.channel_id AND ch.jid_hash=s.jid_hash "+
+   "WHERE s.tenant_id=$1 AND ch.scan_id=ANY($2::uuid[]) "+
+   "ORDER BY s.channel_id,s.jid_hash,s.imported_at DESC,s.import_id DESC LIMIT 200",
+   [tenantId,scanIds]
+  ):await c.query('SELECT id FROM imports WHERE tenant_id=$1 ORDER BY created_at ASC LIMIT 200',[tenantId]);
+  if(!imports.rowCount){const e=new Error(scanIds?'Nenhum histórico de texto disponível nas sessões verificadas.':'Importe pelo menos uma conversa antes da análise.');e.status=422;throw e;}
   await c.query("INSERT INTO training_jobs(id,tenant_id,status,total_items) VALUES($1,$2,'queued',$3)",[jobId,tenantId,imports.rowCount]);
   for(const row of imports.rows)await c.query('INSERT INTO training_job_items(job_id,tenant_id,import_id) VALUES($1,$2,$3)',[jobId,tenantId,row.id]);
   await c.query('COMMIT');
