@@ -9,5 +9,6 @@ WORKDIR /srv
 COPY package.json ./package.json
 RUN npm install --omit=dev --ignore-scripts --no-fund --no-audit
 COPY backup-runner/run.mjs ./backup-runner/run.mjs
+COPY backup-runner/restore.mjs ./backup-runner/restore.mjs
 USER postgres
 CMD ["node","backup-runner/run.mjs"]
