@@ -519,6 +519,7 @@ CREATE TABLE IF NOT EXISTS instagram_outbox (
  created_at timestamptz NOT NULL DEFAULT now(),
  updated_at timestamptz NOT NULL DEFAULT now(),
  UNIQUE(tenant_id,client_request_id),
- FOREIGN KEY(tenant_id,conversation_id) REFERENCES conversations(tenant_id,id)
+ FOREIGN KEY(tenant_id,conversation_id) REFERENCES conversations(tenant_id,id),
+ FOREIGN KEY(tenant_id,user_id) REFERENCES users(tenant_id,id)
 );
 CREATE INDEX IF NOT EXISTS instagram_outbox_recent ON instagram_outbox(tenant_id,created_at DESC);
