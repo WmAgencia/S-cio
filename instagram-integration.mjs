@@ -157,6 +157,10 @@ export async function completeInstagramOAuth(pool,state,code,{env=process.env,re
   [createHash('sha256').update(state).digest('hex')]);
  if(!used.rowCount)throw err(403,'Autorização expirada ou já utilizada.');
  const {tenant_id:tenant,user_id:user}=used.rows[0];
+ const authorized=await pool.query(
+  "SELECT id FROM users WHERE id=$1 AND tenant_id=$2 AND active=true AND role IN ('owner','admin')",
+  [user,tenant]);
+ if(!authorized.rowCount)throw err(403,'Acesso de administração revogado durante autorização.');
  const account=await exchangeInstagramCode(code,env,request);
  const ciphertext=encryptInstagramToken(account.token,env),c=await pool.connect();
  try{
