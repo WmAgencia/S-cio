@@ -389,3 +389,58 @@ CREATE TABLE IF NOT EXISTS ai_reply_attempts (
  FOREIGN KEY(tenant_id,inbound_message_id) REFERENCES messages(tenant_id,id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS ai_reply_attempts_recent ON ai_reply_attempts(tenant_id,conversation_id,created_at DESC);
+
+-- Sócio Fase 3: vendas e aprovações; alterações aditivas sem cobranças automáticas.
+CREATE UNIQUE INDEX IF NOT EXISTS conversations_tenant_sales_fk ON conversations(tenant_id,id);
+CREATE TABLE IF NOT EXISTS sales_quotes (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ conversation_id uuid NOT NULL,
+ series_id uuid NOT NULL,
+ version integer NOT NULL CHECK(version>0),
+ status text NOT NULL DEFAULT 'draft'
+  CHECK(status IN ('draft','issued','accepted','declined','superseded','cancelled','expired')),
+ currency char(3) NOT NULL DEFAULT 'BRL' CHECK(currency='BRL'),
+ amount_cents integer NOT NULL CHECK(amount_cents>0 AND amount_cents<100000000),
+ items jsonb NOT NULL,
+ token_hash char(64) UNIQUE,
+ buyer_name text,
+ expires_at timestamptz,
+ accepted_at timestamptz,
+ created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(tenant_id,conversation_id) REFERENCES conversations(tenant_id,id) ON DELETE CASCADE,
+ UNIQUE(tenant_id,series_id,version),
+ UNIQUE(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS sales_quotes_tenant_recent ON sales_quotes(tenant_id,created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS sales_quotes_one_issued_per_series
+ ON sales_quotes(tenant_id,series_id) WHERE status='issued';
+CREATE TABLE IF NOT EXISTS sales_orders (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ quote_id uuid NOT NULL,
+ conversation_id uuid NOT NULL,
+ customer_name text NOT NULL,
+ amount_cents integer NOT NULL CHECK(amount_cents>0),
+ items jsonb NOT NULL,
+ status text NOT NULL DEFAULT 'pending_payment'
+  CHECK(status IN ('pending_payment','paid_test','manual_review','cancelled')),
+ payment_provider text,
+ payment_session_id text UNIQUE,
+ payment_url text,
+ paid_at timestamptz,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(tenant_id,quote_id),
+ UNIQUE(tenant_id,id),
+ FOREIGN KEY(tenant_id,quote_id) REFERENCES sales_quotes(tenant_id,id),
+ FOREIGN KEY(tenant_id,conversation_id) REFERENCES conversations(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS sales_orders_tenant_recent ON sales_orders(tenant_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS sales_payment_events (
+ event_id text PRIMARY KEY,
+ order_id uuid NOT NULL REFERENCES sales_orders(id) ON DELETE CASCADE,
+ provider text NOT NULL,
+ processed_at timestamptz NOT NULL DEFAULT now()
+);
