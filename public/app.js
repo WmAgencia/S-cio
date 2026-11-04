@@ -614,111 +614,80 @@ function mountAiGuideTabs(){
 
 async function training(){
  clearTimeout(trainingTimer);
- const [list,ag,jobs,versions,waConfig,waLinks,waScans]=await Promise.all([
-  api('/api/imports'),api('/api/agent'),api('/api/training/jobs'),api('/api/training/versions'),
-  api('/api/waakg/config'),api('/api/waakg/channels'),api('/api/waakg/scans')
+ const [auto,versions,waLinks,ag]=await Promise.all([
+  api('/api/training/auto'),api('/api/training/versions'),
+  api('/api/waakg/channels'),api('/api/agent')
  ]);
- const latest=jobs[0],open=jobs.find(x=>['queued','analyzing','paused'].includes(x.status));
- const percent=latest?.totalItems?Math.min(100,Math.round(100*Number(latest.processedItems||0)/Number(latest.totalItems))):0;
- const draft=versions.find(x=>x.status==='draft'),published=versions.find(x=>x.status==='approved');
- const controls=open?'<div class="row-actions">'+
-  (open.status==='paused'?'<button class="btn soft" id="analysisResume">Retomar</button>':'<button class="btn soft" id="analysisPause">Pausar</button>')+
-  '<button class="btn soft" id="analysisCancel">Cancelar</button></div>':
-  '<button class="btn primary" id="analysisStart" '+(list.length?'':'disabled')+'>Analisar '+list.length+' conversa(s) →</button>';
- const summary=latest?.report?.summary||'A análise é baseada somente nas conversas importadas nesta empresa. '+
-  'Sincronize o histórico disponível dos WhatsApps autorizados acima ou importe arquivos antes de analisar.';
- const syncActive=waScans.some(j=>['queued','scanning','importing'].includes(j.status));
- const waCard='<section class="card card-pad section-gap"><div class="section-title">Analisar conversas dos WhatsApps conectados</div>'+
-   '<p class="form-note">Importa texto das sessões autorizadas, sem mensagens automáticas. O WA-AKG atual lista no máximo 50 chats por sessão e até 400 mensagens por conversa; mídias e grupos são ignorados.</p>'+
-   (waLinks.length?'<button class="btn soft" id="waSyncAll" '+(!waConfig.configured?'disabled':'')+'>Sincronizar histórico dos '+waLinks.length+' WhatsApp(s) →</button>':
-   '<p class="form-note">Conecte primeiro uma sessão existente na guia WhatsApps.</p>')+
-   (!waConfig.configured?'<p class="form-note">Gateway pendente de configuração pela Consecom.</p>':'')+
-   (waScans.length?'<div class="section-gap">'+waScans.slice(0,8).map(j=>{
-     const pct=j.status==='completed'?100:j.totalChats?Math.round(100*j.processedChats/j.totalChats):0;
-     const label=waLinks.find(c=>c.id===j.channelId)?.label||'WhatsApp';
-     return '<div class="section-gap"><strong>'+e(label)+' — '+pct+'%</strong><span class="form-note"> '+e(j.status)+'</span>'+
-      '<div class="progress-track"><div class="progress-fill" style="width:'+pct+'%"></div></div>'+
-      '<p class="form-note">'+e(j.processedChats)+'/'+e(j.totalChats)+' conversas processadas, '+e(j.importedChats)+' importadas, '+e(j.importedMessages)+' mensagens. '+
-      (j.partialCoverage?'Cobertura parcial: listagem do gateway limitada. ':'')+
-      (j.truncatedChats?'Algumas conversas excedem 400 mensagens. ':'')+
-      (j.errorCode?'Erro: '+e(j.errorCode):'')+'</p>'+
-      (['queued','scanning','importing','paused','failed'].includes(j.status)?
-        '<div class="row-actions"><button class="btn sm soft" data-wa-action="'+(j.status==='paused'||j.status==='failed'?'resume':'pause')+'" data-job="'+e(j.id)+'">'+(j.status==='paused'||j.status==='failed'?'Retomar':'Pausar')+'</button>'+
-        '<button class="btn sm soft" data-wa-action="cancel" data-job="'+e(j.id)+'">Cancelar</button></div>':'')+'</div>';
-   }).join('')+'</div>':'')+
-   '<p class="form-note">Depois de sincronizar, use <strong>Analisar conversas</strong> abaixo para gerar relatório e Markdown. A aprovação do conhecimento continua manual.</p></section>';
- const trainingCard='<section class="card card-pad section-gap" id="analysisCard">'+
-  '<div class="section-title">Análise automática — rascunho supervisionado</div>'+
-  '<p class="form-note">O percentual indica registros realmente processados. Não mede a eficácia de vendas sem conversões verificadas.</p>'+
-  '<div class="progress-track"><div class="progress-fill" style="width:'+percent+'%"></div></div>'+
-  '<p><strong>'+percent+'% analisado</strong> · '+(latest?e(latest.processedItems)+' de '+e(latest.totalItems)+' conversas':'Nenhuma análise iniciada')+
-  ' · '+e(latest?.status||'pronto para começar')+'</p>'+
-  '<p class="form-note">'+e(summary)+'</p>'+controls+
-  (draft?'<div class="section-gap"><strong>Versão '+e(draft.version)+' gerada — aguardando aprovação</strong>'+
-    '<p class="form-note">'+e(draft.report?.summary||'')+'</p>'+
-    '<div class="code-preview">'+e(draft.markdown||'')+'</div>'+
-    '<button class="btn primary section-gap" id="analysisApprove" data-id="'+e(draft.id)+'">Aprovar conhecimento →</button></div>':'')+
-  (published?'<p class="form-note">Última versão aprovada: '+e(published.version)+'. A publicação não ativa envios automáticos.</p>':'')+
-  '</section>';
-
+ const run=auto.run,connected=waLinks.filter(c=>c.status==='connected');
+ const percent=run?.percent??0;
+ const draft=versions.find(v=>v.status==='draft'),published=versions.find(v=>v.status==='approved');
+ const ongoing=run&&['scanning','analyzing'].includes(run.status);
+ const status=run?.status==='scanning'?'Lendo conversas dos WhatsApps conectados':
+  run?.status==='analyzing'?'Organizando o conhecimento e gerando Markdown':
+  run?.status==='completed'?'Análise concluída — conhecimento pronto para revisão':
+  run?.status==='failed'?'Não foi possível concluir o treinamento':
+  'Pronto para iniciar';
+ const canManage=state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role);
+ const percentText=ongoing||run?.status==='completed'?percent+'%':'0%';
  view.innerHTML=
- waCard+trainingCard+
- '<div class="two-pane train"><div class="card card-pad"><div class="section-title">Importar conversas de sucesso</div><div class="file-drop"><span class="file-icon">⇧</span><strong>Escolha conversas .txt, .md ou .zip</strong><small>Múltiplos arquivos · até 700 KB por texto ou 2 MB por ZIP</small><input type="file" id="importInput" accept=".txt,.md,.zip,text/plain,text/markdown,application/zip" multiple aria-label="Escolher conversas"></div><p class="form-note">No WhatsApp: abra a conversa → Exportar conversa → Sem mídia. Você também pode enviar o ZIP da exportação diretamente, sem extraí-lo.</p><div class="info-strip"><strong>Privacidade em primeiro lugar</strong>Utilize conversas que sua empresa está autorizada a tratar. Telefones, e-mails e documentos numéricos são mascarados; nomes de participantes são substituídos por identificadores genéricos.</div><div id="importFeedback" class="form-note"></div></div>'+
- '<div>'+panel('Base de experiência',list.length+' conversa(s) importada(s).',
- '<div class="card-pad"><div class="progress-track"><div class="progress-fill" style="width:'+Math.min(100,list.length*10)+'%"></div></div><p class="form-note">'+Math.min(list.length,10)+' de 10 referências sugeridas para o primeiro treinamento.</p></div>'+
- (list.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>Arquivo</th><th>Mensagens</th></tr></thead><tbody>'+list.map(x=>'<tr><td><strong>'+e(x.filename)+'</strong><div class="table-detail">'+date(x.created_at)+'</div></td><td>'+e(x.message_count)+'</td></tr>').join('')+'</tbody></table></div>':empty('✳','Ainda não há exemplos','Suas primeiras conversas de referência aparecerão aqui.')))+
- '<div class="card card-pad section-gap"><div class="section-title">Conhecimento aprovado</div><p class="form-note">Somente análises revisadas e aprovadas entram no conhecimento do agente. Produtos e preços continuam em configuração separada.</p><div class="code-preview">'+e(ag.knowledge_md||'# Aguardando as primeiras conversas de referência...')+'</div></div></div></div>';
- const run=async(path)=>action(async()=>{await api(path,'POST',{});await training();});
- $('#waSyncAll')?.addEventListener('click',async()=>{
-  await action(async()=>{
-   let started=0,errors=[];
-   for(const c of waLinks){
-    if(waScans.some(j=>j.channelId===c.id&&['queued','scanning','importing','paused'].includes(j.status)))continue;
-    try{await api('/api/waakg/scans','POST',{channelId:c.id});started++;}
-    catch(err){errors.push(c.label+': '+errMsg(err));}
-   }
-   toast(started+' sincronização(ões) iniciada(s).'+(errors.length?' '+errors.join(' | '):''),!started);
-   await training();
-  });
- });
- view.querySelectorAll('[data-wa-action]').forEach(button=>button.addEventListener('click',()=>run('/api/waakg/scans/'+button.dataset.job+'/'+button.dataset.waAction)));
- $('#analysisStart')?.addEventListener('click',()=>run('/api/training/jobs'));
- $('#analysisPause')?.addEventListener('click',()=>run('/api/training/jobs/'+open.id+'/pause'));
- $('#analysisResume')?.addEventListener('click',()=>run('/api/training/jobs/'+open.id+'/resume'));
- $('#analysisCancel')?.addEventListener('click',()=>run('/api/training/jobs/'+open.id+'/cancel'));
- $('#analysisApprove')?.addEventListener('click',()=>run('/api/training/versions/'+draft.id+'/approve'));
- if((open&&open.status!=='paused')||syncActive){
-  trainingTimer=setTimeout(()=>{if(state.view==='training')training().catch(error=>toast(errMsg(error),true));},1750);
- }
- $('#importInput').addEventListener('change',async ev=>{
-  const files=Array.from(ev.target.files||[]);
-  const feedback=$('#importFeedback');if(!files.length)return;
-  if(files.some(f=>!(/\.(txt|md|zip)$/i.test(f.name))||f.size>(/\.zip$/i.test(f.name)?2000000:700000)))return toast('Selecione textos até 700 KB ou ZIPs até 2 MB.',true);
-  let okay=0;const errors=[];
-  for(const file of files){
-   feedback.textContent='Importando '+e(file.name)+'... ('+(okay+errors.length+1)+'/'+files.length+')';
-   try{
-    if(/\.zip$/i.test(file.name)){
-     const bytes=new Uint8Array(await file.arrayBuffer()),parts=[];
-     for(let i=0;i<bytes.length;i+=32768)parts.push(String.fromCharCode(...bytes.subarray(i,i+32768)));
-     const result=await api('/api/imports/zip','POST',{filename:file.name,contentBase64:btoa(parts.join(''))});
-     okay+=result.conversationCount;
-    }else{await api('/api/imports','POST',{filename:file.name,content:await file.text()});okay++;}
-   }
-   catch(ex){errors.push(file.name+': '+errMsg(ex));}
-  }
-  toast(okay+' arquivo(s) importado(s).'+(errors.length?' '+errors.length+' falha(s).':'') ,!okay);
+ '<div class="socio-training-clean">'+
+  '<section class="card card-pad socio-training-center">'+
+   '<span class="eyebrow">APRENDIZADO E ANÁLISES</span>'+
+   '<div class="socio-train-emblem">✳</div>'+
+   '<h2>Seu Sócio aprende com suas conversas.</h2>'+
+   '<p>Com um clique, analisamos as conversas disponíveis nos WhatsApps conectados da empresa e criamos um Markdown de conhecimento para sua aprovação.</p>'+
+   '<div class="socio-train-accounts">'+connected.map(c=>
+    '<span class="socio-train-account"><span class="socio-green-dot"></span>'+e(c.label||c.phone||'WhatsApp')+'</span>').join('')+
+    (!connected.length?'<span>Conecte seu WhatsApp para começar</span>':'')+'</div>'+
+   '<button type="button" class="btn primary socio-train-cta" id="startAutoTraining" '+
+    (!connected.length||ongoing||!canManage?'disabled':'')+'>Treinar</button>'+
+   '<div class="socio-train-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+percent+'" aria-label="Progresso da análise">'+
+    '<div class="progress-track"><div class="progress-fill" style="width:'+percent+'%"></div></div></div>'+
+   '<strong class="socio-train-percent">'+percentText+' analisado</strong>'+
+   '<p class="form-note" role="status">'+e(status)+'</p>'+
+   (run?.messagesImported?'<p class="form-note">'+e(run.messagesImported)+' mensagens de texto novas importadas neste treinamento.</p>':'')+
+   (run?.partialCoverage?'<p class="form-note">Cobertura parcial: o gateway limita o histórico a 50 conversas por número e até 400 mensagens por conversa. Não representa todo o WhatsApp.</p>':'')+
+   (run?.errorCode?'<p class="form-error">Erro: '+e(run.errorCode)+'</p>':'')+
+   (!auto.grokConfigured?'<p class="form-note">A chave do Grok (xAI) ainda não está configurada. A análise gera Markdown preliminar por regras; a síntese com Grok será habilitada com XAI_API_KEY.</p>':
+    '<p class="form-note">Síntese por Grok (xAI) habilitada. Resultados ficam como rascunho até sua aprovação.</p>')+
+   (!connected.length?'<button type="button" class="btn soft" id="trainConnectWhatsApp">+ Conectar WhatsApp</button>':'')+
+  '</section>'+
+  (draft?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Markdown gerado · versão '+e(draft.version)+'</h2>'+
+    '<span class="badge yellow">Aguardando aprovação</span></div>'+
+    '<p class="form-note">'+e(draft.report?.summary||'Reveja o conteúdo antes de ativá-lo.')+'</p>'+
+    '<p class="form-note">Processamento: '+e(draft.report?.analysisProvider==='xai_grok'?'Grok xAI':draft.report?.analysisProvider==='deterministic_fallback'?'Síntese preliminar (Grok indisponível)':'Síntese preliminar')+'</p>'+
+    '<pre class="code-preview">'+e(draft.markdown||'')+'</pre>'+
+    '<button type="button" class="btn primary" id="analysisApprove" data-id="'+e(draft.id)+'">Aprovar Markdown</button></section>':'')+
+  (published?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Conhecimento aprovado</h2><span class="badge green">Versão '+e(published.version)+'</span></div>'+
+    '<pre class="code-preview">'+e(ag.knowledge_md||'')+'</pre></section>':'')+
+ '</div>';
+ $('#startAutoTraining')?.addEventListener('click',()=>action(async()=>{
+  const btn=$('#startAutoTraining');if(btn)btn.disabled=true;
+  await api('/api/training/auto','POST',{});
+  toast('Treinamento iniciado. O conhecimento será preparado para sua revisão.');
   await training();
-  if(errors.length)$('#importFeedback').textContent=errors.join(' | ');
- });
+ }));
+ $('#trainConnectWhatsApp')?.addEventListener('click',()=>window.SocioUX.openQr({
+  api,toast,canManage,
+  onConnected:()=>state.view==='training'?training():Promise.resolve()
+ }));
+ $('#analysisApprove')?.addEventListener('click',()=>action(async()=>{
+  await api('/api/training/versions/'+draft.id+'/approve','POST',{});
+  toast('Markdown aprovado e disponível para a IA.');
+  await training();
+ }));
  mountAiGuideTabs();
+ if(ongoing)trainingTimer=setTimeout(()=>{
+  if(state.view==='training'&&state.aiTab==='training')
+   training().catch(error=>toast(errMsg(error),true));
+ },1800);
 }
 async function agent(){
  const ag=await api('/api/agent');
- const missing=!state.me.groqConfigured;
+ const missing=!state.me.grokConfigured;
  view.innerHTML=
  '<div class="two-pane train"><div class="card card-pad"><div class="section-title">Identidade e comportamento</div><form id="agentForm" class="form-stack"><label>Nome do agente<input name="name" required maxlength="80" value="'+e(ag.name||'Sócio')+'"></label><label>Tom de voz<input name="tone" required maxlength="300" value="'+e(ag.tone||'Profissional e natural')+'"></label><label>Instruções e limites<textarea name="instructions" required maxlength="6000" rows="8">'+e(ag.instructions||'')+'</textarea></label><label>Modo operacional<select name="enabled"><option value="false"'+(!ag.enabled?' selected':'')+'>Em preparação</option><option value="true"'+(ag.enabled?' selected':'')+'>Preparado para integrar (não envia sozinho)</option></select></label><button type="submit" class="btn primary">Salvar personalidade →</button><p class="form-note">Marcar como preparado não conecta um WhatsApp ou libera envios automáticos.</p></form></div>'+
- '<div class="card"><div class="panel-head"><div><h2>Laboratório de conversas</h2><p>Faça perguntas como se fosse um cliente.</p></div>'+badge('Simulação','gray')+'</div><div class="messages-preview" id="simulationMessages"><div class="bubble">Olá! Este é seu laboratório. Configure produtos e treinamento e faça uma pergunta para experimentar a personalidade do seu Sócio.</div></div><form class="chat-compose" id="simulateForm"><input name="message" required maxlength="1200" placeholder="Ex.: Quais serviços vocês oferecem?" autocomplete="off"><button type="submit" class="btn primary">Enviar ↗</button></form>'+(missing?'<div class="info-strip" style="margin:14px">Conecte GROQ_API_KEY nas variáveis do Railway para ativar respostas reais no simulador.</div>':'')+'</div></div>';
+ '<div class="card"><div class="panel-head"><div><h2>Laboratório de conversas</h2><p>Faça perguntas como se fosse um cliente.</p></div>'+badge('Simulação','gray')+'</div><div class="messages-preview" id="simulationMessages"><div class="bubble">Olá! Este é seu laboratório. Configure produtos e treinamento e faça uma pergunta para experimentar a personalidade do seu Sócio.</div></div><form class="chat-compose" id="simulateForm"><input name="message" required maxlength="1200" placeholder="Ex.: Quais serviços vocês oferecem?" autocomplete="off"><button type="submit" class="btn primary">Enviar ↗</button></form>'+(missing?'<div class="info-strip" style="margin:14px">Configure XAI_API_KEY no Railway para ativar as respostas do Grok (xAI) no simulador.</div>':'')+'</div></div>';
  $('#agentForm').addEventListener('submit',async ev=>{ev.preventDefault();const d=formValues(ev.currentTarget);await action(async()=>{await api('/api/agent','PUT',{...d,enabled:d.enabled==='true'});toast('Personalidade atualizada.');await agent();});});
  $('#simulateForm').addEventListener('submit',async ev=>{
   ev.preventDefault();const form=ev.currentTarget,txt=val(form,'message');if(!txt)return;
