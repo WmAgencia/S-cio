@@ -10,6 +10,7 @@ const val=(form,k)=>String(new FormData(form).get(k)||'').trim();
 const errMsg=error=>String(error?.message||'Não foi possível concluir a solicitação.');
 const view=$('#view');
 let toastTimer,trainingTimer,waQrTimer;
+let activeInbox=null;
 
 function toast(message,error=false){
  const el=$('#toast');el.textContent=message;el.className='toast'+(error?' error':'');
@@ -60,6 +61,7 @@ async function boot(){
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
 async function changeView(next){
+ if(next!=='inbox'&&activeInbox){activeInbox.cleanup();activeInbox=null;}
  if(next==='agent'){state.aiTab='agent';next='training';}
  else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
@@ -701,25 +703,14 @@ async function agent(){
  mountAiGuideTabs();
 }
 async function inbox(){
- const data=await api('/api/inbox');
- view.innerHTML=heading('ATENDIMENTO','Conversas da sua empresa.','Todas as conversas recebidas pelos canais integrados, em um único lugar.')+
- '<div class="card inbox-layout"><div class="thread-list"><div class="thread-head">Caixa de entrada <span class="muted">('+data.length+')</span></div>'+
- (data.length?data.map(c=>'<button class="thread-item" data-thread="'+e(c.id)+'"><div class="avatar">'+e((c.customer_name||c.customer_phone||'?')[0].toUpperCase())+'</div><div class="thread-body"><strong>'+e(c.customer_name||c.customer_phone)+'</strong><small>'+e(c.last_message||'Sem mensagens')+'</small><small>'+e(c.channel_label)+' · '+date(c.last_message_at)+'</small></div></button>').join(''):empty('▤','Nenhuma conversa ainda','As mensagens de clientes aparecerão quando um canal estiver conectado.'))+
- '</div><div class="thread-view" id="threadView">'+empty('✉','Selecione uma conversa','Aqui você poderá ler mensagens, registrar notas e assumir o atendimento.')+'</div></div>';
- view.querySelectorAll('[data-thread]').forEach(b=>b.addEventListener('click',()=>openThread(b.dataset.thread)));
- if(data.length)await openThread(data[0].id);
+ if(!window.SocioInbox)throw new Error('Módulo de conversas não foi carregado. Recarregue a página.');
+ if(activeInbox)activeInbox.cleanup();
+ activeInbox=window.SocioInbox.create({api,e,toast,view,changeView});
+ await activeInbox.render();
 }
 async function openThread(convId){
- const data=await api('/api/conversations/'+convId+'/messages');
- state.currentConversation=convId;
- view.querySelectorAll('[data-thread]').forEach(b=>b.classList.toggle('active',b.dataset.thread===convId));
- const c=data.conversation;
- $('#threadView').innerHTML='<div class="thread-toolbar"><div><strong>'+e(c.customer_name||c.customer_phone)+'</strong><div class="muted-label">'+e(c.customer_phone)+'</div></div><select id="threadStatus" aria-label="Status da conversa"><option value="open">Aberta</option><option value="human">Atendimento humano</option><option value="resolved">Resolvida</option></select></div>'+
- '<div class="messages-preview">'+(data.messages.length?data.messages.map(m=>'<div class="bubble '+(m.direction==='outbound'?'agent':m.direction==='note'?'note':'')+'">'+e(m.body)+'<div class="table-detail">'+e(m.direction==='note'?'Nota interna':m.direction==='outbound'?'Empresa':'Cliente')+' · '+date(m.created_at)+'</div></div>').join(''):empty('▤','Sem mensagens','Nenhuma mensagem neste histórico.'))+'</div>'+
- '<form id="noteForm" class="chat-compose"><input name="text" maxlength="3000" required placeholder="Escreva uma nota interna (não enviada ao WhatsApp)"><button class="btn primary" type="submit">Salvar nota</button></form>';
- $('#threadStatus').value=c.status;
- $('#threadStatus').addEventListener('change',async ev=>{const status=ev.target.value;await action(async()=>{await api('/api/conversations/'+convId,'PATCH',{status});toast('Status atualizado.');});});
- $('#noteForm').addEventListener('submit',async ev=>{ev.preventDefault();const txt=val(ev.currentTarget,'text');await action(async()=>{await api('/api/conversations/'+convId+'/note','POST',{text:txt});await openThread(convId);toast('Nota interna registrada.');});});
+ if(!activeInbox)return;
+ return activeInbox.open(convId);
 }
 async function team(){
  const data=await api('/api/team');
