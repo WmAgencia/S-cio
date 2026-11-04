@@ -392,7 +392,7 @@ async function instagram(){
  view.innerHTML=heading('CANAIS','Instagram.',
   'Preparação de acesso privado por conta de teste, sem Meta Developers.')+
   '<div class="card" style="padding:24px;max-width:820px">'+
-   '<h2>aiograpi-rest 6.0.0</h2><p>'+e(status)+'</p>'+
+   '<h2>aiograpi-rest 6.0.0 — Instagram profissional</h2><p>'+e(status)+'</p>'+
    '<p>O serviço está isolado na rede interna do Railway. Por enquanto, nenhuma conta do Instagram foi autenticada.'+
    ' Não são realizadas publicações, Stories, Reels, DMs ou ações sobre perfis reais.</p>'+
    '<p class="form-note">A API é não oficial e pode provocar desafios de autenticação, restrições de uso ou bloqueio de contas.'+
