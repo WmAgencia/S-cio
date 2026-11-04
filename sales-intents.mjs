@@ -14,7 +14,7 @@ export function proposedQuantity(body){
  const found=s.match(/\b(\d{1,3})\s*(?:unidades?|pecas?|itens?|caixas?|kits?)\b/)||
   s.match(/\b(?:comprar|levar|pedir|reservar|separar)\s+(\d{1,3})\b/);
  if(found)return Math.min(100,Number(found[1]))||null;
- if(/\b(?:um|uma|1)\s+(?:unidade|peca|kit|caixa)\b/.test(s))return 1;
+ if(/\b(?:um|uma|1)\s+(?:unidade|peca|kit|caixa)\b/.test(s)||/\b(?:comprar|levar|pedir|reservar|separar)\s+(?:um|uma)\s+/.test(s))return 1;
  return null;
 }
 export async function scanSalesIntents(pool){
@@ -39,7 +39,9 @@ export async function scanSalesIntents(pool){
   const matches=products.rows.filter(p=>norm(p.name).length>=4&&text.includes(norm(p.name)));
   const quantity=proposedQuantity(m.body);
   // Ambiguous product, variation or quantity stays unpriced until operator review.
-  const certain=matches.length===1&&quantity&&Number(matches[0].variant_count)===0;
+  const certain=matches.length===1&&quantity&&Number(matches[0].variant_count)===0&&
+   (matches[0].stock_quantity===null||Number(matches[0].stock_quantity)>=quantity)&&
+   Number(matches[0].price_cents)>0;
   const product=certain?matches[0]:null;
   const items=product?[{productId:product.id,variantId:null,name:product.name,quantity,
    unitPriceCents:product.price_cents,totalCents:product.price_cents*quantity}]:[];
