@@ -1019,7 +1019,7 @@ async function reports(){
    (days.length?'<div class="report-bars" role="img" aria-label="Mensagens recebidas por dia">'+days.map(d=>{
     const n=Number(d.messages||0),width=Math.max(2,Math.round(n/max*100));
     const stamp=new Date(String(d.day).slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
-    return '<div class="report-bar-row"><span>'+e(stamp)+'</span><div class="report-bar-track"><i style="width:'+width+'%"></i></div><strong>'+e(n)+'</strong></div>';
+    return '<div class="report-bar-row"><span>'+e(stamp)+'</span><div class="report-bar-track"><i data-width="'+width+'"></i></div><strong>'+e(n)+'</strong></div>';
    }).join('')+'</div>':'<p class="form-note">Nenhuma mensagem recebida no período.</p>')+
   '</section><section class="card card-pad"><h2>Interpretação dos dados</h2>'+
    '<p class="form-note">O Sócio registra intenções de compra, orçamentos enviados e pedidos aprovados separadamente. Valores estimados não entram como faturamento.</p>'+
@@ -1029,6 +1029,9 @@ async function reports(){
     '<p>Transações sandbox, sem receita real.</p></div></div>'+
    '<p class="form-note">Para medir receita real será necessário conectar e conciliar um meio de pagamento autorizado.</p>'+
   '</section></div></section>';
+ view.querySelectorAll('.report-bar-track i[data-width]').forEach(bar=>{
+  bar.style.width=String(Math.min(100,Math.max(2,Number(bar.dataset.width)||2)))+'%';
+ });
 }
 
 async function inbox(){
