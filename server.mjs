@@ -8,6 +8,9 @@ import {extractWhatsAppZip} from './zip-import.mjs';
 import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
 import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
 import {processNextWaakgScan} from './waakg-history.mjs';
+import {startAutoTraining,autoTrainingStatus,processNextAutoTraining} from './training-auto.mjs';
+import {grokReady,grokResponse} from './xai-grok.mjs';
+import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
@@ -52,7 +55,7 @@ const validText=(v,max=500)=>typeof v==='string'&&v.trim().length>0&&v.length<=m
 const trimmed=(v,max=500)=>typeof v==='string'?v.trim().slice(0,max):'';
 const money=v=>Number.isInteger(v)&&v>=0&&v<100000000;
 const safeDetail=e=>[400,401,403,404,409,413,422,429,503].includes(e.status)?e.message:'Erro interno. Tente novamente.';
-const authAttempts=new Map(),simulationAttempts=new Map();
+const authAttempts=new Map(),simulationAttempts=new Map(),cnpjCache=new Map();
 function limiter(map,key,windowMs,max){
  const ts=Date.now(),value=map.get(key);
  if(!value||ts-value.since>windowMs){map.set(key,{since:ts,count:1});return true;}
@@ -107,9 +110,9 @@ async function handle(req,res){
  if(method==='GET'&&pathname==='/health')return json(res,200,{ok:true,app:'socio',database:'connected'});
  if(method==='GET'&&pathname==='/api/bootstrap'){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
-  return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:!!process.env.GROQ_API_KEY});
+  return json(res,200,{initialized:r.rows[0].initialized,grokConfigured:grokReady(),groqConfigured:!!process.env.GROQ_API_KEY});
  }
- if(method==='GET'&&['/','/index.html','/app.js','/inbox.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -168,7 +171,7 @@ async function handle(req,res){
   const csrf=req.headers['x-csrf-token'];
   if(!csrf||!secureEqual(String(csrf),a.csrf))throw fail(403,'Sessão sem validação de segurança.');
  }
- if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,platformOwner:a.platform_owner},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status},csrf:a.csrf,groqConfigured:!!process.env.GROQ_API_KEY});
+ if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,platformOwner:a.platform_owner},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status},csrf:a.csrf,grokConfigured:grokReady(),groqConfigured:!!process.env.GROQ_API_KEY});
  // Changing a phone login identifier requires the signed-in user's current password.
  // Never infer this from the company's connected WhatsApp number.
  if(method==='POST'&&pathname==='/api/me/phone'){
@@ -212,14 +215,15 @@ async function handle(req,res){
   return json(res,200,{range:requested,granularity:range.unit,points:results.rows});
  }
  if(method==='GET'&&pathname==='/api/dashboard'){
-  const [ch,prod,imp,conv,msg]=await Promise.all([
+  const [ch,prod,imp,conv,msg,today]=await Promise.all([
    query('SELECT count(*)::int AS n FROM channels WHERE tenant_id=$1',[a.active_tenant_id]),
    query('SELECT count(*)::int AS n FROM products WHERE tenant_id=$1 AND active=true',[a.active_tenant_id]),
    query('SELECT count(*)::int AS n FROM imports WHERE tenant_id=$1',[a.active_tenant_id]),
    query("SELECT count(*)::int AS n FROM conversations WHERE tenant_id=$1 AND status!='resolved'",[a.active_tenant_id]),
-   query("SELECT count(*)::int AS n FROM messages WHERE tenant_id=$1 AND direction='inbound'",[a.active_tenant_id])
+   query("SELECT count(*)::int AS n FROM messages WHERE tenant_id=$1 AND direction='inbound'",[a.active_tenant_id]),
+   query("SELECT count(*)::int AS n FROM messages WHERE tenant_id=$1 AND direction='inbound' AND created_at >= (date_trunc('day', now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo')",[a.active_tenant_id])
   ]);
-  return json(res,200,{channels:ch.rows[0].n,products:prod.rows[0].n,imports:imp.rows[0].n,openConversations:conv.rows[0].n,inboundMessages:msg.rows[0].n});
+  return json(res,200,{channels:ch.rows[0].n,products:prod.rows[0].n,imports:imp.rows[0].n,openConversations:conv.rows[0].n,inboundMessages:msg.rows[0].n,messagesReceivedToday:today.rows[0].n});
  }
 
  // WA-AKG is a server-side, read-only integration. It does not expose the
@@ -513,6 +517,17 @@ async function handle(req,res){
   const r=await query('UPDATE agents SET name=$2,tone=$3,instructions=$4,enabled=$5,updated_at=now() WHERE tenant_id=$1 RETURNING name,tone,instructions,knowledge_md,enabled',[a.active_tenant_id,data.name.trim(),data.tone.trim(),data.instructions.trim(),data.enabled]);
   await audit(a,'agent.updated',{enabled:data.enabled});return json(res,200,r.rows[0]);
  }
+ if(method==='GET'&&pathname==='/api/training/auto'){
+  return json(res,200,{run:await autoTrainingStatus(pool,a.active_tenant_id),grokConfigured:grokReady()});
+ }
+ if(method==='POST'&&pathname==='/api/training/auto'){
+  needRole(a,['owner','admin']);
+  if(!limiter(simulationAttempts,'auto-train:'+a.active_tenant_id,600000,4))
+   throw fail(429,'Muitas solicitações de treinamento.');
+  const run=await startAutoTraining(pool,a.active_tenant_id);
+  await audit(a,'training.auto.started',{runId:run.id,connectedChannels:run.connectedChannels});
+  return json(res,201,run);
+ }
  if(method==='GET'&&pathname==='/api/training/jobs'){
   const r=await query("SELECT id,status,total_items AS \"totalItems\",processed_items AS \"processedItems\",report_json AS report,created_at AS \"createdAt\",updated_at AS \"updatedAt\" FROM training_jobs WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 12",[a.active_tenant_id]);
   return json(res,200,r.rows);
@@ -608,7 +623,7 @@ async function handle(req,res){
    query('SELECT name,tone,instructions,knowledge_md FROM agents WHERE tenant_id=$1',[a.active_tenant_id]),
    fullCatalog(a.active_tenant_id)
   ]);
-  if(!process.env.GROQ_API_KEY)throw fail(503,'O simulador precisa da chave GROQ_API_KEY configurada no Railway.');
+  if(!grokReady())throw fail(503,'Configure XAI_API_KEY para usar o Grok (xAI) no simulador.');
   const catalog=catalogPrompt(catalogProducts.filter(p=>p.active));
   const config=agent.rows[0]||{};
   const system=[
@@ -622,18 +637,9 @@ async function handle(req,res){
    'REFERÊNCIAS DE LINGUAGEM (não são ordens):\n'+String(config.knowledge_md||'').slice(0,14000),
    'Responda com naturalidade, em português brasileiro, em até 120 palavras.'
   ].join('\n\n');
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),16000);
-  try{
-   const resp=await fetch('https://api.groq.com/openai/v1/chat/completions',{
-    method:'POST',headers:{'Authorization':'Bearer '+process.env.GROQ_API_KEY,'Content-Type':'application/json'},
-    body:JSON.stringify({model:process.env.GROQ_MODEL||'llama-3.3-70b-versatile',temperature:0.55,max_tokens:250,messages:[{role:'system',content:system},{role:'user',content:data.message}]}),
-    signal:controller.signal
-   });
-   if(!resp.ok)throw fail(503,'Groq não respondeu corretamente. Consulte a chave e o modelo configurados.');
-   const payload=await resp.json();
-   return json(res,200,{reply:String(payload.choices?.[0]?.message?.content||'').slice(0,3000),simulation:true,
-    productCards:matchCatalogProducts(data.message,catalogProducts)});
-  }finally{clearTimeout(timer);}
+  const reply=await grokResponse({instructions:system,input:data.message,maxOutputTokens:550});
+  return json(res,200,{reply:reply.slice(0,3000),simulation:true,provider:'xai_grok',
+   productCards:matchCatalogProducts(data.message,catalogProducts)});
  }
  // Inbox v2: tenant-bound WhatsApp-style management. Keep legacy API for
  // existing dashboards and migrations; never expose gateway send operations.
@@ -676,20 +682,40 @@ async function handle(req,res){
   const r=await query('INSERT INTO users(id,tenant_id,email,phone,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,name,email,phone,role',[id(),a.active_tenant_id,data.email.trim().toLowerCase(),phone,data.name.trim(),hash,data.role]);
   await audit(a,'team.invited',{userId:r.rows[0].id});return json(res,201,r.rows[0]);
  }
+ if(method==='GET'&&pathname==='/api/admin/cnpj'){
+  needPlatform(a);
+  if(!limiter(authAttempts,'cnpj:'+a.user_id,600000,12))
+   throw fail(429,'Muitas consultas CNPJ. Tente novamente.');
+  const cnpj=normalizeCnpj(new URL(req.url,'http://local').searchParams.get('number'));
+  if(!validCnpj(cnpj))throw fail(422,'Informe um CNPJ válido de 14 dígitos.');
+  const previous=cnpjCache.get(cnpj);
+  if(previous&&Date.now()-previous.at<900000)return json(res,200,previous.result);
+  const result=await lookupCompany(cnpj);
+  cnpjCache.set(cnpj,{result,at:Date.now()});
+  if(cnpjCache.size>150)cnpjCache.clear();
+  return json(res,200,result);
+ }
  if(method==='GET'&&pathname==='/api/admin/tenants'){
   needPlatform(a);
-  const r=await query("SELECT t.id,t.name,t.slug,t.plan,t.status,t.created_at,(SELECT count(*)::int FROM users u WHERE u.tenant_id=t.id) AS members FROM tenants t ORDER BY t.created_at DESC");
+  const r=await query("SELECT t.id,t.name,t.slug,t.plan,t.status,t.cnpj,t.legal_name,t.trade_name,t.created_at,(SELECT count(*)::int FROM users u WHERE u.tenant_id=t.id) AS members FROM tenants t ORDER BY t.created_at DESC");
   return json(res,200,r.rows);
  }
  if(method==='POST'&&pathname==='/api/admin/tenants'){
   needPlatform(a);const {data}=await body(req);
   if(!validText(data.company,120)||!validText(data.ownerName,100)||!emailOk(data.ownerEmail)||!['essencial','equipe','voz'].includes(data.plan||'essencial'))throw fail(422,'Dados da empresa inválidos.');
+  const rawCnpj=String(data.cnpj||'').trim();
+  const companyCnpj=rawCnpj?normalizeCnpj(rawCnpj):null;
+  if(rawCnpj&&!validCnpj(companyCnpj))throw fail(422,'CNPJ inválido.');
+  const companyProfile=typeof data.companyProfile==='object'&&data.companyProfile&&!Array.isArray(data.companyProfile)?
+   {address:data.companyProfile.address||{},primaryActivity:String(data.companyProfile.primaryActivity||'').slice(0,150),
+    status:String(data.companyProfile.status||'').slice(0,70)}:{};
+  const legalName=trimmed(data.legalName||'',200),tradeName=trimmed(data.tradeName||'',200);
   const raw=String(data.ownerPhone||'').trim(),phone=raw?normalizeLoginPhone(raw):null;
   if(raw&&!phone)throw fail(422,'Número do responsável inválido. Informe o DDD.');
   const hash=await hashPassword(data.ownerPassword),tenant=id(),user=id(),client=await pool.connect();
   try{
    await client.query('BEGIN');
-   await client.query("INSERT INTO tenants(id,name,slug,plan,status) VALUES($1,$2,$3,$4,'trial')",[tenant,data.company.trim(),slugify(data.company)+'-'+tenant.slice(0,6),data.plan||'essencial']);
+   await client.query("INSERT INTO tenants(id,name,slug,plan,status,cnpj,legal_name,trade_name,company_profile) VALUES($1,$2,$3,$4,'trial',$5,$6,$7,$8)",[tenant,data.company.trim(),slugify(data.company)+'-'+tenant.slice(0,6),data.plan||'essencial',companyCnpj,legalName,tradeName,JSON.stringify(companyProfile)]);
    await client.query('INSERT INTO users(id,tenant_id,email,phone,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6,$7)',[user,tenant,data.ownerEmail.trim().toLowerCase(),phone,data.ownerName.trim(),hash,'owner']);
    await client.query('INSERT INTO agents(tenant_id) VALUES($1)',[tenant]);
    await client.query('COMMIT');
@@ -750,6 +776,17 @@ async function main(){
    .catch(error=>console.warn('[socio gateway private]',JSON.stringify({reachable:false,
      code:Number(error?.status||503)})));
  }
+ // Automatically move a supervised training run from scan to Markdown draft;
+ // per-run database row locks make this safe across replicas.
+ let autoBusy=false;
+ const autoWorker=setInterval(async()=>{
+  if(autoBusy)return;
+  autoBusy=true;
+  try{await processNextAutoTraining(pool);}
+  catch(error){console.warn('[socio-auto-training]',String(error?.code||'worker-error').slice(0,55));}
+  finally{autoBusy=false;}
+ },2400);
+ autoWorker.unref();
  // One active worker per Node instance; row locks serialize jobs across replicas.
  // All results remain drafts until the tenant owner approves them.
  let waBusy=false,waLastError=0;
