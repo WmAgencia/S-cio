@@ -154,7 +154,7 @@
       '<button type="button" data-chat-action="assist" class="wa-mode-btn'+(controlledByAi?' active':'')+'">✳ Entregar para IA</button>'+
      '</div><span class="wa-compose-disclaimer">'+
       (!enabled?'Envio externo indisponível: gateway ainda não validado':
-       controlledByAi?'IA responsável · assuma para responder manualmente':
+       controlledByAi?(thread?.capabilities?.aiAutoReply?'IA autorizada a responder automaticamente':'IA selecionada · automação aguarda ativação'):
        asNote?'Nota interna · não vai ao WhatsApp':'Envio pelo WhatsApp conectado')+
       '</span></div>'+
     (hasReply?'<div class="wa-reply-banner"><div><strong>'+(!asNote?'Respondendo no Sócio (citação local)':'Respondendo como nota interna')+'</strong>'+
@@ -338,7 +338,7 @@
    if(action==='submit-compose'){await submitComposer();return;}
    if(action==='toggle-notes'){noteMode=!noteMode;renderComposer();byId('inboxDraft')?.focus();return;}
    if(action==='take'){await setPref({handling_mode:'human'});return;}
-   if(action==='assist'){await setPref({handling_mode:'ai_assist'});toast('IA habilitada para sugestões internas. Envio automático continua desativado.');return;}
+   if(action==='assist'){await setPref({handling_mode:'ai_assist'});toast(thread?.capabilities?.aiAutoReply?'Conversa entregue à IA; respostas seguem as configurações do agente.':'Conversa atribuída à IA. Automatização exige Groq configurado e ativação do envio.');return;}
    if(action==='pin'){await setPref({pinned:!c.pinned});return;}
    if(action==='favorite'){await setPref({favorite:!c.favorite});return;}
    if(action==='mute'){await setPref({muted:!c.muted});return;}
