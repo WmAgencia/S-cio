@@ -3,6 +3,8 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
+import {startPipeboardOAuth,finishPipeboardOAuth,listPipeboardOAuth,revokePipeboardOAuth,oauthClientMetadata} from './marketing-oauth.mjs';
+import {instagramHostedReady,beginInstagramHosted,instagramHostedStatus,disconnectInstagramHosted} from './instagram-hosted.mjs';
 import {instagramLabHealth,connectPipeboard,registerGoogleAdsScript,ingestGoogleReport,listMarketing,disconnectMarketing,googleScriptTemplate} from './marketing-integrations.mjs';
 import {instagramReady,beginInstagramOAuth,completeInstagramOAuth,ingestInstagramWebhook,revokeInstagramAccount} from './instagram-integration.mjs';
 import {maintenanceEnabled,writesBlocked,workersBlocked} from './migration-guard.mjs';
@@ -128,6 +130,26 @@ async function handle(req,res){
  if(writesBlocked(method)){
   res.setHeader('Retry-After','120');
   return json(res,503,{error:'Manutenção do Sócio em andamento. Novas alterações estão temporariamente bloqueadas.'});
+ }
+ // Public OAuth metadata for clients that support CIMD instead of dynamic registration.
+ if(method==='GET'&&pathname==='/.well-known/oauth-client'){
+  res.setHeader('Cache-Control','public,max-age=1800');
+  return json(res,200,oauthClientMetadata());
+ }
+ if(method==='GET'&&pathname==='/api/marketing/oauth/callback'){
+  const qs=new URL(req.url,'http://local').searchParams;
+  const isDenied=Boolean(qs.get('error'));
+  if(!isDenied){
+   try{await finishPipeboardOAuth(pool,qs.get('state'),qs.get('code'));}
+   catch(error){
+    console.warn('[marketing-oauth]',String(error?.status||'OAUTH_ERROR').slice(0,24));
+    res.writeHead(303,{Location:'/?marketing=failed','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
+    return res.end();
+   }
+  }
+  res.writeHead(303,{Location:isDenied?'/?marketing=cancelled':'/?marketing=authorized',
+   'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
+  return res.end();
  }
  if(method==='GET'&&pathname==='/api/bootstrap'){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
@@ -255,6 +277,47 @@ async function handle(req,res){
   if(!csrf||!secureEqual(String(csrf),a.csrf))throw fail(403,'Sessão sem validação de segurança.');
  }
  if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,platformOwner:a.platform_owner,permissions:permissionsFor(a.role,a.platform_owner)},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status},csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
+ // Hosted one-click OAuth (Pipeboard). Tokens never go to the browser.
+ if(method==='GET'&&pathname==='/api/marketing/oauth'){
+  requirePermission(a,'marketing.read');
+  return json(res,200,{grants:await listPipeboardOAuth(pool,a)});
+ }
+ if(method==='POST'&&pathname==='/api/marketing/oauth/start'){
+  requirePermission(a,'marketing.manage');
+  if(!limiter(authAttempts,'marketing-oauth:'+a.user_id,600000,6))
+   throw fail(429,'Muitas tentativas de conexão. Tente novamente.');
+  const {data}=await body(req,2500);
+  const result=await startPipeboardOAuth(pool,a,String(data.provider||''));
+  await audit(a,'marketing.oauth_started',{provider:result.provider});
+  return json(res,200,result);
+ }
+ const oauthRevoke=pathname.match(/^\/api\/marketing\/oauth\/(meta|google)\/disconnect$/);
+ if(oauthRevoke&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  const result=await revokePipeboardOAuth(pool,a,oauthRevoke[1]);
+  await audit(a,'marketing.oauth_disconnected',{provider:oauthRevoke[1]});
+  return json(res,200,result);
+ }
+ // Managed Instagram SSO; only enabled when agency has configured a hosted
+ // provider with separately created tenant profiles.
+ if(method==='GET'&&pathname==='/api/instagram/hosted/status'){
+  requirePermission(a,'channels.manage');
+  return json(res,200,await instagramHostedStatus(pool,a));
+ }
+ if(method==='POST'&&pathname==='/api/instagram/hosted/connect'){
+  requirePermission(a,'channels.manage');
+  if(!limiter(authAttempts,'hosted-instagram:'+a.user_id,600000,5))
+   throw fail(429,'Muitas tentativas de conectar Instagram.');
+  const result=await beginInstagramHosted(pool,a,a.tenant_name);
+  await audit(a,'instagram.hosted_link_started',{provider:result.provider});
+  return json(res,200,result);
+ }
+ if(method==='POST'&&pathname==='/api/instagram/hosted/disconnect'){
+  requirePermission(a,'channels.manage');
+  const result=await disconnectInstagramHosted(pool,a);
+  await audit(a,'instagram.hosted_link_revoked');
+  return json(res,200,result);
+ }
  // Company-level marketing integrations: read-only Meta/Google by default.
  if(method==='GET'&&pathname==='/api/marketing'){
   requirePermission(a,'marketing.read');

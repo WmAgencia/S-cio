@@ -61,12 +61,21 @@ async function boot(){
    for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['instagram','channels.manage'],['marketing','marketing.read']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
+   const marketingStatus=typeof location==='object'?new URL(location.href).searchParams.get('marketing'):null;
+   if(['authorized','failed','cancelled'].includes(marketingStatus)){
+    state.view='marketing';
+    if(typeof history==='object')history.replaceState(null,'',location.pathname);
+   }
    const instagramStatus=typeof location==='object'?new URL(location.href).searchParams.get('instagram'):null;
-   if(['connected','failed'].includes(instagramStatus)){
+   if(['connected','failed','return'].includes(instagramStatus)){
     state.view='instagram';
     if(typeof history==='object')history.replaceState(null,'',location.pathname);
    }
    await changeView(state.view);
+   if(marketingStatus==='authorized')toast('Login Pipeboard autorizado. Confira o acesso às contas escolhidas.');
+   if(marketingStatus==='failed')toast('Não foi possível concluir autorização. Confira a conta e tente novamente.',true);
+   if(marketingStatus==='cancelled')toast('Autorização cancelada; nenhuma conta foi alterada.');
+   if(instagramStatus==='return')toast('Verifique se o Instagram foi conectado à sua empresa.');
    if(instagramStatus==='connected')toast('Instagram autorizado. Confirme a conexão nesta guia.');
    if(instagramStatus==='failed')toast('A Meta não concluiu a autorização. Confira as permissões e tente novamente.',true);
   }catch(error){state.me=null;state.csrf='';setupAuth(bootstrap.initialized);}
@@ -385,114 +394,103 @@ async function channels(){
  }));
 }
 async function instagram(){
- const info=await api('/api/marketing');
+ const [info,account]=await Promise.all([api('/api/marketing'),api('/api/instagram/hosted/status')]);
  const lab=info.instagramLab||{installed:false,reachable:false};
- const status=lab.reachable?'Laboratório instalado e respondendo':
-  lab.installed?'Laboratório instalado — sem resposta no momento':'Laboratório não configurado';
  view.innerHTML=heading('CANAIS','Instagram.',
-  'Preparação de acesso privado por conta de teste, sem Meta Developers.')+
-  '<div class="card" style="padding:24px;max-width:820px">'+
-   '<h2>aiograpi-rest 6.0.0 — Instagram profissional</h2><p>'+e(status)+'</p>'+
-   '<p>O serviço está isolado na rede interna do Railway. Por enquanto, nenhuma conta do Instagram foi autenticada.'+
-   ' Não são realizadas publicações, Stories, Reels, DMs ou ações sobre perfis reais.</p>'+
-   '<p class="form-note">A API é não oficial e pode provocar desafios de autenticação, restrições de uso ou bloqueio de contas.'+
-   ' O primeiro login deve ser de uma conta de teste com autorização do titular.</p>'+
-   '<button id="checkInstagramLab" class="btn soft" type="button">Verificar serviço</button>'+
-   '<p class="form-note">A conexão oficial antiga fica desativada enquanto usamos a alternativa experimental.</p>'+
-  '</div>';
- $('#checkInstagramLab')?.addEventListener('click',()=>action(async()=>{
-  await instagram();
-  toast('Verificação do laboratório atualizada.');
+  'Um clique para autorizar a sua conta com segurança, sem entregar sua senha ao Sócio.')+
+  '<section class="card" style="padding:24px;max-width:860px">'+
+   '<h2>Conectar conta do Instagram</h2>'+
+   '<p>'+e(account.linked?'Conta do Instagram autorizada e vinculada à sua empresa.':
+    account.configured?'Conecte a conta profissional pelo login oficial, na página segura do parceiro.':
+    'A conexão por login oficial está sendo preparada com um parceiro autorizado para empresas.')+'</p>'+
+   (account.linked?
+    '<button type="button" class="btn soft" id="disconnectHostedInstagram">Desconectar Instagram</button>':
+    '<button type="button" class="btn primary" id="connectHostedInstagram" '+(account.configured?'':'disabled')+
+    '>Conectar Instagram</button>')+
+   (account.configured?
+    '<p class="form-note">Você será direcionado à autorização segura do Instagram e retornará ao Sócio.</p>':
+    '<p class="form-note">Nenhum login pode ser iniciado até a agência habilitar a integração hospedada.'+
+    ' Não é necessário criar uma conta de desenvolvedor Meta para cada cliente.</p>')+
+  '</section>'+
+  '<section class="card" style="padding:20px;max-width:860px;margin-top:18px">'+
+   '<h3>Instagram profissional — laboratório técnico isolado</h3>'+
+   '<p class="form-note">aiograpi-rest: '+e(lab.reachable?'serviço privado online':
+    lab.installed?'serviço indisponível':'não instalado')+'. '+
+    'Esta API não oficial não oferece autorização OAuth da Meta e não acessa nenhuma conta real.</p>'+
+  '</section>';
+ $('#connectHostedInstagram')?.addEventListener('click',()=>action(async()=>{
+  const response=await api('/api/instagram/hosted/connect','POST',{});
+  const url=new URL(response.authorizationUrl);
+  if(url.protocol!=='https:'||url.hostname!=='profile.ayrshare.com')
+   throw Error('Destino de autorização Instagram não autorizado.');
+  window.location.assign(url.toString());
  }));
+ $('#disconnectHostedInstagram')?.addEventListener('click',()=>{
+  if(!confirm('Desvincular o Instagram desta empresa?'))return;
+  void action(async()=>{
+   await api('/api/instagram/hosted/disconnect','POST',{});
+   toast('Instagram desconectado.');
+   await instagram();
+  });
+ });
 }
 
 async function marketing(){
- const result=await api('/api/marketing');
- const entries=result.connections||[],reports=result.reports||[];
- const meta=entries.filter(x=>x.provider==='pipeboard_meta');
- const google=entries.filter(x=>x.provider==='google_ads_scripts');
- const status=x=>x.status==='verified'?'Leitura confirmada':x.status==='pending'?'Aguardando dados reais':'Desconectado';
- const cards=xs=>xs.length?xs.map(x=>
-  '<div class="card" style="padding:14px;margin:8px 0">'+
-   '<strong>'+e(x.label)+'</strong><p class="form-note">Conta '+e(x.account_id)+
-   ' · '+e(status(x))+
-   (x.last_verified_at?' · Última confirmação '+e(date(x.last_verified_at)):'')+'</p>'+
-   (x.status==='disabled'?'':'<button type="button" class="btn soft" data-marketing-disconnect="'+e(x.id)+
-   '">Desconectar</button>')+'</div>').join(''):
-  '<p class="form-note">Nenhuma conta vinculada.</p>';
+ const [data,auth]=await Promise.all([api('/api/marketing'),api('/api/marketing/oauth')]);
+ const grants=auth.grants||[],connections=data.connections||[],reports=data.reports||[];
+ const scope=key=>grants.find(x=>x.provider===key&&x.status==='authorized');
+ const accountCards=(provider,legacy)=>connections.filter(x=>x.provider===legacy&&x.status==='verified')
+   .map(x=>'<p class="form-note">Conta com acesso de leitura verificado: '+e(x.label)+' · '+e(x.account_id)+'</p>').join('');
+ const item=(key,label,description,legacy)=>{
+  const grant=scope(key);
+  const expiry=grant?.expires_at?new Date(grant.expires_at).getTime():null;
+  const valid=!!grant&&(!expiry||expiry>Date.now());
+  const existing=accountCards(key,legacy);
+  return '<section class="card" style="padding:24px;margin-bottom:18px">'+
+   '<h2>'+e(label)+'</h2>'+
+   '<p>'+e(description)+'</p>'+
+   '<p class="form-note">'+(valid?
+    'Login Pipeboard autorizado para esta empresa. Confira quais contas de anúncios você liberou no parceiro.':
+    'Ainda não autorizado no Sócio.')+'</p>'+
+   '<button type="button" class="btn primary" data-marketing-oauth="'+key+'">'+
+    (valid?'Reconectar '+e(label):'Conectar '+e(label))+'</button> '+
+   (valid?'<button type="button" class="btn soft" data-marketing-oauth-revoke="'+key+'">Desconectar</button>':'')+
+   '<p class="form-note">Login em janela segura, sem senha ou token colado no Sócio. '+
+    'Após autorizar, selecione as contas em '+
+    '<a href="https://pipeboard.co/connections" rel="noopener noreferrer" target="_blank">Gerenciar contas no Pipeboard</a>.'+
+    '</p>'+existing+
+   '</section>';
+ };
  view.innerHTML=heading('MARKETING','Anúncios e métricas.',
-  'Integrações de leitura por empresa. Criações de campanhas e alterações de orçamento não estão habilitadas.')+
-  '<div class="card" style="padding:22px;margin-bottom:16px">'+
-   '<h2>Meta Ads — Pipeboard hospedado</h2>'+
-   '<p>Conecte um token Pipeboard autorizado para a conta de anúncios desta empresa.'+
-   ' O Sócio verifica apenas acesso de leitura antes de salvar a conexão.</p>'+
-   '<form id="metaConnect" class="form-stack" autocomplete="off">'+
-    '<label>ID da conta Meta Ads<input name="accountId" placeholder="act_1234567890" pattern="act_[0-9]{4,20}" required maxlength="24"></label>'+
-    '<label>Identificação<input name="label" required maxlength="90" placeholder="Anúncios da empresa"></label>'+
-    '<label>Token Pipeboard<input name="token" type="password" required autocomplete="off" minlength="32" placeholder="Token autorizado no Pipeboard"></label>'+
-    '<button type="submit" class="btn primary">Verificar acesso de leitura</button>'+
-   '</form><p class="form-note">Crie ou conecte sua conta em <a href="https://pipeboard.co/api-tokens" target="_blank" rel="noopener noreferrer">Pipeboard API Tokens</a>.'+
-   ' Use um token restrito somente à conta desta empresa; nunca reutilize um token master com acesso a todos os clientes.</p>'+
-   cards(meta)+'</div>'+
-  '<div class="card" style="padding:22px;margin-bottom:16px">'+
-   '<h2>Google Ads — Scripts</h2>'+
-   '<p>Sem token de desenvolvedor ou API hospedada. O proprietário autoriza o script diretamente na conta Google Ads.'+
-   ' Ele envia métricas agregadas com assinatura para este painel. Não altera campanhas.</p>'+
-   '<form id="googleScriptConnect" class="form-stack" autocomplete="off">'+
-    '<label>ID da conta Google Ads (10 dígitos, sem hífen)<input name="accountId" pattern="[0-9]{10}" maxlength="10" required placeholder="1234567890"></label>'+
-    '<label>Identificação<input name="label" required maxlength="90" placeholder="Google Ads da empresa"></label>'+
-    '<button class="btn primary" type="submit">Gerar script seguro</button>'+
-   '</form>'+
-   '<div id="googleScriptGenerated" class="hidden" aria-live="polite" style="margin:12px 0">'+
-    '<p class="form-note">Copie agora: por segurança, a chave só aparece nesta geração.'+
-    ' Coloque o código em Google Ads → Ferramentas → Ações em massa → Scripts, autorize, faça Preview e então execute.</p>'+
-    '<textarea id="googleScriptCode" rows="15" readonly aria-label="Script do Google Ads"></textarea>'+
-    '<button type="button" id="copyGoogleScript" class="btn soft">Copiar script</button>'+
-   '</div>'+cards(google)+'</div>'+
-  '<div class="card" style="padding:22px;margin-bottom:16px"><h2>Relatórios recebidos</h2>'+
-   (reports.length?'<div style="overflow-x:auto"><table class="table"><thead><tr><th>Dia</th><th>Campanha</th>'+
-    '<th>Impressões</th><th>Cliques</th><th>Gasto (moeda da conta)</th></tr></thead><tbody>'+
-    reports.slice(0,50).map(r=>'<tr><td>'+e(r.date?.slice(0,10))+'</td><td>'+e(r.campaign_name)+
-     '</td><td>'+e(r.impressions)+'</td><td>'+e(r.clicks)+'</td><td>'+
-     e((Number(r.cost_micros)/1000000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}))+
-     '</td></tr>').join('')+'</tbody></table></div>':
-     '<p class="form-note">Ainda não recebemos nenhuma métrica de uma conta autorizada.</p>')+
-   '</div>'+
-  '<div class="card" style="padding:20px"><h2>Proteção de contas</h2>'+
-   '<p>Contas e dados ficam restritos à empresa. Desconectar revoga a credencial guardada pelo Sócio.'+
-   ' Ações de publicação, alterações de anúncios e gastos precisam de fluxos separados com autorização.</p>'+
-  '</div>';
- $('#metaConnect')?.addEventListener('submit',async ev=>{
-  ev.preventDefault();
-  const btn=ev.currentTarget.querySelector('button[type="submit"]');btn.disabled=true;
-  await action(async()=>{
-   await api('/api/marketing/meta/connect','POST',formValues(ev.currentTarget));
-   toast('Acesso de leitura Pipeboard confirmado.');await marketing();
-  });
-  btn.disabled=false;
- });
- $('#googleScriptConnect')?.addEventListener('submit',async ev=>{
-  ev.preventDefault();
-  const btn=ev.currentTarget.querySelector('button[type="submit"]');btn.disabled=true;
-  await action(async()=>{
-   const response=await api('/api/marketing/google/register','POST',formValues(ev.currentTarget));
-   // Do not re-render after creation: preserve the one-time script in memory
-   // only, so it is never stored in localStorage or included in a GET response.
-   $('#googleScriptCode').value=response.script;
-   $('#googleScriptGenerated').classList.remove('hidden');
-   toast('Script preparado. Copie o código e autorize na conta Google Ads.');
-  });
-  btn.disabled=false;
- });
- $('#copyGoogleScript')?.addEventListener('click',async()=>{
-  try{await navigator.clipboard.writeText($('#googleScriptCode').value);toast('Script copiado.');}
-  catch{toast('Selecione e copie manualmente o script.',true);}
- });
- view.querySelectorAll('[data-marketing-disconnect]').forEach(btn=>btn.addEventListener('click',()=>{
-  if(!confirm('Desconectar a integração? Novos dados não serão recebidos; o histórico será mantido.'))return;
+  'Apenas conecte a sua conta. Sem códigos, scripts ou configurações de API.')+
+  item('meta','Meta Ads','Conecte o Facebook e escolha as contas de anúncios que deseja autorizar.','pipeboard_meta')+
+  item('google','Google Ads','Conecte sua conta Google e autorize o acesso às suas contas Google Ads.','google_ads_scripts')+
+  '<section class="card" style="padding:22px">'+
+   '<h2>Relatórios</h2>'+
+   (reports.length?
+    '<div style="overflow-x:auto"><table class="table"><thead><tr><th>Data</th><th>Campanha</th>'+
+    '<th>Impressões</th><th>Cliques</th><th>Investimento (moeda da conta)</th></tr></thead><tbody>'+
+    reports.slice(0,30).map(r=>'<tr><td>'+e(String(r.date||'').slice(0,10))+'</td>'+
+     '<td>'+e(r.campaign_name)+'</td><td>'+e(r.impressions)+'</td><td>'+e(r.clicks)+
+     '</td><td>'+e((Number(r.cost_micros)/1000000).toFixed(2))+'</td></tr>').join('')+
+    '</tbody></table></div>':
+    '<p class="form-note">Quando uma conta for vinculada e a leitura de dados estiver confirmada, os relatórios aparecerão aqui.</p>')+
+  '</section>'+
+  '<p class="form-note" style="margin-top:12px">A autorização do Pipeboard não comprova, por si só, que uma conta de anúncios foi vinculada.'+
+  ' Nenhuma campanha será criada, alterada ou ativada sem permissão e confirmação separadas.</p>';
+ view.querySelectorAll('[data-marketing-oauth]').forEach(btn=>btn.addEventListener('click',()=>action(async()=>{
+  const result=await api('/api/marketing/oauth/start','POST',{provider:btn.dataset.marketingOauth});
+  const target=new URL(result.authorizationUrl);
+  if(target.protocol!=='https:'||!(/(^|\.)pipeboard\.co$/.test(target.hostname)))
+   throw Error('O destino da autorização não é confiável.');
+  window.location.assign(target.toString());
+ })));
+ view.querySelectorAll('[data-marketing-oauth-revoke]').forEach(btn=>btn.addEventListener('click',()=>{
+  if(!confirm('Revogar a autorização desta plataforma no Sócio?'))return;
   void action(async()=>{
-   await api('/api/marketing/connections/'+btn.dataset.marketingDisconnect+'/disconnect','POST',{});
-   toast('Integração desconectada.');await marketing();
+   await api('/api/marketing/oauth/'+btn.dataset.marketingOauthRevoke+'/disconnect','POST',{});
+   toast('Autorização do Sócio revogada. Você também pode revogar no Pipeboard.');
+   await marketing();
   });
  }));
 }

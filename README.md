@@ -191,3 +191,20 @@ reais ou feitas conexões não autorizadas. Configuração e limites:
 ## Instagram sem aplicativo Meta próprio + Meta Ads + Google Ads
 
 O painel Sócio agora inclui laboratório privado aiograpi-rest v6.0.0 (somente health até uma conta de teste autorizada), conexão de **leitura** Pipeboard Meta Ads por empresa e integração de relatórios Google Ads Scripts autenticados com HMAC. Nenhuma campanha é criada ou ativada; nenhum Instagram comercial é acessado automaticamente. Consulte [o guia de configuração](docs/socio-open-marketing-integrations.md) antes de usar com clientes. Produção continua no PostgreSQL Railway.
+
+
+## Conectar contas com um clique
+
+A guia **Anúncios e métricas** agora inicia um login OAuth hospedado pelo Pipeboard
+para Meta Ads e Google Ads (sem pedir token, ID de conta ou código no painel).
+O login concluído aparece como **autorização do Pipeboard**; vinculação e leitura
+de contas de anúncios exigem confirmação real e escopo autorizado.
+
+A guia **Instagram** utiliza, quando configurado pela agência, SSO hospedado
+da Ayrshare Business (projeto separado do laboratório privado aiograpi-rest).
+Sem contrato e credenciais desse provedor, o botão ficará desabilitado,
+evitando pedir senhas de Instagram na aplicação.
+
+Veja o [guia de conexão de um clique](docs/socio-conexao-um-clique.md).
+O fluxo anterior de Pipeboard por token e Google Ads Scripts permanece apenas
+como alternativa técnica de compatibilidade, fora da interface principal.
