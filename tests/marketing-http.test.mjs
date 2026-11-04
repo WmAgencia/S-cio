@@ -64,7 +64,7 @@ test('marketing HTTP: owner/CSRF, signed Google Ads Scripts, replay and disconne
  const create=await fetch(base+'/api/marketing/google/register',{
   method:'POST',headers:{Cookie:cookie,'X-CSRF-Token':csrf,'Content-Type':'application/json'},
   body:JSON.stringify({accountId:'1234567890',label:'Google Teste'})});
- assert.equal(create.status,201,await create.text().catch(()=>'?'));
+ assert.equal(create.status,201);
  const created=await create.json();
  assert.equal(created.accountId,'1234567890');
  assert.equal(created.status,'pending');
@@ -83,7 +83,7 @@ test('marketing HTTP: owner/CSRF, signed Google Ads Scripts, replay and disconne
  const signature='sha256='+createHmac('sha256',secret).update(raw).digest('hex');
  const send=await fetch(uri,{method:'POST',headers:{'Content-Type':'application/json',
   'X-Socio-Signature-256':signature},body:raw});
- assert.equal(send.status,200,await send.text().catch(()=>'?'));
+ assert.equal(send.status,200);
  assert.deepEqual(await send.json(),{ok:true,reused:false,stored:1});
  const again=await fetch(uri,{method:'POST',headers:{'Content-Type':'application/json',
   'X-Socio-Signature-256':signature},body:raw});
