@@ -18,6 +18,13 @@ test('migration preflight refuses same database, missing URL or non-Supabase des
  const target='postgresql://backend:pw@db.example.supabase.co:5432/postgres?sslmode=require';
  assert.equal(checkMigrationConfiguration(source,target),true);
  assert.throws(()=>checkMigrationConfiguration(source,source),/different databases/);
+ assert.throws(()=>checkMigrationConfiguration(
+  'postgresql://admin:a@db.example.supabase.co:5432/postgres',
+  'postgresql://other:b@db.other.supabase.co:5432/postgres'),/Source must not be a Supabase/);
+ assert.throws(()=>checkMigrationConfiguration(
+  'postgresql://admin:a@db.example.supabase.co:5432/postgres',
+  'postgresql://other:b@db.example.supabase.co:5432/postgres'),/different databases/);
+
  assert.throws(()=>checkMigrationConfiguration(source,''),/required/);
  assert.throws(()=>checkMigrationConfiguration(source,'postgresql://a:pw@evil.example:5432/db'),/Supabase/);
  assert.throws(()=>checkMigrationConfiguration('https://bad.example',target),/Postgres/);
