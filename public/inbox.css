@@ -250,3 +250,25 @@
 }
 
 .wa-sync-feedback{margin-top:14px;padding:12px;border-radius:10px;background:#492d1b;border:1px solid #7b4d2c;color:#efc5a1;font-size:11px;line-height:1.5;min-height:22px}
+
+/* Native WhatsApp actions stay inside the composer, away from the filter row */
+.wa-rich-panel{border-top:1px solid #6d452c;background:#2c1b13;padding:15px;display:flex;flex-direction:column;gap:10px}
+.wa-rich-panel.hidden{display:none!important}
+.wa-rich-head{display:flex;align-items:center;justify-content:space-between;gap:14px;color:#f5dfd0}
+.wa-rich-head strong{font-size:12px;letter-spacing:.1px}
+.wa-rich-panel label{display:flex;flex-direction:column;gap:5px;color:#dbbfa8;font-size:11px}
+.wa-rich-panel input{width:100%;min-width:0;background:#20140e;border:1px solid #6b472d;border-radius:10px;color:#f6e4d5;font-size:12px;padding:10px}
+.wa-rich-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.wa-rich-panel .btn{align-self:flex-start}
+.wa-rich-products{display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));gap:7px;max-height:260px;overflow:auto}
+.wa-rich-product{display:flex;align-items:center;gap:9px;text-align:left;padding:8px;border:1px solid #785135;
+ border-radius:12px;background:#382217;color:#f7e7d8;cursor:pointer;min-width:0}
+.wa-rich-product:hover,.wa-rich-product:focus-visible{outline:2px solid #e89243;outline-offset:1px}
+.wa-rich-product img{width:52px;height:52px;border-radius:9px;object-fit:cover;flex:0 0 52px}
+.wa-rich-product span:nth-child(2){display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
+.wa-rich-product strong{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wa-rich-product small{color:#e9aa6e;font-size:10px}
+.wa-rich-product span:last-child{font-size:10px;color:#ffbd83}
+.wa-message-product-image{display:block;width:min(100%,230px);max-height:200px;object-fit:cover;border-radius:10px;margin:7px 0}
+.wa-rich-label{font-size:10px;font-weight:700;color:#e5a46b}
+@media(max-width:620px){.wa-rich-options{grid-template-columns:1fr}.wa-rich-products{grid-template-columns:1fr}}

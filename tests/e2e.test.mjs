@@ -237,6 +237,15 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(markedRead.result.preferences.marked_unread,false);
  const noSend=await call('/api/conversations/'+conversationId+'/send','POST',{text:'não enviar'},adminCookie,csrf);
  assert.equal(noSend.status,503,'WhatsApp send must be disabled before explicit live verification');
+ const noButtons=await call('/api/conversations/'+conversationId+'/send-interactive','POST',
+  {message:'Como ajudar?',choices:['Comprar'],clientRequestId:'55555555-5555-4555-8555-555555555555'},
+  adminCookie,csrf);
+ assert.equal(noButtons.status,503,'Native buttons must remain disabled before gateway verification');
+ const noProduct=await call('/api/conversations/'+conversationId+'/send-product','POST',
+  {productId:'33333333-3333-4333-8333-333333333333',clientRequestId:'66666666-6666-4666-8666-666666666666'},
+  adminCookie,csrf);
+ assert.equal(noProduct.status,503,'Catalog photos must not send on test defaults');
+
 
  const alpha=await call('/api/products','POST',{name:'Site Institucional',description:'Site responsivo',priceCents:49700},adminCookie,csrf);
  assert.equal(alpha.status,201);
@@ -272,6 +281,11 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(hiddenInbox.result.conversations.length,0,'Tenant B cannot see tenant A inbox');
  const crossHistory=await call('/api/conversations/'+conversationId+'/history','GET',undefined,betaCookie);
  assert.equal(crossHistory.status,404,'Tenant B cannot read tenant A history');
+ const foreignRich=await call('/api/conversations/'+conversationId+'/send-product','POST',
+  {productId:'33333333-3333-4333-8333-333333333333',clientRequestId:'77777777-7777-4777-8777-777777777777'},
+  betaCookie,betaCsrf);
+ assert.equal(foreignRich.status,404,'Tenant B cannot reach tenant A rich messages');
+
  const crossPreferences=await call('/api/conversations/'+conversationId+'/ui','PATCH',{archived:true},betaCookie,betaCsrf);
  assert.equal(crossPreferences.status,404,'Tenant B cannot modify tenant A preferences');
  const crossFavorite=await call('/api/conversations/'+conversationId+'/messages/'+messageId+'/ui','PATCH',{starred:true},betaCookie,betaCsrf);

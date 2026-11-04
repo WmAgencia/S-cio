@@ -72,6 +72,7 @@ test('Groq automatic replies never include staff-only notes in selected history'
    {direction:'inbound',body:'Qual é o preço?'},{direction:'outbound',body:'Como posso ajudar?'}
   ]};
   if(sql.includes('FROM products WHERE'))return {rowCount:1,rows:[]};
+  if(sql.includes('FROM product_variants WHERE'))return {rowCount:0,rows:[]};
   if(sql.startsWith('UPDATE ai_reply_attempts'))return {rowCount:1,rows:[]};
   throw Error('Unexpected query '+sql);
  }};

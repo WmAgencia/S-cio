@@ -389,3 +389,13 @@ CREATE TABLE IF NOT EXISTS ai_reply_attempts (
  FOREIGN KEY(tenant_id,inbound_message_id) REFERENCES messages(tenant_id,id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS ai_reply_attempts_recent ON ai_reply_attempts(tenant_id,conversation_id,created_at DESC);
+
+-- Additive rich-message metadata. Photos themselves remain in private S3;
+-- only server-validated catalog IDs and a payload fingerprint are persisted.
+ALTER TABLE message_outbox ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'text'
+ CHECK(kind IN ('text','buttons','product'));
+ALTER TABLE message_outbox ADD COLUMN IF NOT EXISTS payload_fingerprint text;
+ALTER TABLE message_outbox ADD COLUMN IF NOT EXISTS product_id uuid;
+ALTER TABLE message_outbox ADD COLUMN IF NOT EXISTS media_id uuid;
+CREATE INDEX IF NOT EXISTS message_outbox_media_lookup_idx
+ ON message_outbox(tenant_id,provider_id) WHERE kind='product';
