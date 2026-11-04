@@ -107,7 +107,12 @@ async function handle(req,res){
  res.setHeader('Referrer-Policy','no-referrer');
  res.setHeader('X-Frame-Options','DENY');
  res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
- if(method==='GET'&&pathname==='/health')return json(res,200,{ok:true,app:'socio',database:'connected'});
+ if(method==='GET'&&pathname==='/health'){
+  // Railway only considers the app ready when the tenant database is usable.
+  // A static 200 here used to hide Postgres outages from the healthcheck.
+  await query('SELECT 1');
+  return json(res,200,{ok:true,app:'socio',database:'connected'});
+ }
  if(method==='GET'&&pathname==='/api/bootstrap'){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
