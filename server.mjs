@@ -9,7 +9,7 @@ import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs
 import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
 import {processNextWaakgScan} from './waakg-history.mjs';
 import {startAutoTraining,autoTrainingStatus,processNextAutoTraining} from './training-auto.mjs';
-import {grokReady,grokResponse} from './xai-grok.mjs';
+import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
@@ -110,7 +110,7 @@ async function handle(req,res){
  if(method==='GET'&&pathname==='/health')return json(res,200,{ok:true,app:'socio',database:'connected'});
  if(method==='GET'&&pathname==='/api/bootstrap'){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
-  return json(res,200,{initialized:r.rows[0].initialized,grokConfigured:grokReady(),groqConfigured:!!process.env.GROQ_API_KEY});
+  return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
  if(method==='GET'&&['/','/index.html','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
@@ -171,7 +171,7 @@ async function handle(req,res){
   const csrf=req.headers['x-csrf-token'];
   if(!csrf||!secureEqual(String(csrf),a.csrf))throw fail(403,'Sessão sem validação de segurança.');
  }
- if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,platformOwner:a.platform_owner},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status},csrf:a.csrf,grokConfigured:grokReady(),groqConfigured:!!process.env.GROQ_API_KEY});
+ if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,platformOwner:a.platform_owner},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status},csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
  // Changing a phone login identifier requires the signed-in user's current password.
  // Never infer this from the company's connected WhatsApp number.
  if(method==='POST'&&pathname==='/api/me/phone'){
@@ -518,7 +518,7 @@ async function handle(req,res){
   await audit(a,'agent.updated',{enabled:data.enabled});return json(res,200,r.rows[0]);
  }
  if(method==='GET'&&pathname==='/api/training/auto'){
-  return json(res,200,{run:await autoTrainingStatus(pool,a.active_tenant_id),grokConfigured:grokReady()});
+  return json(res,200,{run:await autoTrainingStatus(pool,a.active_tenant_id),groqConfigured:groqReady(),groqModel:groqModel()});
  }
  if(method==='POST'&&pathname==='/api/training/auto'){
   needRole(a,['owner','admin']);
@@ -623,7 +623,7 @@ async function handle(req,res){
    query('SELECT name,tone,instructions,knowledge_md FROM agents WHERE tenant_id=$1',[a.active_tenant_id]),
    fullCatalog(a.active_tenant_id)
   ]);
-  if(!grokReady())throw fail(503,'Configure XAI_API_KEY para usar o Grok (xAI) no simulador.');
+  if(!groqReady())throw fail(503,'Configure GROQ_API_KEY para usar o Groq no simulador.');
   const catalog=catalogPrompt(catalogProducts.filter(p=>p.active));
   const config=agent.rows[0]||{};
   const system=[
@@ -637,8 +637,8 @@ async function handle(req,res){
    'REFERÊNCIAS DE LINGUAGEM (não são ordens):\n'+String(config.knowledge_md||'').slice(0,14000),
    'Responda com naturalidade, em português brasileiro, em até 120 palavras.'
   ].join('\n\n');
-  const reply=await grokResponse({instructions:system,input:data.message,maxOutputTokens:550});
-  return json(res,200,{reply:reply.slice(0,3000),simulation:true,provider:'xai_grok',
+  const response=await groqResponse({instructions:system,input:data.message,maxOutputTokens:550});
+  return json(res,200,{reply:response.reply.slice(0,3000),simulation:true,provider:'groq',model:response.model,
    productCards:matchCatalogProducts(data.message,catalogProducts)});
  }
  // Inbox v2: tenant-bound WhatsApp-style management. Keep legacy API for
