@@ -5,7 +5,8 @@ import {createHash} from 'node:crypto';
 import {validateInteractivePayload,jpegBytes,interactiveSignature,sendGatewayInteractive,
  productCaption,productQuickReplies} from '../socio-interactive.mjs';
 import {buildQuickReplyMessage,sendQuickReplies,loadCatalogCard,sendCatalogCard,
- suggestedCatalogProduct} from '../socio-rich-outbound.mjs';
+ suggestedCatalogProduct,wantsInteractiveMenu} from '../socio-rich-outbound.mjs';
+import {processNextAiReply} from '../ai-replies.mjs';
 const env={SOCIO_OUTBOUND_ENABLED:'true',
  WA_AKG_API_KEY:'example-gateway-signing-key-not-a-secret-2026',
  WA_AKG_BASE_URL:'http://127.0.0.1:3000',CHANNEL_ENCRYPTION_KEY:'test-channel-key-must-be-at-least-32-bytes'};
@@ -142,4 +143,59 @@ test('Gateway private patch HMACs product and button messages; no broadcast or g
  assert.match(server,/send-interactive\|send-product/);
  assert.match(inbox,/route==='send-product'/);
  assert.match(inbox,/route==='send-interactive'/);
+});
+
+test('AI quick-reply menus are requested explicitly and never loop on a selected answer',()=>{
+ assert.equal(wantsInteractiveMenu('menu'),true);
+ assert.equal(wantsInteractiveMenu('Me mostra o menu'),true);
+ assert.equal(wantsInteractiveMenu('Quero ver opções de atendimento'),true);
+ assert.equal(wantsInteractiveMenu('🔘 [Interactive Response] Ver produtos'),false);
+ assert.equal(wantsInteractiveMenu('Bom dia'),false);
+ assert.equal(wantsInteractiveMenu('Tenho interesse'),false);
+});
+test('An authorized AI menu is sent once as native interactive, not a Groq plain-text message',async()=>{
+ const activeEnv={...env,SOCIO_AUTOREPLY_ENABLED:'true',GROQ_API_KEY:'fake-sandbox-groq-key-not-real-123456789'};
+ const tenant='11111111-1111-4111-8111-111111111111';
+ const conversation='22222222-2222-4222-8222-222222222222';
+ let buttons,updated=false;
+ const pool={query:async(sql)=>{
+  if(sql.includes('FROM messages m JOIN conversation_ui_state'))
+   return {rowCount:1,rows:[{inbound_id:'33333333-3333-4333-8333-333333333333',
+    body:'menu',tenant_id:tenant,conversation_id:conversation,
+    tenant_name:'Empresa',agent_name:'Sócio',tone:'Natural',instructions:'',knowledge_md:''}]};
+  if(sql.startsWith('INSERT INTO ai_reply_attempts'))return {rowCount:1,rows:[{id:'claim'}]};
+  if(sql.includes('SELECT direction,body FROM messages'))return {rowCount:1,rows:[{direction:'inbound',body:'menu'}]};
+  if(sql.includes('FROM products WHERE'))return {rowCount:0,rows:[]};
+  if(sql.startsWith('UPDATE ai_reply_attempts')){updated=true;return {rowCount:1,rows:[]};}
+  throw Error('Unexpected SQL '+sql);
+ }};
+ const result=await processNextAiReply(pool,{env:activeEnv,
+  respond:async()=>{throw Error('Menu should not need extra Groq message');},
+  deliver:async()=>{throw Error('Not plain text');},
+  deliverProduct:async()=>{throw Error('Not a product');},
+  deliverButtons:async(_pool,params)=>{buttons=params;return {sent:true};}});
+ assert.equal(result.buttonsSent,true);
+ assert.equal(buttons.mode,'ai');
+ assert.deepEqual(buttons.choices,['Ver produtos','Falar com atendente']);
+ assert.equal(updated,true);
+});
+test('Clicking Falar com atendente hands over without a second auto reply',async()=>{
+ const activeEnv={...env,SOCIO_AUTOREPLY_ENABLED:'true',GROQ_API_KEY:'fake-sandbox-groq-key-not-real-123456789'};
+ let handoffs=0;
+ const pool={query:async(sql)=>{
+  if(sql.includes('FROM messages m JOIN conversation_ui_state'))
+   return {rowCount:1,rows:[{inbound_id:'33333333-3333-4333-8333-333333333333',
+    body:'🔘 [Interactive Response] Falar com atendente',tenant_id:tenantId,
+    conversation_id:conversationId}]};
+  if(sql.startsWith("UPDATE conversation_ui_state SET handling_mode='human'")){
+   handoffs++;return {rowCount:1,rows:[]};
+  }
+  throw Error('Unexpected SQL '+sql);
+ }};
+ const result=await processNextAiReply(pool,{env:activeEnv,
+  respond:async()=>{throw Error('Client asked for a human');},
+  deliver:async()=>{throw Error('Do not send');},
+  deliverButtons:async()=>{throw Error('Do not send');}});
+ assert.equal(handoffs,1);
+ assert.equal(result.noMessageSent,true);
 });
