@@ -435,10 +435,10 @@ function catalogVariantRow(variant={}){
   '<button type="button" class="btn sm ghost" data-remove-variant aria-label="Excluir variação">×</button>'+
  '</div>';
 }
-async function products(selected=state.catalogProductId){
+async function products(selected=null){
  const [list,storage]=await Promise.all([api('/api/products'),api('/api/products/storage')]);
  if(selected&&!list.some(p=>p.id===selected))selected=null;
- state.catalogProductId=selected||null;
+ state.catalogProductId=selected&&selected!=='new'?selected:null;
  const current=list.find(p=>p.id===selected);
  const photo=p=>p.media?.length?'<img class="catalog-cover-image" src="'+e(p.media[0].url)+'" alt="'+e(p.media[0].alt||p.name)+'" loading="lazy">':
    '<div class="catalog-placeholder">◈</div>';
@@ -477,30 +477,73 @@ async function products(selected=state.catalogProductId){
    '<label>ID da campanha<input name="campaignId" maxlength="150" required placeholder="Identificador na plataforma"></label>'+
    '<label>Nome interno<input name="label" maxlength="120" placeholder="Ex.: Campanha Black Friday"></label>'+
    '<button class="btn soft" type="submit">Associar campanha →</button></form></section>':'';
- view.innerHTML=heading('CATÁLOGO INTELIGENTE','Produtos que o Sócio conhece.','Fotos reais, preços oficiais, variações e disponibilidade. Tudo separado por empresa.')+
-  '<div class="two-pane"><div><section class="card card-pad"><div class="section-title">Catálogo comercial · '+e(list.length)+' produto(s)</div>'+productCards+'</section></div>'+
-  '<div class="card card-pad"><div class="section-title" id="productFormTitle">'+(current?'Editar produto':'Novo produto')+'</div>'+
-  '<form class="form-stack" id="productForm"><label>Nome<input name="name" required maxlength="120" placeholder="Ex.: Pizza de calabresa" value="'+e(current?.name||'')+'"></label>'+
-  '<div class="catalog-pair"><label>Preço (R$)<input name="price" required type="number" min="0" step="0.01" value="'+e(current?(current.price_cents/100).toFixed(2):'')+'"></label>'+
-  '<label>Preço anterior (opcional)<input name="compareAtPrice" type="number" min="0" step="0.01" value="'+e(current?.compare_at_price_cents!=null?(current.compare_at_price_cents/100).toFixed(2):'')+'"></label></div>'+
-  '<div class="catalog-pair"><label>SKU<input name="sku" maxlength="50" placeholder="Código do produto" value="'+e(current?.sku||'')+'"></label>'+
-  '<label>Estoque (vazio = sem controle)<input name="stock" type="number" min="0" step="1" value="'+e(current?.stock_quantity??'')+'"></label></div>'+
-  '<label>Descrição comercial<textarea name="description" maxlength="1200" placeholder="Características, benefícios e condições...">'+e(current?.description||'')+'</textarea></label>'+
-  '<label>Disponibilidade<select name="active"><option value="true"'+(current?.active===false?'':' selected')+'>Ativo</option>'+
-  '<option value="false"'+(current?.active===false?' selected':'')+'>Inativo</option></select></label>'+
-  '<div class="form-actions"><button class="btn primary" type="submit">'+(current?'Salvar alterações':'Criar produto')+' →</button>'+
-  (current?'<button class="btn ghost" type="button" id="clearProduct">Novo produto</button>':'')+'</div></form></div></div>'+
-  detail;
+ const modalOpen=selected==='new'||Boolean(current);
+ view.innerHTML=heading('CATÁLOGO','Produtos e serviços.','Catálogo, preços e disponibilidade da empresa.',
+  '<button class="btn primary" id="newProduct">+ Novo produto</button>')+
+  '<section class="card card-pad socio-catalog-clean">'+
+   '<div class="socio-clean-head"><h2>Seu catálogo</h2><small>'+list.length+' produto(s) cadastrado(s)</small></div>'+
+   productCards+'</section>'+
+  '<div class="socio-popup-backdrop'+(modalOpen?'':' hidden')+'" id="productModal" role="presentation">'+
+   '<section class="socio-popup-surface socio-product-popup" role="dialog" aria-modal="true" aria-labelledby="productFormTitle">'+
+    '<div class="socio-popup-header"><div><small>CATÁLOGO DA EMPRESA</small>'+
+    '<h2 id="productFormTitle">'+(current?'Editar produto':'Novo produto')+'</h2>'+
+    '<p>Preencha as informações do produto. Fotos e variações ficam no mesmo lugar.</p></div>'+
+    '<button type="button" class="socio-popup-close" id="closeProductModal" aria-label="Fechar cadastro">×</button></div>'+
+    '<form class="form-stack" id="productForm">'+
+     '<label>Nome ou título do produto<input name="name" required maxlength="120" placeholder="Ex.: Kit profissional" value="'+e(current?.name||'')+'"></label>'+
+     '<div class="catalog-pair"><label>Preço (R$)<input name="price" required type="number" min="0" step="0.01" value="'+e(current?(current.price_cents/100).toFixed(2):'')+'"></label>'+
+     '<label>Preço anterior (opcional)<input name="compareAtPrice" type="number" min="0" step="0.01" value="'+e(current?.compare_at_price_cents!=null?(current.compare_at_price_cents/100).toFixed(2):'')+'"></label></div>'+
+     '<div class="catalog-pair"><label>Código / SKU<input name="sku" maxlength="50" placeholder="Opcional" value="'+e(current?.sku||'')+'"></label>'+
+     '<label>Estoque disponível<input name="stock" type="number" min="0" step="1" placeholder="Sem controle" value="'+e(current?.stock_quantity??'')+'"></label></div>'+
+     '<label>Descrição do produto<textarea name="description" maxlength="1200" placeholder="Características, benefícios e condições...">'+e(current?.description||'')+'</textarea></label>'+
+     '<label>Disponibilidade<select name="active"><option value="true"'+(current?.active===false?'':' selected')+'>Disponível</option>'+
+       '<option value="false"'+(current?.active===false?' selected':'')+'>Indisponível</option></select></label>'+
+     (!current?'<label>Fotos do produto (JPG, PNG, WebP; até 8)<input type="file" name="newPhotos" accept="image/jpeg,image/png,image/webp" multiple '+(!storage.configured?'disabled':'')+'></label>'+
+     '<div class="socio-clean-section"><h3>Variações</h3><div id="newVariantRows"></div>'+
+      '<button class="btn soft" id="addNewVariant" type="button">+ Adicionar variação</button></div>':'')+
+     '<div class="form-actions"><button class="btn primary" type="submit">'+(current?'Salvar alterações':'Cadastrar produto')+'</button>'+
+      (current?'<button class="btn ghost" type="button" id="clearProduct">Novo produto</button>':'')+'</div>'+
+    '</form>'+
+    (current?detail:'')+
+   '</section></div>';
+ $('#newProduct')?.addEventListener('click',()=>products('new'));
+ $('#closeProductModal')?.addEventListener('click',()=>products(null));
+ $('#productModal')?.addEventListener('click',ev=>{if(ev.target===$('#productModal'))products(null)});
+ $('#addNewVariant')?.addEventListener('click',()=>{
+  const host=$('#newVariantRows');
+  if(host.querySelectorAll('[data-variant-row]').length>=25)return toast('Máximo de 25 variações.',true);
+  host.insertAdjacentHTML('beforeend',catalogVariantRow());
+ });
+ $('#newVariantRows')?.addEventListener('click',ev=>{
+  const btn=ev.target.closest('[data-remove-variant]');if(btn)btn.closest('[data-variant-row]').remove();
+ });
+ if(modalOpen)$('#productForm')?.elements?.name?.focus();
  view.querySelectorAll('[data-select-product]').forEach(btn=>btn.addEventListener('click',()=>products(btn.dataset.selectProduct)));
  $('#clearProduct')?.addEventListener('click',()=>products(null));
  $('#productForm').addEventListener('submit',async ev=>{
-  ev.preventDefault();const d=formValues(ev.currentTarget);
+  ev.preventDefault();const form=ev.currentTarget,d=formValues(form);
   await action(async()=>{
    const data={name:d.name,description:d.description,sku:d.sku,
     priceCents:centsFromInput(d.price),compareAtPriceCents:d.compareAtPrice?centsFromInput(d.compareAtPrice):null,
     stockQuantity:stockFromInput(d.stock),active:d.active==='true'};
    const result=await api(current?'/api/products/'+current.id:'/api/products',current?'PATCH':'POST',data);
-   toast('Catálogo atualizado.');await products(current?.id||result.id);
+   const productId=current?.id||result.id;
+   if(!current){
+    const variants=[...form.querySelectorAll('#newVariantRows [data-variant-row]')].map(row=>{
+     const get=selector=>row.querySelector(selector)?.value||'';
+     return {name:get('[data-variant-name]'),sku:get('[data-variant-sku]'),
+      priceCents:centsFromInput(get('[data-variant-price]')),
+      stockQuantity:stockFromInput(get('[data-variant-stock]')),active:true};
+    });
+    if(variants.length)await api('/api/products/'+productId+'/variants','PUT',{variants});
+    const photos=[...(form.elements.newPhotos?.files||[])];
+    if(photos.length>8)throw Error('Máximo de oito fotos por produto.');
+    for(const file of photos){
+     const contentBase64=await compressCatalogImage(file);
+     await api('/api/products/'+productId+'/media','POST',{contentBase64,alt:d.name});
+    }
+   }
+   toast('Catálogo atualizado.');await products(productId);
   });
  });
  if(!current)return;
