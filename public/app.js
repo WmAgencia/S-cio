@@ -789,9 +789,10 @@ async function team(){
  const permissions=new Set(state.me?.user?.permissions||[]);
  const mayView=permissions.has('team.read'),mayInvite=permissions.has('team.invite'),
   mayManage=permissions.has('team.manage'),mayPromote=permissions.has('team.promote');
- const [people,auditData]=await Promise.all([
+ const [people,auditData,integrity]=await Promise.all([
   mayView?api('/api/team'):Promise.resolve([]),
-  permissions.has('audit.read')?api('/api/ops/audit?limit=35'):Promise.resolve({events:[]})
+  permissions.has('audit.read')?api('/api/ops/audit?limit=35'):Promise.resolve({events:[]}),
+  permissions.has('audit.read')?api('/api/ops/tenant-integrity'):Promise.resolve(null)
  ]);
  const roleLabel=role=>role==='owner'?'Proprietário':role==='admin'?'Administrador':'Atendente';
  const members=mayView?'<section class="card card-pad"><div class="section-title">Pessoas da empresa</div>'+
@@ -825,6 +826,11 @@ async function team(){
    '<div class="socio-audit-line"><strong>'+e(item.action)+'</strong><span>'+e(item.actor||'Sistema')+
    ' · '+e(date(item.created_at))+'</span></div>').join('')+'</div>':
    '<p class="form-note">Nenhum evento registrado.</p>')+'</section>':'';
+ const integrityBlock=integrity?'<section class="card card-pad socio-integrity-panel">'+
+  '<h2>Isolamento de dados</h2><p class="form-note">Diagnóstico somente de leitura. Verifica vínculos entre registros da sua empresa; não valida retroativamente todas as restrições do banco.</p>'+
+  '<strong>'+e(integrity.preflightClean?'Nenhuma divergência encontrada neste diagnóstico':
+    'Foram encontradas divergências que exigem revisão administrativa')+'</strong>'+
+  '<p class="form-note">'+e(integrity.totalMismatches||0)+' relacionamento(s) divergente(s) na verificação.</p></section>':'';
  view.innerHTML=heading('ADMINISTRAÇÃO','Equipe e acessos.',
   'Gerencie as permissões e a segurança da sua conta. Cada colaborador atua apenas na empresa autorizada.')+
  '<section class="card card-pad" style="margin-bottom:18px"><div class="section-title">Minha conta</div>'+
@@ -836,7 +842,7 @@ async function team(){
  '<label>Senha atual<input name="currentPassword" type="password" required autocomplete="current-password"></label>'+
  '<label>Nova senha (mínimo 12 caracteres)<input name="newPassword" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>'+
  '<button type="submit" class="btn primary">Alterar senha e encerrar outras sessões</button></form></div></section>'+
- (mayView?'<div class="socio-team-grid">'+members+invite+'</div>':'')+log;
+ (mayView?'<div class="socio-team-grid">'+members+invite+'</div>':'')+integrityBlock+log;
  $('#myPhoneForm')?.addEventListener('submit',async ev=>{
   ev.preventDefault();const form=ev.currentTarget;
   await action(async()=>{
