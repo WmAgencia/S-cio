@@ -776,7 +776,7 @@ async function training(){
  clearTimeout(trainingTimer);
  const [auto,versions,waLinks,ag]=await Promise.all([
   api('/api/training/auto'),api('/api/training/versions'),
-  api('/api/waakg/channels'),api('/api/agent')
+  (featureAvailable('whatsapp')?api('/api/waakg/channels'):Promise.resolve([])),api('/api/agent')
  ]);
  const run=auto.run,connected=waLinks.filter(c=>c.status==='connected');
  const percent=run?.percent??0;
@@ -812,7 +812,7 @@ async function training(){
    (run?.errorCode?'<p class="form-error">Erro: '+e(run.errorCode)+'</p>':'')+
    (!auto.groqConfigured?'<p class="form-note">A chave GROQ_API_KEY ainda não está configurada. A análise gera Markdown preliminar por regras; a síntese pelo Groq será habilitada quando a chave for instalada.</p>':
     '<p class="form-note">Síntese pelo Groq habilitada. O conhecimento continua como rascunho até sua aprovação.</p>')+
-   (!connected.length?'<button type="button" class="btn soft" id="trainConnectWhatsApp">+ Conectar WhatsApp</button>':'')+
+   (!featureAvailable('whatsapp')?'<p class="form-note">O WhatsApp está desabilitado para esta empresa. O administrador Consecom pode habilitá-lo em Empresas.</p>':!connected.length?'<button type="button" class="btn soft" id="trainConnectWhatsApp">+ Conectar WhatsApp</button>':'')+
   '</section>'+
   (draft?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Markdown gerado · versão '+e(draft.version)+'</h2>'+
     '<span class="badge yellow">Aguardando aprovação</span></div>'+
