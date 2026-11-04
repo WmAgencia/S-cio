@@ -7,6 +7,11 @@ CREATE TABLE IF NOT EXISTS tenants (
  status text NOT NULL DEFAULT 'trial' CHECK (status IN ('trial','active','paused')),
  created_at timestamptz NOT NULL DEFAULT now()
 );
+-- Feature bundles: existing companies retain all functions until the platform owner changes them.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS features jsonb NOT NULL DEFAULT
+ '{"whatsapp":true,"catalog":true,"quotes":true,"meta_ads":true,"ai":true,"team":true}'::jsonb;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS quote_alert_whatsapp boolean NOT NULL DEFAULT false;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS quote_alert_enabled_at timestamptz;
 CREATE TABLE IF NOT EXISTS users (
  id uuid PRIMARY KEY,
  tenant_id uuid NOT NULL REFERENCES tenants(id),
@@ -628,3 +633,30 @@ CREATE TABLE IF NOT EXISTS instagram_hosted_profiles (
  updated_at timestamptz NOT NULL DEFAULT now(),
  FOREIGN KEY(tenant_id,created_by) REFERENCES users(tenant_id,id)
 );
+
+
+-- Customer-initiated budget requests are NOT priced or sent to customers by AI.
+-- Incoming message uniqueness prevents duplicate owner alerts when a worker restarts.
+CREATE TABLE IF NOT EXISTS quote_requests (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ conversation_id uuid NOT NULL,
+ inbound_message_id uuid NOT NULL,
+ customer_name text NOT NULL DEFAULT '',
+ customer_phone text NOT NULL DEFAULT '',
+ summary text NOT NULL DEFAULT '',
+ status text NOT NULL DEFAULT 'pending'
+  CHECK(status IN ('pending','preparing','resolved')),
+ alert_status text NOT NULL DEFAULT 'pending'
+  CHECK(alert_status IN ('pending','processing','sent','unconfirmed')),
+ alert_last_attempt_at timestamptz,
+ alert_sent_at timestamptz,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(tenant_id,inbound_message_id),
+ UNIQUE(tenant_id,id),
+ FOREIGN KEY(tenant_id,conversation_id) REFERENCES conversations(tenant_id,id) ON DELETE CASCADE,
+ FOREIGN KEY(tenant_id,inbound_message_id) REFERENCES messages(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS quote_requests_tenant_status ON quote_requests(tenant_id,status,created_at DESC);
+CREATE INDEX IF NOT EXISTS quote_requests_delivery_queue ON quote_requests(alert_status,created_at);

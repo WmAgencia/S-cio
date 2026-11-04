@@ -12,7 +12,9 @@ async function claim(pool){
  try{
   await c.query('BEGIN');
   const q=await c.query(
-   "SELECT id FROM waakg_scans WHERE status IN ('queued','scanning','importing') AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1"
+   "SELECT id FROM waakg_scans WHERE status IN ('queued','scanning','importing') AND (lease_until IS NULL OR lease_until<now()) "+
+   "AND tenant_id IN (SELECT id FROM tenants WHERE COALESCE((features->>'whatsapp')::boolean,true)=true) "+
+   "ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1"
   );
   if(!q.rowCount){await c.query('COMMIT');return null;}
   const updated=await c.query(

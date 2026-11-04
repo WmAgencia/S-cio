@@ -148,3 +148,40 @@
 .socio-audit-line span{color:var(--muted,#8f7969);font-size:12px}
 @media(max-width:1000px){.socio-team-grid{grid-template-columns:1fr}}
 @media(max-width:680px){.socio-my-account{grid-template-columns:1fr}.socio-audit-line{align-items:flex-start}}
+
+
+/* UX audit: controls use the same 10–14px radii, unobtrusive motion and focus style. */
+.auth-password{position:relative;width:100%}
+.auth-password input{padding-right:88px}
+.auth-password-toggle{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:transparent;border:0;border-radius:8px;padding:8px 11px;color:#66589f;font:inherit;font-size:12px;cursor:pointer}
+.auth-password-toggle:hover{background:rgba(104,84,171,.08)}
+.auth-password-toggle:focus-visible{outline:3px solid #b4a6ff;outline-offset:1px}
+.auth-caps-warning{font-size:12px;line-height:1.5;color:#8d5a1c;margin:-10px 0 0}
+#loginSubmit[aria-busy="true"]{cursor:progress;opacity:.77}
+.feature-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.feature-choice{display:flex!important;flex-direction:row!important;align-items:flex-start;gap:12px;padding:13px;border:1px solid var(--line,#e2e2e8);background:var(--surface,#fff);border-radius:12px;cursor:pointer;font-size:12px}
+.feature-choice:has(input:checked){border-color:#9c91cc;background:rgba(125,105,201,.07)}
+.feature-choice input{width:18px;min-width:18px;height:18px;margin:1px 0 0;accent-color:#6b57ad}
+.feature-choice span{display:flex;flex-direction:column;gap:5px;min-width:0}
+.feature-choice strong{font-size:12px;color:var(--ink,#32313b)}
+.feature-choice small{font-size:11px;line-height:1.45;color:#85808f;font-weight:400}
+#featuresModal .socio-popup-surface,#companyModal .socio-popup-surface{max-height:min(92dvh,850px);overflow-y:auto;overscroll-behavior:contain}
+#featuresModal .socio-popup-surface{width:min(650px,calc(100vw - 28px))}
+.catalog-product{min-width:0}
+.catalog-product-copy,.catalog-product-copy strong{min-width:0;overflow-wrap:anywhere}
+.catalog-cover-image{object-fit:cover}
+.catalog-product:focus-visible,.feature-choice:focus-within{outline:3px solid #b4a6ff;outline-offset:2px}
+@media(max-width:650px){
+ .feature-grid{grid-template-columns:minmax(0,1fr)}
+ .auth-panel{padding:24px 16px}
+ #companyModal .socio-popup-surface{max-height:92dvh}
+}
+@media(prefers-reduced-motion:reduce){
+ #loginSubmit,.auth-password-toggle,.feature-choice,.catalog-product{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+}
+
+/* Catálogo com filtros para lista populada */
+.catalog-filters{display:grid;grid-template-columns:minmax(0,2fr) minmax(170px,1fr);gap:12px;padding:12px 0 18px}
+.catalog-filters label{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:600;min-width:0}
+.catalog-filters input,.catalog-filters select{width:100%;min-width:0}
+@media(max-width:650px){.catalog-filters{grid-template-columns:minmax(0,1fr)}}

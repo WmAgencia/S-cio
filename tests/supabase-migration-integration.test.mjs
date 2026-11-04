@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {Client} from 'pg';
 import {TABLES,migrate} from '../scripts/socio-supabase-migrate.mjs';
 
-test('37-table migration: read-only preflight, exact copies, fingerprints, and refusal of occupied targets',
+test('38-table migration: read-only preflight, exact copies, fingerprints, and refusal of occupied targets',
  {skip:!process.env.DATABASE_URL,timeout:120000},async t=>{
  const sourceName='socio_migration_source_test_'+randomBytes(5).toString('hex');
  const targetName='socio_migration_target_test_'+randomBytes(5).toString('hex');

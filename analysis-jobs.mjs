@@ -59,7 +59,9 @@ export async function processNextAnalysisJob(pool){
  const c=await pool.connect();
  try{
   await c.query('BEGIN');
-  const selected=await c.query("SELECT id,tenant_id FROM training_jobs WHERE status IN ('queued','analyzing') ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1");
+  const selected=await c.query("SELECT id,tenant_id FROM training_jobs WHERE status IN ('queued','analyzing') "+
+  "AND tenant_id IN (SELECT id FROM tenants WHERE COALESCE((features->>'ai')::boolean,true)=true) "+
+  "ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1");
   const job=selected.rows[0];
   if(!job){await c.query('COMMIT');return {processed:false};}
   const next=await c.query(

@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import {TABLES,checkMigrationConfiguration,compareTableShape,fingerprintRow} from '../scripts/socio-supabase-migrate.mjs';
 import {validateMasterConfig} from '../scripts/socio-provision-master.mjs';
 
-test('Sócio migration covers all 37 production tables in dependency order',()=>{
- assert.equal(TABLES.length,37);
+test('Sócio migration covers all 38 production tables in dependency order',()=>{
+ assert.equal(TABLES.length,38);
  assert.equal(new Set(TABLES).size,TABLES.length);
  for(const [parent,child] of [['tenants','users'],['tenants','products'],['channels','conversations'],
   ['conversations','messages'],['users','instagram_oauth_states'],['users','marketing_connections'],['users','marketing_oauth_attempts'],['users','marketing_oauth_grants'],['users','instagram_hosted_profiles'],['marketing_connections','marketing_report_receipts'],['marketing_connections','marketing_daily_metrics'],['channels','instagram_accounts'],['conversations','instagram_outbox'],['training_jobs','training_job_items'],
   ['training_jobs','training_versions'],['imports','training_job_items'],
-  ['waakg_scans','waakg_scan_chats'],['products','product_variants'],['conversations','conversation_ui_state'],['messages','message_ui_state'],['messages','ai_reply_attempts'],['conversations','message_outbox'],['conversations','sales_quotes'],['sales_quotes','sales_orders'],['sales_orders','sales_payment_events']]){
+  ['waakg_scans','waakg_scan_chats'],['products','product_variants'],['conversations','conversation_ui_state'],['messages','message_ui_state'],['messages','ai_reply_attempts'],['conversations','message_outbox'],['conversations','sales_quotes'],['messages','quote_requests'],['sales_quotes','sales_orders'],['sales_orders','sales_payment_events']]){
   assert.ok(TABLES.indexOf(parent)<TABLES.indexOf(child),parent+' must be inserted before '+child);
  }
 });

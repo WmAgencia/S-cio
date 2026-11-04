@@ -11,7 +11,8 @@ export async function processLiveInboxSync(pool,{
  const channels=await pool.query(
   "SELECT l.session_id,l.channel_id,l.tenant_id,ch.phone FROM waakg_links l "+
   "JOIN channels ch ON ch.id=l.channel_id AND ch.tenant_id=l.tenant_id "+
-  "WHERE ch.provider='waakg' AND ch.status='connected' "+
+  "JOIN tenants t ON t.id=l.tenant_id "+
+  "WHERE ch.provider='waakg' AND ch.status='connected' AND COALESCE((t.features->>'whatsapp')::boolean,true)=true "+
   "ORDER BY l.created_at LIMIT 50");
  if(!channels.rowCount)return {processed:false,reason:'NO_CHANNELS'};
  const c=channels.rows[channelCursor++%channels.rows.length];

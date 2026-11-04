@@ -1,7 +1,12 @@
 
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
-const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training'};
+const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training',catalogSearch:'',catalogStock:'all'};
+const featureLabels={whatsapp:'Atendimento WhatsApp',catalog:'Produtos e serviços',quotes:'Orçamentos e pedidos',meta_ads:'Meta Ads',ai:'Inteligência Artificial',team:'Equipe'};
+const featureView={inbox:'whatsapp',products:'catalog',sales:'quotes',marketing:'meta_ads',training:'ai',team:'team'};
+const featureKeys=Object.keys(featureLabels);
+const featuresEnabled=()=>state.me?.tenant?.features||{};
+const featureAvailable=key=>featuresEnabled()[key]!==false;
 const titles={overview:'Visão geral',inbox:'WhatsApp',marketing:'Meta Ads',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas e orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
@@ -61,6 +66,15 @@ async function boot(){
    for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['marketing','marketing.read']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
+   for(const [section,feature] of Object.entries(featureView)){
+    const nav=document.querySelector('.nav-item[data-view="'+section+'"]');
+    if(nav)nav.classList.toggle('hidden',!featureAvailable(feature)||
+     (section==='training'&&!access.has('training.manage'))||
+     (section==='sales'&&!access.has('sales.read'))||
+     (section==='marketing'&&!access.has('marketing.read')));
+   }
+   $('#teamNav')?.classList.toggle('hidden',!featureAvailable('team')||
+    (!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner));
    const marketingStatus=typeof location==='object'?new URL(location.href).searchParams.get('marketing'):null;
    const marketingProvider=typeof location==='object'?new URL(location.href).searchParams.get('provider'):null;
    if(['authorized','failed','cancelled'].includes(marketingStatus)){
@@ -107,6 +121,7 @@ async function changeView(next){
  else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
  if(next==='admin'&&!state.me?.user.platformOwner)return;
+ if(featureView[next]&&!featureAvailable(featureView[next]))next='overview';
  const access=new Set(state.me?.user?.permissions||[]);
  if(next==='training'&&!access.has('training.manage'))next='overview';
  if(next==='sales'&&!access.has('sales.read'))next='overview';
@@ -120,7 +135,7 @@ async function changeView(next){
   if(next==='overview')await overview();
   if(next==='channels')await channels();
   if(next==='products')await products();
-  if(next==='sales')await window.SocioSales.render({api,e,toast,view});
+  if(next==='sales')await window.SocioSales.render({api,e,toast,view,me:state.me,navigate:changeView});
   if(next==='training')await (state.aiTab==='agent'?agent():training());
   if(next==='inbox')await inbox();
   if(next==='marketing')await marketing();
@@ -566,7 +581,9 @@ async function products(selected=null){
  const productCards=list.length?'<div class="catalog-list">'+list.map(p=>{
   const stockedVariants=p.variants?.filter(v=>v.active!==false)||[];
   const available=p.active&&(stockedVariants.length?stockedVariants.some(v=>v.stock_quantity===null||v.stock_quantity>0):(p.stock_quantity===null||p.stock_quantity>0));
-  return '<button type="button" class="catalog-product '+(selected===p.id?'is-selected':'')+'" data-select-product="'+e(p.id)+'">'+
+  return '<button type="button" class="catalog-product '+(selected===p.id?'is-selected':'')+
+   '" data-catalog-item data-catalog-label="'+e((p.name||'')+' '+(p.sku||''))+
+   '" data-catalog-available="'+(available?'true':'false')+'" data-select-product="'+e(p.id)+'">'+
    '<div class="catalog-cover">'+photo(p)+'</div>'+
    '<div class="catalog-product-copy"><strong>'+e(p.name)+'</strong><small>'+e(p.sku||'Sem SKU')+' · '+e(p.media?.length||0)+' foto(s)</small>'+
    '<span>'+e(catalogPrice(p.price_cents))+'</span></div>'+
@@ -603,7 +620,12 @@ async function products(selected=null){
   '<button class="btn primary" id="newProduct">+ Novo produto</button>')+
   '<section class="card card-pad socio-catalog-clean">'+
    '<div class="socio-clean-head"><h2>Seu catálogo</h2><small>'+list.length+' produto(s) cadastrado(s)</small></div>'+
-   productCards+'</section>'+
+   (list.length?'<div class="catalog-filters"><label>Buscar produtos<input id="catalogSearch" type="search" maxlength="120" placeholder="Nome ou SKU" value="'+e(state.catalogSearch)+'"></label>'+
+    '<label>Disponibilidade<select id="catalogStock"><option value="all"'+(state.catalogStock==='all'?' selected':'')+'>Todos</option>'+
+    '<option value="available"'+(state.catalogStock==='available'?' selected':'')+'>Disponíveis</option>'+
+    '<option value="unavailable"'+(state.catalogStock==='unavailable'?' selected':'')+'>Sem estoque / inativos</option></select></label></div>':'')+
+   productCards+
+   '<p id="catalogNoResults" class="form-note hidden" role="status">Nenhum produto corresponde aos filtros. Tente outra busca.</p></section>'+
   '<div class="socio-popup-backdrop'+(modalOpen?'':' hidden')+'" id="productModal" role="presentation">'+
    '<section class="socio-popup-surface socio-product-popup" role="dialog" aria-modal="true" aria-labelledby="productFormTitle">'+
     '<div class="socio-popup-header"><div><small>CATÁLOGO DA EMPRESA</small>'+
@@ -639,6 +661,23 @@ async function products(selected=null){
   const btn=ev.target.closest('[data-remove-variant]');if(btn)btn.closest('[data-variant-row]').remove();
  });
  if(modalOpen)$('#productForm')?.elements?.name?.focus();
+ const applyCatalogFilters=()=>{
+  const needle=String(state.catalogSearch||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  let shown=0;
+  view.querySelectorAll('[data-catalog-item]').forEach(card=>{
+   const label=String(card.dataset.catalogLabel||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+   const available=card.dataset.catalogAvailable==='true';
+   const visible=label.includes(needle)&&(state.catalogStock==='all'||
+    (state.catalogStock==='available'&&available)||(state.catalogStock==='unavailable'&&!available));
+   card.classList.toggle('hidden',!visible);
+   if(visible)shown++;
+  });
+  const empty=$('#catalogNoResults');
+  if(empty)empty.classList.toggle('hidden',!list.length||shown>0);
+ };
+ $('#catalogSearch')?.addEventListener('input',ev=>{state.catalogSearch=ev.currentTarget.value;applyCatalogFilters();});
+ $('#catalogStock')?.addEventListener('change',ev=>{state.catalogStock=ev.currentTarget.value;applyCatalogFilters();});
+ applyCatalogFilters();
  view.querySelectorAll('[data-select-product]').forEach(btn=>btn.addEventListener('click',()=>products(btn.dataset.selectProduct)));
  $('#clearProduct')?.addEventListener('click',()=>products(null));
  $('#productForm').addEventListener('submit',async ev=>{
@@ -1009,13 +1048,35 @@ async function team(){
   });
  }));
 }
+function featureChecks(flags={},prefix='feature-'){
+ return '<div class="feature-grid" role="group" aria-label="Funcionalidades da empresa">'+
+  featureKeys.map(key=>'<label class="feature-choice"><input type="checkbox" name="'+prefix+key+
+   '" '+(flags[key]!==false?'checked':'')+'><span><strong>'+e(featureLabels[key])+
+   '</strong><small>'+(key==='quotes'?'Precisa de WhatsApp e catálogo':key==='meta_ads'?'Conexão opcional via Pipeboard':'Ativar neste ambiente')+
+   '</small></span></label>').join('')+'</div>';
+}
+function selectedFeatures(form,prefix='feature-'){
+ return Object.fromEntries(featureKeys.map(key=>[key,form.elements[prefix+key]?.checked===true]));
+}
+function wireFeatureDependencies(form,prefix='feature-'){
+ form.addEventListener('change',ev=>{
+  const key=String(ev.target?.name||'').replace(prefix,'');
+  const quote=form.elements[prefix+'quotes'],catalog=form.elements[prefix+'catalog'],whatsapp=form.elements[prefix+'whatsapp'];
+  if(!quote||!catalog||!whatsapp)return;
+  if(key==='quotes'&&quote.checked){catalog.checked=true;whatsapp.checked=true;}
+  if((key==='catalog'&&!catalog.checked)||(key==='whatsapp'&&!whatsapp.checked)){
+   quote.checked=false;
+  }
+ });
+}
 async function admin(){
  const tenants=await api('/api/admin/tenants');
  const rows=tenants.map(t=>
   '<tr><td><strong>'+e(t.name)+'</strong><div class="table-detail">'+
    e(t.cnpj||t.slug)+' · '+e(t.members)+' usuário(s)</div></td>'+
    '<td>'+badge(t.plan)+'</td><td>'+badge(t.status,t.status==='active'?'green':'gray')+'</td>'+
-   '<td><button class="btn sm ghost" data-switch="'+e(t.id)+'">'+
+   '<td><button type="button" class="btn sm soft" data-feature-edit="'+e(t.id)+'">Funcionalidades</button> '+
+   '<button class="btn sm ghost" data-switch="'+e(t.id)+'">'+
    (t.id===state.me.tenant.id?'Atual':'Acessar')+'</button></td></tr>').join('');
  view.innerHTML=heading('CONTROLE CONSECOM','Empresas.','Gerencie clientes e espaços independentes.',
   '<button type="button" class="btn primary" id="newCompany">+ Nova empresa</button>')+
@@ -1040,11 +1101,23 @@ async function admin(){
    '<label>E-mail do responsável (login)<input name="ownerEmail" required type="email" maxlength="255"></label>'+
    '<div class="catalog-pair"><label>Celular para login<input name="ownerPhone" type="tel" maxlength="32" placeholder="Com DDD"></label>'+
    '<label>Plano<select name="plan"><option value="essencial">Essencial</option><option value="equipe">Equipe</option><option value="voz">Voz</option></select></label></div>'+
+   '<div class="socio-popup-divider"><span>FUNCIONALIDADES DA EMPRESA</span></div>'+
+   '<p class="form-note">Selecione somente os módulos contratados. Você poderá alterar depois.</p>'+
+   featureChecks()+
    '<label>Senha inicial (mínimo 12 caracteres)<input name="ownerPassword" required type="password" minlength="12" maxlength="128" autocomplete="new-password"></label>'+
    '<p class="form-note">O cadastro cria um ambiente separado. Cobrança não é ativada automaticamente.</p>'+
    '<button class="btn primary socio-full-btn" type="submit">Criar empresa</button>'+
+  '</form></section></div>'+
+  '<div class="socio-popup-backdrop hidden" id="featuresModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="featuresHeading">'+
+  '<div class="socio-popup-header"><div><small>CONFIGURAÇÕES DO CLIENTE</small><h2 id="featuresHeading">Funcionalidades</h2>'+
+  '<p>Os módulos desmarcados ficam ocultos e bloqueados também na API, sem apagar dados existentes.</p></div>'+
+  '<button type="button" id="featuresClose" class="socio-popup-close" aria-label="Fechar funcionalidades">×</button></div>'+
+  '<form id="featuresForm" class="form-stack">'+
+  '<div id="featuresChoices"></div>'+
+  '<button type="submit" class="btn primary socio-full-btn">Salvar funcionalidades</button>'+
   '</form></section></div>';
  const modal=$('#companyModal'),form=$('#tenantForm');
+ wireFeatureDependencies(form);
  let publicProfile=null;
  const open=()=>{modal.classList.remove('hidden');form.elements.cnpj.focus();};
  const close=()=>modal.classList.add('hidden');
@@ -1074,6 +1147,7 @@ async function admin(){
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();
   const data=formValues(form);
+  data.features=selectedFeatures(form);
   data.companyProfile=publicProfile?.cnpj===data.cnpj.replace(/\D/g,'')?
    {address:publicProfile.address,primaryActivity:publicProfile.primaryActivity,status:publicProfile.status,
     commercialEmail:data.companyEmail,commercialPhone:data.companyPhone}:
@@ -1083,6 +1157,34 @@ async function admin(){
    toast('Empresa cadastrada e ambiente criado com isolamento.');
    close();await admin();
   });
+ });
+ const featureModal=$('#featuresModal'),featureForm=$('#featuresForm');
+ wireFeatureDependencies(featureForm,'edit-feature-');
+ let editingTenant=null;
+ const closeFeatures=()=>{featureModal.classList.add('hidden');editingTenant=null;};
+ $('#featuresClose').addEventListener('click',closeFeatures);
+ featureModal.addEventListener('click',ev=>{if(ev.target===featureModal)closeFeatures();});
+ view.querySelectorAll('[data-feature-edit]').forEach(b=>b.addEventListener('click',()=>{
+  const tenant=tenants.find(x=>x.id===b.dataset.featureEdit);
+  if(!tenant)return;
+  editingTenant=tenant.id;
+  $('#featuresHeading').textContent='Funcionalidades · '+tenant.name;
+  $('#featuresChoices').innerHTML=featureChecks(tenant.features,'edit-feature-');
+  featureModal.classList.remove('hidden');
+  $('#featuresClose').focus();
+ }));
+ featureForm.addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  if(!editingTenant)return;
+  const data={features:selectedFeatures(featureForm,'edit-feature-')};
+  const submit=featureForm.querySelector('[type="submit"]');
+  submit.disabled=true;
+  try{
+   await api('/api/admin/tenants/'+editingTenant+'/features','PUT',data);
+   toast('Funcionalidades atualizadas com sucesso.');
+   closeFeatures();await admin();
+  }catch(error){toast(errMsg(error),true);}
+  finally{submit.disabled=false;}
  });
  view.querySelectorAll('[data-switch]').forEach(b=>b.addEventListener('click',()=>action(async()=>{
   await api('/api/admin/switch','POST',{tenantId:b.dataset.switch});
@@ -1119,7 +1221,12 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  key!=='agent'&&key!=='channels'&&(key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&(key!=='team'||!state.me?.user.platformOwner)&&(key!=='admin'||state.me?.user.platformOwner)&&
+  key!=='agent'&&key!=='channels'&&(!featureView[key]||featureAvailable(featureView[key]))&&
+  (key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&
+  (key!=='sales'||(state.me?.user?.permissions||[]).includes('sales.read'))&&
+  (key!=='training'||(state.me?.user?.permissions||[]).includes('training.manage'))&&
+  (key!=='team'||(state.me?.user?.permissions||[]).includes('team.read'))&&
+  (key!=='admin'||state.me?.user.platformOwner)&&
   (label.toLocaleLowerCase('pt-BR').includes(keyword)||key.includes(keyword)));
  const list=$('#commandList');
  list.innerHTML=names.length?names.map(([key,label])=>
@@ -1154,10 +1261,34 @@ document.addEventListener('keydown',event=>{
 });
 initSidebarIcons();
 
+const loginPassword=$('#loginPassword'),togglePassword=$('#togglePassword'),capsWarning=$('#capsWarning');
+togglePassword.addEventListener('click',()=>{
+ const reveal=loginPassword.type==='password';
+ loginPassword.type=reveal?'text':'password';
+ togglePassword.textContent=reveal?'Ocultar':'Mostrar';
+ togglePassword.setAttribute('aria-pressed',String(reveal));
+ loginPassword.focus();
+});
+loginPassword.addEventListener('keyup',ev=>{
+ capsWarning.classList.toggle('hidden',!ev.getModifierState('CapsLock'));
+});
+loginPassword.addEventListener('blur',()=>capsWarning.classList.add('hidden'));
 $('#loginForm').addEventListener('submit',async ev=>{
  ev.preventDefault();$('#authError').textContent='';
- try{const data=await api('/api/login','POST',formValues(ev.currentTarget));state.csrf=data.csrf;await boot();}
- catch(err){$('#authError').textContent=errMsg(err);}
+ const form=ev.currentTarget,submit=$('#loginSubmit');
+ if(submit.disabled)return;
+ submit.disabled=true;submit.setAttribute('aria-busy','true');submit.textContent='Entrando com segurança…';
+ try{
+  const data=await api('/api/login','POST',formValues(form));
+  state.csrf=data.csrf;
+  await boot();
+ }catch(err){
+  $('#authError').textContent=errMsg(err);
+  $('#authError').focus();
+ }finally{
+  submit.disabled=false;submit.removeAttribute('aria-busy');
+  submit.innerHTML='Entrar no Sócio <span aria-hidden="true">→</span>';
+ }
 });
 $('#setupForm').addEventListener('submit',async ev=>{
  ev.preventDefault();$('#authError').textContent='';

@@ -3,6 +3,8 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
+import {scanQuoteRequests,listQuoteRequests,updateQuoteRequest,setQuoteAlerts,processNextOwnerQuoteAlert} from './quote-requests.mjs';
+import {validateTenantFeatures,parseTenantFeatures,filterPermissions,assertApiFeature} from './tenant-features.mjs';
 import {startPipeboardOAuth,finishPipeboardOAuth,listPipeboardOAuth,revokePipeboardOAuth,oauthClientMetadata,testPipeboardConnection} from './marketing-oauth.mjs';
 import {instagramHostedReady,beginInstagramHosted,instagramHostedStatus,disconnectInstagramHosted} from './instagram-hosted.mjs';
 import {connectPipeboard,listMarketing,disconnectMarketing} from './marketing-integrations.mjs';
@@ -98,7 +100,7 @@ async function sessionFor(req){
  if(!match)return null;
  const token=decodeURIComponent(match[1]);
  if(!token||token.length>256)return null;
- const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.phone,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true AND (u.platform_owner=true OR u.tenant_id=s.active_tenant_id)",[hashToken(token)]);
+ const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.phone,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status,t.features,t.quote_alert_whatsapp FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true AND (u.platform_owner=true OR u.tenant_id=s.active_tenant_id)",[hashToken(token)]);
  return result.rows[0]||null;
 }
 async function createSession(userId,tenantId,res){
@@ -276,7 +278,14 @@ async function handle(req,res){
   const csrf=req.headers['x-csrf-token'];
   if(!csrf||!secureEqual(String(csrf),a.csrf))throw fail(403,'Sessão sem validação de segurança.');
  }
- if(method==='GET'&&pathname==='/api/me')return json(res,200,{user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,platformOwner:a.platform_owner,permissions:permissionsFor(a.role,a.platform_owner)},tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status},csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
+ if(method==='GET'&&pathname==='/api/me')return json(res,200,{
+  user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,
+   platformOwner:a.platform_owner,permissions:filterPermissions(permissionsFor(a.role,a.platform_owner),a.features)},
+  tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status,
+   features:parseTenantFeatures(a.features),quoteAlertWhatsApp:a.quote_alert_whatsapp===true},
+  csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
+ // Feature restrictions are server-side. Hidden navigation never constitutes authorization.
+ assertApiFeature(a.features,pathname);
  // Hosted one-click OAuth (Pipeboard). Tokens never go to the browser.
  if(method==='GET'&&pathname==='/api/marketing/oauth'){
   requirePermission(a,'marketing.read');
@@ -634,6 +643,26 @@ async function handle(req,res){
   return json(res,201,r.rows[0]);
  }
 
+ if(method==='GET'&&pathname==='/api/sales/quote-requests'){
+  requirePermission(a,'sales.read');
+  return json(res,200,{requests:await listQuoteRequests(pool,a.active_tenant_id),
+   alertWhatsAppEnabled:a.quote_alert_whatsapp===true});
+ }
+ if(method==='PUT'&&pathname==='/api/sales/quote-alerts'){
+  requirePermission(a,'sales.manage');
+  const {data}=await body(req,1000);
+  const result=await setQuoteAlerts(pool,a,data.enabled);
+  await audit(a,'sales.quote_alerts.changed',{enabled:result.enabled});
+  return json(res,200,result);
+ }
+ const reqStatus=pathname.match(/^\/api\/sales\/quote-requests\/([a-f0-9-]{36})\/status$/);
+ if(reqStatus&&method==='PATCH'){
+  requirePermission(a,'sales.manage');
+  const {data}=await body(req,1000);
+  const result=await updateQuoteRequest(pool,a.active_tenant_id,reqStatus[1],data.status);
+  await audit(a,'sales.quote_request.updated',{requestId:result.id,status:result.status});
+  return json(res,200,result);
+ }
  if(method==='GET'&&pathname==='/api/sales'){
   requirePermission(a,'sales.read');
   return json(res,200,await listSales(pool,a.active_tenant_id));
@@ -1137,8 +1166,19 @@ async function handle(req,res){
  }
  if(method==='GET'&&pathname==='/api/admin/tenants'){
   needPlatform(a);
-  const r=await query("SELECT t.id,t.name,t.slug,t.plan,t.status,t.cnpj,t.legal_name,t.trade_name,t.created_at,(SELECT count(*)::int FROM users u WHERE u.tenant_id=t.id) AS members FROM tenants t ORDER BY t.created_at DESC");
+  const r=await query("SELECT t.id,t.name,t.slug,t.plan,t.status,t.cnpj,t.legal_name,t.trade_name,t.features,t.quote_alert_whatsapp,t.created_at,(SELECT count(*)::int FROM users u WHERE u.tenant_id=t.id) AS members FROM tenants t ORDER BY t.created_at DESC");
   return json(res,200,r.rows);
+ }
+ const tenantFeaturesRoute=pathname.match(/^\/api\/admin\/tenants\/([a-f0-9-]{36})\/features$/i);
+ if(tenantFeaturesRoute&&method==='PUT'){
+  needPlatform(a);
+  const {data}=await body(req,3000);
+  const features=validateTenantFeatures(data.features);
+  const updated=await query("UPDATE tenants SET features=$2 WHERE id=$1 RETURNING id,features",
+   [tenantFeaturesRoute[1],JSON.stringify(features)]);
+  if(!updated.rowCount)throw fail(404,'Empresa não encontrada.');
+  await audit(a,'platform.tenant_features.updated',{targetTenantId:tenantFeaturesRoute[1],features});
+  return json(res,200,updated.rows[0]);
  }
  if(method==='POST'&&pathname==='/api/admin/tenants'){
   needPlatform(a);const {data}=await body(req);
@@ -1149,6 +1189,9 @@ async function handle(req,res){
   const candidate=typeof data.companyProfile==='object'&&data.companyProfile&&!Array.isArray(data.companyProfile)?
    data.companyProfile:{};
   const addr=candidate.address&&typeof candidate.address==='object'&&!Array.isArray(candidate.address)?candidate.address:{};
+  const features=validateTenantFeatures(data.features||{
+   whatsapp:true,catalog:true,quotes:true,meta_ads:true,ai:true,team:true
+  });
   const companyProfile={
    address:Object.fromEntries(['street','number','additional','neighborhood','city','state','postalCode']
     .map(key=>[key,trimmed(addr[key]||'',key==='street'?130:100)])),
@@ -1163,7 +1206,7 @@ async function handle(req,res){
   const hash=await hashPassword(data.ownerPassword),tenant=id(),user=id(),client=await pool.connect();
   try{
    await client.query('BEGIN');
-   await client.query("INSERT INTO tenants(id,name,slug,plan,status,cnpj,legal_name,trade_name,company_profile) VALUES($1,$2,$3,$4,'trial',$5,$6,$7,$8)",[tenant,data.company.trim(),slugify(data.company)+'-'+tenant.slice(0,6),data.plan||'essencial',companyCnpj,legalName,tradeName,JSON.stringify(companyProfile)]);
+   await client.query("INSERT INTO tenants(id,name,slug,plan,status,cnpj,legal_name,trade_name,company_profile,features) VALUES($1,$2,$3,$4,'trial',$5,$6,$7,$8,$9)",[tenant,data.company.trim(),slugify(data.company)+'-'+tenant.slice(0,6),data.plan||'essencial',companyCnpj,legalName,tradeName,JSON.stringify(companyProfile),JSON.stringify(features)]);
    await client.query('INSERT INTO users(id,tenant_id,email,phone,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6,$7)',[user,tenant,data.ownerEmail.trim().toLowerCase(),phone,data.ownerName.trim(),hash,'owner']);
    await client.query('INSERT INTO agents(tenant_id) VALUES($1)',[tenant]);
    await client.query('COMMIT');
@@ -1265,6 +1308,28 @@ async function main(){
   finally{liveSyncBusy=false;}
  },16000);
  liveSyncWorker.unref();
+ // Quote lead intake scans only recent inbound messages. It never sends any
+ // quote to the customer and cannot create a paid order automatically.
+ let quoteBusy=false;
+ const quoteWorker=setInterval(async()=>{
+  if(quoteBusy||workersBlocked())return;
+  quoteBusy=true;
+  try{await scanQuoteRequests(pool);}
+  catch(error){console.warn('[socio-quote-intake]',String(error?.code||'INTAKE_ERROR').slice(0,40));}
+  finally{quoteBusy=false;}
+ },15000);
+ quoteWorker.unref();
+ // Owner WhatsApp alerts only when the owner explicitly enabled the setting.
+ // Uncertain sends are marked permanently, never retried automatically.
+ let ownerAlertBusy=false;
+ const ownerAlertWorker=setInterval(async()=>{
+  if(ownerAlertBusy||workersBlocked())return;
+  ownerAlertBusy=true;
+  try{await processNextOwnerQuoteAlert(pool);}
+  catch(error){console.warn('[socio-quote-alert]',String(error?.code||'ALERT_ERROR').slice(0,40));}
+  finally{ownerAlertBusy=false;}
+ },12000);
+ ownerAlertWorker.unref();
  // AI only attempts replies if explicitly enabled, agent enabled and each
  // conversation handed over. Claims are durable to avoid duplicate messages.
  let replyBusy=false;
