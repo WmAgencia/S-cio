@@ -3,6 +3,7 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
+import {maintenanceEnabled,writesBlocked,workersBlocked} from './migration-guard.mjs';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier} from './lib.mjs';
 import {permissionsFor,requirePermission,allowedNewMemberRole,validateMemberPatch} from './team-permissions.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
@@ -116,7 +117,14 @@ async function handle(req,res){
   // Railway only considers the app ready when the tenant database is usable.
   // A static 200 here used to hide Postgres outages from the healthcheck.
   await query('SELECT 1');
-  return json(res,200,{ok:true,app:'socio',database:'connected'});
+  return json(res,200,{ok:true,app:'socio',database:'connected',readOnly:maintenanceEnabled()});
+ }
+ // Migration safety: every state-changing endpoint is blocked, including
+ // login/session writes, public buyer acceptance and external webhooks.
+ // The read barrier is evaluated BEFORE any webhook or authenticated route.
+ if(writesBlocked(method)){
+  res.setHeader('Retry-After','120');
+  return json(res,503,{error:'Manutenção do Sócio em andamento. Novas alterações estão temporariamente bloqueadas.'});
  }
  if(method==='GET'&&pathname==='/api/bootstrap'){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
@@ -1010,7 +1018,17 @@ async function receiveWhatsApp(req,res){
 }
 async function main(){
  const schema=await readFile(new URL('./schema.sql',import.meta.url),'utf8');
- await query(schema);
+ if(dbSchema==='socio_app'){
+  // Private Supabase runtime is migrated explicitly; do not silently run
+  // Railway's public DDL against a remotely managed Postgres project.
+  const expected=['tenants','users','sessions','channels','messages','sales_quotes',
+    'sales_orders','sales_payment_events','training_auto_runs'];
+  const check=await query(
+   "SELECT table_name FROM information_schema.tables WHERE table_schema='socio_app' AND table_name=ANY($1::text[])",
+   [expected]);
+  const names=new Set(check.rows.map(x=>x.table_name));
+  if(expected.some(name=>!names.has(name)))throw new Error('Private Supabase schema is incomplete');
+ }else await query(schema);
  // Storage probe checks the real private S3 endpoint without touching customer files.
  if(mediaConfigured())void checkMediaStorage()
   .then(x=>console.info('[socio product media]',JSON.stringify(x)))
@@ -1028,7 +1046,7 @@ async function main(){
  // This worker NEVER sends; it detects newly arrived messages for the inbox.
  let liveSyncBusy=false;
  const liveSyncWorker=setInterval(async()=>{
-  if(liveSyncBusy||!gatewayConfigured()||process.env.SOCIO_LIVE_SYNC_ENABLED==='false')return;
+  if(liveSyncBusy||workersBlocked()||!gatewayConfigured()||process.env.SOCIO_LIVE_SYNC_ENABLED==='false')return;
   liveSyncBusy=true;
   try{await processLiveInboxSync(pool);}
   catch(e){console.warn('[socio-inbox-sync]',String(e?.code||'SYNC_ERROR').slice(0,40));}
@@ -1039,7 +1057,7 @@ async function main(){
  // conversation handed over. Claims are durable to avoid duplicate messages.
  let replyBusy=false;
  const aiReplyWorker=setInterval(async()=>{
-  if(replyBusy)return;
+  if(replyBusy||workersBlocked())return;
   replyBusy=true;
   try{await processNextAiReply(pool);}
   catch(e){console.warn('[socio-ai-reply]',String(e?.code||'REPLY_ERROR').slice(0,40));}
@@ -1050,7 +1068,7 @@ async function main(){
  // per-run database row locks make this safe across replicas.
  let autoBusy=false;
  const autoWorker=setInterval(async()=>{
-  if(autoBusy)return;
+  if(autoBusy||workersBlocked())return;
   autoBusy=true;
   try{await processNextAutoTraining(pool);}
   catch(error){console.warn('[socio-auto-training]',String(error?.code||'worker-error').slice(0,55));}
@@ -1061,7 +1079,7 @@ async function main(){
  // All results remain drafts until the tenant owner approves them.
  let waBusy=false,waLastError=0;
  const waWorker=setInterval(async()=>{
-  if(waBusy||!gatewayConfigured())return;
+  if(waBusy||workersBlocked()||!gatewayConfigured())return;
   waBusy=true;
   try{await processNextWaakgScan(pool);}
   catch(err){if(Date.now()-waLastError>30000){
@@ -1073,7 +1091,7 @@ async function main(){
  waWorker.unref();
  let workerBusy=false,lastWorkerError=0;
  const worker=setInterval(async()=>{
-  if(workerBusy)return;
+  if(workerBusy||workersBlocked())return;
   workerBusy=true;
   try{await processNextAnalysisJob(pool);}
   catch(error){if(Date.now()-lastWorkerError>30000){
