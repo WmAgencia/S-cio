@@ -1034,6 +1034,17 @@ function featureChecks(flags={},prefix='feature-'){
 function selectedFeatures(form,prefix='feature-'){
  return Object.fromEntries(featureKeys.map(key=>[key,form.elements[prefix+key]?.checked===true]));
 }
+function wireFeatureDependencies(form,prefix='feature-'){
+ form.addEventListener('change',ev=>{
+  const key=String(ev.target?.name||'').replace(prefix,'');
+  const quote=form.elements[prefix+'quotes'],catalog=form.elements[prefix+'catalog'],whatsapp=form.elements[prefix+'whatsapp'];
+  if(!quote||!catalog||!whatsapp)return;
+  if(key==='quotes'&&quote.checked){catalog.checked=true;whatsapp.checked=true;}
+  if((key==='catalog'&&!catalog.checked)||(key==='whatsapp'&&!whatsapp.checked)){
+   quote.checked=false;
+  }
+ });
+}
 async function admin(){
  const tenants=await api('/api/admin/tenants');
  const rows=tenants.map(t=>
@@ -1082,6 +1093,7 @@ async function admin(){
   '<button type="submit" class="btn primary socio-full-btn">Salvar funcionalidades</button>'+
   '</form></section></div>';
  const modal=$('#companyModal'),form=$('#tenantForm');
+ wireFeatureDependencies(form);
  let publicProfile=null;
  const open=()=>{modal.classList.remove('hidden');form.elements.cnpj.focus();};
  const close=()=>modal.classList.add('hidden');
@@ -1123,6 +1135,7 @@ async function admin(){
   });
  });
  const featureModal=$('#featuresModal'),featureForm=$('#featuresForm');
+ wireFeatureDependencies(featureForm,'edit-feature-');
  let editingTenant=null;
  const closeFeatures=()=>{featureModal.classList.add('hidden');editingTenant=null;};
  $('#featuresClose').addEventListener('click',closeFeatures);
