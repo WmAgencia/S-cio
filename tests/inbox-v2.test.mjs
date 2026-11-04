@@ -45,9 +45,10 @@ test('WhatsApp-like inbox has real keyboard/mouse/touch handlers and never claim
 test('Sócio inbox offers exactly three handling filters, including both in Todas',()=>{
  const js=readFileSync(new URL('../public/inbox.js',import.meta.url),'utf8');
  const css=readFileSync(new URL('../public/inbox.css',import.meta.url),'utf8');
- const match=js.match(/const filters=\\[([\\s\\S]*?)\\];/);
- assert(match,'Inbox must expose visible filters');
- const list=[...match[1].matchAll(/\\['([^']+)','([^']+)'\\]/g)].map(x=>[x[1],x[2]]);
+ const start=js.indexOf('const filters=[');
+ const end=js.indexOf('];',start);
+ assert(start>=0&&end>start,'Inbox must expose visible filters');
+ const list=[...js.slice(start,end).matchAll(/\['([^']+)','([^']+)'\]/g)].map(x=>[x[1],x[2]]);
  assert.deepEqual(list,[
   ['all','Todas'],
   ['ai_assist','IA respondendo'],
@@ -55,8 +56,8 @@ test('Sócio inbox offers exactly three handling filters, including both in Toda
  ]);
  assert.match(js,/handling_mode:'human'/);
  assert.match(js,/handling_mode:'ai_assist'/);
- assert.match(js,/Object\\.hasOwn\\(patch,'handling_mode'\\)\\)\\{[\\s\\S]*?await refreshList\\(\\)/);
+ assert.match(js,/Object\.hasOwn\(patch,'handling_mode'\)\)\{[\s\S]*?await refreshList\(\)/);
  assert.match(js,/data-inbox-connect>Conectar WhatsApp/);
- assert.match(css,/grid-template-columns:repeat\\(3,minmax\\(0,1fr\\)\\)/);
- assert.doesNotMatch(css,/\\.wa-filters\\{[^}]*overflow-x:auto/);
+ assert.match(css,/grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+ assert.doesNotMatch(css,/\.wa-filters\{[^}]*overflow-x:auto/);
 });
