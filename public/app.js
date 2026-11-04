@@ -1137,10 +1137,11 @@ async function admin(){
   if(!selectedTenant)return;
   void action(async()=>{
    const flags=selectedModules(featureForm);
-   await api('/api/admin/tenants/'+selectedTenant.id+'/features','PATCH',{features:flags});
+   const savedTenantId=selectedTenant.id;
+   await api('/api/admin/tenants/'+savedTenantId+'/features','PATCH',{features:flags});
    toast('Funcionalidades atualizadas para esta empresa.');
    closeFeatures();
-   if(selectedTenant.id===state.me.tenant.id)await boot();
+   if(savedTenantId===state.me.tenant.id)await boot();
    else await admin();
   });
  });
