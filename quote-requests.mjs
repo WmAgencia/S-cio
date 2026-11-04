@@ -3,7 +3,7 @@
 // outbound safety switch. Unknown delivery is NEVER retried.
 import {randomUUID} from 'node:crypto';
 import {getSessionStatus} from './waakg-adapter.mjs';
-import {sendGatewayText,outboundEnabled} from './socio-outbound.mjs';
+import {sendGatewayText,outboundEnabled,deliverToConversation} from './socio-outbound.mjs';
 import {parseTenantFeatures} from './tenant-features.mjs';
 const bad=(status,message)=>Object.assign(new Error(message),{status});
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[89ab0-9a-f]{12}$/i;
@@ -39,7 +39,7 @@ export async function scanQuoteRequests(pool){
 }
 export async function listQuoteRequests(pool,tenantId){
  const r=await pool.query(
-  "SELECT id,conversation_id,customer_name,customer_phone,summary,status,alert_status,created_at "+
+  "SELECT id,conversation_id,customer_name,customer_phone,summary,status,alert_status,draft_text,draft_amount_cents,delivery_status,quote_sent_at,created_at "+
   "FROM quote_requests WHERE tenant_id=$1 ORDER BY "+
   "CASE WHEN status='pending' THEN 0 WHEN status='preparing' THEN 1 ELSE 2 END,created_at DESC LIMIT 120",
   [tenantId]);
@@ -122,5 +122,46 @@ export async function processNextOwnerQuoteAlert(pool,{
    "UPDATE quote_requests SET alert_status='unconfirmed',updated_at=now() WHERE id=$1 AND tenant_id=$2",
    [q.id,q.tenant_id]).catch(()=>{});
   return {processed:true,sent:false,unconfirmed:true};
+ }
+}
+
+export async function saveQuoteDraft(pool,tenant,requestId,{text,amountCents}){
+ if(!uuid.test(String(requestId||''))||typeof text!=='string'||!text.trim()||
+   text.trim().length>2300||!Number.isInteger(amountCents)||amountCents<1||amountCents>=100000000)
+  throw bad(422,'Informe a descrição do orçamento e um valor final válido.');
+ const r=await pool.query(
+  "UPDATE quote_requests SET draft_text=$3,draft_amount_cents=$4,status='preparing',updated_at=now() "+
+  "WHERE tenant_id=$1 AND id=$2 AND status<>'resolved' AND delivery_status='not_sent' "+
+  "RETURNING id,conversation_id,status,draft_text,draft_amount_cents,delivery_status",
+  [tenant,requestId,text.trim(),amountCents]);
+ if(!r.rowCount)throw bad(409,'Orçamento indisponível ou já enviado. Revise o histórico antes de continuar.');
+ return r.rows[0];
+}
+export async function sendQuoteDraft(pool,tenant,requestId,userId,{env=process.env,deliver=deliverToConversation}={}){
+ if(!uuid.test(String(requestId||'')))throw bad(422,'Solicitação inválida.');
+ if(!outboundEnabled(env))throw bad(503,'Envio WhatsApp indisponível. O orçamento permanece salvo no Sócio.');
+ const r=await pool.query(
+  "UPDATE quote_requests SET delivery_status='processing',updated_at=now() "+
+  "WHERE tenant_id=$1 AND id=$2 AND delivery_status='not_sent' AND status='preparing' "+
+  "AND draft_text IS NOT NULL AND draft_amount_cents>0 "+
+  "RETURNING id,conversation_id,draft_text,draft_amount_cents,customer_name",
+  [tenant,requestId]);
+ if(!r.rowCount)throw bad(409,'Salve o orçamento antes de enviar. Solicitações já enviadas ou incertas não são reenviadas.');
+ const q=r.rows[0];
+ const money=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(q.draft_amount_cents)/100);
+ const body='Orçamento solicitado'+(q.customer_name?' para '+String(q.customer_name).slice(0,100):'')+
+  '\n\n'+String(q.draft_text).trim()+'\n\nValor total: '+money+
+  '\n\nConfirme diretamente com nossa equipe as condições de pagamento e entrega.';
+ try{
+  const sent=await deliver(pool,{tenantId:tenant,conversationId:q.conversation_id,userId,mode:'human',
+   text:body,clientRequestId:q.id,env});
+  if(!sent?.sent)throw bad(503,'O WhatsApp não confirmou o envio.');
+  await pool.query("UPDATE quote_requests SET delivery_status='sent',quote_sent_at=now(),status='resolved',updated_at=now() "+
+   "WHERE tenant_id=$1 AND id=$2",[tenant,requestId]);
+  return {id:q.id,deliveryStatus:'sent',conversationId:q.conversation_id};
+ }catch(error){
+  await pool.query("UPDATE quote_requests SET delivery_status='unconfirmed',updated_at=now() "+
+   "WHERE tenant_id=$1 AND id=$2 AND delivery_status='processing'",[tenant,requestId]).catch(()=>{});
+  throw bad(503,'Não foi possível confirmar o envio. Confira a conversa antes de qualquer nova tentativa. O orçamento foi preservado.');
  }
 }
