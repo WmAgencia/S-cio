@@ -70,6 +70,7 @@ async function pollCommerceAlerts(){
     const target=view.querySelector(isSale?'[data-intent="'+item.id+'"]':'[data-quote-prepare="'+item.id+'"]');
     target?.scrollIntoView({block:'center',behavior:'smooth'});
     if(isSale)target?.querySelector('[data-lead-expand]')?.click();
+    else target?.closest('.quote-request-item')?.querySelector('summary')?.click();
    });
    card.querySelector('[data-chat-alert]').addEventListener('click',()=>{card.remove();changeView('inbox',item.conversation_id);});
    host.prepend(card);
@@ -1005,7 +1006,7 @@ async function reports(){
   ['Oportunidades de compra',t.purchase_intents,'Intenções detectadas, não vendas pagas'],
   ['Aguardando atendimento',t.purchase_pending,'Solicitações de compra abertas'],
   ['Orçamentos solicitados',t.quote_requests,'Pedidos identificados no período'],
-  ['Orçamentos enviados',t.quote_sent,'Envios confirmados no gateway'],
+  ['Orçamentos enviados pelo Sócio',t.quote_sent,'Envios confirmados no gateway'],
   ['Pedidos aprovados',t.approved_orders,'Não significa pagamento confirmado']
  ];
  const days=Array.isArray(report.dailyMessages)?report.dailyMessages:[];
