@@ -859,6 +859,8 @@ async function handle(req,res){
   needRole(a,['owner','admin']);const {data}=await body(req);
   if(data.role==='admin')requirePermission(a,'team.promote');
   if(!emailOk(data.email)||!validText(data.name,100)||!allowedNewMemberRole(a,data.role))throw fail(422,'Dados de usuário ou permissão inválidos.');
+  if(typeof data.password!=='string'||data.password.length<12||data.password.length>128)
+   throw fail(422,'Senha inicial deve conter de 12 a 128 caracteres.');
   const raw=String(data.phone||'').trim(),phone=raw?normalizeLoginPhone(raw):null;
   if(raw&&!phone)throw fail(422,'Número de colaborador inválido. Informe o DDD.');
   const hash=await hashPassword(data.password),c=await pool.connect();
