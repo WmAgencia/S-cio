@@ -209,3 +209,76 @@ export function oauthClientMetadata(env=process.env){
   grant_types:['authorization_code','refresh_token'],response_types:['code'],
   token_endpoint_auth_method:'none'};
 }
+
+// Only these account-listing operations may be used by the connection diagnostic.
+// Tool discovery never grants permission to execute an arbitrary advertised tool.
+const accountTools={
+ meta:['mcp_meta_ads_get_ad_accounts','get_ad_accounts'],
+ google:['mcp_google_ads_list_customers','list_customers','mcp_google_ads_list_accessible_customers','list_accessible_customers','mcp_google_ads_get_accounts','get_accounts','mcp_google_ads_list_accounts','list_accounts']
+};
+export function decodeMcpReply(raw,id){
+ if(typeof raw!=='string'||raw.length>500000)throw bad(503,'Resposta do provedor fora do limite.');
+ const lines=raw.split('\n').filter(x=>x.startsWith('data:')).map(x=>x.slice(5).trim());
+ for(const line of lines.length?lines:[raw]){
+  try{const parsed=JSON.parse(line);if(parsed.id===id){
+   if(parsed.error||parsed.result?.isError)throw bad(503,'O provedor recusou a leitura. Confira as contas autorizadas no Pipeboard.');
+   if(parsed.result)return parsed.result;
+  }}catch(error){if(error.status)throw error;}
+ }
+ throw bad(503,'O provedor não confirmou a leitura.');
+}
+export function normalizeAdsAccounts(result,provider){
+ let payload=result.structuredContent;
+ if(!payload){
+  for(const block of result.content||[])if(block.type==='text'){
+   try{payload=JSON.parse(block.text);break;}catch{}
+  }
+ }
+ if(!payload||payload.error||payload.success===false)throw bad(503,'O provedor não retornou uma lista válida de contas.');
+ const list=Array.isArray(payload)?payload:payload.accounts||payload.data?.accounts||payload.data||payload.customers||payload.resourceNames;
+ if(!Array.isArray(list))throw bad(503,'Formato de contas não reconhecido. A autorização permanece salva.');
+ const accounts=[];
+ for(const row of list.slice(0,200)){
+  const id=String(typeof row==='string'?row:row.id||row.account_id||row.customer_id||row.customerId||row.resourceName||'').replace(/^customers\//,'');
+  if(!(provider==='meta'?/^act_\d{4,20}$/:/^\d{10}$/).test(id))continue;
+  const name=typeof row==='object'?String(row.name||row.descriptive_name||row.descriptiveName||id).slice(0,160):id;
+  accounts.push({id,name});
+ }
+ if(list.length&&!accounts.length)throw bad(503,'O provedor retornou contas sem identificação reconhecida.');
+ return [...new Map(accounts.map(x=>[x.id,x])).values()];
+}
+export async function testPipeboardConnection(pool,identity,provider,{env=process.env,request=fetch}={}){
+ if(!oauthSupported(provider))throw bad(422,'Plataforma inválida.');
+ const r=await pool.query("SELECT token_ciphertext,expires_at FROM marketing_oauth_grants WHERE tenant_id=$1 AND provider=$2 AND status='authorized'",[identity.active_tenant_id,provider]);
+ if(!r.rowCount)throw bad(409,'Conecte esta plataforma antes de testar.');
+ const grant=r.rows[0];
+ if(grant.expires_at&&new Date(grant.expires_at).getTime()<=Date.now())throw bad(409,'A autorização expirou. Clique em Reconectar para renovar o acesso.');
+ const token=secretOpen(grant.token_ciphertext,env);
+ let session=null,counter=0;
+ async function rpc(method,params,notification=false){
+  const id=++counter;
+  let response;
+  try{response=await request(servers[provider],{method:'POST',redirect:'manual',signal:AbortSignal.timeout(15000),
+   headers:{Authorization:'Bearer '+token.access_token,'Content-Type':'application/json',Accept:'application/json, text/event-stream',
+    ...(session?{'Mcp-Session-Id':session,'MCP-Protocol-Version':'2025-03-26'}:{})},
+   body:JSON.stringify({jsonrpc:'2.0',...(notification?{}:{id}),method,...(params?{params}:{})})});
+  }catch{throw bad(503,'O provedor não respondeu. Tente novamente.');}
+  if(response.status===401||response.status===403)throw bad(409,'A autorização não permite esta leitura. Reconecte e confira as contas liberadas no Pipeboard.');
+  if(!response.ok)throw bad(503,'O provedor está indisponível para leitura.');
+  const sid=response.headers?.get('mcp-session-id');if(sid)session=sid;
+  if(notification)return;
+  return decodeMcpReply(await response.text(),id);
+ }
+ await rpc('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'socio-connection-test',version:'1.0'}});
+ await rpc('notifications/initialized',undefined,true);
+ const discovery=await rpc('tools/list',{});
+ const tool=(discovery.tools||[]).find(x=>accountTools[provider].includes(x.name));
+ if(!tool)throw bad(503,'O provedor não oferece a consulta de contas esperada. A autorização permanece salva.');
+ const args=provider==='meta'?{user_id:'me',limit:200}:{};
+ const required=tool.inputSchema?.required||[];
+ if(required.some(x=>!Object.hasOwn(args,x)))throw bad(503,'A consulta de contas exige uma configuração adicional no provedor.');
+ const result=await rpc('tools/call',{name:tool.name,arguments:args});
+ const accounts=normalizeAdsAccounts(result,provider);
+ return {provider,status:accounts.length?'verified':'no_accounts',accounts,checkedAt:new Date().toISOString(),
+  message:accounts.length?'Conexão testada: '+accounts.length+' conta(s) com acesso de leitura.':'Login válido, mas nenhuma conta de anúncios foi disponibilizada pelo provedor.'};
+}
