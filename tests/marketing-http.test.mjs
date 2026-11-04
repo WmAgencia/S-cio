@@ -51,6 +51,29 @@ test('marketing HTTP: owner/CSRF, signed Google Ads Scripts, replay and disconne
  assert.equal(login.status,200);
  const cookie=login.headers.get('set-cookie').split(';')[0],csrf=(await login.json()).csrf;
  assert.equal((await fetch(base+'/api/marketing')).status,401);
+ const oauthMeta=await fetch(base+'/.well-known/oauth-client');
+ assert.equal(oauthMeta.status,200);
+ const metadata=await oauthMeta.json();
+ assert.deepEqual(metadata.redirect_uris,['https://socio.example.test/api/marketing/oauth/callback']);
+ const grantsReq=await fetch(base+'/api/marketing/oauth',{headers:{Cookie:cookie}});
+ assert.equal(grantsReq.status,200);
+ assert.deepEqual((await grantsReq.json()).grants,[]);
+ const unauthorizedOauth=await fetch(base+'/api/marketing/oauth');
+ assert.equal(unauthorizedOauth.status,401);
+ const noCsrfOauth=await fetch(base+'/api/marketing/oauth/start',{method:'POST',headers:{
+  Cookie:cookie,'content-type':'application/json'},body:JSON.stringify({provider:'meta'})});
+ assert.equal(noCsrfOauth.status,403);
+ const invalidOauth=await fetch(base+'/api/marketing/oauth/start',{method:'POST',headers:{
+  Cookie:cookie,'content-type':'application/json','x-csrf-token':csrf},
+  body:JSON.stringify({provider:'unknown'})});
+ assert.equal(invalidOauth.status,422);
+ const instagramStatus=await fetch(base+'/api/instagram/hosted/status',{headers:{Cookie:cookie}});
+ assert.equal(instagramStatus.status,200);
+ assert.equal((await instagramStatus.json()).configured,false);
+ const refusedCallback=await fetch(base+'/api/marketing/oauth/callback?state='+('0'.repeat(64))+
+  '&code=some-test-code-123',{redirect:'manual'});
+ assert.equal(refusedCallback.status,303);
+ assert.equal(refusedCallback.headers.get('location'),'/?marketing=failed');
  const overview=await fetch(base+'/api/marketing',{headers:{Cookie:cookie}});
  assert.equal(overview.status,200);
  const initial=await overview.json();
