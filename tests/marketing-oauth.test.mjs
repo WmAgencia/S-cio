@@ -101,7 +101,8 @@ test('disposable Postgres OAuth Meta and Google: tenant ownership, one-use state
  const pool=new Pool({connectionString:target.href});
  t.after(async()=>{
   await pool.end().catch(()=>{});
-  await admin.query('DROP DATABASE IF EXISTS '+name+' WITH (FORCE)').catch(()=>{});
+  // Close clients gracefully before removing the disposable database.
+  await admin.query('DROP DATABASE IF EXISTS '+name);
   await admin.end();
  });
  await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
@@ -160,7 +161,8 @@ test('Instagram managed SSO: tenant profile, encrypted keys, authorized URL, sta
  const pool=new Pool({connectionString:target.href});
  t.after(async()=>{
   await pool.end().catch(()=>{});
-  await admin.query('DROP DATABASE IF EXISTS '+name+' WITH (FORCE)').catch(()=>{});
+  // Close clients gracefully before removing the disposable database.
+  await admin.query('DROP DATABASE IF EXISTS '+name);
   await admin.end();
  });
  await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
