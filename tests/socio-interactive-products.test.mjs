@@ -134,7 +134,7 @@ test('Gateway private patch HMACs product and button messages; no broadcast or g
  assert.match(patch,/x-socio-outbound-signature/);
  assert.match(patch,/timingSafeEqual/);
  assert.match(patch,/quick_reply/);
- assert.ok(patch.includes('whatsapp.net'));
+ assert.ok(patch.includes('privateRecipient'));
 
  assert.match(docker,/patch_interactive\.py/);
  const server=readFileSync(new URL('../server.mjs',import.meta.url),'utf8');
