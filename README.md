@@ -130,3 +130,25 @@ estão habilitados envio automático de imagens pelo WhatsApp ou reserva de esto
 `tests/e2e.test.mjs` executa PostgreSQL real efêmero, catálogo real de teste,
 versão invalidadora, token de cliente, aprovação idempotente e isolamento por tenant.
 Verificar GitHub Actions e healthcheck Railway após cada publicação.
+
+
+## Etapa 4 — Equipe, isolamento e auditoria
+
+O proprietário gerencia administradores e atendentes, pode revogar sessões ao desativar uma pessoa
+e acompanha eventos críticos por empresa. Administradores podem convidar somente atendentes.
+Atendentes trabalham no WhatsApp e consultam o catálogo, sem acesso a dados internos de
+treinamento, auditoria, vendas e gestão de permissões. Todos podem alterar sua própria
+senha, o que encerra outras sessões. Permissões são verificadas em cada requisição
+no servidor, não somente na interface.
+
+As relações entre canal/conversa e conversa/mensagem agora possuem chaves estrangeiras
+compostas pelo tenant. Novos vínculos cruzados são rejeitados no PostgreSQL. A validação
+retroativa de vínculos antigos permanece uma tarefa administrativa que requer conferência.
+
+Foi preparado um utilitário para backup **criptografado** de PostgreSQL e ensaio de
+restauração em base descartável. A CI testa esse fluxo automaticamente com dados
+fictícios; **não foram ativados backup agendado ou restauração de produção**.
+Fotos e sessões gateway não integram o snapshot PostgreSQL.
+
+Detalhes, matriz de acesso, comandos, riscos e pendências:
+[docs/socio-phase4-team-backup-20261104.md](docs/socio-phase4-team-backup-20261104.md)
