@@ -92,7 +92,6 @@ test('AI training empty history does not call .forEach on a null single element'
  const rendered=tree.make('id:view').innerHTML;
  assert.match(rendered,/Seu Sócio aprende com suas conversas/);
  assert.doesNotMatch(rendered,/Não foi possível carregar|Cannot read properties/);
- assert(!app.includes("$('[data-restore-version]').forEach"));
  assert(app.includes("$$('[data-restore-version]').forEach"));
 });
 test('products populated with media, variants and pricing appear as interactive accessible cards',async()=>{
