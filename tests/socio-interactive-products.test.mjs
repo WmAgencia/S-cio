@@ -166,6 +166,7 @@ test('An authorized AI menu is sent once as native interactive, not a Groq plain
   if(sql.startsWith('INSERT INTO ai_reply_attempts'))return {rowCount:1,rows:[{id:'claim'}]};
   if(sql.includes('SELECT direction,body FROM messages'))return {rowCount:1,rows:[{direction:'inbound',body:'menu'}]};
   if(sql.includes('FROM products WHERE'))return {rowCount:0,rows:[]};
+  if(sql.includes('FROM product_variants WHERE'))return {rowCount:0,rows:[]};
   if(sql.startsWith('UPDATE ai_reply_attempts')){updated=true;return {rowCount:1,rows:[]};}
   throw Error('Unexpected SQL '+sql);
  }};
@@ -215,6 +216,7 @@ test('Groq-managed conversation sends the correct catalog photo on an explicit n
    {direction:'inbound',body:'Me envia uma foto do Sérum Telocapil'}]};
   if(sql.includes('FROM products WHERE'))return {rowCount:1,rows:[
    {id:productId,name:'Sérum Telocapil',active:true,stock_quantity:6,price_cents:5900}]};
+  if(sql.includes('FROM product_variants WHERE'))return {rowCount:0,rows:[]};
   if(sql.startsWith('UPDATE ai_reply_attempts'))return {rowCount:1,rows:[]};
   throw Error('Unexpected SQL '+sql);
  }};
