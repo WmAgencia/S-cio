@@ -56,3 +56,19 @@ test('Priority scan fails closed when a session is disconnected or phone mismatc
  assert.equal(result.checked,0);
  assert.equal(result.imported,0);
 });
+
+test('Native Flow reply IDs are converted into readable customer intent when display text is absent',async()=>{
+ const {normalizeInboxRemoteText}=await import('../inbox-api.mjs');
+ const jid='5515999999999@s.whatsapp.net';
+ const rows=[
+  {remoteJid:jid,keyId:'native1',type:'TEXT',fromMe:false,
+   content:'🔘 [Interactive Response] socio:reply:ver-produtos',timestamp:Date.now()-3000},
+  {remoteJid:jid,keyId:'native2',type:'TEXT',fromMe:false,
+   content:'🔘 [Interactive Response] socio:human',timestamp:Date.now()-2000},
+  {remoteJid:jid,keyId:'native3',type:'TEXT',fromMe:false,
+   content:'🔘 [Interactive Response] socio:interest:33333333-3333-4333-8333-333333333333',timestamp:Date.now()-1000}
+ ];
+ const normalized=normalizeInboxRemoteText(rows,jid);
+ assert.deepEqual(normalized.map(x=>x.body),['ver produtos','Falar com atendente','Tenho interesse']);
+ assert.equal(normalized.length,3);
+});
