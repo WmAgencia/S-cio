@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {TABLES,checkMigrationConfiguration} from '../scripts/socio-supabase-migrate.mjs';
 import {validateMasterConfig} from '../scripts/socio-provision-master.mjs';
 
-test('Sócio migration covers all 22 production tables in dependency order',()=>{
- assert.equal(TABLES.length,22);
+test('Sócio migration covers all 23 production tables in dependency order',()=>{
+ assert.equal(TABLES.length,23);
  assert.equal(new Set(TABLES).size,TABLES.length);
  for(const [parent,child] of [['tenants','users'],['tenants','products'],['channels','conversations'],
   ['conversations','messages'],['training_jobs','training_job_items'],

@@ -34,7 +34,7 @@ test('authenticated Sócio boot renders approved orange espresso dashboard and n
   '/api/bootstrap':{initialized:true},
   '/api/me':{user:{name:'Conta master',role:'owner',platformOwner:true},
    tenant:{name:'Consecom Brasil'},csrf:'csrf-abc'},
-  '/api/dashboard':{openConversations:2,channels:1,products:4,imports:5,inboundMessages:9},
+  '/api/dashboard':{openConversations:2,channels:1,products:4,imports:5,inboundMessages:9,messagesReceivedToday:4},
   '/api/waakg/channels':[{id:'example-channel',status:'connected',label:'Vendas'}],
   '/api/agent':{instructions:'Atenda com respeito.',enabled:false},
   '/api/dashboard/activity?range=1m':{range:'1m',granularity:'day',points:[
@@ -60,6 +60,6 @@ test('authenticated Sócio boot renders approved orange espresso dashboard and n
  assert.match(dashboard.innerHTML,/lucid-dashboard ember-dashboard/);
  assert.match(dashboard.innerHTML,/Conectar WhatsApp/);
  assert.match(dashboard.innerHTML,/Cliente de teste/);
- assert.match(dashboard.innerHTML,/Mensagens recebidas/);
+ assert.match(dashboard.innerHTML,/Mensagens recebidas hoje/);
  assert.doesNotMatch(dashboard.innerHTML,/Não foi possível carregar|class="loading"/);
 });

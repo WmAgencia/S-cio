@@ -20,10 +20,11 @@ test('visual theme progressively upgrades to approved espresso dark without fict
 });
 test('all tenant modules remain navigable with only one IA sidebar menu item',()=>{
  const html=read('index.html'),js=read('app.js');
- for(const module of ['overview','inbox','channels','products','training','team','admin']){
+ for(const module of ['overview','inbox','products','training','team','admin']){
   assert.match(html,new RegExp('data-view="'+module+'"'));
  }
  assert.doesNotMatch(html,/data-view="agent"/);
+ assert.doesNotMatch(html,/data-view="channels"/);
  assert.match(js,/data-ai-tab="agent"/);
  assert.match(js,/mountAiGuideTabs/);
  assert.match(html,/id="quickSearchBtn"/);

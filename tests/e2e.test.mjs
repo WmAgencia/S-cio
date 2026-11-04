@@ -87,6 +87,12 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(approvedCSS.status,200,'Approved espresso theme must be served');
  assert.match(approvedCSS.headers.get('content-type')||'',/text\/css/);
  assert.match(await approvedCSS.text(),/\.ember-dashboard/);
+ const unifiedPopup=await fetch(base+'/socio-ux.js');
+ assert.equal(unifiedPopup.status,200);
+ assert.match(await unifiedPopup.text(),/openQr/);
+ const popupCSS=await fetch(base+'/socio-ux.css');
+ assert.equal(popupCSS.status,200);
+ assert.match(await popupCSS.text(),/socio-popup-backdrop/);
  const loginPage=await fetch(base+'/');
  assert.equal(loginPage.status,200);
  const pageHtml=await loginPage.text();
@@ -114,6 +120,21 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const setup=await call('/api/setup','POST',{setupToken:process.env.SETUP_TOKEN,name:'Administradora',company:'Consecom QA',email:'qa-owner@test.invalid',password:'SenhaMuitoForte2026!'});
  assert.equal(setup.status,201,JSON.stringify(setup.result));
  const adminCookie=setup.cookie.split(';')[0],csrf=setup.result.csrf;
+ const badCnpj=await call('/api/admin/cnpj?number=00000000000000','GET',undefined,adminCookie);
+ assert.equal(badCnpj.status,422,'Invalid CNPJ must not call external service');
+ const badCompany=await call('/api/admin/tenants','POST',{
+  cnpj:'00000000000000',company:'Empresa inválida',ownerName:'Teste',
+  ownerEmail:'invalid-cnpj@test.invalid',ownerPassword:'SenhaMuitoForte2026!'
+ },adminCookie,csrf);
+ assert.equal(badCompany.status,422,'Tenant cannot be created with invalid CNPJ');
+ const unknownTraining=await call('/api/training/auto','GET',undefined,adminCookie);
+ assert.equal(unknownTraining.status,200);
+ assert.equal(unknownTraining.result.run,null);
+ const emptyTraining=await call('/api/training/auto','POST',{},adminCookie,csrf);
+ assert.equal(emptyTraining.status,422,'One-click analysis requires connected WhatsApp');
+ const dashboardToday=await call('/api/dashboard','GET',undefined,adminCookie);
+ assert.equal(dashboardToday.status,200);
+ assert.equal(Number.isInteger(dashboardToday.result.messagesReceivedToday),true);
  const me=await call('/api/me','GET',undefined,adminCookie);
  assert.equal(me.result.user.platformOwner,true);
  const initialActivity=await call('/api/dashboard/activity?range=12m','GET',undefined,adminCookie);
@@ -233,6 +254,8 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(duplicateAcrossTenants.status,409,'Two separate tenant users cannot claim one login phone');
 
  const betaCookie=betaLogin.cookie.split(';')[0],betaCsrf=betaLogin.result.csrf;
+ const unauthorizedCnpj=await call('/api/admin/cnpj?number=11222333000181','GET',undefined,betaCookie);
+ assert.equal(unauthorizedCnpj.status,403,'CNPJ prefill is restricted to the master account');
  const hiddenInbox=await call('/api/inbox/v2','GET',undefined,betaCookie);
  assert.equal(hiddenInbox.status,200);
  assert.equal(hiddenInbox.result.conversations.length,0,'Tenant B cannot see tenant A inbox');

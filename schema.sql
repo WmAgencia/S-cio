@@ -323,3 +323,27 @@ CREATE TABLE IF NOT EXISTS message_ui_state (
  FOREIGN KEY(tenant_id,message_id) REFERENCES messages(tenant_id,id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS message_ui_state_starred_idx ON message_ui_state(tenant_id,user_id,starred) WHERE starred=true;
+
+
+-- Optional public business registration data for master onboarding.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS cnpj char(14);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS legal_name text NOT NULL DEFAULT '';
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trade_name text NOT NULL DEFAULT '';
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS company_profile jsonb NOT NULL DEFAULT '{}'::jsonb;
+CREATE UNIQUE INDEX IF NOT EXISTS tenants_cnpj_unique ON tenants(cnpj) WHERE cnpj IS NOT NULL;
+
+-- One-click supervised WhatsApp history analysis; drafts still require approval.
+CREATE TABLE IF NOT EXISTS training_auto_runs (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ status text NOT NULL DEFAULT 'scanning' CHECK(status IN ('scanning','analyzing','completed','failed','cancelled')),
+ scan_ids uuid[] NOT NULL DEFAULT ARRAY[]::uuid[],
+ job_id uuid,
+ error_code text,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ finished_at timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS training_auto_one_active ON training_auto_runs(tenant_id)
+ WHERE status IN ('scanning','analyzing');
+CREATE INDEX IF NOT EXISTS training_auto_recent ON training_auto_runs(tenant_id,created_at DESC);

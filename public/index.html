@@ -10,6 +10,8 @@
  <link rel="stylesheet" href="/cloud-theme.css">
  <link rel="stylesheet" href="/ember-theme.css">
  <link rel="stylesheet" href="/inbox.css">
+ <link rel="stylesheet" href="/socio-ux.css">
+ <script src="/socio-ux.js" defer></script>
  <script src="/inbox.js" defer></script>
  <script src="/app.js" defer></script>
 </head>
@@ -58,13 +60,13 @@
   <div class="sidebar-label">MENU PRINCIPAL</div>
   <nav class="nav" aria-label="Menu principal">
    <button data-view="overview" class="nav-item selected"><span class="nav-symbol">◈</span> Visão geral</button>
-   <button data-view="inbox" class="nav-item"><span class="nav-symbol">▤</span> Conversas</button>
-   <button data-view="channels" class="nav-item"><span class="nav-symbol">◉</span> WhatsApps</button>
+   <button data-view="inbox" class="nav-item"><span class="nav-symbol">▤</span> WhatsApp</button>
+   
    <button data-view="products" class="nav-item"><span class="nav-symbol">▦</span> Produtos e serviços</button>
    <div class="sidebar-label inner">INTELIGÊNCIA</div>
    <button data-view="training" class="nav-item"><span class="nav-symbol">✳</span> Inteligência Artificial</button>
    <div class="sidebar-label inner">ADMINISTRAÇÃO</div>
-   <button data-view="team" class="nav-item"><span class="nav-symbol">♙</span> Equipe</button>
+   <button data-view="team" class="nav-item" id="teamNav"><span class="nav-symbol">♙</span> Equipe</button>
    <button data-view="admin" class="nav-item hidden" id="adminNav"><span class="nav-symbol">▧</span> Empresas</button>
   </nav>
   <div class="sidebar-bottom">

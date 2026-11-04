@@ -2,7 +2,7 @@
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training'};
-const titles={overview:'Visão geral',inbox:'Conversas',channels:'WhatsApps',products:'Produtos e serviços',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
+const titles={overview:'Visão geral',inbox:'WhatsApp',channels:'WhatsApps',products:'Produtos e serviços',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -56,16 +56,19 @@ async function boot(){
    $('#userName').textContent=me.user.name;
    $('#userRole').textContent=me.user.platformOwner?'Administrador master':me.user.role==='owner'?'Proprietário':'Equipe da empresa';
    $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
+   $('#teamNav')?.classList.toggle('hidden',!!me.user.platformOwner);
    await changeView(state.view);
   }catch(error){state.me=null;state.csrf='';setupAuth(bootstrap.initialized);}
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
 async function changeView(next){
  if(next!=='inbox'&&activeInbox){activeInbox.cleanup();activeInbox=null;}
+ if(next==='channels')next='inbox';
  if(next==='agent'){state.aiTab='agent';next='training';}
  else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
  if(next==='admin'&&!state.me?.user.platformOwner)return;
+ if(next==='team'&&state.me?.user.platformOwner)return;
  state.view=next;
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
  $('#topTitle').textContent=titles[next]||'Sócio';
@@ -152,28 +155,18 @@ function emberIcon(kind){
  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(emberIcons[kind]||emberIcons.spark)+'</svg>';
 }
 async function overview(){
- const [d,ag,trend,recent,links]=await Promise.all([
-  api('/api/dashboard'),api('/api/agent'),api('/api/dashboard/activity?range=1m'),api('/api/inbox'),api('/api/waakg/channels')
+ const [d,trend,recent,links]=await Promise.all([
+  api('/api/dashboard'),api('/api/dashboard/activity?range=1m'),api('/api/inbox'),api('/api/waakg/channels')
  ]);
  state.dashboard=d;
  const openCount=chartNumber(d.openConversations);
  const online=Array.isArray(links)?links.filter(channel=>channel.status==='connected').length:0;
- const messages=chartNumber(d.inboundMessages);
+ const messages=chartNumber(d.messagesReceivedToday);
  const totalMessages=(trend.points||[]).reduce((sum,p)=>sum+chartNumber(p.inbound)+chartNumber(p.outbound),0);
  const received=(trend.points||[]).reduce((sum,p)=>sum+chartNumber(p.inbound),0);
  const sent=(trend.points||[]).reduce((sum,p)=>sum+chartNumber(p.outbound),0);
  const recentItems=Array.isArray(recent)?recent.slice(0,4):[];
- const pending=Array.isArray(links)?links.find(c=>c.status!=='connected'):null;
- let qrImage=null;
- if(pending){
-  try{
-   const qr=await api('/api/waakg/channels/'+encodeURIComponent(pending.id)+'/qr');
-   if(qr?.ready&&typeof qr.image==='string'&&
-      /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(qr.image)&&qr.image.length<350000){
-      qrImage=qr.image;
-   }
-  }catch{} // A failed/expired QR must never blank the main dashboard.
- }
+ const connectedWhatsApps=Array.isArray(links)?links.filter(c=>c.status==='connected'):[];
  const kpi=(kind,label,value,meta,type)=>'<div class="ember-kpi ember-kpi-'+type+'">'+
   '<div class="ember-kpi-symbol">'+emberIcon(kind)+'</div>'+
   '<div class="ember-kpi-copy"><div class="ember-kpi-name">'+e(label)+'</div>'+
@@ -195,16 +188,19 @@ async function overview(){
    '<span class="ember-conversation-tail">'+(time?'<small>'+e(time)+'</small>':'')+
     '<span class="ember-status '+chip+'">'+e(label)+'</span></span></button>';
  };
- const qrVisual=qrImage?
-  '<div class="ember-qr-live"><img src="'+e(qrImage)+'" alt="QR Code ativo do WhatsApp. Escaneie com o aplicativo no celular."></div>':
-  '<div class="ember-qr-placeholder" aria-label="QR Code disponível após iniciar a conexão">'+emberIcon('scan')+
-   '<strong>Seu QR Code</strong><small>'+e(pending?'Aguardando novo código':'Gerado ao conectar')+'</small></div>';
+ const whatsappSummary=connectedWhatsApps.length?
+  '<div class="socio-connected-list">'+connectedWhatsApps.slice(0,5).map(c=>
+    '<div class="socio-connected-item"><span class="socio-green-dot"></span><div><strong>'+e(c.label||'WhatsApp')+
+    '</strong><small>'+e(c.phone||'Número confirmado')+'</small></div><span class="badge green">Conectado</span></div>'
+   ).join('')+(connectedWhatsApps.length>5?'<small>Mais '+(connectedWhatsApps.length-5)+' número(s) conectado(s)</small>':'')+'</div>':
+  '<div class="socio-no-connections"><span class="socio-wa-empty-icon">◉</span><strong>Nenhum WhatsApp conectado</strong>'+
+  '<p>Conecte seu primeiro número usando o QR Code.</p></div>';
  view.innerHTML=
  '<div class="lucid-dashboard ember-dashboard">'+
   '<div class="ember-kpi-grid">'+
    kpi('bubble','Conversas em aberto',openCount.toLocaleString('pt-BR'),'Atendimentos aguardando acompanhamento','conversations')+
    kpi('whatsapp','WhatsApps conectados',online.toLocaleString('pt-BR'),'Sessões vinculadas neste espaço','connected')+
-   kpi('mail','Mensagens recebidas',messages.toLocaleString('pt-BR'),'Total registrado nesta empresa','messages')+
+   kpi('mail','Mensagens recebidas hoje',messages.toLocaleString('pt-BR'),'Dia atual · horário de Brasília','messages')+
   '</div>'+
   '<div class="ember-primary-grid">'+
    '<section class="ember-card ember-activity">'+
@@ -228,18 +224,12 @@ async function overview(){
      '<span><i class="ember-dot green"></i>Enviadas</span>'+
      '<small>Dados reais da empresa selecionada</small></div>'+
    '</section>'+
-   '<section class="ember-card ember-qr-card">'+
-    '<div class="ember-qr-head">'+
-     '<span class="ember-whatsapp-icon">'+emberIcon('whatsapp')+'</span>'+
-     '<div><h2>Conectar WhatsApp</h2><p>Conecte um número para usar os recursos de atendimento do Sócio.</p></div>'+
-    '</div>'+
-    '<div class="ember-qr-content">'+qrVisual+
-     '<ol class="ember-qr-steps"><li><b>1</b><span>Abra o WhatsApp no celular</span></li>'+
-     '<li><b>2</b><span>Toque em Dispositivos conectados</span></li>'+
-     '<li><b>3</b><span>Escaneie o QR Code</span></li></ol>'+
-    '</div>'+
-    '<button type="button" class="btn primary ember-qr-cta" data-go="channels">'+emberIcon('scan')+' Conectar WhatsApp</button>'+
-    '<p class="ember-qr-disclaimer">A leitura de conversas depende de autorização e conexão ativa. Respostas automáticas permanecem desativadas.</p>'+
+   '<section class="ember-card ember-qr-card socio-dashboard-whatsapp">'+
+    '<div class="ember-qr-head"><span class="ember-whatsapp-icon">'+emberIcon('whatsapp')+'</span>'+
+      '<div><h2>Seus WhatsApps</h2><p>Números da empresa disponíveis para atendimento.</p></div></div>'+
+    whatsappSummary+
+    '<button type="button" class="btn primary ember-qr-cta" id="dashboardConnectWhatsApp">+ Conectar WhatsApp</button>'+
+    '<p class="ember-qr-disclaimer">Conexão por QR Code. Leitura e análise do histórico autorizadas; envio externo ainda desativado.</p>'+
    '</section>'+
   '</div>'+
   '<div class="ember-secondary-grid">'+
@@ -265,6 +255,10 @@ async function overview(){
   '</div>'+
  '</div>';
  bindNavWithin();
+ $('#dashboardConnectWhatsApp')?.addEventListener('click',()=>window.SocioUX.openQr({
+  api,toast,canManage:state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role),
+  onConnected:()=>state.view==='overview'?overview():Promise.resolve()
+ }));
  view.querySelectorAll('[data-range]').forEach(btn=>btn.addEventListener('click',async()=>{
   const range=btn.dataset.range;
   if(!['7d','1m','90d'].includes(range))return;
@@ -442,10 +436,10 @@ function catalogVariantRow(variant={}){
   '<button type="button" class="btn sm ghost" data-remove-variant aria-label="Excluir variação">×</button>'+
  '</div>';
 }
-async function products(selected=state.catalogProductId){
+async function products(selected=null){
  const [list,storage]=await Promise.all([api('/api/products'),api('/api/products/storage')]);
- if(selected&&!list.some(p=>p.id===selected))selected=null;
- state.catalogProductId=selected||null;
+ if(selected&&selected!=='new'&&!list.some(p=>p.id===selected))selected=null;
+ state.catalogProductId=selected&&selected!=='new'?selected:null;
  const current=list.find(p=>p.id===selected);
  const photo=p=>p.media?.length?'<img class="catalog-cover-image" src="'+e(p.media[0].url)+'" alt="'+e(p.media[0].alt||p.name)+'" loading="lazy">':
    '<div class="catalog-placeholder">◈</div>';
@@ -484,30 +478,73 @@ async function products(selected=state.catalogProductId){
    '<label>ID da campanha<input name="campaignId" maxlength="150" required placeholder="Identificador na plataforma"></label>'+
    '<label>Nome interno<input name="label" maxlength="120" placeholder="Ex.: Campanha Black Friday"></label>'+
    '<button class="btn soft" type="submit">Associar campanha →</button></form></section>':'';
- view.innerHTML=heading('CATÁLOGO INTELIGENTE','Produtos que o Sócio conhece.','Fotos reais, preços oficiais, variações e disponibilidade. Tudo separado por empresa.')+
-  '<div class="two-pane"><div><section class="card card-pad"><div class="section-title">Catálogo comercial · '+e(list.length)+' produto(s)</div>'+productCards+'</section></div>'+
-  '<div class="card card-pad"><div class="section-title" id="productFormTitle">'+(current?'Editar produto':'Novo produto')+'</div>'+
-  '<form class="form-stack" id="productForm"><label>Nome<input name="name" required maxlength="120" placeholder="Ex.: Pizza de calabresa" value="'+e(current?.name||'')+'"></label>'+
-  '<div class="catalog-pair"><label>Preço (R$)<input name="price" required type="number" min="0" step="0.01" value="'+e(current?(current.price_cents/100).toFixed(2):'')+'"></label>'+
-  '<label>Preço anterior (opcional)<input name="compareAtPrice" type="number" min="0" step="0.01" value="'+e(current?.compare_at_price_cents!=null?(current.compare_at_price_cents/100).toFixed(2):'')+'"></label></div>'+
-  '<div class="catalog-pair"><label>SKU<input name="sku" maxlength="50" placeholder="Código do produto" value="'+e(current?.sku||'')+'"></label>'+
-  '<label>Estoque (vazio = sem controle)<input name="stock" type="number" min="0" step="1" value="'+e(current?.stock_quantity??'')+'"></label></div>'+
-  '<label>Descrição comercial<textarea name="description" maxlength="1200" placeholder="Características, benefícios e condições...">'+e(current?.description||'')+'</textarea></label>'+
-  '<label>Disponibilidade<select name="active"><option value="true"'+(current?.active===false?'':' selected')+'>Ativo</option>'+
-  '<option value="false"'+(current?.active===false?' selected':'')+'>Inativo</option></select></label>'+
-  '<div class="form-actions"><button class="btn primary" type="submit">'+(current?'Salvar alterações':'Criar produto')+' →</button>'+
-  (current?'<button class="btn ghost" type="button" id="clearProduct">Novo produto</button>':'')+'</div></form></div></div>'+
-  detail;
+ const modalOpen=selected==='new'||Boolean(current);
+ view.innerHTML=heading('CATÁLOGO','Produtos e serviços.','Catálogo, preços e disponibilidade da empresa.',
+  '<button class="btn primary" id="newProduct">+ Novo produto</button>')+
+  '<section class="card card-pad socio-catalog-clean">'+
+   '<div class="socio-clean-head"><h2>Seu catálogo</h2><small>'+list.length+' produto(s) cadastrado(s)</small></div>'+
+   productCards+'</section>'+
+  '<div class="socio-popup-backdrop'+(modalOpen?'':' hidden')+'" id="productModal" role="presentation">'+
+   '<section class="socio-popup-surface socio-product-popup" role="dialog" aria-modal="true" aria-labelledby="productFormTitle">'+
+    '<div class="socio-popup-header"><div><small>CATÁLOGO DA EMPRESA</small>'+
+    '<h2 id="productFormTitle">'+(current?'Editar produto':'Novo produto')+'</h2>'+
+    '<p>Preencha as informações do produto. Fotos e variações ficam no mesmo lugar.</p></div>'+
+    '<button type="button" class="socio-popup-close" id="closeProductModal" aria-label="Fechar cadastro">×</button></div>'+
+    '<form class="form-stack" id="productForm">'+
+     '<label>Nome ou título do produto<input name="name" required maxlength="120" placeholder="Ex.: Kit profissional" value="'+e(current?.name||'')+'"></label>'+
+     '<div class="catalog-pair"><label>Preço (R$)<input name="price" required type="number" min="0" step="0.01" value="'+e(current?(current.price_cents/100).toFixed(2):'')+'"></label>'+
+     '<label>Preço anterior (opcional)<input name="compareAtPrice" type="number" min="0" step="0.01" value="'+e(current?.compare_at_price_cents!=null?(current.compare_at_price_cents/100).toFixed(2):'')+'"></label></div>'+
+     '<div class="catalog-pair"><label>Código / SKU<input name="sku" maxlength="50" placeholder="Opcional" value="'+e(current?.sku||'')+'"></label>'+
+     '<label>Estoque disponível<input name="stock" type="number" min="0" step="1" placeholder="Sem controle" value="'+e(current?.stock_quantity??'')+'"></label></div>'+
+     '<label>Descrição do produto<textarea name="description" maxlength="1200" placeholder="Características, benefícios e condições...">'+e(current?.description||'')+'</textarea></label>'+
+     '<label>Disponibilidade<select name="active"><option value="true"'+(current?.active===false?'':' selected')+'>Disponível</option>'+
+       '<option value="false"'+(current?.active===false?' selected':'')+'>Indisponível</option></select></label>'+
+     (!current?'<label>Fotos do produto (JPG, PNG, WebP; até 8)<input type="file" name="newPhotos" accept="image/jpeg,image/png,image/webp" multiple '+(!storage.configured?'disabled':'')+'></label>'+
+     '<div class="socio-clean-section"><h3>Variações</h3><div id="newVariantRows"></div>'+
+      '<button class="btn soft" id="addNewVariant" type="button">+ Adicionar variação</button></div>':'')+
+     '<div class="form-actions"><button class="btn primary" type="submit">'+(current?'Salvar alterações':'Cadastrar produto')+'</button>'+
+      (current?'<button class="btn ghost" type="button" id="clearProduct">Novo produto</button>':'')+'</div>'+
+    '</form>'+
+    (current?detail:'')+
+   '</section></div>';
+ $('#newProduct')?.addEventListener('click',()=>products('new'));
+ $('#closeProductModal')?.addEventListener('click',()=>products(null));
+ $('#productModal')?.addEventListener('click',ev=>{if(ev.target===$('#productModal'))products(null)});
+ $('#addNewVariant')?.addEventListener('click',()=>{
+  const host=$('#newVariantRows');
+  if(host.querySelectorAll('[data-variant-row]').length>=25)return toast('Máximo de 25 variações.',true);
+  host.insertAdjacentHTML('beforeend',catalogVariantRow());
+ });
+ $('#newVariantRows')?.addEventListener('click',ev=>{
+  const btn=ev.target.closest('[data-remove-variant]');if(btn)btn.closest('[data-variant-row]').remove();
+ });
+ if(modalOpen)$('#productForm')?.elements?.name?.focus();
  view.querySelectorAll('[data-select-product]').forEach(btn=>btn.addEventListener('click',()=>products(btn.dataset.selectProduct)));
  $('#clearProduct')?.addEventListener('click',()=>products(null));
  $('#productForm').addEventListener('submit',async ev=>{
-  ev.preventDefault();const d=formValues(ev.currentTarget);
+  ev.preventDefault();const form=ev.currentTarget,d=formValues(form);
   await action(async()=>{
    const data={name:d.name,description:d.description,sku:d.sku,
     priceCents:centsFromInput(d.price),compareAtPriceCents:d.compareAtPrice?centsFromInput(d.compareAtPrice):null,
     stockQuantity:stockFromInput(d.stock),active:d.active==='true'};
    const result=await api(current?'/api/products/'+current.id:'/api/products',current?'PATCH':'POST',data);
-   toast('Catálogo atualizado.');await products(current?.id||result.id);
+   const productId=current?.id||result.id;
+   if(!current){
+    const variants=[...form.querySelectorAll('#newVariantRows [data-variant-row]')].map(row=>{
+     const get=selector=>row.querySelector(selector)?.value||'';
+     return {name:get('[data-variant-name]'),sku:get('[data-variant-sku]'),
+      priceCents:centsFromInput(get('[data-variant-price]')),
+      stockQuantity:stockFromInput(get('[data-variant-stock]')),active:true};
+    });
+    if(variants.length)await api('/api/products/'+productId+'/variants','PUT',{variants});
+    const photos=[...(form.elements.newPhotos?.files||[])];
+    if(photos.length>8)throw Error('Máximo de oito fotos por produto.');
+    for(const file of photos){
+     const contentBase64=await compressCatalogImage(file);
+     await api('/api/products/'+productId+'/media','POST',{contentBase64,alt:d.name});
+    }
+   }
+   toast('Catálogo atualizado.');await products(productId);
   });
  });
  if(!current)return;
@@ -578,111 +615,80 @@ function mountAiGuideTabs(){
 
 async function training(){
  clearTimeout(trainingTimer);
- const [list,ag,jobs,versions,waConfig,waLinks,waScans]=await Promise.all([
-  api('/api/imports'),api('/api/agent'),api('/api/training/jobs'),api('/api/training/versions'),
-  api('/api/waakg/config'),api('/api/waakg/channels'),api('/api/waakg/scans')
+ const [auto,versions,waLinks,ag]=await Promise.all([
+  api('/api/training/auto'),api('/api/training/versions'),
+  api('/api/waakg/channels'),api('/api/agent')
  ]);
- const latest=jobs[0],open=jobs.find(x=>['queued','analyzing','paused'].includes(x.status));
- const percent=latest?.totalItems?Math.min(100,Math.round(100*Number(latest.processedItems||0)/Number(latest.totalItems))):0;
- const draft=versions.find(x=>x.status==='draft'),published=versions.find(x=>x.status==='approved');
- const controls=open?'<div class="row-actions">'+
-  (open.status==='paused'?'<button class="btn soft" id="analysisResume">Retomar</button>':'<button class="btn soft" id="analysisPause">Pausar</button>')+
-  '<button class="btn soft" id="analysisCancel">Cancelar</button></div>':
-  '<button class="btn primary" id="analysisStart" '+(list.length?'':'disabled')+'>Analisar '+list.length+' conversa(s) →</button>';
- const summary=latest?.report?.summary||'A análise é baseada somente nas conversas importadas nesta empresa. '+
-  'Sincronize o histórico disponível dos WhatsApps autorizados acima ou importe arquivos antes de analisar.';
- const syncActive=waScans.some(j=>['queued','scanning','importing'].includes(j.status));
- const waCard='<section class="card card-pad section-gap"><div class="section-title">Analisar conversas dos WhatsApps conectados</div>'+
-   '<p class="form-note">Importa texto das sessões autorizadas, sem mensagens automáticas. O WA-AKG atual lista no máximo 50 chats por sessão e até 400 mensagens por conversa; mídias e grupos são ignorados.</p>'+
-   (waLinks.length?'<button class="btn soft" id="waSyncAll" '+(!waConfig.configured?'disabled':'')+'>Sincronizar histórico dos '+waLinks.length+' WhatsApp(s) →</button>':
-   '<p class="form-note">Conecte primeiro uma sessão existente na guia WhatsApps.</p>')+
-   (!waConfig.configured?'<p class="form-note">Gateway pendente de configuração pela Consecom.</p>':'')+
-   (waScans.length?'<div class="section-gap">'+waScans.slice(0,8).map(j=>{
-     const pct=j.status==='completed'?100:j.totalChats?Math.round(100*j.processedChats/j.totalChats):0;
-     const label=waLinks.find(c=>c.id===j.channelId)?.label||'WhatsApp';
-     return '<div class="section-gap"><strong>'+e(label)+' — '+pct+'%</strong><span class="form-note"> '+e(j.status)+'</span>'+
-      '<div class="progress-track"><div class="progress-fill" style="width:'+pct+'%"></div></div>'+
-      '<p class="form-note">'+e(j.processedChats)+'/'+e(j.totalChats)+' conversas processadas, '+e(j.importedChats)+' importadas, '+e(j.importedMessages)+' mensagens. '+
-      (j.partialCoverage?'Cobertura parcial: listagem do gateway limitada. ':'')+
-      (j.truncatedChats?'Algumas conversas excedem 400 mensagens. ':'')+
-      (j.errorCode?'Erro: '+e(j.errorCode):'')+'</p>'+
-      (['queued','scanning','importing','paused','failed'].includes(j.status)?
-        '<div class="row-actions"><button class="btn sm soft" data-wa-action="'+(j.status==='paused'||j.status==='failed'?'resume':'pause')+'" data-job="'+e(j.id)+'">'+(j.status==='paused'||j.status==='failed'?'Retomar':'Pausar')+'</button>'+
-        '<button class="btn sm soft" data-wa-action="cancel" data-job="'+e(j.id)+'">Cancelar</button></div>':'')+'</div>';
-   }).join('')+'</div>':'')+
-   '<p class="form-note">Depois de sincronizar, use <strong>Analisar conversas</strong> abaixo para gerar relatório e Markdown. A aprovação do conhecimento continua manual.</p></section>';
- const trainingCard='<section class="card card-pad section-gap" id="analysisCard">'+
-  '<div class="section-title">Análise automática — rascunho supervisionado</div>'+
-  '<p class="form-note">O percentual indica registros realmente processados. Não mede a eficácia de vendas sem conversões verificadas.</p>'+
-  '<div class="progress-track"><div class="progress-fill" style="width:'+percent+'%"></div></div>'+
-  '<p><strong>'+percent+'% analisado</strong> · '+(latest?e(latest.processedItems)+' de '+e(latest.totalItems)+' conversas':'Nenhuma análise iniciada')+
-  ' · '+e(latest?.status||'pronto para começar')+'</p>'+
-  '<p class="form-note">'+e(summary)+'</p>'+controls+
-  (draft?'<div class="section-gap"><strong>Versão '+e(draft.version)+' gerada — aguardando aprovação</strong>'+
-    '<p class="form-note">'+e(draft.report?.summary||'')+'</p>'+
-    '<div class="code-preview">'+e(draft.markdown||'')+'</div>'+
-    '<button class="btn primary section-gap" id="analysisApprove" data-id="'+e(draft.id)+'">Aprovar conhecimento →</button></div>':'')+
-  (published?'<p class="form-note">Última versão aprovada: '+e(published.version)+'. A publicação não ativa envios automáticos.</p>':'')+
-  '</section>';
-
+ const run=auto.run,connected=waLinks.filter(c=>c.status==='connected');
+ const percent=run?.percent??0;
+ const draft=versions.find(v=>v.status==='draft'),published=versions.find(v=>v.status==='approved');
+ const ongoing=run&&['scanning','analyzing'].includes(run.status);
+ const status=run?.status==='scanning'?'Lendo conversas dos WhatsApps conectados':
+  run?.status==='analyzing'?'Organizando o conhecimento e gerando Markdown':
+  run?.status==='completed'?'Análise concluída — conhecimento pronto para revisão':
+  run?.status==='failed'?'Não foi possível concluir o treinamento':
+  'Pronto para iniciar';
+ const canManage=state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role);
+ const percentText=ongoing||run?.status==='completed'?percent+'%':'0%';
  view.innerHTML=
- waCard+trainingCard+
- '<div class="two-pane train"><div class="card card-pad"><div class="section-title">Importar conversas de sucesso</div><div class="file-drop"><span class="file-icon">⇧</span><strong>Escolha conversas .txt, .md ou .zip</strong><small>Múltiplos arquivos · até 700 KB por texto ou 2 MB por ZIP</small><input type="file" id="importInput" accept=".txt,.md,.zip,text/plain,text/markdown,application/zip" multiple aria-label="Escolher conversas"></div><p class="form-note">No WhatsApp: abra a conversa → Exportar conversa → Sem mídia. Você também pode enviar o ZIP da exportação diretamente, sem extraí-lo.</p><div class="info-strip"><strong>Privacidade em primeiro lugar</strong>Utilize conversas que sua empresa está autorizada a tratar. Telefones, e-mails e documentos numéricos são mascarados; nomes de participantes são substituídos por identificadores genéricos.</div><div id="importFeedback" class="form-note"></div></div>'+
- '<div>'+panel('Base de experiência',list.length+' conversa(s) importada(s).',
- '<div class="card-pad"><div class="progress-track"><div class="progress-fill" style="width:'+Math.min(100,list.length*10)+'%"></div></div><p class="form-note">'+Math.min(list.length,10)+' de 10 referências sugeridas para o primeiro treinamento.</p></div>'+
- (list.length?'<div class="table-wrap"><table class="data-table"><thead><tr><th>Arquivo</th><th>Mensagens</th></tr></thead><tbody>'+list.map(x=>'<tr><td><strong>'+e(x.filename)+'</strong><div class="table-detail">'+date(x.created_at)+'</div></td><td>'+e(x.message_count)+'</td></tr>').join('')+'</tbody></table></div>':empty('✳','Ainda não há exemplos','Suas primeiras conversas de referência aparecerão aqui.')))+
- '<div class="card card-pad section-gap"><div class="section-title">Conhecimento aprovado</div><p class="form-note">Somente análises revisadas e aprovadas entram no conhecimento do agente. Produtos e preços continuam em configuração separada.</p><div class="code-preview">'+e(ag.knowledge_md||'# Aguardando as primeiras conversas de referência...')+'</div></div></div></div>';
- const run=async(path)=>action(async()=>{await api(path,'POST',{});await training();});
- $('#waSyncAll')?.addEventListener('click',async()=>{
-  await action(async()=>{
-   let started=0,errors=[];
-   for(const c of waLinks){
-    if(waScans.some(j=>j.channelId===c.id&&['queued','scanning','importing','paused'].includes(j.status)))continue;
-    try{await api('/api/waakg/scans','POST',{channelId:c.id});started++;}
-    catch(err){errors.push(c.label+': '+errMsg(err));}
-   }
-   toast(started+' sincronização(ões) iniciada(s).'+(errors.length?' '+errors.join(' | '):''),!started);
-   await training();
-  });
- });
- view.querySelectorAll('[data-wa-action]').forEach(button=>button.addEventListener('click',()=>run('/api/waakg/scans/'+button.dataset.job+'/'+button.dataset.waAction)));
- $('#analysisStart')?.addEventListener('click',()=>run('/api/training/jobs'));
- $('#analysisPause')?.addEventListener('click',()=>run('/api/training/jobs/'+open.id+'/pause'));
- $('#analysisResume')?.addEventListener('click',()=>run('/api/training/jobs/'+open.id+'/resume'));
- $('#analysisCancel')?.addEventListener('click',()=>run('/api/training/jobs/'+open.id+'/cancel'));
- $('#analysisApprove')?.addEventListener('click',()=>run('/api/training/versions/'+draft.id+'/approve'));
- if((open&&open.status!=='paused')||syncActive){
-  trainingTimer=setTimeout(()=>{if(state.view==='training')training().catch(error=>toast(errMsg(error),true));},1750);
- }
- $('#importInput').addEventListener('change',async ev=>{
-  const files=Array.from(ev.target.files||[]);
-  const feedback=$('#importFeedback');if(!files.length)return;
-  if(files.some(f=>!(/\.(txt|md|zip)$/i.test(f.name))||f.size>(/\.zip$/i.test(f.name)?2000000:700000)))return toast('Selecione textos até 700 KB ou ZIPs até 2 MB.',true);
-  let okay=0;const errors=[];
-  for(const file of files){
-   feedback.textContent='Importando '+e(file.name)+'... ('+(okay+errors.length+1)+'/'+files.length+')';
-   try{
-    if(/\.zip$/i.test(file.name)){
-     const bytes=new Uint8Array(await file.arrayBuffer()),parts=[];
-     for(let i=0;i<bytes.length;i+=32768)parts.push(String.fromCharCode(...bytes.subarray(i,i+32768)));
-     const result=await api('/api/imports/zip','POST',{filename:file.name,contentBase64:btoa(parts.join(''))});
-     okay+=result.conversationCount;
-    }else{await api('/api/imports','POST',{filename:file.name,content:await file.text()});okay++;}
-   }
-   catch(ex){errors.push(file.name+': '+errMsg(ex));}
-  }
-  toast(okay+' arquivo(s) importado(s).'+(errors.length?' '+errors.length+' falha(s).':'') ,!okay);
+ '<div class="socio-training-clean">'+
+  '<section class="card card-pad socio-training-center">'+
+   '<span class="eyebrow">APRENDIZADO E ANÁLISES</span>'+
+   '<div class="socio-train-emblem">✳</div>'+
+   '<h2>Seu Sócio aprende com suas conversas.</h2>'+
+   '<p>Com um clique, analisamos as conversas disponíveis nos WhatsApps conectados da empresa e criamos um Markdown de conhecimento para sua aprovação.</p>'+
+   '<div class="socio-train-accounts">'+connected.map(c=>
+    '<span class="socio-train-account"><span class="socio-green-dot"></span>'+e(c.label||c.phone||'WhatsApp')+'</span>').join('')+
+    (!connected.length?'<span>Conecte seu WhatsApp para começar</span>':'')+'</div>'+
+   '<button type="button" class="btn primary socio-train-cta" id="startAutoTraining" '+
+    (!connected.length||ongoing||!canManage?'disabled':'')+'>Treinar</button>'+
+   '<div class="socio-train-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+percent+'" aria-label="Progresso da análise">'+
+    '<div class="progress-track"><div class="progress-fill" style="width:'+percent+'%"></div></div></div>'+
+   '<strong class="socio-train-percent">'+percentText+' analisado</strong>'+
+   '<p class="form-note" role="status">'+e(status)+'</p>'+
+   (run?.messagesImported?'<p class="form-note">'+e(run.messagesImported)+' mensagens de texto novas importadas neste treinamento.</p>':'')+
+   (run?.partialCoverage?'<p class="form-note">Cobertura parcial: o gateway limita o histórico a 50 conversas por número e até 400 mensagens por conversa. Não representa todo o WhatsApp.</p>':'')+
+   (run?.errorCode?'<p class="form-error">Erro: '+e(run.errorCode)+'</p>':'')+
+   (!auto.grokConfigured?'<p class="form-note">A chave do Grok (xAI) ainda não está configurada. A análise gera Markdown preliminar por regras; a síntese com Grok será habilitada com XAI_API_KEY.</p>':
+    '<p class="form-note">Síntese por Grok (xAI) habilitada. Resultados ficam como rascunho até sua aprovação.</p>')+
+   (!connected.length?'<button type="button" class="btn soft" id="trainConnectWhatsApp">+ Conectar WhatsApp</button>':'')+
+  '</section>'+
+  (draft?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Markdown gerado · versão '+e(draft.version)+'</h2>'+
+    '<span class="badge yellow">Aguardando aprovação</span></div>'+
+    '<p class="form-note">'+e(draft.report?.summary||'Reveja o conteúdo antes de ativá-lo.')+'</p>'+
+    '<p class="form-note">Processamento: '+e(draft.report?.analysisProvider==='xai_grok'?'Grok xAI':draft.report?.analysisProvider==='deterministic_fallback'?'Síntese preliminar (Grok indisponível)':'Síntese preliminar')+'</p>'+
+    '<pre class="code-preview">'+e(draft.markdown||'')+'</pre>'+
+    '<button type="button" class="btn primary" id="analysisApprove" data-id="'+e(draft.id)+'">Aprovar Markdown</button></section>':'')+
+  (published?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Conhecimento aprovado</h2><span class="badge green">Versão '+e(published.version)+'</span></div>'+
+    '<pre class="code-preview">'+e(ag.knowledge_md||'')+'</pre></section>':'')+
+ '</div>';
+ $('#startAutoTraining')?.addEventListener('click',()=>action(async()=>{
+  const btn=$('#startAutoTraining');if(btn)btn.disabled=true;
+  await api('/api/training/auto','POST',{});
+  toast('Treinamento iniciado. O conhecimento será preparado para sua revisão.');
   await training();
-  if(errors.length)$('#importFeedback').textContent=errors.join(' | ');
- });
+ }));
+ $('#trainConnectWhatsApp')?.addEventListener('click',()=>window.SocioUX.openQr({
+  api,toast,canManage,
+  onConnected:()=>state.view==='training'?training():Promise.resolve()
+ }));
+ $('#analysisApprove')?.addEventListener('click',()=>action(async()=>{
+  await api('/api/training/versions/'+draft.id+'/approve','POST',{});
+  toast('Markdown aprovado e disponível para a IA.');
+  await training();
+ }));
  mountAiGuideTabs();
+ if(ongoing)trainingTimer=setTimeout(()=>{
+  if(state.view==='training'&&state.aiTab==='training')
+   training().catch(error=>toast(errMsg(error),true));
+ },1800);
 }
 async function agent(){
  const ag=await api('/api/agent');
- const missing=!state.me.groqConfigured;
+ const missing=!state.me.grokConfigured;
  view.innerHTML=
  '<div class="two-pane train"><div class="card card-pad"><div class="section-title">Identidade e comportamento</div><form id="agentForm" class="form-stack"><label>Nome do agente<input name="name" required maxlength="80" value="'+e(ag.name||'Sócio')+'"></label><label>Tom de voz<input name="tone" required maxlength="300" value="'+e(ag.tone||'Profissional e natural')+'"></label><label>Instruções e limites<textarea name="instructions" required maxlength="6000" rows="8">'+e(ag.instructions||'')+'</textarea></label><label>Modo operacional<select name="enabled"><option value="false"'+(!ag.enabled?' selected':'')+'>Em preparação</option><option value="true"'+(ag.enabled?' selected':'')+'>Preparado para integrar (não envia sozinho)</option></select></label><button type="submit" class="btn primary">Salvar personalidade →</button><p class="form-note">Marcar como preparado não conecta um WhatsApp ou libera envios automáticos.</p></form></div>'+
- '<div class="card"><div class="panel-head"><div><h2>Laboratório de conversas</h2><p>Faça perguntas como se fosse um cliente.</p></div>'+badge('Simulação','gray')+'</div><div class="messages-preview" id="simulationMessages"><div class="bubble">Olá! Este é seu laboratório. Configure produtos e treinamento e faça uma pergunta para experimentar a personalidade do seu Sócio.</div></div><form class="chat-compose" id="simulateForm"><input name="message" required maxlength="1200" placeholder="Ex.: Quais serviços vocês oferecem?" autocomplete="off"><button type="submit" class="btn primary">Enviar ↗</button></form>'+(missing?'<div class="info-strip" style="margin:14px">Conecte GROQ_API_KEY nas variáveis do Railway para ativar respostas reais no simulador.</div>':'')+'</div></div>';
+ '<div class="card"><div class="panel-head"><div><h2>Laboratório de conversas</h2><p>Faça perguntas como se fosse um cliente.</p></div>'+badge('Simulação','gray')+'</div><div class="messages-preview" id="simulationMessages"><div class="bubble">Olá! Este é seu laboratório. Configure produtos e treinamento e faça uma pergunta para experimentar a personalidade do seu Sócio.</div></div><form class="chat-compose" id="simulateForm"><input name="message" required maxlength="1200" placeholder="Ex.: Quais serviços vocês oferecem?" autocomplete="off"><button type="submit" class="btn primary">Enviar ↗</button></form>'+(missing?'<div class="info-strip" style="margin:14px">Configure XAI_API_KEY no Railway para ativar as respostas do Grok (xAI) no simulador.</div>':'')+'</div></div>';
  $('#agentForm').addEventListener('submit',async ev=>{ev.preventDefault();const d=formValues(ev.currentTarget);await action(async()=>{await api('/api/agent','PUT',{...d,enabled:d.enabled==='true'});toast('Personalidade atualizada.');await agent();});});
  $('#simulateForm').addEventListener('submit',async ev=>{
   ev.preventDefault();const form=ev.currentTarget,txt=val(form,'message');if(!txt)return;
@@ -705,7 +711,11 @@ async function agent(){
 async function inbox(){
  if(!window.SocioInbox)throw new Error('Módulo de conversas não foi carregado. Recarregue a página.');
  if(activeInbox)activeInbox.cleanup();
- activeInbox=window.SocioInbox.create({api,e,toast,view,changeView});
+ activeInbox=window.SocioInbox.create({api,e,toast,view,changeView,
+  openQr:()=>window.SocioUX.openQr({api,toast,
+   canManage:state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role),
+   onConnected:()=>state.view==='inbox'?inbox():Promise.resolve()})
+ });
  await activeInbox.render();
 }
 async function openThread(convId){
@@ -738,12 +748,84 @@ async function team(){
 }
 async function admin(){
  const tenants=await api('/api/admin/tenants');
- view.innerHTML=heading('CONTROLE CONSECOM','Empresas do Sócio.','Gerencie clientes, planos e ambientes independentes da plataforma.')+
- '<div class="two-pane"><div>'+panel('Empresas cadastradas',tenants.length+' ambiente(s) isolado(s).',
- '<div class="table-wrap"><table class="data-table"><thead><tr><th>Empresa</th><th>Plano</th><th>Acesso</th></tr></thead><tbody>'+tenants.map(t=>'<tr><td><strong>'+e(t.name)+'</strong><div class="table-detail">'+e(t.slug)+' · '+e(t.members)+' usuário(s)</div></td><td>'+badge(t.plan)+'</td><td><button class="btn sm ghost" data-switch="'+e(t.id)+'">'+(t.id===state.me.tenant.id?'Atual':'Acessar')+'</button></td></tr>').join('')+'</tbody></table></div>')+'</div>'+
- '<div class="card card-pad"><div class="section-title">Cadastrar empresa cliente</div><form id="tenantForm" class="form-stack"><label>Nome da empresa<input name="company" required maxlength="120" placeholder="Ex.: Pizzaria Bella"></label><label>Nome do responsável<input name="ownerName" required maxlength="100"></label><label>E-mail do responsável<input name="ownerEmail" required type="email"></label><label>Celular para login (opcional)<input name="ownerPhone" type="tel" maxlength="32" placeholder="(15) 99999-9999"></label><label>Plano<select name="plan"><option value="essencial">Essencial · R$129/mês</option><option value="equipe">Equipe</option><option value="voz">Voz (futuro)</option></select></label><label>Senha inicial (mín. 12 caracteres)<input type="password" name="ownerPassword" required minlength="12" maxlength="128" autocomplete="new-password"></label><button class="btn primary" type="submit">Criar espaço da empresa →</button><p class="form-note">O plano é um registro administrativo; cobranças e assinaturas ainda não são processadas automaticamente.</p></form></div></div>';
- $('#tenantForm').addEventListener('submit',async ev=>{ev.preventDefault();const d=formValues(ev.currentTarget);await action(async()=>{await api('/api/admin/tenants','POST',d);toast('Empresa cadastrada e isolada.');await admin();});});
- view.querySelectorAll('[data-switch]').forEach(b=>b.addEventListener('click',()=>action(async()=>{await api('/api/admin/switch','POST',{tenantId:b.dataset.switch});toast('Ambiente alterado.');state.view='overview';await boot();})));
+ const rows=tenants.map(t=>
+  '<tr><td><strong>'+e(t.name)+'</strong><div class="table-detail">'+
+   e(t.cnpj||t.slug)+' · '+e(t.members)+' usuário(s)</div></td>'+
+   '<td>'+badge(t.plan)+'</td><td>'+badge(t.status,t.status==='active'?'green':'gray')+'</td>'+
+   '<td><button class="btn sm ghost" data-switch="'+e(t.id)+'">'+
+   (t.id===state.me.tenant.id?'Atual':'Acessar')+'</button></td></tr>').join('');
+ view.innerHTML=heading('CONTROLE CONSECOM','Empresas.','Gerencie clientes e espaços independentes.',
+  '<button type="button" class="btn primary" id="newCompany">+ Nova empresa</button>')+
+ '<section class="card card-pad socio-list-panel"><div class="socio-clean-head"><h2>Empresas cadastradas</h2><small>'+tenants.length+' ambientes</small></div>'+
+ '<div class="table-wrap"><table class="data-table"><thead><tr><th>Empresa</th><th>Plano</th><th>Situação</th><th>Acesso</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
+ '<div class="socio-popup-backdrop hidden" id="companyModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="companyHeading">'+
+  '<div class="socio-popup-header"><div><small>ADMINISTRAÇÃO MASTER</small><h2 id="companyHeading">Nova empresa</h2>'+
+  '<p>Consulte o CNPJ para preencher os dados públicos automaticamente.</p></div>'+
+  '<button type="button" class="socio-popup-close" id="companyClose" aria-label="Fechar cadastro">×</button></div>'+
+  '<form id="tenantForm" class="form-stack">'+
+   '<div class="socio-cnpj-lookup"><label>CNPJ (opcional)<input name="cnpj" maxlength="18" placeholder="00.000.000/0000-00" inputmode="numeric"></label>'+
+   '<button type="button" class="btn soft" id="lookupCnpj">Buscar CNPJ</button></div>'+
+   '<p class="form-note" id="cnpjFeedback" role="status">A consulta é pública e pode ficar indisponível. Todos os dados podem ser preenchidos manualmente.</p>'+
+   '<label>Nome da empresa<input name="company" required maxlength="120" placeholder="Ex.: Pizzaria Bella"></label>'+
+   '<div class="catalog-pair"><label>Razão social<input name="legalName" maxlength="200"></label>'+
+   '<label>Nome fantasia<input name="tradeName" maxlength="200"></label></div>'+
+   '<div class="catalog-pair"><label>Telefone comercial<input name="companyPhone" maxlength="30" placeholder="Opcional"></label>'+
+   '<label>E-mail comercial<input name="companyEmail" maxlength="150" placeholder="Opcional"></label></div>'+
+   '<label>Endereço (informação pública do cadastro)<textarea name="companyAddress" rows="2" maxlength="500" placeholder="Rua, número, bairro, cidade e UF" readonly></textarea></label>'+
+   '<div class="socio-popup-divider"><span>ACESSO DO RESPONSÁVEL</span></div>'+
+   '<label>Nome do responsável<input name="ownerName" required maxlength="100"></label>'+
+   '<label>E-mail do responsável (login)<input name="ownerEmail" required type="email" maxlength="255"></label>'+
+   '<div class="catalog-pair"><label>Celular para login<input name="ownerPhone" type="tel" maxlength="32" placeholder="Com DDD"></label>'+
+   '<label>Plano<select name="plan"><option value="essencial">Essencial</option><option value="equipe">Equipe</option><option value="voz">Voz</option></select></label></div>'+
+   '<label>Senha inicial (mínimo 12 caracteres)<input name="ownerPassword" required type="password" minlength="12" maxlength="128" autocomplete="new-password"></label>'+
+   '<p class="form-note">O cadastro cria um ambiente separado. Cobrança não é ativada automaticamente.</p>'+
+   '<button class="btn primary socio-full-btn" type="submit">Criar empresa</button>'+
+  '</form></section></div>';
+ const modal=$('#companyModal'),form=$('#tenantForm');
+ let publicProfile=null;
+ const open=()=>{modal.classList.remove('hidden');form.elements.cnpj.focus();};
+ const close=()=>modal.classList.add('hidden');
+ $('#newCompany').addEventListener('click',open);
+ $('#companyClose').addEventListener('click',close);
+ modal.addEventListener('click',ev=>{if(ev.target===modal)close();});
+ $('#lookupCnpj').addEventListener('click',async()=>{
+  const cnpj=form.elements.cnpj.value.replace(/\D/g,'');
+  const feedback=$('#cnpjFeedback'),btn=$('#lookupCnpj');
+  if(cnpj.length!==14){feedback.textContent='Digite os 14 dígitos do CNPJ.';return;}
+  btn.disabled=true;feedback.textContent='Buscando dados públicos do CNPJ...';
+  try{
+   const result=await api('/api/admin/cnpj?number='+encodeURIComponent(cnpj));
+   publicProfile=result;
+   form.elements.company.value=result.company||result.legalName||'';
+   form.elements.legalName.value=result.legalName||'';
+   form.elements.tradeName.value=result.tradeName||'';
+   form.elements.companyPhone.value=result.phone||'';
+   form.elements.companyEmail.value=result.email||'';
+   const a=result.address||{};
+   form.elements.companyAddress.value=[a.street,a.number,a.additional,a.neighborhood,a.city,a.state,a.postalCode].filter(Boolean).join(', ');
+   feedback.textContent='Dados encontrados: '+(result.legalName||result.company)+'. Confira e complete o acesso do responsável.';
+  }catch(error){publicProfile=null;feedback.textContent=errMsg(error)+' Você pode preencher manualmente.';}
+  finally{btn.disabled=false;}
+ });
+ form.elements.cnpj.addEventListener('input',()=>{publicProfile=null;});
+ form.addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const data=formValues(form);
+  data.companyProfile=publicProfile?.cnpj===data.cnpj.replace(/\D/g,'')?
+   {address:publicProfile.address,primaryActivity:publicProfile.primaryActivity,status:publicProfile.status,
+    commercialEmail:data.companyEmail,commercialPhone:data.companyPhone}:
+   {commercialEmail:data.companyEmail,commercialPhone:data.companyPhone};
+  await action(async()=>{
+   await api('/api/admin/tenants','POST',data);
+   toast('Empresa cadastrada e ambiente criado com isolamento.');
+   close();await admin();
+  });
+ });
+ view.querySelectorAll('[data-switch]').forEach(b=>b.addEventListener('click',()=>action(async()=>{
+  await api('/api/admin/switch','POST',{tenantId:b.dataset.switch});
+  toast('Ambiente alterado.');
+  state.view='overview';await boot();
+ })));
 }
 async function action(fn){try{await fn();}catch(err){toast(errMsg(err),true);}}
 
@@ -772,7 +854,7 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  key!=='agent'&&(key!=='admin'||state.me?.user.platformOwner)&&
+  key!=='agent'&&key!=='channels'&&(key!=='team'||!state.me?.user.platformOwner)&&(key!=='admin'||state.me?.user.platformOwner)&&
   (label.toLocaleLowerCase('pt-BR').includes(keyword)||key.includes(keyword)));
  const list=$('#commandList');
  list.innerHTML=names.length?names.map(([key,label])=>

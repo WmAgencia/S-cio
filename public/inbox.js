@@ -3,7 +3,7 @@
    when the dedicated WA-AKG gateway is operating in read-only mode. */
 (function(){
  'use strict';
- function create({api,e,toast,view,changeView}){
+ function create({api,e,toast,view,changeView,openQr}){
   let conversations=[],active=null,thread=null,filter='all',search='',filterMessages='',selected=new Set();
   let reply=null,menuId=null,pointer=null,longTimer=null,refreshTimer=null,searchTimer=null,draftTimer=null;
   let infoOpen=false,helpOpen=false,menuAt=null,team=null,lock=false,disposed=false,lastFetch=0,syncing=false,cancelSync=false,suppressClick=false;
@@ -49,7 +49,7 @@
     '<aside class="wa-inbox-side" aria-label="Lista de conversas">'+
      '<header class="wa-inbox-side-head"><div><span class="wa-inbox-eyebrow">SEU ATENDIMENTO</span>'+
       '<h1>Conversas <span id="inboxCount" aria-live="polite"></span></h1></div>'+
-      '<div class="wa-side-head-buttons"><button type="button" class="wa-round-icon" data-inbox-sync aria-label="Sincronizar histórico de WhatsApps conectados" title="Sincronizar conversas">⟳</button>'+' <button type="button" class="wa-round-icon" id="inboxSettings" aria-label="Opções de acessibilidade" title="Acessibilidade">⚙</button></div></header>'+
+      '<div class="wa-side-head-buttons"><button type="button" class="wa-inbox-connect" data-inbox-connect title="Conectar WhatsApp via QR Code">+ Conectar</button>'+' <button type="button" class="wa-round-icon" data-inbox-sync aria-label="Sincronizar histórico de WhatsApps conectados" title="Sincronizar conversas">⟳</button>'+' <button type="button" class="wa-round-icon" id="inboxSettings" aria-label="Opções de acessibilidade" title="Acessibilidade">⚙</button></div></header>'+
      '<div class="wa-inbox-search">'+icon('⌕')+
       '<input id="inboxSearch" type="search" maxlength="90" placeholder="Buscar nome, número ou mensagem" autocomplete="off" aria-label="Pesquisar conversas" value="'+t(search,90)+'"></div>'+
      '<nav class="wa-filters" role="group" aria-label="Filtrar conversas">'+filters.map(([key,label])=>
@@ -525,6 +525,7 @@
   function onClick(ev){
    if(disposed)return;
    if(suppressClick){suppressClick=false;ev.preventDefault();return;}
+   if(ev.target.closest('[data-inbox-connect]')){if(typeof openQr==='function')void openQr();return;}
    if(ev.target.closest('#inboxSettings')){showHelp();return;}
    if(ev.target.closest('[data-inbox-sync]')){chooseSync().catch(err=>toast(err.message,true));return;}
    if(ev.target.closest('[data-inbox-start-sync]')){runSync();return;}
