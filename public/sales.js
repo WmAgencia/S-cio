@@ -158,7 +158,7 @@
     linkToShare='';await render({api,e,toast,view,me});
    }catch(err){toast(err.message,true)}
   }));
-  $('[data-quote-prepare]').forEach(btn=>btn.addEventListener('click',()=>{
+  $$('[data-quote-prepare]').forEach(btn=>btn.addEventListener('click',()=>{
    requestToPrepare=btn.dataset.quotePrepare;revision=null;linkToShare='';
    void render({api,e,toast,view,me}).then(()=>view.querySelector('#saleForm')?.scrollIntoView({block:'start',behavior:'smooth'}));
   }));
