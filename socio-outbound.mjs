@@ -1,6 +1,6 @@
 // Only sends to existing, tenant-owned connected WA-AKG conversations.
 // Every request is idempotent. An ambiguous gateway response is NEVER retried.
-import {createHmac,randomUUID} from 'node:crypto';
+import {createHmac,createHash,randomUUID} from 'node:crypto';
 import {getSessionStatus,gatewayBase,validSessionId} from './waakg-adapter.mjs';
 const bad=(status,message)=>Object.assign(new Error(message),{status});
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -88,7 +88,7 @@ export async function deliverToConversation(pool,{tenantId,conversationId,userId
  try{
   const delivery=await send({sessionId:c.session_id,jid,text:body,env});
   if(!delivery.sent||!delivery.providerId)throw bad(503,'O gateway não confirmou o envio.');
-  const providerId='waakg:'+createHmac('sha256',env.WA_AKG_API_KEY).update(c.session_id+':'+jid+':'+delivery.providerId).digest('hex');
+  const providerId='waakg:'+createHash('sha256').update(c.session_id+':'+jid+':'+delivery.providerId).digest('hex');
   await pool.query("UPDATE message_outbox SET status='sent',provider_id=$3,updated_at=now() WHERE id=$1 AND tenant_id=$2",
    [outboxId,tenantId,providerId]);
   await pool.query(
