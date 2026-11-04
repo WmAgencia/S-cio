@@ -3,6 +3,8 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
+import {maintenanceEnabled,writesBlocked,workersBlocked} from './migration-guard.mjs';
+import {TABLES as MIGRATION_TABLES} from './scripts/socio-supabase-migrate.mjs';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier} from './lib.mjs';
 import {permissionsFor,requirePermission,allowedNewMemberRole,validateMemberPatch} from './team-permissions.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
@@ -34,7 +36,7 @@ if(!['public','socio_app'].includes(dbSchema)||(isSupabaseDb&&dbSchema!=='socio_
  process.exit(1);
 }
 const pool=new Pool({connectionString:DATABASE_URL,max:10,connectionTimeoutMillis:8000,idleTimeoutMillis:30000,
- options:dbSchema==='socio_app'?'-c search_path=socio_app,public':undefined});
+ options:dbSchema==='socio_app'?'-c search_path=socio_app,pg_catalog':undefined});
 const query=(sql,values=[])=>pool.query(sql,values);
 async function fullCatalog(tenantId){
  const [items,variants,media,campaigns]=await Promise.all([
@@ -116,7 +118,14 @@ async function handle(req,res){
   // Railway only considers the app ready when the tenant database is usable.
   // A static 200 here used to hide Postgres outages from the healthcheck.
   await query('SELECT 1');
-  return json(res,200,{ok:true,app:'socio',database:'connected'});
+  return json(res,200,{ok:true,app:'socio',database:'connected',readOnly:maintenanceEnabled()});
+ }
+ // Migration safety: every state-changing endpoint is blocked, including
+ // login/session writes, public buyer acceptance and external webhooks.
+ // The read barrier is evaluated BEFORE any webhook or authenticated route.
+ if(writesBlocked(method)){
+  res.setHeader('Retry-After','120');
+  return json(res,503,{error:'Manutenção do Sócio em andamento. Novas alterações estão temporariamente bloqueadas.'});
  }
  if(method==='GET'&&pathname==='/api/bootstrap'){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
@@ -587,6 +596,28 @@ async function handle(req,res){
  }
  // Tenant-owner operational checks: never return credentials or assert that a
  // configured integration has passed a real end-to-end test.
+ if(method==='GET'&&pathname==='/api/ops/migration-readiness'){
+  requirePermission(a,'audit.read');
+  const metadata=await query(
+   "SELECT current_setting('server_version') AS version, current_schema() AS schema_name, "+
+   "(SELECT count(*)::int FROM information_schema.tables WHERE table_schema=$1 "+
+   " AND table_type='BASE TABLE') AS schema_table_count",[dbSchema]);
+  const state=metadata.rows[0],isTarget=dbSchema==='socio_app'&&isSupabaseDb;
+  const blockers=[];
+  if(!isTarget)blockers.push('O banco ativo continua no Railway: sem corte de produção autorizado.');
+  if(!maintenanceEnabled())blockers.push('A aplicação não está em modo de manutenção; gravações podem continuar.');
+  if(process.env.SOCIO_VERIFIED_BACKUP!=='YES')
+   blockers.push('Backup de produção íntegro não foi atestado no processo de migração.');
+  if(!process.env.SOCIO_SUPABASE_DATABASE_URL&&!isTarget)
+   blockers.push('Conexão PostgreSQL autenticada do Supabase não está configurada para o migrador.');
+  blockers.push('Falta validação externa do inventário de fotos S3 e gateway WA-AKG/MySQL.');
+  return json(res,200,{database:isTarget?'supabase_private':'railway',schema:state.schema_name,
+   postgresVersion:state.version,tableCount:state.schema_table_count,
+   maintenance:maintenanceEnabled(),backupConfirmationConfigured:process.env.SOCIO_VERIFIED_BACKUP==='YES',
+   destinationConfigured:!!process.env.SOCIO_SUPABASE_DATABASE_URL,
+   automaticCutoverEnabled:false,blockers,
+   note:'Diagnóstico não autoriza nem executa migração e não comprova backup ou restauração de produção.'});
+ }
  if(method==='GET'&&pathname==='/api/ops/readiness'){
   needRole(a,['owner','admin']);
   const report=await getOperationalReadiness(pool,a.active_tenant_id);
@@ -1010,7 +1041,20 @@ async function receiveWhatsApp(req,res){
 }
 async function main(){
  const schema=await readFile(new URL('./schema.sql',import.meta.url),'utf8');
- await query(schema);
+ if(dbSchema==='socio_app'){
+  // Private Supabase runtime is migrated explicitly; do not silently run
+  // Railway's public DDL against a remotely managed Postgres project.
+  const expected=MIGRATION_TABLES;
+  const check=await query(
+   "SELECT table_name FROM information_schema.tables WHERE table_schema='socio_app' AND table_name=ANY($1::text[])",
+   [expected]);
+  const names=new Set(check.rows.map(x=>x.table_name));
+  if(expected.some(name=>!names.has(name)))throw new Error('Private Supabase schema is incomplete');
+  const requiredColumns=await query(
+   "SELECT column_name FROM information_schema.columns WHERE table_schema='socio_app' "+
+   "AND table_name='users' AND column_name='active'");
+  if(!requiredColumns.rowCount)throw new Error('Private Supabase team schema is outdated');
+ }else await query(schema);
  // Storage probe checks the real private S3 endpoint without touching customer files.
  if(mediaConfigured())void checkMediaStorage()
   .then(x=>console.info('[socio product media]',JSON.stringify(x)))
@@ -1028,7 +1072,7 @@ async function main(){
  // This worker NEVER sends; it detects newly arrived messages for the inbox.
  let liveSyncBusy=false;
  const liveSyncWorker=setInterval(async()=>{
-  if(liveSyncBusy||!gatewayConfigured()||process.env.SOCIO_LIVE_SYNC_ENABLED==='false')return;
+  if(liveSyncBusy||workersBlocked()||!gatewayConfigured()||process.env.SOCIO_LIVE_SYNC_ENABLED==='false')return;
   liveSyncBusy=true;
   try{await processLiveInboxSync(pool);}
   catch(e){console.warn('[socio-inbox-sync]',String(e?.code||'SYNC_ERROR').slice(0,40));}
@@ -1039,7 +1083,7 @@ async function main(){
  // conversation handed over. Claims are durable to avoid duplicate messages.
  let replyBusy=false;
  const aiReplyWorker=setInterval(async()=>{
-  if(replyBusy)return;
+  if(replyBusy||workersBlocked())return;
   replyBusy=true;
   try{await processNextAiReply(pool);}
   catch(e){console.warn('[socio-ai-reply]',String(e?.code||'REPLY_ERROR').slice(0,40));}
@@ -1050,7 +1094,7 @@ async function main(){
  // per-run database row locks make this safe across replicas.
  let autoBusy=false;
  const autoWorker=setInterval(async()=>{
-  if(autoBusy)return;
+  if(autoBusy||workersBlocked())return;
   autoBusy=true;
   try{await processNextAutoTraining(pool);}
   catch(error){console.warn('[socio-auto-training]',String(error?.code||'worker-error').slice(0,55));}
@@ -1061,7 +1105,7 @@ async function main(){
  // All results remain drafts until the tenant owner approves them.
  let waBusy=false,waLastError=0;
  const waWorker=setInterval(async()=>{
-  if(waBusy||!gatewayConfigured())return;
+  if(waBusy||workersBlocked()||!gatewayConfigured())return;
   waBusy=true;
   try{await processNextWaakgScan(pool);}
   catch(err){if(Date.now()-waLastError>30000){
@@ -1073,7 +1117,7 @@ async function main(){
  waWorker.unref();
  let workerBusy=false,lastWorkerError=0;
  const worker=setInterval(async()=>{
-  if(workerBusy)return;
+  if(workerBusy||workersBlocked())return;
   workerBusy=true;
   try{await processNextAnalysisJob(pool);}
   catch(error){if(Date.now()-lastWorkerError>30000){

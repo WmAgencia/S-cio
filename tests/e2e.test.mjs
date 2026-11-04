@@ -360,7 +360,7 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const employeeMe=await call('/api/me','GET',undefined,employeeCookie);
  assert.equal(employeeMe.status,200);
  assert(!employeeMe.result.user.permissions.includes('team.promote'));
- for(const endpoint of ['/api/team','/api/ops/audit','/api/ops/tenant-integrity','/api/sales','/api/agent','/api/training/auto','/api/training/versions','/api/imports','/api/waakg/scans']){
+ for(const endpoint of ['/api/team','/api/ops/audit','/api/ops/migration-readiness','/api/ops/tenant-integrity','/api/sales','/api/agent','/api/training/auto','/api/training/versions','/api/imports','/api/waakg/scans']){
   const denied=await call(endpoint,'GET',undefined,employeeCookie);
   assert.equal(denied.status,403,'Attendant must not read '+endpoint);
  }
@@ -456,6 +456,12 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
 
  const unauthorizedCnpj=await call('/api/admin/cnpj?number=11222333000181','GET',undefined,betaCookie);
  assert.equal(unauthorizedCnpj.status,403,'CNPJ prefill is restricted to the master account');
+ const migrationReadiness=await call('/api/ops/migration-readiness','GET',undefined,betaCookie);
+ assert.equal(migrationReadiness.status,200);
+ assert.equal(migrationReadiness.result.database,'railway');
+ assert.equal(migrationReadiness.result.maintenance,false);
+ assert.equal(migrationReadiness.result.automaticCutoverEnabled,false);
+ assert(migrationReadiness.result.blockers.length>=3);
  const betaReadiness=await call('/api/ops/readiness','GET',undefined,betaCookie);
  assert.equal(betaReadiness.status,200);
  assert.equal(betaReadiness.result.catalog.activeProducts,0,'Tenant B should not see products from tenant A');

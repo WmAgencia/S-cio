@@ -743,9 +743,11 @@ async function agent(){
    '<div class="socio-clean-head"><div><h2>Verificação operacional</h2>'+
    '<p class="form-note">Veja o que está configurado e teste o Groq sem enviar mensagens aos clientes.</p></div></div>'+
    '<div class="socio-ops-actions"><button type="button" class="btn soft" id="checkSocioOps">Verificar operação</button>'+
-   '<button type="button" class="btn primary" id="testSocioGroq">Testar conexão Groq</button></div>'+
+   '<button type="button" class="btn primary" id="testSocioGroq">Testar conexão Groq</button>'+
+   '<button type="button" class="btn soft" id="checkSocioMigration">Verificar preparação Supabase</button></div>'+
    '<div id="socioOpsResult" role="status" aria-live="polite" class="socio-ops-result">'+
-   'Nenhuma verificação executada nesta sessão.</div></section>');
+   'Nenhuma verificação executada nesta sessão.</div>'+
+   '<div id="socioMigrationResult" role="status" aria-live="polite" class="socio-ops-result" hidden></div></section>');
   $('#checkSocioOps')?.addEventListener('click',()=>action(async()=>{
    const btn=$('#checkSocioOps');btn.disabled=true;
    try{
@@ -756,6 +758,19 @@ async function agent(){
       '<div><strong>'+e(check.label)+'</strong><small>'+e(check.detail)+'</small></div></div>').join('')+
      '</div><p class="form-note">'+e(result.numbers?.verified||0)+
      ' WhatsApp(s) verificado(s). A presença da chave Groq não prova uma resposta real: use o botão de teste.</p>';
+   }finally{btn.disabled=false;}
+  }));
+  $('#checkSocioMigration')?.addEventListener('click',()=>action(async()=>{
+   const btn=$('#checkSocioMigration');btn.disabled=true;
+   try{
+    const status=await api('/api/ops/migration-readiness');
+    const panel=$('#socioMigrationResult');
+    panel.hidden=false;
+    panel.innerHTML='<strong>Banco ativo: '+e(status.database==='railway'?'Railway PostgreSQL':'Supabase privado')+'</strong>'+
+     '<p class="form-note">Schema '+e(status.schema)+' · '+e(status.tableCount)+' tabelas · '+
+     (status.maintenance?'modo de manutenção ativo':'funcionamento normal')+'</p>'+
+     '<p class="form-note">A migração automática permanece desabilitada. Pendências:</p>'+
+     '<ul>'+status.blockers.map(item=>'<li>'+e(item)+'</li>').join('')+'</ul>';
    }finally{btn.disabled=false;}
   }));
   $('#testSocioGroq')?.addEventListener('click',()=>action(async()=>{

@@ -152,3 +152,23 @@ Fotos e sessões gateway não integram o snapshot PostgreSQL.
 
 Detalhes, matriz de acesso, comandos, riscos e pendências:
 [docs/socio-phase4-team-backup-20261104.md](docs/socio-phase4-team-backup-20261104.md)
+
+
+## Etapa 5 — Confiabilidade e preparação para Supabase
+
+O backend **permanece em produção no PostgreSQL Railway**. O esquema privado
+Supabase `socio_app` foi alinhado para as 28 tabelas do Sócio, está vazio
+e não é exposto a `anon`/`authenticated`. Nenhum dado real foi migrado.
+
+O migrador possui preflight de paridade de colunas/PKs, destino vazio e
+assinatura por conteúdo de cada tabela. O modo de manutenção bloqueia
+webhooks e escritas HTTP, pausa workers e mantém leituras. O teste automatizado
+usa bancos descartáveis com duas empresas e pedidos simulados, inclusive
+falha provocada para verificar rollback. A ferramenta **não executa cutover
+de `DATABASE_URL`** e exige quatro confirmações operacionais antes de copiar.
+
+A dependência `sharp` foi atualizada para a versão corrigida `0.35.5`;
+o CI agora exige `npm audit --omit=dev --audit-level=high`.
+
+Veja critérios, comandos, inventário S3/WA-AKG e plano de reversão:
+[docs/socio-phase5-supabase-cutover-20261104.md](docs/socio-phase5-supabase-cutover-20261104.md)
