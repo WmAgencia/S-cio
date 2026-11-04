@@ -1,7 +1,7 @@
 // One-click Sócio training: queued WA-AKG text scans + existing deterministic
 // anonymized analysis. Never sends WhatsApp messages, never auto-approves Markdown.
 import {randomUUID} from 'node:crypto';
-import {createTrainingAnalysis} from './analysis-jobs.mjs';
+import {createTrainingAnalysisInClient} from './analysis-jobs.mjs';
 import {gatewayConfigured,getSessionStatus} from './waakg-adapter.mjs';
 const uuid=()=>randomUUID();
 const bad=(status,message)=>Object.assign(new Error(message),{status});
@@ -18,7 +18,7 @@ export async function startAutoTraining(pool,tenantId,{getStatus=getSessionStatu
  const verified=[];
  for(const c of available.rows.slice(0,10)){
   try{const r=await getStatus(c.session_id);
-   if(r.connected&&r.connectedNumber===c.phone)verified.push(c);
+   if(r.connected&&r.connectedNumber===String(c.phone||'').replace(/\D/g,''))verified.push(c);
   }catch{/* disconnected session will not enter an auto scan */}
  }
  if(!verified.length)throw bad(409,'Os WhatsApps cadastrados não estão disponíveis para sincronização.');
@@ -49,6 +49,7 @@ export async function startAutoTraining(pool,tenantId,{getStatus=getSessionStatu
    [runId,tenantId,ids]);
   await client.query('COMMIT');
   return {id:runId,status:'scanning',percent:0,connectedChannels:verified.length,
+   partialChannels:available.rows.length>10,
    note:'Apenas o histórico de texto disponível nos números conectados. Conhecimento exige aprovação.'};
  }catch(err){await client.query('ROLLBACK').catch(()=>{});throw err;}
  finally{client.release();}
@@ -79,6 +80,9 @@ export async function autoTrainingStatus(pool,tenantId){
  return {id:run.id,status:run.status,percent,errorCode:run.error_code,
   channels:totalScans,scanned:finished,jobId:run.job_id,jobStatus:job?.status||null,
   partialCoverage:scans.rows.some(s=>s.partial_coverage||s.truncated_chats>0||s.status!=='completed'),
+  failedScans:scans.rows.filter(s=>['failed','cancelled'].includes(s.status)).length,
+  totalChats:scans.rows.reduce((n,s)=>n+Number(s.total_chats||0),0),
+  processedChats:scans.rows.reduce((n,s)=>n+Number(s.processed_chats||0),0),
   messagesImported:scans.rows.reduce((n,s)=>n+Number(s.imported_messages||0),0),
   source:'available_waakg_text',approvalRequired:true};
 }
@@ -98,25 +102,32 @@ export async function processNextAutoTraining(pool){
    if(scans.rows.length<run.scan_ids.length||scans.rows.some(s=>activeScan.has(s.status))){
     await client.query('COMMIT');return {processed:false,reason:'SCANNING'};
    }
-   const imported=await client.query(
-    "SELECT COUNT(*)::int AS n FROM imports WHERE tenant_id=$1",[run.tenant_id]);
-   if(!imported.rows[0].n){
+   if(scans.rows.some(s=>s.status!=='completed')){
     await client.query(
-     "UPDATE training_auto_runs SET status='failed',error_code='NO_TEXT_HISTORY',updated_at=now(),finished_at=now() WHERE id=$1",
-     [run.id]);
-    await client.query('COMMIT');return {processed:true,failed:true};
+     "UPDATE training_auto_runs SET status='failed',error_code='SCAN_INTERRUPTED',updated_at=now(),finished_at=now() WHERE id=$1 AND tenant_id=$2",
+     [run.id,run.tenant_id]);
+    await client.query('COMMIT');
+    return {processed:true,failed:true,errorCode:'SCAN_INTERRUPTED'};
    }
+   // The scan and its analysis job are committed atomically.
+   await client.query('SAVEPOINT auto_job');
    try{
-    const job=await createTrainingAnalysis(pool,run.tenant_id);
+    const job=await createTrainingAnalysisInClient(client,run.tenant_id,{scanIds:run.scan_ids});
     await client.query(
-     "UPDATE training_auto_runs SET status='analyzing',job_id=$2,updated_at=now() WHERE id=$1",
-     [run.id,job.id]);
-    await client.query('COMMIT');return {processed:true,stage:'ANALYZING',jobId:job.id};
+     "UPDATE training_auto_runs SET status='analyzing',job_id=$2,updated_at=now() WHERE id=$1 AND tenant_id=$3",
+     [run.id,job.id,run.tenant_id]);
+    await client.query('RELEASE SAVEPOINT auto_job');
+    await client.query('COMMIT');
+    return {processed:true,stage:'ANALYZING',jobId:job.id,source:job.source,
+     partialCoverage:job.partialCoverage};
    }catch(err){
+    await client.query('ROLLBACK TO SAVEPOINT auto_job');
+    const errorCode=err.status===422?'NO_TEXT_HISTORY':'ANALYSIS_NOT_STARTED';
     await client.query(
-     "UPDATE training_auto_runs SET status='failed',error_code='ANALYSIS_NOT_STARTED',updated_at=now(),finished_at=now() WHERE id=$1",
-     [run.id]);
-    await client.query('COMMIT');return {processed:true,failed:true};
+     "UPDATE training_auto_runs SET status='failed',error_code=$2,updated_at=now(),finished_at=now() WHERE id=$1 AND tenant_id=$3",
+     [run.id,errorCode,run.tenant_id]);
+    await client.query('COMMIT');
+    return {processed:true,failed:true,errorCode};
    }
   }
   const job=await client.query("SELECT status FROM training_jobs WHERE id=$1 AND tenant_id=$2",

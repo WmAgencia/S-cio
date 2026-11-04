@@ -128,3 +128,22 @@
 .socio-ops-indicator.configured{background:#f4a456}
 .socio-ops-indicator.action_required{background:#e58a69}
 @media(max-width:640px){.socio-ops-actions .btn{flex:1;min-width:130px}}
+
+/* Phase 2: human-reviewed Markdown, version history and grounded progress */
+.socio-draft-label{display:block;margin:16px 0 7px;font-size:12px;font-weight:700;color:#f1d8c1}
+.socio-training-editor{display:block;width:100%;min-height:260px;resize:vertical;
+ border:1px solid #84563b;background:#21150f;color:#f5e4d4;border-radius:12px;
+ padding:15px;white-space:pre-wrap;font:12px/1.7 ui-monospace,Consolas,monospace}
+.socio-training-editor:focus-visible{outline:2px solid #eda264;outline-offset:2px}
+.socio-training-editor:disabled{opacity:.68;cursor:not-allowed}
+.socio-training-buttons{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-top:12px}
+.socio-training-version-list{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.socio-training-version{display:flex;align-items:center;justify-content:space-between;gap:12px;
+ padding:13px;border:1px solid #70482f;border-radius:12px;background:#302016}
+.socio-training-version strong{font-size:12px;color:#f7ddc8;display:block}
+.socio-training-version small{display:block;font-size:11px;line-height:1.4;color:#cba88e;
+ margin-top:5px;overflow-wrap:anywhere}
+.socio-training-version>div{min-width:0;flex:1}
+.socio-training-version .btn{flex-shrink:0}
+@media(max-width:600px){.socio-training-version{align-items:flex-start;flex-direction:column}
+ .socio-training-version .btn{width:100%}}

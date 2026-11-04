@@ -41,6 +41,18 @@ test('Groq Markdown remains draft and identifies failed provider safely',async()
  });
  assert.equal(report.provider,'groq');
  assert.match(report.markdown,/Conhecimento revisado/);
+ assert.match(report.markdown,/Limites verificáveis/);
+ assert.match(report.markdown,/Intenção de compra não confirma venda/);
+});
+test('Groq-generated knowledge containing invented contacts is rejected before drafting',async()=>{
+ const clean='# Síntese agregada\nAmostras de linguagem e contagens sem clientes identificados.';
+ const invalid=await groqKnowledgeDraft({markdown:clean,report:{conversations:2},env,
+  fetchImpl:async()=>({ok:true,json:async()=>({choices:[{message:{
+   content:'# Versão insegura\nEnviar notificações para pessoa@empresa.exemplo e https://example.org com dados do cliente.'+
+    ' Exemplo não autorizado.'.repeat(10)
+  }}]})})});
+ assert.equal(invalid.provider,'deterministic_fallback');
+ assert.equal(invalid.markdown,clean);
 });
 test('WhatsApp QR UX can restart pending sessions and preserves real code requirement',()=>{
  const ui=source('public/socio-ux.js'),server=source('server.mjs');

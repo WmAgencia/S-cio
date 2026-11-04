@@ -68,7 +68,19 @@ export async function groqKnowledgeDraft({markdown,report,env=process.env,fetchI
     '\n\nBASE DETERMINÍSTICA:\n'+String(markdown).slice(0,13500)});
   if(!/^#\s+\S/m.test(result.reply)||result.reply.length<120)
    return {markdown,provider:'deterministic_fallback',model:null};
-  return {markdown:result.reply.slice(0,21000),provider:'groq',model:result.model};
+  // No identifiable customer material was sent to Groq. Reject any response
+  // that introduces contact details or external URLs regardless of origin.
+  const pii=/https?:\/\/\S+|[\w.+-]+@[\w.-]+\.[a-z]{2,}|\+?\d[\d(). -]{8,}\d/gi;
+  if(pii.test(result.reply))
+   return {markdown,provider:'deterministic_fallback',model:null};
+  const limits=[
+   '## Limites verificáveis',
+   '- A análise considera apenas os trechos anonimizados efetivamente disponíveis e pode ter cobertura parcial.',
+   '- Intenção de compra não confirma venda, faturamento ou conversão.',
+   '- Nenhuma regra é ativada até aprovação humana deste Markdown.'
+  ].join('\n');
+  return {markdown:(result.reply.slice(0,19000).trim()+'\n\n'+limits).slice(0,22000),
+   provider:'groq',model:result.model};
  }catch{
   // Fall back transparently, never claim Groq generated a result if it failed.
   return {markdown,provider:'deterministic_fallback',model:null};
