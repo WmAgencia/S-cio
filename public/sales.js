@@ -136,18 +136,18 @@
     }
     revision=null;linkToShare='';
     toast('Orçamento salvo como rascunho. Gere um link antes de enviar.');
-    await render({api,e,toast,view});
+    await render({api,e,toast,view,me});
    }catch(err){toast(err.message,true)}
   });
   $$('[data-sale-revise]').forEach(btn=>btn.addEventListener('click',()=>{
-   revision=btn.dataset.saleRevise;render({api,e,toast,view});
+   revision=btn.dataset.saleRevise;render({api,e,toast,view,me});
   }));
   $$('[data-sale-issue]').forEach(btn=>btn.addEventListener('click',async()=>{
    try{
     const info=await api('/api/sales/quotes/'+btn.dataset.saleIssue+'/issue','POST',{});
     linkToShare=location.origin+info.path;
     toast('Link de aprovação gerado. Envie manualmente ao cliente.');
-    await render({api,e,toast,view});
+    await render({api,e,toast,view,me});
    }catch(err){toast(err.message,true)}
   }));
   $$('[data-sale-cancel]').forEach(btn=>btn.addEventListener('click',async()=>{
@@ -155,7 +155,7 @@
    try{
     await api('/api/sales/quotes/'+btn.dataset.saleCancel+'/cancel','POST',{});
     if(revision===btn.dataset.saleCancel)revision=null;
-    linkToShare='';await render({api,e,toast,view});
+    linkToShare='';await render({api,e,toast,view,me});
    }catch(err){toast(err.message,true)}
   }));
   $('[data-quote-prepare]').forEach(btn=>btn.addEventListener('click',()=>{
