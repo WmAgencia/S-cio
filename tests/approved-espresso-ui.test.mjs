@@ -31,6 +31,7 @@ test('approved layout uses real tenant counts, three live chart filters and no f
  assert.match(js,/aria-label="QR Code disponível após iniciar a conexão"/);
  assert.match(js,/data-go="channels"/);
  assert.match(js,/data-go="training"/);
- assert.match(js,/data-go="agent"/);
+ assert.match(js,/aiRow\('user','Personalidade'/);
+ assert.match(js,/aiRow\('play','Testar IA'/);
  assert.doesNotMatch(js,/1\.984|28\.430|8\.430|1\.240 mensagens|Rafael Santos/);
 });
