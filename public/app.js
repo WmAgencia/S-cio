@@ -1224,10 +1224,34 @@ document.addEventListener('keydown',event=>{
 });
 initSidebarIcons();
 
+const loginPassword=$('#loginPassword'),togglePassword=$('#togglePassword'),capsWarning=$('#capsWarning');
+togglePassword.addEventListener('click',()=>{
+ const reveal=loginPassword.type==='password';
+ loginPassword.type=reveal?'text':'password';
+ togglePassword.textContent=reveal?'Ocultar':'Mostrar';
+ togglePassword.setAttribute('aria-pressed',String(reveal));
+ loginPassword.focus();
+});
+loginPassword.addEventListener('keyup',ev=>{
+ capsWarning.classList.toggle('hidden',!ev.getModifierState('CapsLock'));
+});
+loginPassword.addEventListener('blur',()=>capsWarning.classList.add('hidden'));
 $('#loginForm').addEventListener('submit',async ev=>{
  ev.preventDefault();$('#authError').textContent='';
- try{const data=await api('/api/login','POST',formValues(ev.currentTarget));state.csrf=data.csrf;await boot();}
- catch(err){$('#authError').textContent=errMsg(err);}
+ const form=ev.currentTarget,submit=$('#loginSubmit');
+ if(submit.disabled)return;
+ submit.disabled=true;submit.setAttribute('aria-busy','true');submit.textContent='Entrando com segurança…';
+ try{
+  const data=await api('/api/login','POST',formValues(form));
+  state.csrf=data.csrf;
+  await boot();
+ }catch(err){
+  $('#authError').textContent=errMsg(err);
+  $('#authError').focus();
+ }finally{
+  submit.disabled=false;submit.removeAttribute('aria-busy');
+  submit.innerHTML='Entrar no Sócio <span aria-hidden="true">→</span>';
+ }
 });
 $('#setupForm').addEventListener('submit',async ev=>{
  ev.preventDefault();$('#authError').textContent='';
