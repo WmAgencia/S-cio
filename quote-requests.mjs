@@ -156,10 +156,10 @@ export async function sendQuoteDraft(pool,tenant,requestId,userId,{env=process.e
   throw bad(409,'Assuma a conversa no WhatsApp antes de enviar o orçamento.');
  if(connection.provider!=='waakg'||connection.channel_status!=='connected'||!connection.session_id)
   throw bad(409,'Conecte um WhatsApp da empresa antes de enviar.');
- if(!/^\\d{5,24}$/.test(String(connection.customer_phone||'')))
+ if(!/^\d{5,24}$/.test(String(connection.customer_phone||'')))
   throw bad(422,'Número do cliente inválido para envio.');
  const session=await getSessionStatus(connection.session_id).catch(()=>null);
- if(!session?.connected||session.connectedNumber!==String(connection.linked_phone||'').replace(/\\D/g,''))
+ if(!session?.connected||session.connectedNumber!==String(connection.linked_phone||'').replace(/\D/g,''))
   throw bad(409,'A conexão WhatsApp não está verificada. Atualize a sessão antes de enviar.');
 
  const r=await pool.query(
