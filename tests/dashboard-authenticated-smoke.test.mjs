@@ -24,7 +24,7 @@ test('authenticated Sócio boot renders lavender dashboard and never stays blank
   return nodes.get(key);
  };
  const names=['overview','inbox','channels','products','training','team','admin'];
- const nav=names.map(name=>({...make('nav:'+name),dataset:{view:name},querySelector:()=>make('symbol:'+name)} }));
+ const nav=names.map(name=>({ ...make('nav:'+name), dataset:{view:name}, querySelector:()=>make('symbol:'+name) }));
  const doc={
   querySelector:sel=>make(sel.replace(/^#/,'id:')),
   querySelectorAll:sel=>sel.includes('.nav-item')?nav:[],
