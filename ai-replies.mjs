@@ -31,7 +31,7 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
  // Only the LAST inbound message in an explicitly activated conversation.
  // Ignore historical messages imported before AI takeover.
  const found=await pool.query(
-  "SELECT m.id AS inbound_id,m.body,m.created_at,m.conversation_id,m.tenant_id,t.name AS tenant_name,"+
+  "SELECT m.id AS inbound_id,m.body,m.created_at,m.conversation_id,m.tenant_id,t.name AS tenant_name,t.features AS tenant_features,"+
   "ag.name AS agent_name,ag.tone,ag.instructions,ag.knowledge_md "+
   "FROM messages m JOIN conversation_ui_state st ON st.tenant_id=m.tenant_id AND st.conversation_id=m.conversation_id "+
   "JOIN agents ag ON ag.tenant_id=m.tenant_id AND ag.enabled=true "+
@@ -72,6 +72,7 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
    pool.query("SELECT direction,body FROM messages WHERE tenant_id=$1 AND conversation_id=$2 "+
     "AND direction IN ('inbound','outbound') ORDER BY created_at DESC LIMIT 18",
     [m.tenant_id,m.conversation_id]),
+   m.tenant_features?.catalog===false?Promise.resolve({rows:[]}):
    pool.query("SELECT name,price_cents,stock_quantity FROM products WHERE tenant_id=$1 AND active=true ORDER BY created_at DESC LIMIT 40",
     [m.tenant_id])
   ]);
