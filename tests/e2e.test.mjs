@@ -81,9 +81,17 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(lavenderCSS.status,200,'Lavender stylesheet must be served in production');
  assert.match(lavenderCSS.headers.get('content-type')||'',/text\/css/);
  assert.match(await lavenderCSS.text(),/\.lucid-dashboard/);
+ const approvedCSS=await fetch(base+'/ember-theme.css');
+ assert.equal(approvedCSS.status,200,'Approved espresso theme must be served');
+ assert.match(approvedCSS.headers.get('content-type')||'',/text\/css/);
+ assert.match(await approvedCSS.text(),/\.ember-dashboard/);
  const loginPage=await fetch(base+'/');
  assert.equal(loginPage.status,200);
- assert.match(await loginPage.text(),/href="\/cloud-theme\.css"/);
+ const pageHtml=await loginPage.text();
+ assert.match(pageHtml,/href="\/cloud-theme\.css"/);
+ assert.match(pageHtml,/href="\/ember-theme\.css"/);
+ assert.ok(pageHtml.indexOf('/ember-theme.css')>pageHtml.indexOf('/cloud-theme.css'));
+
 
  async function call(path,method='GET',data,cookie='',csrf=''){
   const headers={Origin:base};
@@ -105,6 +113,12 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const dailyActivity=await call('/api/dashboard/activity?range=1m','GET',undefined,adminCookie);
  assert.equal(dailyActivity.status,200);
  assert.equal(dailyActivity.result.points.length,30,'Last-month filter returns real daily buckets');
+ const lastWeekActivity=await call('/api/dashboard/activity?range=7d','GET',undefined,adminCookie);
+ assert.equal(lastWeekActivity.status,200);
+ assert.equal(lastWeekActivity.result.points.length,7,'Approved UI 7-day filter shows 7 real daily buckets');
+ const lastNinetyDays=await call('/api/dashboard/activity?range=90d','GET',undefined,adminCookie);
+ assert.equal(lastNinetyDays.status,200);
+ assert.equal(lastNinetyDays.result.points.length,90,'Approved UI 90-day filter shows 90 real daily buckets');
  const badRange=await call('/api/dashboard/activity?range=decades','GET',undefined,adminCookie);
  assert.equal(badRange.status,400,'User input cannot enter SQL date interval');
  const anonymousActivity=await call('/api/dashboard/activity?range=6m');
