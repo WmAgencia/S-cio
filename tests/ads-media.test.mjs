@@ -10,6 +10,8 @@ import {handleAdsMediaMcp} from '../ads-media-mcp.mjs';
 import {readFile} from 'node:fs/promises';
 const env={NODE_ENV:'test',SOCIO_STORAGE_DRIVER:'memory',CHANNEL_ENCRYPTION_KEY:'socio-video-strong-secret-for-tests-0123456789abcdef',
  SOCIO_PUBLIC_URL:'https://socio-test.example.com'};
+process.env.SOCIO_PUBLIC_URL=env.SOCIO_PUBLIC_URL;
+process.env.CHANNEL_ENCRYPTION_KEY=env.CHANNEL_ENCRYPTION_KEY;
 const T='8a3179c7-9174-4c34-ae3f-038a1081727b',USER='82d4ab34-b3fe-4b0a-80ba-82f02096f16b',OTHER='2af90123-8ab7-40db-9471-2d1f225511d9';
 const actor={active_tenant_id:T,user_id:USER,role:'owner',phone:'+5515987654321'};
 class Pool {
