@@ -37,6 +37,8 @@ Base desta rodada: `45b868075dbd1c09c56d6f74a167a27a1b3f63fd` (PR #41). Ambiente
 - `npm audit --omit=dev`: nenhuma vulnerabilidade conhecida nas dependências resolvidas.
 - `git diff --check` e verificação de sintaxe dos arquivos JavaScript.
 
+Uma execução paralela do CI identificou também uma corrida na limpeza do banco descartável dos testes. O encerramento agora aguarda o processo da aplicação e as conexões antes de excluir a base, sem derrubar conexões à força.
+
 As integrações de envio e pagamento são verificadas com fixtures. Nenhuma compra ou mensagem para clientes é necessária para estes testes. A publicação segue PR e CI, seguida de verificação do healthcheck e do conteúdo servido no domínio existente.
 
 ## Melhorias que continuam exigindo evolução estrutural

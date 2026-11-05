@@ -48,8 +48,21 @@ test('audit regressions against isolated PostgreSQL',
  await admin.query('CREATE DATABASE '+name);
  const pool=new Pool({connectionString:url.href});let app;
  t.after(async()=>{
-  if(app&&app.exitCode===null){app.kill();await new Promise(resolve=>{app.once('exit',resolve);setTimeout(resolve,2000).unref();});}
-  await pool.end();await admin.query('DROP DATABASE '+name+' WITH (FORCE)');await admin.end();
+  if(app&&app.exitCode===null&&app.signalCode===null)await new Promise(resolve=>{
+   const timer=setTimeout(()=>app.kill('SIGKILL'),2000);
+   app.once('exit',()=>{clearTimeout(timer);resolve();});
+   app.kill('SIGTERM');
+  });
+  await pool.end();
+  // A forced drop could terminate an idle socket while pg was still completing
+  // its close, producing a race-dependent uncaught error in parallel CI runs.
+  // Close the app and pool first, then let PostgreSQL verify there are no users.
+  try{
+   for(let attempt=0;;attempt++){
+    try{await admin.query('DROP DATABASE '+name);break;}
+    catch(error){if(error.code!=='55006'||attempt>=10)throw error;await new Promise(r=>setTimeout(r,50));}
+   }
+  }finally{await admin.end();}
  });
  await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
  const tenant=randomUUID(),user=randomUUID(),channel=randomUUID(),conversation=randomUUID(),product=randomUUID();
