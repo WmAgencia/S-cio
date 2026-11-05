@@ -86,7 +86,12 @@ async function spoolVideo(source){
    if(size>MAX_AD_VIDEO_BYTES)throw err(413,'Vídeo maior que 90 MB.');
    if(head.length<12)head=Buffer.concat([head,chunk.subarray(0,12-head.length)]);
    hash.update(chunk);
-   await handle.write(chunk);
+   let pos=0;
+   while(pos<chunk.length){
+    const {bytesWritten}=await handle.write(chunk,pos,chunk.length-pos);
+    if(bytesWritten<=0)throw err(503,'Falha de gravação do arquivo.');
+    pos+=bytesWritten;
+   }
   }
  }catch(e){await handle.close();await unlink(file).catch(()=>{});throw e;}
  await handle.close();
@@ -163,7 +168,7 @@ export async function serveSignedVideo(pool,id,expiry,signature,req,res,env=proc
  }
  const headers={'Content-Type':row.content_type,'Content-Length':String(end-start+1),
   'Cache-Control':'private,no-store','Accept-Ranges':'bytes','X-Robots-Tag':'noindex,nofollow',
-  'Content-Disposition':'inline; filename="anuncio.mp4"','X-Content-Type-Options':'nosniff'};
+  'Content-Disposition':row.content_type==='video/quicktime'?'inline; filename="anuncio.mov"':'inline; filename="anuncio.mp4"','X-Content-Type-Options':'nosniff'};
  if(partial)headers['Content-Range']='bytes '+start+'-'+end+'/'+size;
  if(req.method==='HEAD'){res.writeHead(partial?206:200,headers);return res.end();}
  if(env.NODE_ENV==='test'&&env.SOCIO_STORAGE_DRIVER==='memory'){
