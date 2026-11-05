@@ -28,7 +28,7 @@ function send(res,status,payload,extra={}){
 function html(res,status,markup){
  res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store',
   'Content-Security-Policy':"default-src 'none'; form-action 'self'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
-  'Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','X-Content-Type-Options':'nosniff'});
+  'Referrer-Policy':'same-origin','X-Frame-Options':'DENY','X-Content-Type-Options':'nosniff'});
  res.end(markup);
 }
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));

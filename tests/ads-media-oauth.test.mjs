@@ -102,8 +102,14 @@ test('OAuth end-to-end com PKCE, login consentido, token e rotação de refresh'
  const page=await oauth(db,'GET','/oauth/authorize?'+q.toString());
  assert.equal(page.statusCode,200);
  assert.ok(page.text.includes('Conectar vídeos ao ChatGPT'));
+ assert.equal(page.headers['Referrer-Policy'],'same-origin',
+  'authorization form must preserve its same-origin POST Origin in browsers');
  const hidden=[...page.text.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)];
  const form=new URLSearchParams(hidden.map(m=>[m[1],m[2]]));form.set('decision','approve');
+ for(const headers of [{origin:'null'},{origin:'https://evil.example'},{'sec-fetch-site':'cross-site'}]){
+  await assert.rejects(oauth(db,'POST','/oauth/authorize',form.toString(),headers),
+   /OAuth request origin invalid/);
+ }
  const grant=await oauth(db,'POST','/oauth/authorize',form.toString());
  assert.equal(grant.statusCode,303);
  const redirect=new URL(grant.headers.Location);
