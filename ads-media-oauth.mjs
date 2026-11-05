@@ -75,7 +75,7 @@ function requestSignature(v,time,nonce,env){
  const secret=env.CHANNEL_ENCRYPTION_KEY;
  if(typeof secret!=='string'||secret.length<32)throw error(503,'OAuth signing secret unavailable');
  return createHmac('sha256',secret).update(JSON.stringify([v.client_id,v.redirect_uri,v.code_challenge,v.code_challenge_method,
-  v.scope,v.state,v.resource,v.response_type,time,nonce])).digest('hex');
+  v.scope,v.state,v.resource,v.response_type,String(time),String(nonce)])).digest('hex');
 }
 function userCanAuthorize(a){
  return !!a&&a.tenant_status!=='paused'&&(a.platform_owner===true||['owner','admin'].includes(a.role))&&
