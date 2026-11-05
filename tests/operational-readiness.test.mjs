@@ -52,6 +52,7 @@ test('Readiness is honest when no WhatsApp is linked and no Groq key exists',asy
  assert.equal(result.numbers.verified,0);
  assert.equal(result.groq.configured,false);
  assert.equal(result.flags.aiAutomationConfigured,false);
+ assert.equal(result.flags.incrementalSyncConfigured,true,'Live sync is enabled unless explicitly disabled, matching the worker');
  assert(result.checks.every(x=>x.status==='action_required'));
 });
 test('Groq automatic replies never include staff-only notes in selected history',async()=>{

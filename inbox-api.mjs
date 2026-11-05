@@ -109,6 +109,7 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
    const remote=await gatewayRead('/api/messages/'+encodeURIComponent(sessionId)+'/search?'+params.toString());
    if(!Array.isArray(remote.data))throw err(503,'Gateway retornou mensagens inválidas.');
    const normalized=normalizeInboxRemoteText(remote.data,jid);
+   if(!normalized.length)continue;
    const client=await pool.connect();
    try{
     await client.query('BEGIN');
@@ -129,8 +130,8 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
      messagesImported+=inserted.rowCount;
     }
     if(normalized.length){
-     await client.query(`UPDATE conversations SET last_message_at=GREATEST(
-       last_message_at,(SELECT MAX(created_at) FROM messages WHERE tenant_id=$1 AND conversation_id=$2))
+     await client.query(`UPDATE conversations SET last_message_at=COALESCE(
+       (SELECT MAX(created_at) FROM messages WHERE tenant_id=$1 AND conversation_id=$2),last_message_at)
        WHERE tenant_id=$1 AND id=$2`,[tenant,conversationId]);
     }
     await client.query('COMMIT');chatsImported++;
@@ -156,10 +157,10 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
      COALESCE(st.marked_unread,false) AS marked_unread,
      COALESCE(st.draft,'') AS draft,COALESCE(st.labels,ARRAY[]::text[]) AS labels,
      COALESCE(st.handling_mode,'human') AS handling_mode,st.assigned_user_id,
-     (COALESCE(st.marked_unread,false) OR (st.last_read_at IS NOT NULL AND EXISTS (
+     (COALESCE(st.marked_unread,false) OR EXISTS (
       SELECT 1 FROM messages mi WHERE mi.tenant_id=$1 AND mi.conversation_id=c.id
-       AND mi.direction='inbound' AND mi.created_at>st.last_read_at
-     ))) AS unread,
+       AND mi.direction='inbound' AND mi.created_at>COALESCE(st.last_read_at,'-infinity'::timestamptz)
+     )) AS unread,
      COALESCE((
       SELECT m.body FROM messages m WHERE m.tenant_id=$1 AND m.conversation_id=c.id
        ORDER BY m.created_at DESC,m.id DESC LIMIT 1
@@ -174,10 +175,10 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
     AND ($3='archived' OR COALESCE(st.archived,false)=false)
     AND ($3<>'archived' OR COALESCE(st.archived,false)=true)
     AND ($3<>'unread' OR COALESCE(st.marked_unread,false) OR
-      (st.last_read_at IS NOT NULL AND EXISTS(
+      EXISTS(
        SELECT 1 FROM messages um WHERE um.tenant_id=$1 AND um.conversation_id=c.id
-        AND um.direction='inbound' AND um.created_at>st.last_read_at
-      )))
+        AND um.direction='inbound' AND um.created_at>COALESCE(st.last_read_at,'-infinity'::timestamptz)
+      ))
     AND ($3<>'favorites' OR COALESCE(st.favorite,false))
     AND ($3<>'pinned' OR COALESCE(st.pinned,false))
     AND ($3<>'human' OR COALESCE(st.handling_mode,'human')='human')
@@ -231,7 +232,7 @@ export async function handleInboxApi({pathname,method,req,res,a,query,body,json,
   if(Object.hasOwn(clean,'assigned_user_id')){
    if(!['owner','admin'].includes(a.role)&&!a.platform_owner)throw err(403,'Sem permissão para atribuir conversas.');
    if(clean.assigned_user_id!==null){
-    const user=await query('SELECT id FROM users WHERE id=$1 AND tenant_id=$2',[clean.assigned_user_id,tenant]);
+    const user=await query('SELECT id FROM users WHERE id=$1 AND tenant_id=$2 AND active=true',[clean.assigned_user_id,tenant]);
     if(!user.rowCount)throw err(422,'Colaborador não pertence à empresa.');
    }
   }

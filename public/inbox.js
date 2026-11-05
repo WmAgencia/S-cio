@@ -8,6 +8,9 @@
   let reply=null,menuId=null,pointer=null,longTimer=null,refreshTimer=null,searchTimer=null,draftTimer=null;
   let infoOpen=false,helpOpen=false,menuAt=null,team=null,lock=false,disposed=false,lastFetch=0,syncing=false,cancelSync=false,suppressClick=false,noteMode=false,sendKey=null,sendFingerprint=null;
   let prefs={fontScale:'normal',contrast:'normal',compact:false};
+  const draftWrites=new Map();
+  const draftDirty=new Set();
+  let listRequest=0;
   try{const saved=JSON.parse(localStorage.getItem('socio-inbox-accessibility')||'{}');
    if(saved.fontScale==='large')prefs.fontScale='large';
    if(saved.contrast==='high')prefs.contrast='high';
@@ -36,6 +39,7 @@
    searchTimer=draftTimer=longTimer=refreshTimer=null;
   }
   function cleanup(){
+   if(active)void saveDraft(active).catch(()=>{});
    clearTimers();disposed=true;pointer=null;menuId=null;active=null;thread=null;selected.clear();
   }
   function layout(){
@@ -250,14 +254,18 @@
    if(action==='ai-suggest'){await suggestion(msg.body);return;}
   }
   async function setPref(patch,{silent=false}={}){
-   if(!active)return;
-   const result=await api('/api/conversations/'+active+'/ui','PATCH',patch);
-   const c=current();if(c){
+   const conversationId=active;
+   if(!conversationId)return;
+   const result=await api('/api/conversations/'+conversationId+'/ui','PATCH',patch);
+   const c=conversations.find(c=>c.id===conversationId);if(c){
+    const localDraft=c.draft;
     Object.assign(c,result.preferences);
+    if(!Object.hasOwn(patch,'draft'))c.draft=localDraft;
     if(Object.hasOwn(patch,'read'))c.unread=false;
     if(Object.hasOwn(patch,'marked_unread'))c.unread=patch.marked_unread;
    }
-   if(thread)thread.preferences=result.preferences;
+   if(disposed||active!==conversationId)return;
+   if(thread)thread.preferences={...result.preferences,draft:c?.draft??result.preferences.draft};
    if(!silent)toast('Preferências salvas.');
    renderList();
    if(Object.hasOwn(patch,'handling_mode')){
@@ -265,26 +273,39 @@
     await refreshList();
    }
   }
-  async function saveDraft(){
-   const input=byId('inboxDraft');if(!input||!active)return;
-   const value=input.value.slice(0,3000),c=current();if(c)c.draft=value;
-   await setPref({draft:value},{silent:true});
+  async function saveDraft(conversationId=active,value){
+   if(!conversationId)return;
+   const c=conversations.find(c=>c.id===conversationId);
+   value=String(value??c?.draft??'').slice(0,3000);
+   // Queue writes per chat so an old autosave cannot overwrite a cleared draft.
+   const pending=(draftWrites.get(conversationId)||Promise.resolve()).catch(()=>{}).then(()=>
+    api('/api/conversations/'+conversationId+'/ui','PATCH',{draft:value})).then(result=>{
+     const currentDraft=conversations.find(c=>c.id===conversationId);
+     if(currentDraft?.draft===value)draftDirty.delete(conversationId);
+     return result;
+    });
+   draftWrites.set(conversationId,pending);
+   const done=()=>{if(draftWrites.get(conversationId)===pending)draftWrites.delete(conversationId);};
+   pending.then(done,done);return pending;
   }
   async function submitNote(){
    const input=byId('inboxDraft');if(!input||lock)return;
    const text=input.value.trim();if(!text){input.focus();return;}
-   lock=true;
+   const conversationId=active;
+   clearTimeout(draftTimer);
+   lock=true;input.disabled=true;
    try{
-    const result=await api('/api/conversations/'+active+'/notes','POST',
+    const result=await api('/api/conversations/'+conversationId+'/notes','POST',
       {text,replyToMessageId:reply?.id||null});
+    await saveDraft(conversationId,'').catch(()=>toast('Nota salva; não foi possível limpar o rascunho.',true));
+    if(disposed||active!==conversationId)return;
     thread.messages.push({...result.message,starred:false,reaction:null});
     reply=null;const c=current();if(c)c.draft='';
     renderMessageList();renderComposer();renderSelected();
-    await setPref({draft:''},{silent:true});
     announce('Nota interna salva; nenhuma mensagem foi enviada ao WhatsApp.');
     toast('Nota interna registrada. Não enviada ao cliente.');
    }catch(error){toast(error.message,true);}
-   finally{lock=false;}
+   finally{lock=false;input.disabled=false;}
   }
   async function submitComposer(){
    const enabled=current()?.channel_provider==='instagram'?thread?.capabilities?.instagramSend:thread?.capabilities?.whatsappSend;
@@ -293,24 +314,27 @@
    const input=byId('inboxDraft');
    if(!input||lock)return;
    const text=input.value.trim();if(!text)return input.focus();
+   const conversationId=active;
+   clearTimeout(draftTimer);
    if(!sendKey||sendFingerprint!==text){
     sendKey=crypto.randomUUID();sendFingerprint=text;
    }
-   lock=true;
+   lock=true;input.disabled=true;
    try{
-    const result=await api('/api/conversations/'+active+'/send','POST',
+    const result=await api('/api/conversations/'+conversationId+'/send','POST',
      {text,clientRequestId:sendKey,replyToMessageId:reply?.id||null});
     if(!result.sent){
      toast('Envio ainda não confirmado. Confira a situação antes de reenviar.',true);return;
     }
+    await saveDraft(conversationId,'').catch(()=>toast('Mensagem enviada; não foi possível limpar o rascunho.',true));
+    if(disposed||active!==conversationId)return;
     reply=null;sendKey=null;sendFingerprint=null;
     const c=current();if(c)c.draft='';
-    await setPref({draft:''},{silent:true});
-    await open(active,{background:true});
+    await open(conversationId,{background:true});
     announce('A plataforma recebeu a mensagem; a entrega ao destinatário pode ocorrer depois.');
     toast(current()?.channel_provider==='instagram'?'Instagram aceitou a resposta.':'Mensagem aceita pelo gateway WhatsApp.');
    }catch(error){toast(error.message,true);}
-   finally{lock=false;}
+   finally{lock=false;input.disabled=false;}
   }
   async function suggestion(input){
    const text=String(input||'').trim();
@@ -389,8 +413,10 @@
   }
   async function loadMore(){
    if(!thread?.hasMore||!thread.nextCursor)return;
+   const conversationId=active,previousThread=thread;
    const el=byId('inboxMessageList'),top=el?.scrollHeight||0;
-   const result=await api('/api/conversations/'+active+'/history?limit=80&before='+encodeURIComponent(thread.nextCursor));
+   const result=await api('/api/conversations/'+conversationId+'/history?limit=80&before='+encodeURIComponent(thread.nextCursor));
+   if(disposed||active!==conversationId||thread!==previousThread)return;
    thread.messages=[...result.messages,...thread.messages];
    thread.hasMore=result.hasMore;thread.nextCursor=result.nextCursor;
    renderMessageList({keepScroll:true});
@@ -398,7 +424,9 @@
   }
   async function open(id,{background=false}={}){
    if(!cleanId(id)||disposed)return;
+   if(lock&&!background){toast('Aguarde a conclusão do envio antes de trocar de conversa.');return;}
    const same=active===id;
+   if(!same&&active){clearTimeout(draftTimer);void saveDraft(active).catch(()=>{});}
    if(!same){selected.clear();reply=null;infoOpen=false;filterMessages='';noteMode=false;sendKey=null;sendFingerprint=null;closeMenu();}
    active=id;
    const item=current();if(!item)return;
@@ -485,10 +513,12 @@
   }
   async function refreshList({quiet=false}={}){
    if(disposed)return;
+   const request=++listRequest;
    const q=new URLSearchParams({filter,search});
    const result=await api('/api/inbox/v2?'+q);
-   if(disposed)return;
-   conversations=result.conversations||[];
+   if(disposed||request!==listRequest)return;
+   const old=new Map(conversations.map(c=>[c.id,c]));
+   conversations=(result.conversations||[]).map(c=>draftDirty.has(c.id)&&old.has(c.id)?{...c,draft:old.get(c.id).draft}:c);
    renderList();
    if(!quiet&&active&&!conversations.some(c=>c.id===active)){
     active=null;thread=null;
@@ -500,10 +530,12 @@
   async function poll(){
    if(disposed||document.hidden||!wrap()||lock||!active||Date.now()-lastFetch<9500)return;
    const previous=thread?.messages?.at(-1)?.id;
+   const conversationId=active,previousThread=thread;
    try{
     await refreshList({quiet:true});
-    if(!active||!wrap())return;
-    const next=await api('/api/conversations/'+active+'/history?limit=80');
+    if(disposed||active!==conversationId||!wrap())return;
+    const next=await api('/api/conversations/'+conversationId+'/history?limit=80');
+    if(disposed||active!==conversationId||thread!==previousThread)return;
     const latest=next.messages.at(-1)?.id;
     if(latest!==previous){
      const c=current();if(c?.draft)next.preferences.draft=c.draft;
@@ -629,7 +661,9 @@
    if(ev.target.id==='inboxDraft'){
     sendKey=null;sendFingerprint=null;
     const c=current();if(c)c.draft=ev.target.value.slice(0,3000);
-    clearTimeout(draftTimer);draftTimer=setTimeout(()=>saveDraft().catch(()=>{}),750);
+    if(active)draftDirty.add(active);
+    const conversationId=active,value=ev.target.value.slice(0,3000);
+    clearTimeout(draftTimer);draftTimer=setTimeout(()=>saveDraft(conversationId,value).catch(()=>{}),750);
    }
   }
   function onChange(ev){

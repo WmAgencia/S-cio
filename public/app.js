@@ -7,6 +7,8 @@ const featureView={inbox:'whatsapp',products:'catalog',sales:'quotes',quotes:'qu
 const featureKeys=Object.keys(featureLabels);
 const featuresEnabled=()=>state.me?.tenant?.features||{};
 const featureAvailable=key=>featuresEnabled()[key]!==false;
+const ownAccountAvailable=()=>!!state.me?.user?.platformOwner||(state.me?.user?.permissions||[]).includes('account.manage');
+const viewAvailable=key=>!featureView[key]||featureAvailable(featureView[key])||key==='team'&&ownAccountAvailable();
 const titles={overview:'Visão geral',reports:'Relatórios',inbox:'WhatsApp',marketing:'Meta Ads',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas',quotes:'Orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
@@ -127,13 +129,15 @@ async function boot(){
    }
    for(const [section,feature] of Object.entries(featureView)){
     const nav=document.querySelector('.nav-item[data-view="'+section+'"]');
-    if(nav)nav.classList.toggle('hidden',!featureAvailable(feature)||
+    if(nav)nav.classList.toggle('hidden',!viewAvailable(section)||
      (section==='training'&&!access.has('training.manage'))||
      ((section==='sales'||section==='quotes')&&!access.has('sales.read'))||
      (section==='marketing'&&!access.has('marketing.read')));
    }
-   $('#teamNav')?.classList.toggle('hidden',!featureAvailable('team')||
-    (!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner));
+   $('#teamNav')?.classList.toggle('hidden',!ownAccountAvailable());
+   const accountNav=$('#teamNav'),accountLabel=featureAvailable('team')&&access.has('team.read')?'Equipe':'Minha conta';
+   if(accountNav?.lastChild?.nodeType===3)accountNav.lastChild.textContent=' '+accountLabel;
+   if(accountNav){accountNav.title=accountLabel;accountNav.setAttribute('aria-label',accountLabel);}
    const marketingStatus=typeof location==='object'?new URL(location.href).searchParams.get('marketing'):null;
    const marketingProvider=typeof location==='object'?new URL(location.href).searchParams.get('provider'):null;
    if(['authorized','failed','cancelled'].includes(marketingStatus)){
@@ -180,7 +184,7 @@ async function changeView(next,conversationId=null){
  else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
  if(next==='admin'&&!state.me?.user.platformOwner)return;
- if(featureView[next]&&!featureAvailable(featureView[next]))next='overview';
+ if(!viewAvailable(next))next='overview';
  const access=new Set(state.me?.user?.permissions||[]);
  if(next==='training'&&!access.has('training.manage'))next='overview';
  if((next==='sales'||next==='quotes')&&!access.has('sales.read'))next='overview';
@@ -277,7 +281,9 @@ function emberIcon(kind){
 }
 async function overview(){
  const [d,trend,recent,links]=await Promise.all([
-  api('/api/dashboard'),api('/api/dashboard/activity?range=1m'),api('/api/inbox'),api('/api/waakg/channels')
+  api('/api/dashboard'),api('/api/dashboard/activity?range=1m'),
+  featureAvailable('whatsapp')?api('/api/inbox'):Promise.resolve([]),
+  featureAvailable('whatsapp')?api('/api/waakg/channels'):Promise.resolve([])
  ]);
  state.dashboard=d;
  const openCount=chartNumber(d.openConversations);
@@ -376,6 +382,12 @@ async function overview(){
   '</div>'+
  '</div>';
  bindNavWithin();
+ if(!featureAvailable('whatsapp')){
+  view.querySelector('.socio-dashboard-whatsapp')?.classList.add('hidden');
+  view.querySelector('.ember-recent-card')?.classList.add('hidden');
+ }
+ if(!featureAvailable('ai')||!(state.me.user.permissions||[]).includes('training.manage'))
+  view.querySelector('.ember-ai-card')?.classList.add('hidden');
  $('#dashboardConnectWhatsApp')?.addEventListener('click',()=>window.SocioUX.openQr({
   api,toast,canManage:state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role),
   onConnected:()=>state.view==='overview'?overview():Promise.resolve()
@@ -865,7 +877,7 @@ async function training(){
     (!connected.length||ongoing||!canManage?'disabled':'')+'>Treinar</button>'+
    (ongoing&&canManage?'<button type="button" class="btn soft" id="cancelAutoTraining">Cancelar treinamento</button>':'')+
    '<div class="socio-train-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+percent+'" aria-label="Progresso da análise">'+
-    '<div class="progress-track"><div class="progress-fill" style="width:'+percent+'%"></div></div></div>'+
+    '<div class="progress-track"><div class="progress-fill"></div></div></div>'+
    '<strong class="socio-train-percent">'+percentText+' analisado</strong>'+
    '<p class="form-note" role="status">'+e(status)+'</p>'+
    (run?.messagesImported?'<p class="form-note">'+e(run.messagesImported)+' mensagens de texto novas importadas neste treinamento.</p>':'')+
@@ -890,6 +902,7 @@ async function training(){
     (canManage?'<button type="button" class="btn soft" data-restore-version="'+e(v.id)+'">Restaurar</button>':'')+'</div>').join('')+
    '</section>':'')+
  '</div>';
+ const progress=view.querySelector('.progress-fill');if(progress)progress.style.width=percent+'%';
  $('#startAutoTraining')?.addEventListener('click',()=>action(async()=>{
   const btn=$('#startAutoTraining');if(btn)btn.disabled=true;
   await api('/api/training/auto','POST',{});
@@ -1051,12 +1064,13 @@ async function openThread(convId){
 }
 async function team(){
  const permissions=new Set(state.me?.user?.permissions||[]);
- const mayView=permissions.has('team.read'),mayInvite=permissions.has('team.invite'),
+ const ownAccountOnly=!featureAvailable('team')||state.me?.tenant?.status==='paused';
+ const mayView=!ownAccountOnly&&permissions.has('team.read'),mayInvite=!ownAccountOnly&&permissions.has('team.invite'),
   mayManage=permissions.has('team.manage'),mayPromote=permissions.has('team.promote');
  const [people,auditData,integrity]=await Promise.all([
   mayView?api('/api/team'):Promise.resolve([]),
-  permissions.has('audit.read')?api('/api/ops/audit?limit=35'):Promise.resolve({events:[]}),
-  permissions.has('audit.read')?api('/api/ops/tenant-integrity'):Promise.resolve(null)
+  !ownAccountOnly&&permissions.has('audit.read')?api('/api/ops/audit?limit=35'):Promise.resolve({events:[]}),
+  !ownAccountOnly&&permissions.has('audit.read')?api('/api/ops/tenant-integrity'):Promise.resolve(null)
  ]);
  const roleLabel=role=>role==='owner'?'Proprietário':role==='admin'?'Administrador':'Atendente';
  const members=mayView?'<section class="card card-pad"><div class="section-title">Pessoas da empresa</div>'+
@@ -1083,7 +1097,7 @@ async function team(){
   '<label>Senha inicial (mínimo 12 caracteres)<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>'+
   '<button type="submit" class="btn primary">Cadastrar colaborador</button>'+
   '<p class="form-note">Informe a senha inicial por um canal seguro; o colaborador poderá trocá-la em Minha conta.</p></form></section>':'';
- const log=permissions.has('audit.read')?
+ const log=!ownAccountOnly&&permissions.has('audit.read')?
   '<section class="card card-pad"><div class="section-title">Auditoria da empresa</div>'+
   '<p class="form-note">Histórico de alterações de acesso, treinamento, catálogo e atendimento, sem mostrar segredos ou senhas.</p>'+
   (auditData.events.length?'<div class="socio-audit-list">'+auditData.events.map(item=>
@@ -1321,12 +1335,12 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  key!=='agent'&&key!=='channels'&&(!featureView[key]||featureAvailable(featureView[key]))&&
+  key!=='agent'&&key!=='channels'&&viewAvailable(key)&&
   (key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&
   (key!=='reports'||(state.me?.user?.permissions||[]).includes('audit.read'))&&
   (!['sales','quotes'].includes(key)||(state.me?.user?.permissions||[]).includes('sales.read'))&&
   (key!=='training'||(state.me?.user?.permissions||[]).includes('training.manage'))&&
-  (key!=='team'||(state.me?.user?.permissions||[]).includes('team.read'))&&
+  (key!=='team'||ownAccountAvailable())&&
   (key!=='admin'||state.me?.user.platformOwner)&&
   (label.toLocaleLowerCase('pt-BR').includes(keyword)||key.includes(keyword)));
  const list=$('#commandList');

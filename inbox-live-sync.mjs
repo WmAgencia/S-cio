@@ -43,6 +43,7 @@ export async function processLiveInboxSync(pool,{
    if(!Array.isArray(data))continue;
   }catch{continue;}
   const messages=normalizeInboxRemoteText(data,jid),name=String(list.names?.[jid]||'').slice(0,100);
+  if(!messages.length)continue;
   const client=await pool.connect();
   try{
    await client.query('BEGIN');
@@ -61,8 +62,8 @@ export async function processLiveInboxSync(pool,{
     imported+=result.rowCount;
    }
    if(messages.length)await client.query(
-    "UPDATE conversations SET last_message_at=GREATEST(last_message_at, "+
-    "(SELECT MAX(created_at) FROM messages WHERE tenant_id=$1 AND conversation_id=$2)) "+
+    "UPDATE conversations SET last_message_at=COALESCE("+
+    "(SELECT MAX(created_at) FROM messages WHERE tenant_id=$1 AND conversation_id=$2),last_message_at) "+
     "WHERE tenant_id=$1 AND id=$2",[c.tenant_id,conversationId]);
    await client.query('COMMIT');scanned++;
   }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}

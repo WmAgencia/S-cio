@@ -44,7 +44,7 @@ export async function deliverToConversation(pool,{tenantId,conversationId,userId
  if(!uuid.test(conversationId)||!uuid.test(clientRequestId)||!['human','ai'].includes(mode)||
     (replyToId!==null&&!uuid.test(replyToId)))throw bad(422,'Identificador inválido.');
  const body=textPayload(text);
- const record=await pool.query(
+ const loadConversation=()=>pool.query(
   "SELECT c.id,c.customer_phone,c.status,l.session_id,ch.phone AS linked_phone,"+
   "COALESCE(st.handling_mode,'human') AS handling_mode,ag.enabled AS agent_enabled "+
   "FROM conversations c JOIN channels ch ON ch.id=c.channel_id AND ch.tenant_id=c.tenant_id "+
@@ -52,9 +52,20 @@ export async function deliverToConversation(pool,{tenantId,conversationId,userId
   "LEFT JOIN conversation_ui_state st ON st.tenant_id=c.tenant_id AND st.conversation_id=c.id "+
   "LEFT JOIN agents ag ON ag.tenant_id=c.tenant_id "+
   "JOIN tenants t ON t.id=c.tenant_id "+
-  "WHERE c.tenant_id=$1 AND c.id=$2 AND ch.provider='waakg' AND t.status<>'paused' "+
+  "WHERE c.tenant_id=$1 AND c.id=$2 AND ch.provider='waakg' AND ch.status='connected' AND t.status<>'paused' "+
   "AND COALESCE((t.features->>'whatsapp')::boolean,true)=true "+
   "AND ($3::text<>'ai' OR COALESCE((t.features->>'ai')::boolean,true)=true)",[tenantId,conversationId,mode]);
+ const receipt=prior=>{
+  if(prior.conversation_id!==conversationId||prior.mode!==mode||prior.body!==body||
+     (prior.reply_to_id||null)!==(replyToId||null))throw bad(409,'Identificador de envio já foi usado para outra mensagem.');
+  return {id:prior.id,status:prior.status,sent:prior.status==='sent',reused:true};
+ };
+ const prior=await pool.query(
+  'SELECT id,status,conversation_id,mode,body,reply_to_id FROM message_outbox WHERE tenant_id=$1 AND client_request_id=$2',
+  [tenantId,clientRequestId]);
+ // A confirmed retry remains a receipt even after the conversation changes mode.
+ if(prior.rowCount)return receipt(prior.rows[0]);
+ const record=await loadConversation();
  if(!record.rowCount)throw bad(404,'Conversa WhatsApp não encontrada nesta empresa.');
  const c=record.rows[0];
  if(c.status==='resolved')throw bad(409,'Reabra a conversa antes de responder.');
@@ -71,6 +82,21 @@ export async function deliverToConversation(pool,{tenantId,conversationId,userId
  const remote=await getStatus(c.session_id);
  if(!remote.connected||remote.connectedNumber!==String(c.linked_phone||'').replace(/\D/g,''))
   throw bad(409,'Sessão WhatsApp desconectada ou número divergente.');
+ const fresh=await loadConversation(),latest=fresh.rows[0];
+ if(!latest||latest.status==='resolved'||latest.session_id!==c.session_id||
+    latest.customer_phone!==c.customer_phone||latest.linked_phone!==c.linked_phone||
+    latest.handling_mode!==(mode==='ai'?'ai_assist':'human')||mode==='ai'&&!latest.agent_enabled)
+  throw bad(409,'O atendimento mudou durante a preparação. Confira a conversa antes de enviar.');
+ if(userId){
+  const actor=await pool.query('SELECT id FROM users WHERE id=$1 AND active=true AND (tenant_id=$2 OR platform_owner=true)',[userId,tenantId]);
+  if(!actor.rowCount)throw bad(403,'O usuário não está mais autorizado a enviar mensagens.');
+ }
+ if(mode==='ai'){
+  const current=await pool.query("SELECT m.id FROM messages m WHERE m.tenant_id=$1 AND m.conversation_id=$2 AND m.direction='inbound' "+
+   "AND NOT EXISTS(SELECT 1 FROM messages sent WHERE sent.tenant_id=$1 AND sent.conversation_id=$2 AND sent.direction='outbound' AND sent.created_at>=m.created_at) "+
+   "ORDER BY m.created_at DESC,m.id DESC LIMIT 1",[tenantId,conversationId]);
+  if(!replyToId||current.rows[0]?.id!==replyToId)throw bad(409,'A conversa foi atualizada. A resposta anterior foi cancelada.');
+ }
  const created=await pool.query(
   "INSERT INTO message_outbox(id,tenant_id,conversation_id,user_id,client_request_id,mode,body,reply_to_id,status) "+
   "VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending') ON CONFLICT(tenant_id,client_request_id) DO NOTHING RETURNING id",
@@ -80,14 +106,7 @@ export async function deliverToConversation(pool,{tenantId,conversationId,userId
    'SELECT id,status,conversation_id,mode,body,reply_to_id FROM message_outbox WHERE tenant_id=$1 AND client_request_id=$2',
    [tenantId,clientRequestId]);
   if(!existing.rowCount)throw bad(409,'Solicitação já está registrada.');
-  const prior=existing.rows[0];
-  // A request ID is tied to the original tenant, conversation and exact payload.
-  // Reusing it for a different customer must NEVER be treated as a successful send.
-  if(prior.conversation_id!==conversationId||prior.mode!==mode||
-     prior.body!==body||(prior.reply_to_id||null)!==(replyToId||null))
-   throw bad(409,'Identificador de envio já foi usado para outra mensagem.');
-  return {id:prior.id,status:prior.status,
-   sent:prior.status==='sent',reused:true};
+  return receipt(existing.rows[0]);
  }
  const outboxId=created.rows[0].id;
  const claimed=await pool.query(

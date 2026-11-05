@@ -120,3 +120,13 @@ test('quote screen includes human review, owner opt-in and no automatic customer
  assert(SALES.includes('Cadastre um produto ativo'));
  assert(SALES.includes('Copiar link'));
 });
+
+test('own account security remains accessible without the team module',async()=>{
+ const sim=simulatedApp({features:{whatsapp:false,catalog:true,quotes:false,meta_ads:false,ai:false,team:false}});
+ await new Promise(resolve=>setTimeout(resolve,60));
+ await vm.runInContext("state.me.user.permissions.push('account.manage'); changeView('team')",sim.context);
+ assert.equal(vm.runInContext('state.view',sim.context),'team');
+ const html=sim.node('id:view').innerHTML;
+ assert.match(html,/id="passwordChangeForm"/);assert.match(html,/id="myPhoneForm"/);
+ assert.doesNotMatch(html,/id="teamForm"|Não foi possível carregar/);
+});

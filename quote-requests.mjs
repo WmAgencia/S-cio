@@ -5,6 +5,8 @@ import {randomUUID} from 'node:crypto';
 import {getSessionStatus} from './waakg-adapter.mjs';
 import {sendGatewayText,outboundEnabled,deliverToConversation} from './socio-outbound.mjs';
 import {parseTenantFeatures} from './tenant-features.mjs';
+import {createIntakeScanner} from './intake-cursor.mjs';
+const nextIntakeBatch=createIntakeScanner();
 const bad=(status,message)=>Object.assign(new Error(message),{status});
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[89ab0-9a-f]{12}$/i;
 const clean=x=>String(x||'').trim();
@@ -14,15 +16,16 @@ export function isQuoteRequest(text){
  return /\b(?:orcamento|cotacao|quanto (?:custa|fica|sai)|(?:qual|quanto e)\s+(?:o\s+)?(?:preco|valor)|(?:me\s+)?(?:passa|mande|manda|envie|envia|prepara|prepare|faca|faz|quero|preciso)\s+(?:(?:um|uma|o|a|de)\s+)?(?:orcamento|cotacao|preco|valor)|(?:pode|poderia|consegue)\s+(?:me\s+)?(?:passar|enviar|fazer|preparar)\s+(?:um\s+|uma\s+)?(?:orcamento|cotacao))\b/.test(s);
 }
 export async function scanQuoteRequests(pool){
- const found=await pool.query(
-  "SELECT m.id,m.tenant_id,m.conversation_id,m.body,c.customer_name,c.customer_phone "+
+ const found=await nextIntakeBatch(pool,
+  "SELECT m.id,m.created_at::text AS scan_created_at,m.tenant_id,m.conversation_id,m.body,c.customer_name,c.customer_phone "+
   "FROM messages m JOIN tenants t ON t.id=m.tenant_id AND t.status<>'paused' "+
   "JOIN conversations c ON c.tenant_id=m.tenant_id AND c.id=m.conversation_id "+
   "WHERE m.direction='inbound' AND m.created_at > now()-interval '48 hours' "+
+  "AND ($1::timestamptz IS NULL OR (m.created_at,m.id)<($1::timestamptz,$2::uuid)) "+
   "AND COALESCE((t.features->>'quotes')::boolean,true)=true AND COALESCE((t.features->>'whatsapp')::boolean,true)=true "+
   "AND NOT EXISTS (SELECT 1 FROM quote_requests q WHERE q.tenant_id=m.tenant_id AND q.inbound_message_id=m.id) "+
-  "AND m.body ~* '(orçamento|orcamento|cotação|cotacao|preço|preco|quanto custa|quanto fica|quanto sai|qual valor|qual o valor)' "+
-  "ORDER BY m.created_at DESC LIMIT 40"
+  "AND m.body ~* '(orçamento|orcamento|cotação|cotacao|preço|preco|valor|quanto custa|quanto fica|quanto sai)' "+
+  "ORDER BY m.created_at DESC,m.id DESC LIMIT 40"
  );
  let created=0;
  for(const m of found.rows){

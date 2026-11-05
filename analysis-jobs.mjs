@@ -92,10 +92,10 @@ export async function processNextAnalysisJob(pool){
   return {processed:true,completed:true,jobId:job.id};
  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
 }
-export async function createTrainingAnalysis(pool,tenantId,{scanIds=null}={}){
- const c=await pool.connect(),jobId=randomUUID();
+export async function createTrainingAnalysis(pool,tenantId,{scanIds=null,client=null}={}){
+ const c=client||await pool.connect(),jobId=randomUUID(),ownsTransaction=!client;
  try{
-  await c.query('BEGIN');
+  if(ownsTransaction)await c.query('BEGIN');
   // Automatic training only analyzes the latest known snapshot for each chat
   // actually enumerated by the selected WA-AKG scans. Never mix unrelated
   // manual imports or other tenant channels into the automatic draft.
@@ -110,7 +110,7 @@ export async function createTrainingAnalysis(pool,tenantId,{scanIds=null}={}){
   if(!imports.rowCount){const e=new Error(scanIds?'Nenhum histórico de texto disponível nas sessões verificadas.':'Importe pelo menos uma conversa antes da análise.');e.status=422;throw e;}
   await c.query("INSERT INTO training_jobs(id,tenant_id,status,total_items) VALUES($1,$2,'queued',$3)",[jobId,tenantId,imports.rowCount]);
   for(const row of imports.rows)await c.query('INSERT INTO training_job_items(job_id,tenant_id,import_id) VALUES($1,$2,$3)',[jobId,tenantId,row.id]);
-  await c.query('COMMIT');
+  if(ownsTransaction)await c.query('COMMIT');
   return {id:jobId,status:'queued',totalItems:imports.rowCount,processedItems:0};
- }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
+ }catch(e){if(ownsTransaction)await c.query('ROLLBACK');throw e;}finally{if(ownsTransaction)c.release();}
 }

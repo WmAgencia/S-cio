@@ -140,7 +140,8 @@ export async function finishPipeboardOAuth(pool,state,code,{env=process.env,requ
  const row=used.rows[0];
  if(!oauthSupported(row.provider))throw bad(410,'Esta plataforma não está mais disponível no Sócio.');
  const admin=await pool.query(
-  "SELECT 1 FROM users WHERE id=$1 AND tenant_id=$2 AND active=true AND role IN ('owner','admin')",
+  "SELECT 1 FROM users WHERE id=$1 AND tenant_id=$2 AND active=true AND role IN ('owner','admin') "+
+  "AND EXISTS(SELECT 1 FROM tenants WHERE id=$2 AND status<>'paused' AND COALESCE((features->>'meta_ads')::boolean,true)=true)",
   [row.user_id,row.tenant_id]);
  if(!admin.rowCount)throw bad(403,'Usuário não possui mais acesso à empresa.');
  const config=secretOpen(row.data_ciphertext,env);
