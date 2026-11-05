@@ -2,6 +2,7 @@
 // No access to Meta tokens; never creates, activates or spends on ads.
 import {authenticateMediaMcp,adVideoUploadLink,adVideoExportUrl,listAdVideos,findVideo,
  importWhatsAppAdVideo} from './ads-media.mjs';
+import {authenticateMediaOAuth,mediaAuthChallenge} from './ads-media-oauth.mjs';
 const error=(id,message,code=-32603)=>({jsonrpc:'2.0',id,error:{code,message}});
 const ok=(id,result)=>({jsonrpc:'2.0',id,result});
 const tools=[
@@ -35,16 +36,21 @@ async function readJson(req){
  return value;
 }
 export async function handleAdsMediaMcp(pool,req,res){
- if(req.method!=='POST')return json(res,405,error(null,'Método não permitido.',-32600));
  const authorization=String(req.headers.authorization||'');
- if(!/^Bearer socioads_[A-Za-z0-9_-]{48}$/.test(authorization)){
-  res.setHeader('WWW-Authenticate','Bearer realm="socio-ads-media"');
-  return json(res,401,error(null,'MCP requer token de acesso Sócio.',-32001));
+ let actor=null;
+ if(authorization.startsWith('Bearer ')){
+  const bearer=authorization.slice(7);
+  try{
+   if(bearer.startsWith('socio_oauth_'))actor=await authenticateMediaOAuth(pool,bearer);
+   else if(bearer.startsWith('socioads_'))actor=await authenticateMediaMcp(pool,bearer);
+  }catch{/* Never expose authentication details to clients. */}
  }
- let actor;
- try{actor=await authenticateMediaMcp(pool,authorization.slice(7));}
- catch{res.setHeader('WWW-Authenticate','Bearer realm="socio-ads-media"');
-  return json(res,401,error(null,'MCP não autorizado.',-32001));}
+ if(!actor){
+  res.setHeader('WWW-Authenticate',mediaAuthChallenge());
+  return json(res,401,error(null,'Autorização OAuth necessária para acessar este MCP.',-32001));
+ }
+ if(req.method==='GET')return json(res,405,error(null,'SSE não implementado; utilize Streamable HTTP POST.',-32600));
+ if(req.method!=='POST')return json(res,405,error(null,'Método não permitido.',-32600));
  let request;
  try{request=await readJson(req);}
  catch{return json(res,400,error(null,'JSON RPC inválido.',-32700));}
@@ -62,6 +68,9 @@ export async function handleAdsMediaMcp(pool,req,res){
  const name=request.params?.name,args=request.params?.arguments||{};
  if(typeof args!=='object'||!args||Array.isArray(args)||!tools.some(x=>x.name===name))
   return json(res,200,error(id,'Ferramenta ou argumentos inválidos.',-32602));
+ const readOnly=name==='ads_media_list'||name==='ads_media_status';
+ if(actor.oauthScopes&&!actor.oauthScopes.includes(readOnly?'ads_media:read':'ads_media:write'))
+  return json(res,200,ok(id,{isError:true,content:[{type:'text',text:'Escopo de acesso insuficiente.'}]}));
  try{
   let output;
   if(name==='ads_media_create_upload_link')output=await adVideoUploadLink(pool,actor,args.filename);
