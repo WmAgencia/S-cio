@@ -30,6 +30,8 @@ import {getOperationalReadiness} from './operational-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {createQuote,issueQuote,cancelQuote,publicQuote,approveQuote,declineQuote,listSales,createTestCheckout,processStripeTestEvent} from './sales-commerce.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
+import {reserveAdVideo,listAdVideos,storeAdVideo,adVideoExportUrl,resolveSignedAsset,serveSignedVideo,importWhatsAppAdVideo,createMediaMcpToken,revokeMediaMcpTokens,MAX_AD_VIDEO_BYTES} from './ads-media.mjs';
+ import {handleAdsMediaMcp} from './ads-media-mcp.mjs';
 
 const PORT=Number(process.env.PORT||3000);
 const DATABASE_URL=process.env.DATABASE_URL;
@@ -170,11 +172,41 @@ async function handle(req,res){
    'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
   return res.end();
  }
+
+ // Signed private video export for Meta fetch (never exposes S3 credentials).
+ const assetExport=pathname.match(/^\/media\/ads\/([0-9a-f-]{36})$/i);
+ if(assetExport&&['GET','HEAD'].includes(method)){
+  const q=new URL(req.url,'http://local').searchParams;
+  return serveSignedVideo(pool,assetExport[1],q.get('expires'),q.get('signature'),req,res);
+ }
+ const uploadPath=pathname.match(/^\/ads-upload\/([0-9a-f-]{36})$/i);
+ if(uploadPath){
+  const q=new URL(req.url,'http://local').searchParams;
+  const asset=await resolveSignedAsset(pool,uploadPath[1],q.get('expires'),q.get('signature'),'upload');
+  res.setHeader('X-Robots-Tag','noindex,nofollow,noarchive');
+  res.setHeader('Cache-Control','private,no-store');
+  if(method==='GET'){
+   if(asset.status!=='reserved')throw fail(409,'Este link já foi utilizado.');
+   res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'");
+   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
+   return res.end(await readFile(new URL('./public/ads-upload.html',import.meta.url)));
+  }
+  if(method==='POST'){
+   sameOrigin(req);
+   if(asset.status!=='reserved')throw fail(409,'Vídeo já enviado.');
+   const bytes=Number(req.headers['content-length']||0);
+   if(bytes>MAX_AD_VIDEO_BYTES)throw fail(413,'Vídeo excede 90 MB.');
+   if(!['video/mp4','video/quicktime'].includes(String(req.headers['content-type'])))throw fail(422,'Envie MP4 ou MOV.');
+   return json(res,201,await storeAdVideo(pool,asset.tenant_id,asset.id,req,{declaredBytes:bytes||undefined}));
+  }
+  throw fail(405,'Método não permitido.');
+ }
+ if(pathname==='/mcp/ads-media')return handleAdsMediaMcp(pool,req,res);
  if(method==='GET'&&pathname==='/api/bootstrap'){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -304,6 +336,50 @@ async function handle(req,res){
   csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
  // Feature restrictions are server-side. Hidden navigation never constitutes authorization.
  assertApiFeature(a.features,pathname);
+
+ // Tenant-scoped Media Bridge: uploads here do not publish or modify Meta campaigns.
+ if(method==='GET'&&pathname==='/api/ads-media'){
+  requirePermission(a,'marketing.read');
+  return json(res,200,{configured:mediaConfigured(),maxBytes:MAX_AD_VIDEO_BYTES,items:await listAdVideos(pool,a.active_tenant_id)});
+ }
+ if(method==='POST'&&pathname==='/api/ads-media/reserve'){
+  requirePermission(a,'marketing.manage');
+  if(!limiter(simulationAttempts,'ads-reserve:'+a.active_tenant_id,3600000,40))throw fail(429,'Limite de mídia atingido.');
+  const {data}=await body(req,2000);
+  return json(res,201,await reserveAdVideo(pool,a,String(data.filename||''),'chat'));
+ }
+ const adsFile=pathname.match(/^\/api\/ads-media\/([0-9a-f-]{36})\/(upload|export)$/i);
+ if(adsFile&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  if(adsFile[2]==='export')return json(res,200,await adVideoExportUrl(pool,a.active_tenant_id,adsFile[1]));
+  const bytes=Number(req.headers['content-length']||0);
+  if(bytes>MAX_AD_VIDEO_BYTES)throw fail(413,'Vídeo maior que 90 MB.');
+  if(!['video/mp4','video/quicktime','application/octet-stream'].includes(String(req.headers['content-type'])))throw fail(422,'Envie MP4 ou MOV.');
+  const stored=await storeAdVideo(pool,a.active_tenant_id,adsFile[1],req,{declaredBytes:bytes||undefined});
+  await audit(a,'ads.media.uploaded',{mediaId:adsFile[1],bytes:stored.bytes});
+  return json(res,201,stored);
+ }
+ if(method==='POST'&&pathname==='/api/ads-media/import-whatsapp'){
+  requirePermission(a,'marketing.manage');
+  if(!limiter(simulationAttempts,'ads-wa:'+a.user_id,60000,4))throw fail(429,'Muitas importações.');
+  const {data}=await body(req,2000);
+  const imported=await importWhatsAppAdVideo(pool,a,{channelId:data.channelId,jid:data.jid,messageId:data.messageId,filename:data.filename});
+  await audit(a,'ads.media.whatsapp_imported',{mediaId:imported.id});
+  return json(res,201,imported);
+ }
+ if(method==='POST'&&pathname==='/api/ads-media/mcp-token'){
+  requirePermission(a,'marketing.manage');
+  if(!limiter(authAttempts,'mcp-token:'+a.user_id,3600000,5))throw fail(429,'Muitas chaves.');
+  const token=await createMediaMcpToken(pool,a);
+  await audit(a,'ads.media.mcp_token_rotated',{});
+  return json(res,201,token);
+ }
+ if(method==='POST'&&pathname==='/api/ads-media/mcp-revoke'){
+  requirePermission(a,'marketing.manage');
+  await revokeMediaMcpTokens(pool,a);
+  await audit(a,'ads.media.mcp_token_revoked',{});
+  return json(res,200,{revoked:true});
+ }
  // Hosted one-click OAuth (Pipeboard). Tokens never go to the browser.
  if(method==='GET'&&pathname==='/api/marketing/oauth'){
   requirePermission(a,'marketing.read');
