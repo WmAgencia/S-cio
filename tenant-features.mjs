@@ -37,9 +37,9 @@ export function requiredFeatureForApi(path){
  if(/^\/api\/(sales)(?:\/|$)/.test(path))return 'quotes';
  if(/^\/api\/(products)(?:\/|$)/.test(path))return 'catalog';
  if(/^\/api\/(marketing)(?:\/|$)/.test(path))return 'meta_ads';
- if(/^\/api\/(agent|training)(?:\/|$)/.test(path))return 'ai';
+ if(/^\/api\/(agent|training|imports|simulate)(?:\/|$)/.test(path)||path.startsWith('/api/ops/groq/'))return 'ai';
  if(/^\/api\/(team)(?:\/|$)/.test(path))return 'team';
- if(/^\/api\/(inbox|waakg|channels|conversations)(?:\/|$)/.test(path))return 'whatsapp';
+ if(/^\/api\/(inbox|waakg|channels|conversations|instagram)(?:\/|$)/.test(path))return 'whatsapp';
  return null;
 }
 export function assertApiFeature(features,path){

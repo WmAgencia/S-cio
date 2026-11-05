@@ -25,6 +25,7 @@ import {handleInboxApi} from './inbox-api.mjs';
 import {processLiveInboxSync} from './inbox-live-sync.mjs';
 import {processNextAiReply} from './ai-replies.mjs';
 import {reconcileConfirmedOutbox} from './socio-outbound.mjs';
+import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {createQuote,issueQuote,cancelQuote,publicQuote,approveQuote,declineQuote,listSales,createTestCheckout,processStripeTestEvent} from './sales-commerce.mjs';
@@ -93,7 +94,10 @@ async function body(req,limit=900000){
   parts.push(piece);
  }
  const raw=Buffer.concat(parts);
- try{return {raw,data:raw.length?JSON.parse(raw.toString('utf8')):{}};}catch{throw fail(400,'JSON inválido.');}
+ let data;
+ try{data=raw.length?JSON.parse(raw.toString('utf8')):{};}catch{throw fail(400,'JSON inválido.');}
+ if(!data||typeof data!=='object'||Array.isArray(data))throw fail(400,'Envie um objeto JSON válido.');
+ return {raw,data};
 }
 function sameOrigin(req){
  const o=req.headers.origin;
@@ -106,7 +110,7 @@ function sameOrigin(req){
 async function sessionFor(req){
  const match=String(req.headers.cookie||'').match(/(?:^|;\s*)socio_session=([^;]+)/);
  if(!match)return null;
- const token=decodeURIComponent(match[1]);
+ let token;try{token=decodeURIComponent(match[1]);}catch{return null;}
  if(!token||token.length>256)return null;
  const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.phone,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status,t.features,t.quote_alert_whatsapp FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true AND (u.platform_owner=true OR u.tenant_id=s.active_tenant_id)",[hashToken(token)]);
  return result.rows[0]||null;
@@ -265,10 +269,11 @@ async function handle(req,res){
   return json(res,201,{ok:true,csrf});
  }
  if(method==='POST'&&pathname==='/api/login'){
-  const key='login:'+clientIp(req);
-  if(!limiter(authAttempts,key,600000,15))throw fail(429,'Muitas tentativas de login. Tente mais tarde.');
   const {data}=await body(req);
   const identity=loginIdentifier(data.identifier??data.email);
+  const key='login:'+hashToken(identity?identity.type+':'+identity.value:'invalid');
+  if(!limiter(authAttempts,'login-source:'+clientIp(req),600000,300)||
+     !limiter(authAttempts,key,600000,15))throw fail(429,'Muitas tentativas de login. Tente mais tarde.');
   const result=identity?await query(
    identity.type==='email'
     ?'SELECT id,tenant_id,password_hash FROM users WHERE email=$1 AND active=true'
@@ -284,7 +289,7 @@ async function handle(req,res){
  if(!a)throw fail(401,'Entre na sua conta para continuar.');
  // Keep account/session recovery and platform administration available while
  // preventing a paused company from continuing its normal operations.
- if(a.tenant_status==='paused'&&!['/api/me','/api/logout'].includes(pathname)&&
+ if(a.tenant_status==='paused'&&!['/api/me','/api/logout','/api/me/phone','/api/me/password'].includes(pathname)&&
     !(a.platform_owner&&pathname.startsWith('/api/admin/')))
   throw fail(403,'Esta empresa está pausada. Entre em contato com a administração.');
  if(mutations.has(method)){
@@ -463,19 +468,20 @@ async function handle(req,res){
  if(method==='GET'&&pathname==='/api/dashboard/activity'){
   const requested=new URL(req.url,'http://local').searchParams.get('range')||'6m';
   const ranges={'12m':{count:12,unit:'month'},'6m':{count:6,unit:'month'},'3m':{count:3,unit:'month'},'1m':{count:30,unit:'day'},'7d':{count:7,unit:'day'},'90d':{count:90,unit:'day'}};
-  const range=ranges[requested];
+  const range=Object.hasOwn(ranges,requested)?ranges[requested]:null;
   if(!range)throw fail(400,'Período inválido.');
   const interval=range.unit==='day'?'1 day':'1 month';
   const sql=`WITH buckets AS (
-   SELECT date_trunc('${range.unit}', now()) - step * interval '${interval}' AS bucket
+   SELECT date_trunc('${range.unit}', now() AT TIME ZONE 'America/Sao_Paulo') - step * interval '${interval}' AS bucket
    FROM generate_series(${range.count-1},0,-1) AS series(step)
   ) SELECT to_char(b.bucket,'YYYY-MM-DD') AS date,
    COALESCE(count(m.id) FILTER (WHERE m.direction='inbound'),0)::int AS inbound,
    COALESCE(count(m.id) FILTER (WHERE m.direction='outbound'),0)::int AS outbound
-   FROM buckets b LEFT JOIN messages m ON m.tenant_id=$1
-    AND m.created_at>=b.bucket AND m.created_at<b.bucket + interval '${interval}'
+   FROM buckets b LEFT JOIN messages m ON m.tenant_id=$1 AND $2::boolean=true
+    AND m.created_at>=(b.bucket AT TIME ZONE 'America/Sao_Paulo')
+    AND m.created_at<((b.bucket + interval '${interval}') AT TIME ZONE 'America/Sao_Paulo')
    GROUP BY b.bucket ORDER BY b.bucket ASC`;
-  const results=await query(sql,[a.active_tenant_id]);
+  const results=await query(sql,[a.active_tenant_id,parseTenantFeatures(a.features).whatsapp]);
   return json(res,200,{range:requested,granularity:range.unit,points:results.rows});
  }
  if(method==='GET'&&pathname==='/api/dashboard'){
@@ -487,7 +493,10 @@ async function handle(req,res){
    query("SELECT count(*)::int AS n FROM messages WHERE tenant_id=$1 AND direction='inbound'",[a.active_tenant_id]),
    query("SELECT count(*)::int AS n FROM messages WHERE tenant_id=$1 AND direction='inbound' AND created_at >= (date_trunc('day', now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo')",[a.active_tenant_id])
   ]);
-  return json(res,200,{channels:ch.rows[0].n,products:prod.rows[0].n,imports:imp.rows[0].n,openConversations:conv.rows[0].n,inboundMessages:msg.rows[0].n,messagesReceivedToday:today.rows[0].n});
+  const flags=parseTenantFeatures(a.features);
+  return json(res,200,{channels:flags.whatsapp?ch.rows[0].n:0,products:flags.catalog?prod.rows[0].n:0,
+   imports:flags.ai?imp.rows[0].n:0,openConversations:flags.whatsapp?conv.rows[0].n:0,
+   inboundMessages:flags.whatsapp?msg.rows[0].n:0,messagesReceivedToday:flags.whatsapp?today.rows[0].n:0});
  }
 
  // WA-AKG is a server-side, read-only integration. It does not expose the
@@ -1075,7 +1084,7 @@ async function handle(req,res){
   if(!validText(data.message,1200))throw fail(422,'Digite uma mensagem de até 1200 caracteres.');
   const [agent,catalogProducts]=await Promise.all([
    query('SELECT name,tone,instructions,knowledge_md FROM agents WHERE tenant_id=$1',[a.active_tenant_id]),
-   fullCatalog(a.active_tenant_id)
+   parseTenantFeatures(a.features).catalog?fullCatalog(a.active_tenant_id):Promise.resolve([])
   ]);
   if(!groqReady())throw fail(503,'Configure GROQ_API_KEY para usar o Groq no simulador.');
   const catalog=catalogPrompt(catalogProducts.filter(p=>p.active));
@@ -1120,7 +1129,15 @@ async function handle(req,res){
   }
   if(method==='PATCH'&&!conversationMatch[2]){
    const {data}=await body(req);if(!['open','human','resolved'].includes(data.status))throw fail(422,'Status inválido.');
-   await query('UPDATE conversations SET status=$3 WHERE tenant_id=$1 AND id=$2',[a.active_tenant_id,conv.rows[0].id,data.status]);
+   const client=await pool.connect();
+   try{
+    await client.query('BEGIN');
+    await client.query('UPDATE conversations SET status=$3 WHERE tenant_id=$1 AND id=$2',[a.active_tenant_id,conv.rows[0].id,data.status]);
+    if(data.status==='resolved'||data.status==='human')await client.query(
+     "UPDATE conversation_ui_state SET handling_mode='human',ai_activated_at=NULL,updated_at=now() WHERE tenant_id=$1 AND conversation_id=$2",
+     [a.active_tenant_id,conv.rows[0].id]);
+    await client.query('COMMIT');
+   }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}finally{client.release();}
    return json(res,200,{ok:true});
   }
  }
@@ -1206,16 +1223,15 @@ async function handle(req,res){
   const u=new URL(req.url,'http://localhost');
   const rawLimit=u.searchParams.get('limit')||'40',limit=Number(rawLimit);
   if(!Number.isInteger(limit)||limit<1||limit>100)throw fail(422,'Limite de auditoria inválido.');
-  const before=u.searchParams.get('before');
-  if(before&&(before.length>35||!Number.isFinite(Date.parse(before))))
-   throw fail(422,'Data de auditoria inválida.');
+  const before=decodeHistoryCursor(u.searchParams.get('before'));
   const rows=await query(
-   "SELECT a.id,a.action,a.metadata,a.created_at,CASE WHEN u.tenant_id=a.tenant_id THEN u.name ELSE 'Administração Consecom' END AS actor "+
+   "SELECT a.id,a.action,a.metadata,a.created_at,a.created_at::text AS cursor_created_at,CASE WHEN u.tenant_id=a.tenant_id THEN u.name ELSE 'Administração Consecom' END AS actor "+
    "FROM audit a LEFT JOIN users u ON u.id=a.actor_id "+
-   "WHERE a.tenant_id=$1 AND ($2::timestamptz IS NULL OR a.created_at<$2::timestamptz) "+
+   "WHERE a.tenant_id=$1 AND ($2::timestamptz IS NULL OR a.created_at<$2::timestamptz OR ($4::uuid IS NOT NULL AND a.created_at=$2 AND a.id<$4)) "+
    "ORDER BY a.created_at DESC,a.id DESC LIMIT $3",
-   [a.active_tenant_id,before?new Date(before).toISOString():null,limit]);
-  return json(res,200,{events:rows.rows,limit});
+   [a.active_tenant_id,before.time,limit+1,before.id]);
+  const events=rows.rows.slice(0,limit),hasMore=rows.rows.length>limit;
+  return json(res,200,{events,limit,hasMore,nextCursor:hasMore?encodeHistoryCursor(events.at(-1)):null});
  }
  if(method==='GET'&&pathname==='/api/admin/cnpj'){
   needPlatform(a);

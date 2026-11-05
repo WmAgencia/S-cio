@@ -1,6 +1,8 @@
 // Purchase-intent intake for the supervised sales queue. No automatic payment or sale confirmation.
 import {randomUUID} from 'node:crypto';
 import {isQuoteRequest} from './quote-requests.mjs';
+import {createIntakeScanner} from './intake-cursor.mjs';
+const nextIntakeBatch=createIntakeScanner();
 const bad=(status,message)=>Object.assign(new Error(message),{status});
 const validId=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
@@ -18,15 +20,16 @@ export function proposedQuantity(body){
  return null;
 }
 export async function scanSalesIntents(pool){
- const messages=await pool.query(
-  "SELECT m.id,m.tenant_id,m.conversation_id,m.body,c.customer_name,c.customer_phone "+
+ const messages=await nextIntakeBatch(pool,
+  "SELECT m.id,m.created_at::text AS scan_created_at,m.tenant_id,m.conversation_id,m.body,c.customer_name,c.customer_phone "+
   "FROM messages m JOIN tenants t ON t.id=m.tenant_id AND t.status<>'paused' "+
   "JOIN conversations c ON c.id=m.conversation_id AND c.tenant_id=m.tenant_id "+
   "WHERE m.direction='inbound' AND m.created_at > now()-interval '48 hours' "+
+  "AND ($1::timestamptz IS NULL OR (m.created_at,m.id)<($1::timestamptz,$2::uuid)) "+
   "AND COALESCE((t.features->>'quotes')::boolean,true)=true "+
   "AND NOT EXISTS(SELECT 1 FROM sale_intents si WHERE si.tenant_id=m.tenant_id AND si.inbound_message_id=m.id) "+
   "AND m.body ~* '(comprar|levar|separar|reservar|fechar|fechamos|pedido|pix|pagar)' "+
-  "ORDER BY m.created_at DESC LIMIT 60"
+  "ORDER BY m.created_at DESC,m.id DESC LIMIT 60"
  );
  let created=0;
  for(const m of messages.rows){

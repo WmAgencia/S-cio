@@ -138,18 +138,24 @@ export async function processNextAutoTraining(pool){
      [run.id,decision.errorCode]);
     await client.query('COMMIT');return {processed:true,failed:true};
    }
+   await client.query('SAVEPOINT analysis_start');
+   let outcome;
    try{
-    const job=await createTrainingAnalysis(pool,run.tenant_id,{scanIds:run.scan_ids});
+    // The job and its parent run must commit together. A second connection
+    // previously left an orphan job if updating the parent failed or crashed.
+    const job=await createTrainingAnalysis(pool,run.tenant_id,{scanIds:run.scan_ids,client});
     await client.query(
      "UPDATE training_auto_runs SET status='analyzing',job_id=$2,updated_at=now() WHERE id=$1",
      [run.id,job.id]);
-    await client.query('COMMIT');return {processed:true,stage:'ANALYZING',jobId:job.id};
+    outcome={processed:true,stage:'ANALYZING',jobId:job.id};
    }catch(err){
+    await client.query('ROLLBACK TO SAVEPOINT analysis_start');
     await client.query(
      "UPDATE training_auto_runs SET status='failed',error_code=$2,updated_at=now(),finished_at=now() WHERE id=$1",
      [run.id,err.status===422?'NO_TEXT_HISTORY':'ANALYSIS_NOT_STARTED']);
-    await client.query('COMMIT');return {processed:true,failed:true};
+    outcome={processed:true,failed:true};
    }
+   await client.query('COMMIT');return outcome;
   }
   const job=await client.query("SELECT status FROM training_jobs WHERE id=$1 AND tenant_id=$2",
    [run.job_id,run.tenant_id]);

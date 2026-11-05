@@ -43,7 +43,7 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
   "AND c.status<>'resolved' AND m.direction='inbound' AND m.created_at>=st.ai_activated_at "+
   "AND m.created_at<now()-interval '8 seconds' "+
   "AND NOT EXISTS(SELECT 1 FROM messages newer WHERE newer.tenant_id=m.tenant_id "+
-  " AND newer.conversation_id=m.conversation_id AND newer.direction='inbound' AND newer.created_at>m.created_at) "+
+  " AND newer.conversation_id=m.conversation_id AND newer.direction='inbound' AND (newer.created_at,newer.id)>(m.created_at,m.id)) "+
   "AND NOT EXISTS(SELECT 1 FROM messages sent WHERE sent.tenant_id=m.tenant_id "+
   " AND sent.conversation_id=m.conversation_id AND sent.direction='outbound' AND sent.created_at>m.created_at) "+
   "AND NOT EXISTS(SELECT 1 FROM ai_reply_attempts ar WHERE ar.tenant_id=m.tenant_id AND ar.inbound_message_id=m.id) "+

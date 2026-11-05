@@ -50,8 +50,8 @@ test('Manual outbound persists idempotency before sending, rejects mode AI under
    created=true;return {rowCount:1,rows:[{id:requestId}]};
   }
   if(sql.startsWith('SELECT id,status,conversation_id,mode,body,reply_to_id FROM message_outbox'))return {
-   rowCount:1,rows:[{id:requestId,status:'sent',conversation_id:conversationId,
-    mode:'human',body:'Boa tarde!',reply_to_id:null}]};
+   rowCount:created&&args[1]===requestId?1:0,rows:created&&args[1]===requestId?[{id:requestId,status:'sent',conversation_id:conversationId,
+    mode:'human',body:'Boa tarde!',reply_to_id:null}]:[]};
   if(sql.includes("status='processing'"))return {rowCount:1,rows:[{id:requestId}]};
   return {rowCount:1,rows:[]};
  }};

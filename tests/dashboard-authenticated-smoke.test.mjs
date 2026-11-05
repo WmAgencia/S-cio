@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const code=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 
-test('authenticated Sócio boot renders approved orange espresso dashboard and never stays blank',async()=>{
+for(const whatsappEnabled of [true,false])test('authenticated dashboard renders with WhatsApp '+(whatsappEnabled?'enabled':'disabled'),async()=>{
  const nodes=new Map();
  const make=(key)=>{
   if(!nodes.has(key)){
@@ -33,7 +33,7 @@ test('authenticated Sócio boot renders approved orange espresso dashboard and n
  const resources={
   '/api/bootstrap':{initialized:true},
   '/api/me':{user:{name:'Conta master',role:'owner',platformOwner:true},
-   tenant:{name:'Consecom Brasil'},csrf:'csrf-abc'},
+   tenant:{name:'Consecom Brasil',features:{whatsapp:whatsappEnabled}},csrf:'csrf-abc'},
   '/api/dashboard':{openConversations:2,channels:1,products:4,imports:5,inboundMessages:9,messagesReceivedToday:4},
   '/api/waakg/channels':[{id:'example-channel',status:'connected',label:'Vendas'}],
   '/api/agent':{instructions:'Atenda com respeito.',enabled:false},
@@ -48,9 +48,10 @@ test('authenticated Sócio boot renders approved orange espresso dashboard and n
   '/api/inbox':[{customer_name:'Cliente de teste',customer_phone:'5515999999999',
     channel_label:'Atendimento',last_message_at:'2026-11-03T11:00:00Z',status:'open'}]
  };
+ const calls=[];
  const context={document:doc,Date,URL,Intl,FormData,console,setTimeout,clearTimeout,
-  fetch:async path=>({ok:!!resources[path],status:resources[path]?200:404,
-   json:async()=>resources[path]||{error:'Not found'}})
+  fetch:async path=>{calls.push(path);return {ok:!!resources[path],status:resources[path]?200:404,
+   json:async()=>resources[path]||{error:'Not found'}};}
  };
  assert.doesNotThrow(()=>vm.runInNewContext(code,context,{timeout:3000}));
  await new Promise(resolve=>setTimeout(resolve,60));
@@ -59,7 +60,8 @@ test('authenticated Sócio boot renders approved orange espresso dashboard and n
  assert.equal(make('id:authScreen').classList.contains('hidden'),true);
  assert.match(dashboard.innerHTML,/lucid-dashboard ember-dashboard/);
  assert.match(dashboard.innerHTML,/Conectar WhatsApp/);
- assert.match(dashboard.innerHTML,/Cliente de teste/);
+ if(whatsappEnabled)assert.match(dashboard.innerHTML,/Cliente de teste/);
+ else assert(!calls.some(path=>path==='/api/inbox'||path==='/api/waakg/channels'));
  assert.match(dashboard.innerHTML,/Mensagens recebidas hoje/);
  assert.doesNotMatch(dashboard.innerHTML,/Não foi possível carregar|class="loading"/);
 });

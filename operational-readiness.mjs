@@ -64,6 +64,6 @@ export async function getOperationalReadiness(pool,tenantId,{
   agent:{enabled:aiPrepared,knowledgeApproved,approvedVersion:versions.rows[0]?.version||null},
   catalog:{activeProducts:products.rows[0]?.n||0},
   flags:{humanSendConfigured:outgoingConfigured,aiAutomationConfigured:autoConfigured,
-   incrementalSyncConfigured:env.SOCIO_LIVE_SYNC_ENABLED==='true'},
+   incrementalSyncConfigured:env.SOCIO_LIVE_SYNC_ENABLED!=='false'},
   checks:items};
 }
