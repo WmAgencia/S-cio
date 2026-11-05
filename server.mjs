@@ -31,7 +31,8 @@ import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCat
 import {createQuote,issueQuote,cancelQuote,publicQuote,approveQuote,declineQuote,listSales,createTestCheckout,processStripeTestEvent} from './sales-commerce.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
 import {reserveAdVideo,listAdVideos,storeAdVideo,adVideoExportUrl,resolveSignedAsset,serveSignedVideo,importWhatsAppAdVideo,createMediaMcpToken,revokeMediaMcpTokens,MAX_AD_VIDEO_BYTES} from './ads-media.mjs';
- import {handleAdsMediaMcp} from './ads-media-mcp.mjs';
+import {handleAdsMediaMcp} from './ads-media-mcp.mjs';
+import {handleMediaOAuth} from './ads-media-oauth.mjs';
 
 const PORT=Number(process.env.PORT||3000);
 const DATABASE_URL=process.env.DATABASE_URL;
@@ -202,6 +203,14 @@ async function handle(req,res){
   throw fail(405,'Método não permitido.');
  }
  if(pathname==='/mcp/ads-media')return handleAdsMediaMcp(pool,req,res);
+ // OAuth 2.1 for ChatGPT custom MCP: discovery, DCR, login+consent, token exchange.
+ // All endpoints precede the normal tenant cookie/CSRF router by design.
+ if(pathname==='/.well-known/oauth-protected-resource'||
+    pathname==='/.well-known/oauth-protected-resource/mcp/ads-media'||
+    pathname==='/.well-known/oauth-authorization-server'||
+    pathname==='/oauth/register'||pathname==='/oauth/authorize'||pathname==='/oauth/token'){
+   return handleMediaOAuth(pool,req,res,{sessionFor,limiter,authAttempts});
+ }
  if(method==='GET'&&pathname==='/api/bootstrap'){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});

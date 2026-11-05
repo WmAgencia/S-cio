@@ -227,12 +227,15 @@ export async function createMediaMcpToken(pool,a){
 export async function revokeMediaMcpTokens(pool,a){
  await pool.query("UPDATE ads_media_mcp_tokens SET revoked_at=now() "+
   "WHERE tenant_id=$1 AND created_by=$2 AND revoked_at IS NULL",[a.active_tenant_id,a.user_id]);
+ // Revoke OAuth grants for this user, too (not grants issued to other users).
+ await pool.query("UPDATE ads_oauth_tokens SET revoked_at=now() "+
+  "WHERE tenant_id=$1 AND user_id=$2 AND revoked_at IS NULL",[a.active_tenant_id,a.user_id]);
  return {revoked:true};
 }
 export async function authenticateMediaMcp(pool,rawToken){
  if(typeof rawToken!=='string'||!/^socioads_[A-Za-z0-9_-]{48}$/.test(rawToken))throw err(401,'Token MCP ausente ou inválido.');
  const result=await pool.query(
-  "SELECT t.tenant_id AS active_tenant_id,u.id AS user_id,u.role,u.phone,u.platform_owner,u.active "+
+  "SELECT t.id AS active_tenant_id,u.id AS user_id,u.role,u.phone,u.platform_owner,u.active "+
   "FROM ads_media_mcp_tokens tok JOIN tenants t ON t.id=tok.tenant_id "+
   "JOIN users u ON u.id=tok.created_by AND (u.tenant_id=t.id OR u.platform_owner=true) "+
   "WHERE tok.token_hash=$1 AND tok.revoked_at IS NULL AND tok.expires_at>now() "+
