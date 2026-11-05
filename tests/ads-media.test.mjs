@@ -53,6 +53,7 @@ class Pool {
    for(const t of this.tokens)if(t.tenant===values[0]&&t.owner===values[1])t.revoked=true;
    return {rowCount:1,rows:[]};
   }
+  if(sql.startsWith('UPDATE ads_oauth_tokens SET revoked_at=now()'))return {rowCount:0,rows:[]};
   if(sql.includes('FROM ads_media_mcp_tokens tok')){
    const token=this.tokens.find(x=>x.hash===values[0]&&!x.revoked&&x.expiresAt>new Date());
    return {rows:token?[actor]:[],rowCount:token?1:0};
