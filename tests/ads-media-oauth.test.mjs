@@ -148,7 +148,7 @@ test('MCP bloqueia anônimos, aceita token OAuth, lista ferramentas sem tocar na
  process.env.SOCIO_PUBLIC_URL=env.SOCIO_PUBLIC_URL;
  try{
   const none=await mcp();assert.equal(none.statusCode,401);
-  assert.ok(none.headers['WWW-Authenticate'].includes('resource_metadata='));
+  assert.ok(none.headers['www-authenticate'].includes('resource_metadata='));
   const yes=await mcp('Bearer '+acc);
   assert.equal(yes.statusCode,200);assert.equal(yes.json.result.tools.length,5);
  }finally{if(original===undefined)delete process.env.SOCIO_PUBLIC_URL;else process.env.SOCIO_PUBLIC_URL=original;}
