@@ -8,7 +8,7 @@ import path from 'node:path';
 import {Readable} from 'node:stream';
 import {gatewayBase,gatewayRead,validSessionId,privateJid} from './waakg-adapter.mjs';
 const err=(status,message)=>Object.assign(new Error(message),{status});
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeMessage=/^[A-Za-z0-9_-]{4,180}$/;
 export const MAX_AD_VIDEO_BYTES=90*1024*1024;
 export const PUBLIC_LINK_TTL=20*60;
