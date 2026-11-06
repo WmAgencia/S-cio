@@ -19,7 +19,7 @@ export const SOCIO_AD_SKILLS=Object.freeze([
  {id:'ads.performance.read',label:'Consultar resultados da Meta',availability:'ready',channel:'panel'},
  {id:'ads.whatsapp.attribution',label:'Acompanhar sinais WhatsApp pelo WA-AKG',availability:'indicative',channel:'panel'},
  {id:'ads.whatsapp.owner_commands',label:'Comandos seguros por WhatsApp',availability:'pending_gateway_validation',channel:'waakg'},
- {id:'ads.conversions.capI',label:'Eventos no servidor e conversões',availability:'pending_website_integration',channel:'web'}
+ {id:'ads.conversions.capi',label:'Eventos no servidor e conversões',availability:'pending_website_integration',channel:'web'}
 ]);
 
 export function extractCampaignBrief(text,previous={}){
