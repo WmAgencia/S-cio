@@ -834,3 +834,14 @@ CREATE TABLE IF NOT EXISTS meta_official_account_selections (
  currency text, updated_at timestamptz NOT NULL DEFAULT now(),
  FOREIGN KEY(tenant_id,user_id) REFERENCES meta_official_grants(tenant_id,user_id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS meta_ads_plans (
+ id uuid PRIMARY KEY, tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, account_id text NOT NULL,
+ kind text NOT NULL CHECK(kind IN ('create','status','rename','budget')),
+ payload jsonb NOT NULL, summary jsonb NOT NULL,
+ status text NOT NULL CHECK(status IN ('ready','running','succeeded','failed','uncertain')),
+ result jsonb NOT NULL DEFAULT '{}', expires_at timestamptz NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS meta_ads_plans_tenant_idx ON meta_ads_plans(tenant_id,created_at DESC);

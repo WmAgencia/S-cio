@@ -17,7 +17,7 @@ export async function officialPersistenceScenario(pool){
  const request=async url=>{
   const target=String(url);
   if(target.endsWith('/oauth/access_token'))return response({access_token:'test-token-long-enough-for-fixture',expires_in:3600});
-  if(target.includes('/me/permissions'))return response({data:[{permission:'ads_read',status:'granted'}]});
+  if(target.includes('/me/permissions'))return response({data:[{permission:'ads_read',status:'granted'},{permission:'ads_management',status:'granted'}]});
   if(target.includes('/me/adaccounts'))return response({data:[{id:'act_123456',name:'Autorizada',currency:'BRL'}]});
   if(target.includes('/me?'))return response({id:'123456789'});
   throw Error('Unexpected Meta URL');
@@ -56,4 +56,5 @@ export async function officialPersistenceScenario(pool){
  const again=await startOfficial(pool,actors[0],{env});
  await finishOfficial(pool,new URL(again.authorizationUrl).searchParams.get('state'),'fresh',{env,request});
  assert.equal((await pool.query('SELECT * FROM meta_official_grants')).rows.length,1);
+ return {actors,env,request};
 }
