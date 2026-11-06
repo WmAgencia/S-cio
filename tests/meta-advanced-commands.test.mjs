@@ -36,6 +36,18 @@ test('photo + budget + city creates only a draft without hallucinating required 
  assert.equal(r.extracted.dailyBudgetCents,2000);
  assert.match(r.missing.join(' '),/Página/);
 });
+test('Sócio can list or prepare Meta Pixels in Portuguese, but cannot create without confirmation',()=>{
+ const read=parseMetaCommand('Quais pixels existem na minha conta Meta?');
+ assert.equal(read.intent,'read');assert.equal(read.kind,'pixels');assert.equal(read.willSpend,false);
+ const plan=parseMetaCommand('Crie um Pixel chamado Loja Consecom');
+ assert.equal(plan.intent,'plan');assert.equal(plan.kind,'create_pixel');
+ assert.equal(plan.input.name,'Loja Consecom');assert.equal(plan.missing.length,0);
+ const informal=parseMetaCommand('Cria um pixel chamado Loja do Bairro');
+ assert.equal(informal.kind,'create_pixel');assert.equal(informal.input.name,'Loja do Bairro');
+ const missing=parseMetaCommand('Quero criar um Pixel novo');
+ assert.equal(missing.intent,'needs_details');
+ assert.match(missing.missing.join(' '),/Nome do Pixel/);
+});
 test('advanced account insights distinguish Meta click metrics from WhatsApp leads',()=>{
  const values=summarizeMetaInsights([{spend:'10.50',clicks:'3',impressions:'100',campaign_id:'123456',campaign_name:'Teste'},
   {spend:'4.50',clicks:'0',impressions:'100'}],{currency:'BRL'});
