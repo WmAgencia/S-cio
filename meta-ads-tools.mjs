@@ -211,4 +211,28 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
   return {status,result,error:error.message};
  }
 }
+// Explicit ID lookup for QA: must belong to the tenant's selected account.
+// Reads only; does not change campaign, ad sets, ads, billing, or budgets.
+export async function inspectOfficialCampaign(pool,a,campaignId,options={}){
+ if(!numeric(campaignId))throw fail(422,'Informe o ID numérico de uma campanha.');
+ const c=await context(pool,a,options,false);
+ const campaign=await graph(c,'/'+campaignId,{
+  fields:'id,account_id,name,status,effective_status,objective,daily_budget,lifetime_budget'},'GET');
+ if(!campaign?.id||'act_'+campaign.account_id!==c.account.id)
+  throw fail(403,'Campanha não encontrada na conta Meta selecionada desta empresa.');
+ const [sets,ads,insights]=await Promise.all([
+  graph(c,'/'+campaignId+'/adsets',{fields:'id,name,status,effective_status,daily_budget,campaign_id',limit:100},'GET'),
+  graph(c,'/'+campaignId+'/ads',{fields:'id,name,status,effective_status,campaign_id,adset_id',limit:100},'GET'),
+  graph(c,'/'+campaignId+'/insights',{fields:'campaign_id,campaign_name,impressions,reach,clicks,spend,actions',
+   date_preset:'last_7d',limit:30},'GET')
+ ]);
+ const adsets=Array.isArray(sets.data)?sets.data:[],adItems=Array.isArray(ads.data)?ads.data:[],
+  metrics=Array.isArray(insights.data)?insights.data:[];
+ return {accountId:c.account.id,campaign:{
+  id:campaign.id,name:campaign.name,status:campaign.status,effective_status:campaign.effective_status,
+  objective:campaign.objective,daily_budget:campaign.daily_budget,lifetime_budget:campaign.lifetime_budget
+ },adsets:adsets.slice(0,100),ads:adItems.slice(0,100),insights:metrics.slice(0,30),
+  hasMore:Boolean(sets.paging?.next||ads.paging?.next||insights.paging?.next),
+  readOnly:true,period:'last_7d',warning:'Dados da Meta; cliques não comprovam leads ou vendas no WhatsApp.'};
+}
 export async function adsToolHistory(pool,a){permit(a);const r=await pool.query('SELECT id,account_id,kind,summary,status,result,created_at FROM meta_ads_plans WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 30',[a.active_tenant_id]);return {items:r.rows};}
