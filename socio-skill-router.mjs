@@ -11,6 +11,7 @@ import {speakToAdSkill} from './socio-ad-skills.mjs';
 import {selectExpertSkill} from './socio-expert-skills.mjs';
 import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
 import {formatMetaTrafficDiagnosis} from './meta-traffic-diagnostics.mjs';
+import {readWhatsAppFunnel,formatWhatsAppFunnel} from './whatsapp-funnel.mjs';
 
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const uuid=x=>typeof x==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
@@ -130,9 +131,10 @@ export async function speakToSocioSkill(pool,a,request={},opts={}){
    message:formatMetaTrafficDiagnosis(answer.diagnosis)};
  }
  if(expert.id==='whatsapp.sales'){
-  return {runId:null,status:'action_required',skillId:'whatsapp.sales',platform:'whatsapp',executed:false,
-   message:'Para medir clientes e vendas do WhatsApp, o Sócio cruza conversas recebidas pelo WA-AKG com sinais de campanha e pagamentos confirmados. O código de rastreamento identifica uma origem indicativa, não uma compra. Ainda não tenho aqui uma apuração completa de conversas respondidas, leads e vendas; não vou inventar números.',
-   note:'A apuração real exige sessão WA-AKG conectada, consentimento, eventos confirmados e identificação do pedido pago.'};
+  const funnel=await (opts.readWhatsAppFunnel||readWhatsAppFunnel)(pool,a);
+  return {runId:null,status:'completed',skillId:'whatsapp.sales',platform:'whatsapp',
+   executed:false,readOnly:true,data:funnel,
+   message:formatWhatsAppFunnel(funnel)};
  }
  if(expert.id==='tracking.conversions'){
   return {runId:null,status:'action_required',skillId:'tracking.conversions',platform:'tracking',executed:false,
