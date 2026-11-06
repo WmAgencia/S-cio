@@ -66,6 +66,49 @@
       note.textContent='Este teste confirma consultas somente quando a própria API do Sócio retorna sucesso. Não testa publicações, pagamentos ou o WhatsApp.';
       details.append(note);
      });
+     const auditTitle=document.createElement('h3');auditTitle.textContent='Conferir campanha por ID (sem alterações)';
+     report.append(auditTitle);
+     const auditHelp=document.createElement('p');
+     auditHelp.textContent='Informe o ID da campanha para conferir sua situação, conjuntos, anúncios e resultados na conta selecionada. Não publica nem modifica anúncios.';
+     report.append(auditHelp);
+     const auditForm=document.createElement('form');auditForm.className='form-stack';report.append(auditForm);
+     const label=document.createElement('label');label.textContent='ID numérico da campanha';auditForm.append(label);
+     const campaignInput=document.createElement('input');campaignInput.type='text';
+     campaignInput.inputMode='numeric';campaignInput.pattern='[0-9]{4,30}';
+     campaignInput.maxLength=30;campaignInput.required=true;campaignInput.placeholder='Ex.: 120260000000000000';
+     label.append(campaignInput);
+     const lookup=document.createElement('button');lookup.type='submit';lookup.textContent='Conferir campanha na Meta';
+     lookup.className='btn soft';auditForm.append(lookup);
+     const auditOutput=document.createElement('div');report.append(auditOutput);
+     auditForm.addEventListener('submit',async event=>{
+      event.preventDefault();const id=campaignInput.value.trim();
+      if(!/^[0-9]{4,30}$/.test(id)){feedback.textContent='Digite um ID numérico válido.';return;}
+      lookup.disabled=true;auditOutput.replaceChildren();feedback.textContent='Verificando a campanha na Meta, somente leitura…';
+      try{
+       const result=await api('/api/marketing/official/campaign/'+id+'/audit');
+       const campaign=result.campaign;
+       const summary=document.createElement('p');
+       summary.textContent=campaign.name+' · '+campaign.id+' · Situação: '+campaign.effective_status+
+        ' · Conta: '+result.accountId;
+       auditOutput.append(summary);
+       const counts=document.createElement('p');counts.textContent='Conjuntos: '+result.adsets.length+
+        ' · Anúncios: '+result.ads.length+(result.hasMore?' · existem outras páginas':'');auditOutput.append(counts);
+       for(const ad of result.ads.slice(0,20)){
+        const row=document.createElement('p');
+        row.textContent=(ad.name||ad.id)+' · '+(ad.effective_status||ad.status||'sem situação');
+        auditOutput.append(row);
+       }
+       if(result.insights?.length){
+        const record=result.insights[0],line=document.createElement('p');
+        line.textContent='Últimos 7 dias: R$ '+(record.spend||'0')+' gastos · '+
+         (record.impressions||0)+' impressões · '+(record.clicks||0)+' cliques.';
+        auditOutput.append(line);
+       }
+       const warning=document.createElement('p');warning.textContent=result.warning;auditOutput.append(warning);
+       feedback.textContent='Campanha localizada e consultada sem alterações.';
+      }catch(error){feedback.textContent='Não foi possível conferir a campanha: '+error.message;}
+      finally{lookup.disabled=false;}
+     });
     }
     if(data.selectedAccount&&globalThis.SocioAdsTools)await globalThis.SocioAdsTools.render({root,api,canManage:canManage&&data.writesEnabled,account:data.selectedAccount});
     if(data.selectedAccount&&globalThis.SocioMetaAdvanced)await globalThis.SocioMetaAdvanced.render({root,api,account:data.selectedAccount});
