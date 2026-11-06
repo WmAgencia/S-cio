@@ -106,7 +106,7 @@ function promptFor(brief,resources){
 function publicBrief(b){
  return {category:b.category||null,cityName:b.cityName||null,dailyBudgetCents:b.dailyBudgetCents||null,
   destination:b.destination||null,genders:Array.isArray(b.genders)?b.genders:[],hasPhoto:Boolean(b.imageHash),
-  pageId:b.pageId||null,whatsappPhone:b.whatsappPhone||null,url:b.url||null,cityKey:b.cityKey||null};
+  pageId:b.pageId||null,imageName:b.imageName||null,whatsappPhone:b.whatsappPhone||null,url:b.url||null,cityKey:b.cityKey||null};
 }
 async function enrich(pool,a,brief,{read=readAdsTool,options={}}={}){
  const resources={pages:[],images:[],channels:[]};
@@ -135,7 +135,7 @@ async function enrich(pool,a,brief,{read=readAdsTool,options={}}={}){
   // Only auto-use an existing image when it unambiguously mentions the requested product.
   const keyword=clean(brief.category).split(' ')[0];
   const matches=resources.images.filter(x=>validImageHash(x.hash)&&clean(x.name).includes(keyword));
-  if(matches.length===1)brief.imageHash=matches[0].hash;
+  if(matches.length===1){brief.imageHash=matches[0].hash;brief.imageName=String(matches[0].name||'Criativo autorizado').slice(0,90);}
  }
  return {brief,resources};
 }
@@ -213,7 +213,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   if(candidate.length>=3&&candidate.length<=70&&!/\b(R\$|orcamento|campanha|pode criar|autorizo)\b/i.test(candidate))
    brief.category=candidate;
  }
- if(imageHash)brief.imageHash=imageHash;
+ if(imageHash){brief.imageHash=imageHash;brief.imageName='Foto enviada nesta conversa';}
  const {resources}=await enrich(pool,a,brief,{read:opts.read||readAdsTool,options:opts});
  const prompt=promptFor(brief,resources);
  if(prompt){
@@ -251,7 +251,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   [run.id,JSON.stringify(brief),plan.id,pixelPlanId,a.active_tenant_id,a.user_id]);
  return {runId:run.id,status:'ready',brief:publicBrief(brief),planId:plan.id,
   message:'Preparei a campanha '+creative.name+'. Público: '+(brief.genders?.[0]===2?'mulheres, ':'')+
-   'maiores de 18 anos em '+brief.cityName+'. Orçamento diário definido: R$ '+
+   'maiores de 18 anos em '+brief.cityName+'. Página: '+brief.pageId+'. Foto: '+(brief.imageName||'criativo enviado')+'. Orçamento diário definido: R$ '+
    (brief.dailyBudgetCents/100).toFixed(2).replace('.',',')+'/dia. Destino: '+
    (brief.destination==='whatsapp'?'WhatsApp WA-AKG':'site')+'. '+
    (pixelPlanId?'Um Pixel novo também está incluído na autorização, mas ainda precisará ser instalado no site. ':'' )+
