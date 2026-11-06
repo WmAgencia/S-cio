@@ -57,10 +57,14 @@ test('Google Ads cannot invoke Meta operations, even when user requests a real c
 });
 test('WhatsApp attribution and CAPI requests never fabricate real conversions',async()=>{
  const pool={query:async()=>{throw Error('No read or write for unsupported tracking')}};
- const whats=await speakToSocioSkill(pool,actor,{message:'Me manda relatório de vendas no WhatsApp'});
- assert.equal(whats.status,'action_required');
+ const whats=await speakToSocioSkill(pool,actor,{message:'Me manda relatório de vendas no WhatsApp'},{
+  readWhatsAppFunnel:async()=>({items:[],confidence:'indicative',partial:false})
+ });
+ assert.equal(whats.status,'completed');
+ assert.equal(whats.readOnly,true);
  assert.equal(whats.executed,false);
  assert.match(whats.message,/indicativa|WA-AKG/);
+ assert.match(whats.message,/Vendas reais e receita confirmada: indisponíveis/);
  const capi=await speakToSocioSkill(pool,actor,{message:'Quero instalar CAPI para rastrear compras'});
  assert.equal(capi.status,'action_required');
  assert.match(capi.message,/pagamento validado/);

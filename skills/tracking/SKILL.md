@@ -16,3 +16,10 @@ Não existe Pixel instalado **dentro** de uma conversa do WhatsApp. Para anúnci
 
 ## Google
 Quando a API for integrada, usar Google tag/Google Ads conversion actions com os mesmos controles; não afirmar que estão instaladas atualmente.
+
+## Etapa 5 — funil WA-AKG mensurável (somente leitura)
+Consultar `/api/marketing/attribution/funnel` no tenant autorizado. Por código observado em mensagem realmente recebida: contar conversas distintas; respostas `outbound` **somente com `provider_id` confirmado** após a mensagem vinculada; cliente que respondeu após a primeira resposta da empresa; pedidos de orçamento e interesses criados depois da mensagem; pedidos cadastrados e pagamentos **somente do Stripe em modo teste** confirmados pela base de pedidos.
+
+O relatório não demonstra entrega de anúncio Meta, clique Meta, integração CAPI, pagamento real, nem faturamento. Campos `livePaidOrders` e `liveRevenueCents` permanecem `null` até existir um provedor de produção autenticado, nunca deduzidos de intenções. Não somar o mesmo cliente em campanhas duplicadas sem examinar deduplicação/primeiro toque.
+
+Atenção: a coleta de mensagens é passiva e depende de conexão WA-AKG real e `SOCIO_ATTRIBUTION_ENABLED` habilitado explicitamente após homologação. Não ativar apenas para produzir números.

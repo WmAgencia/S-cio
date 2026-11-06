@@ -10,6 +10,7 @@ import {ownerWhatsAppReadiness} from './socio-owner-skill-readiness.mjs';
 import {metaConnectionPreflight} from './meta-integration-preflight.mjs';
 import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from './meta-report-schedules.mjs';
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
+import {readWhatsAppFunnel} from './whatsapp-funnel.mjs';
 import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectOfficial,selectOfficialAccount,handleMetaRemoval,metaRemovalStatus} from './meta-official.mjs';
 
 import http from 'node:http';
@@ -405,6 +406,8 @@ async function handle(req,res){
   return json(res,200,await listTrackingLinks(pool,a));
  if(pathname==='/api/marketing/attribution/report'&&method==='GET')
   return json(res,200,await trackingReport(pool,a));
+ if(pathname==='/api/marketing/attribution/funnel'&&method==='GET')
+  return json(res,200,await readWhatsAppFunnel(pool,a));
  if(pathname==='/api/marketing/attribution/links'&&method==='POST'){
   if(!limiter(simulationAttempts,'tracking-link:'+a.user_id,60000,12))throw fail(429,'Aguarde antes de gerar outro link.');
   const {data}=await body(req,3000);
