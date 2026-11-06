@@ -40,7 +40,7 @@ export async function saveMetaReportSchedule(pool,a,input={},options={}){
   "next_run_at=EXCLUDED.next_run_at,updated_at=now() "+
   "RETURNING hour,time_zone,period,enabled,next_run_at,account_id",
   [a.active_tenant_id,a.user_id,account.id,hour,timeZone,period,enabled,next]);
- return {schedule:result.rows[0],delivery:'panel_only',
+ return {schedule:result.rows[0],serviceEnabled:(options.env||process.env).SOCIO_META_REPORTS_ENABLED==='true',delivery:'panel_only',
   note:'O relatório aparecerá no Sócio. Envio ao grupo WA-AKG não está habilitado.'};
 }
 export async function listMetaReportSchedule(pool,a){
@@ -49,7 +49,7 @@ export async function listMetaReportSchedule(pool,a){
   pool.query('SELECT hour,time_zone,period,enabled,next_run_at,account_id FROM meta_report_schedules WHERE tenant_id=$1',[a.active_tenant_id]),
   pool.query("SELECT id,status,scheduled_for,summary,error_code,created_at FROM meta_report_runs WHERE tenant_id=$1 ORDER BY scheduled_for DESC LIMIT 20",[a.active_tenant_id])
  ]);
- return {schedule:settings.rows[0]||null,runs:reports.rows,delivery:'panel_only',
+ return {schedule:settings.rows[0]||null,runs:reports.rows,serviceEnabled:process.env.SOCIO_META_REPORTS_ENABLED==='true',delivery:'panel_only',
   note:'Relatórios guardados apenas no painel. Cliques e conversas são métricas diferentes.'};
 }
 export async function processDueMetaReport(pool,{env=process.env,now=new Date(),read=readAdvancedMetaTool}={}){
