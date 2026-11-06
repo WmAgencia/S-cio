@@ -8,6 +8,7 @@ import {resolveSelectedOfficialAccount} from './meta-official.mjs';
 import {parseMetaCommand,previewMetaCommand} from './meta-ads-commands.mjs';
 import {prepareAdsPlan,executeAdsPlan} from './meta-ads-tools.mjs';
 import {speakToAdSkill} from './socio-ad-skills.mjs';
+import {selectExpertSkill} from './socio-expert-skills.mjs';
 
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const uuid=x=>typeof x==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
@@ -107,6 +108,24 @@ export async function speakToSocioSkill(pool,a,request={},opts={}){
  if(!raw&&!imageHash)throw fail(422,'Digite um pedido.');
  if(/\b(pixel no whatsapp|instalar pixel no whatsapp)\b/.test(clean(raw)))
   return {runId:null,status:'completed',message:'Não existe Pixel instalado dentro do WhatsApp. Para conversas uso dados de anúncios e sinais do WA-AKG; para sites uso Pixel, CAPI e eventos de compra confirmados.'};
+ const expert=selectExpertSkill(raw);
+ if(expert.id==='google.ads'){
+  return {runId:null,status:'action_required',skillId:'google.ads',platform:'google',executed:false,
+   message:expert.reason==='multi_platform'?
+    'Você mencionou Meta Ads e Google Ads. O Sócio já possui ferramentas Meta, mas o Google Ads ainda precisa de integração OAuth e API. Não criei campanhas em nenhuma plataforma. Podemos preparar uma campanha Meta separada quando você pedir explicitamente.' :
+    'Entendi que você quer Google Ads. O especialista está preparado para planejar campanhas, mas a conta e a API oficial do Google Ads ainda não foram conectadas ao Sócio. Não criei campanha, Pixel ou conversão em outra plataforma.',
+   note:'Integração Google Ads pendente: OAuth, autorização por empresa, API, testes e mensuração. Nenhum custo foi gerado.'};
+ }
+ if(expert.id==='whatsapp.sales'){
+  return {runId:null,status:'action_required',skillId:'whatsapp.sales',platform:'whatsapp',executed:false,
+   message:'Para medir clientes e vendas do WhatsApp, o Sócio cruza conversas recebidas pelo WA-AKG com sinais de campanha e pagamentos confirmados. O código de rastreamento identifica uma origem indicativa, não uma compra. Ainda não tenho aqui uma apuração completa de conversas respondidas, leads e vendas; não vou inventar números.',
+   note:'A apuração real exige sessão WA-AKG conectada, consentimento, eventos confirmados e identificação do pedido pago.'};
+ }
+ if(expert.id==='tracking.conversions'){
+  return {runId:null,status:'action_required',skillId:'tracking.conversions',platform:'tracking',executed:false,
+   message:'Posso organizar o rastreamento profissional, mas instalar eventos no site exige acesso autorizado ao domínio e ao checkout. Pixel e CAPI são para propriedades web; dentro do WhatsApp usamos eventos reais do WA-AKG, sem Pixel na conversa. Purchase só pode ser confirmado depois do pagamento validado.',
+   note:'O Pixel não é instalado no WhatsApp. A integração e os testes dos eventos no site ainda precisam ser concluídos.'};
+ }
  const command=parseMetaCommand(raw);
  if(command.intent==='read'){
   const data=await (opts.preview||previewMetaCommand)(pool,a,raw,opts);

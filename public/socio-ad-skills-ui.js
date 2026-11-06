@@ -5,7 +5,7 @@
   const section=E('section');section.className='card card-pad';section.dataset.socioSkill='campaign';
   root.append(section);
   section.append(E('h2','Peça à IA. O Sócio cuida da campanha.'));
-  section.append(E('p','Descreva seu objetivo normalmente. O Sócio pesquisa os recursos da conta autorizada, prepara a campanha e só pergunta o que realmente faltar. Criação sempre PAUSADA, sem gastos antes de autorização.'));
+  section.append(E('p','Descreva seu objetivo normalmente. O Sócio identifica a especialidade correta, consulta os recursos permitidos e só pede o que faltar. Criação de anúncios Meta sempre PAUSADA; Google Ads ainda não está conectado.'));
   const overview=E('div');overview.className='panel';section.append(overview);
   const start=E('p','Exemplo: Quero vender roupa feminina em Sorocaba gastando seis reais por dia.');
   overview.append(start);
@@ -45,6 +45,8 @@
    if(!message&&!file){feedback.textContent='Escreva um pedido ou envie a foto solicitada.';return;}
    button.disabled=true;feedback.textContent='Conferindo os dados da sua empresa e da conta '+account.account_id+'…';
    try{
+    const isGoogleRequest=/(google\s*(?:ads|adwords)|adwords|rede de pesquisa|an[uú]ncio[s]?\s+(?:no|do|pelo)\s+google|campanha\s+(?:no|do|pelo)\s+google)/i.test(message);
+    if(file&&isGoogleRequest)throw Error('Não vou enviar esta foto para a Meta: você pediu Google Ads, que ainda não está integrado. Envie seu pedido sem foto para ver as orientações.');
     const imageHash=await attachPhoto(file);
     const answer=await api('/api/marketing/skills/chat','POST',{message,runId,imageHash});
     if(message)add('Você',message);
@@ -52,10 +54,11 @@
     runId=answer.runId;
     add('Sócio IA',answer.message||'Solicitação registrada.');
     if(answer.note)add('Rastreamento',answer.note);
-    if(answer.status==='completed'||answer.status==='failed')runId=null;
+    if(['completed','failed','action_required'].includes(answer.status))runId=null;
     feedback.textContent=answer.status==='ready'?'Plano pronto. Se estiver correto, responda “pode criar”.':
      answer.status==='collecting'?'Sócio aguarda apenas a próxima informação necessária.':
-     answer.status==='completed'?'Criação confirmada pela Meta. Itens permanecem pausados.':
+     answer.status==='action_required'?'Esta integração requer configuração; nenhuma campanha foi alterada.':
+     answer.status==='completed'?(answer.result?.result?.campaignId?'Campanha confirmada pela Meta. Itens pausados.':'Consulta concluída. Confira a resposta.'):
      'Confira a mensagem e os resultados antes de repetir.';
     box.value='';upload.value='';
    }catch(error){feedback.textContent=error.message+' Nenhuma execução deve ser repetida sem verificar o histórico.';}
@@ -63,6 +66,8 @@
   });
   try{
    const data=await api('/api/marketing/skills/catalog');
+   const experts=Array.isArray(data.experts)?data.experts:[];
+   if(experts.length)overview.append(E('p','Especialidades: '+experts.map(x=>x.label+(x.availability==='pending_oauth_api'?' (integração pendente)':'')).join(' · ')));
    const pending=(data.skills||[]).filter(x=>x.availability.startsWith('pending'));
    if(pending.length)overview.append(E('p','Comandos por grupos WhatsApp e instalação automática de CAPI ainda estão em homologação. O painel já aceita pedidos conversacionais.'));
   }catch{}
