@@ -94,7 +94,7 @@ test('diagnostic Graph operations remain scoped to selected ad account and never
  const advanced=readFileSync(new URL('../meta-ads-advanced.mjs',import.meta.url),'utf8');
  assert.match(advanced,/readOnly:true/);
  assert.match(advanced,/graph\(c,'ads',\{fields:/);
- assert.match(advanced,/\/\+c\.account\.id\+'\/'\+edge/);
+ assert(advanced.includes("c.account.id+'/'+edge"));
  assert.doesNotMatch(advanced,/method:'POST'|method='POST'/);
  const panel=readFileSync(new URL('../public/meta-advanced-ui.js',import.meta.url),'utf8');
  assert.match(panel,/Próximo passo sugerido/);
