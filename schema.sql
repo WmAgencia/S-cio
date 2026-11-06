@@ -845,6 +845,18 @@ CREATE TABLE IF NOT EXISTS meta_ads_plans (
  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS meta_ads_plans_tenant_idx ON meta_ads_plans(tenant_id,created_at DESC);
+-- Permit the new WhatsApp destination without weakening existing approvals.
+DO $socio_meta_whatsapp_kind$
+BEGIN
+ IF EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='meta_ads_plans'::regclass
+  AND conname='meta_ads_plans_kind_check'
+  AND pg_get_constraintdef(oid) NOT LIKE '%create_whatsapp%') THEN
+  ALTER TABLE meta_ads_plans DROP CONSTRAINT meta_ads_plans_kind_check;
+  ALTER TABLE meta_ads_plans ADD CONSTRAINT meta_ads_plans_kind_check
+   CHECK(kind IN ('create','create_whatsapp','status','rename','budget'));
+ END IF;
+END $socio_meta_whatsapp_kind$;
+
 
 -- WhatsApp attribution phase 1: codes embedded in prefilled click-to-chat messages.
 -- The code is not a credential and does NOT prove a Meta click or paid sale.
