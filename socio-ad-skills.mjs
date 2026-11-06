@@ -188,7 +188,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
     'A Meta confirmou a criação. Campanha, conjunto e anúncio foram criados PAUSADOS. IDs: '+
      [executed.result?.campaignId,executed.result?.adsetId,executed.result?.adId].filter(Boolean).join(', ')+
      '. Para veicular, solicite a ativação autorizada; o rastreamento WhatsApp não é Pixel.' :
-    'Não houve confirmação de conclusão. Confira o histórico da Meta antes de tentar de novo. '+String(executed.error||'').slice(0,120)};
+    'Criação incompleta: confira o histórico e os IDs parciais da Meta antes de tentar novamente. '+String(executed.error||'').slice(0,120)};
  }
  const brief=extractCampaignBrief(message,run.brief||{});
  if(imageHash)brief.imageHash=imageHash;
@@ -210,7 +210,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   ...(brief.destination==='whatsapp'?{whatsappPhone:brief.whatsappPhone}:{url:brief.url})};
  const kind=brief.destination==='whatsapp'?'create_whatsapp':'create';
  const plan=await (opts.prepare||prepareAdsPlan)(pool,a,kind,input,opts);
- await pool.query("UPDATE socio_skill_runs SET brief=$2::jsonb,plan_id=$3,status='ready',updated_at=now() "+
+ await pool.query("UPDATE socio_skill_runs SET brief=$2::jsonb,plan_id=$3,status='ready',expires_at=now()+interval '15 minutes',updated_at=now() "+
   "WHERE id=$1 AND tenant_id=$4 AND user_id=$5 AND status='collecting'",
   [run.id,JSON.stringify(brief),plan.id,a.active_tenant_id,a.user_id]);
  return {runId:run.id,status:'ready',brief:publicBrief(brief),planId:plan.id,
@@ -219,7 +219,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
    (brief.dailyBudgetCents/100).toFixed(2).replace('.',',')+'/dia. Destino: '+
    (brief.destination==='whatsapp'?'WhatsApp WA-AKG':'site')+'. '+
    'Texto: '+creative.message+' A Meta fará a revisão do anúncio. '+
-   "Responda 'pode criar' para eu criar a campanha PAUSADA, sem iniciar gastos.",
+   "Responda 'pode criar' em até 15 minutos para eu criar a campanha PAUSADA, sem iniciar gastos.",
   note:brief.destination==='whatsapp'?
    'Conversa WhatsApp não recebe Pixel. Atribuição dependerá de dados válidos do WA-AKG e da Meta.': 
    'Para medir compras no site, a instalação do Pixel, CAPI e eventos requer integração e consentimento próprios.'};
