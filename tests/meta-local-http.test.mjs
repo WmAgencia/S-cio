@@ -17,7 +17,7 @@ test('real PostgreSQL local relay: one-time enrollment, user/tenant isolation, d
   const pairing=await startLocalPairing(pool,a,{SOCIO_PUBLIC_URL:'https://socio-app-production-762c.up.railway.app'});
   const linked=await claimLocalPairing(pool,{code:pairing.pairCode,deviceLabel:'Fixture PC'});
   await assert.rejects(()=>claimLocalPairing(pool,{code:pairing.pairCode,deviceLabel:'Replay'}),{status:403});
-  const device=await authorizeLocalConnector(pool,'Bearer '+linked.token);assert.equal(device.user_id,user);
+  const device=await authorizeLocalConnector(pool,'Bearer '+linked.token);assert.equal(device.user_id,user);assert.equal((await localConnectionStatus(pool,a)).connectionId,linked.connectionId);
   assert.equal((await localConnectionStatus(pool,b)).paired,false);
   await localHeartbeat(pool,device,{sessionPresent:false,browserOpen:true});assert.equal((await localConnectionStatus(pool,a)).browserOpen,true);
   const login=await pollLocalJob(pool,device);assert.equal(login.job.kind,'login');assert.equal((await pollLocalJob(pool,device)).job,null);

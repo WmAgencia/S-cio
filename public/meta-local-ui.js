@@ -2,7 +2,7 @@
  let cleanup=()=>{};
  const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  async function render({root,api,canManage}){
-  cleanup();let stopped=false,timer,polling=false,plan,executionKey;
+  cleanup();let stopped=false,timer,polling=false,plan,executionKey,pairingId;
   cleanup=()=>{stopped=true;clearTimeout(timer);};
   const initial=await api('/api/marketing/local/status');if(stopped)return;
   root.innerHTML='<div class="view-heading"><div><span class="eyebrow">META ADS</span><h1>Conecte pelo seu navegador.</h1><p>O login acontece em uma janela separada no seu computador.</p></div></div>'+
@@ -20,7 +20,7 @@
    message(!state.paired?'Instale o conector e conecte este computador.':!state.online?'Computador vinculado, mas o conector está offline. Abra Iniciar Conector Socio no seu computador.':state.browserOpen?'A página da Meta está aberta no seu computador. Termine o login e feche essa janela.':state.sessionPresent?'Sessão presente no computador. As operações disponíveis podem ser verificadas abaixo.':'Computador conectado. Abra o login da Meta para entrar na sua conta.');
    if($('metaLocalLogin'))$('metaLocalLogin').hidden=!state.online;
    if($('metaLocalDisconnect'))$('metaLocalDisconnect').hidden=!state.paired;
-   if(state.paired)$('metaLocalPairing').hidden=true;
+   if(state.paired&&(!pairingId||state.connectionId===pairingId))$('metaLocalPairing').hidden=true;
   }
   async function refresh(){const state=await api('/api/marketing/local/status');present(state);return state;}
   async function monitor(){
@@ -43,7 +43,7 @@
   action('metaLocalConnect',async()=>{
    const paired=await api('/api/marketing/local/pairing','POST',{});if(stopped)return;
    const target=new URL(paired.connectUrl);if(target.protocol!=='socio-meta:'||target.hostname!=='connect')throw Error('Link de conexão inválido.');
-   $('metaLocalLink').href=target.href;$('metaLocalCode').textContent=paired.pairCode;$('metaLocalPairing').hidden=false;
+   pairingId=paired.connectionId;$('metaLocalLink').href=target.href;$('metaLocalCode').textContent=paired.pairCode;$('metaLocalPairing').hidden=false;
    message('Clique em Abrir conector instalado e confirme no navegador. Se ainda não instalou, baixe o ZIP primeiro.');
   });
   action('metaLocalRefresh',async()=>{
