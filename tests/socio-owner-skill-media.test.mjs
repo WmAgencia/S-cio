@@ -36,7 +36,7 @@ function poolFor(row,{pending=true,claimed=true}={}){
    return {rowCount:1,rows:[row]};
   }
   if(sql.startsWith('SELECT id,brief FROM socio_skill_runs'))return pending?{
-   rowCount:1,rows:[{id:'8c6249cc-7e81-4920-8924-4723401ec9b9',brief:{category:'moda feminina'}}]
+   rowCount:1,rows:[{id:'8c6249cc-7e81-4920-8924-4723401ec9b9',brief:{category:'moda feminina'},updated_at:new Date(now-60000).toISOString()}]
   }:{rowCount:0,rows:[]};
   if(sql.startsWith('SELECT provider_message_id FROM socio_owner_media_receipts'))
    return {rowCount:1,rows:[]};
@@ -123,6 +123,17 @@ test('verified owner photo joins a collecting campaign, never publishes an ad or
  assert.deepEqual(invoked,['upload','speak','deliver']);
  assert(pool.calls.some(c=>c.sql.includes("ON CONFLICT(tenant_id,channel_id,provider_message_id) DO NOTHING")));
  assert.equal(pool.calls.find(c=>c.sql.startsWith('INSERT INTO socio_owner_media_receipts')).args[5],'key-image-a');
+});
+test('an image received BEFORE the current creative request is not used in a new campaign',async()=>{
+ const row=actorRow(),pool=poolFor(row);let uploaded=0;
+ const result=await processOwnerSkillMedia(pool,{env,now,
+  getStatus:async()=>({connected:true,connectedNumber:'5515888123456'}),
+  read:async()=>({data:[media('IMAGE','older-photo',{timestamp:new Date(now-180000).toISOString()})]}),
+  download:async()=>{uploaded++;throw Error('Old photo must not be downloaded')},
+  upload:async()=>{uploaded++;throw Error('Old photo must not be uploaded')}
+ });
+ assert.equal(result.processed,false);
+ assert.equal(uploaded,0);
 });
 test('voice requests can be transcribed into plans but spoken approval never executes',async()=>{
  const row=actorRow();
