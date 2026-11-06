@@ -1195,8 +1195,10 @@ async function admin(){
  const rows=tenants.map(t=>
   '<tr><td><strong>'+e(t.name)+'</strong><div class="table-detail">'+
    e(t.cnpj||t.slug)+' · '+e(t.members)+' usuário(s)</div></td>'+
-   '<td>'+badge(t.plan)+'</td><td>'+badge(t.status,t.status==='active'?'green':'gray')+'</td>'+
+   '<td>'+badge(t.plan)+'</td><td>'+badge(t.status,t.status==='active'?'green':'gray')+
+   (t.status==='trial'&&t.trial_ends_at?'<div class="table-detail">Teste até '+e(date(t.trial_ends_at))+(new Date(t.trial_ends_at)<new Date()?' · vencido':'')+'</div>':'')+'</td>'+
    '<td><button type="button" class="btn sm soft" data-feature-edit="'+e(t.id)+'">Funcionalidades</button> '+
+   (t.status==='trial'&&t.trial_ends_at?'<button type="button" class="btn sm soft" data-contract="'+e(t.id)+'">Contrato aceito</button> ':'')+
    '<button class="btn sm ghost" data-switch="'+e(t.id)+'">'+
    (t.id===state.me.tenant.id?'Atual':'Acessar')+'</button></td></tr>').join('');
  view.innerHTML=heading('CONTROLE CONSECOM','Empresas.','Gerencie clientes e espaços independentes.',
@@ -1307,6 +1309,15 @@ async function admin(){
   }catch(error){toast(errMsg(error),true);}
   finally{submit.disabled=false;}
  });
+ view.querySelectorAll('[data-contract]').forEach(b=>b.addEventListener('click',()=>{
+  const tenant=tenants.find(x=>x.id===b.dataset.contract);
+  if(!tenant||!confirm('Confirma que '+tenant.name+' aceitou formalmente o contrato mensal? Esta ação não cobra o cliente.'))return;
+  action(async()=>{
+   await api('/api/admin/tenants/'+tenant.id+'/contract','POST',{accepted:true});
+   toast('Contrato registrado. Cobrança deve ser configurada separadamente.');
+   await admin();
+  });
+ }));
  view.querySelectorAll('[data-switch]').forEach(b=>b.addEventListener('click',()=>action(async()=>{
   await api('/api/admin/switch','POST',{tenantId:b.dataset.switch});
   toast('Ambiente alterado.');
