@@ -20,6 +20,7 @@ import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSess
 import {processNextWaakgScan} from './waakg-history.mjs';
 import {startAutoTraining,autoTrainingStatus,cancelAutoTraining,processNextAutoTraining} from './training-auto.mjs';
 import {interviewStatus,startInterview,submitInterviewAnswer,createInterviewDraft,listProofs,createProof,approveProof,removeProof,readProofMedia,getClosingPolicy,updateClosingPolicy} from './socio-training-service.mjs';
+import {transcribeTrainingAudio} from './socio-training-speech.mjs';
 import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
@@ -1076,6 +1077,13 @@ async function handle(req,res){
   await audit(a,'agent.updated',{enabled:data.enabled});return json(res,200,r.rows[0]);
  }
 
+ if(pathname==='/api/training/transcribe'&&method==='POST'){
+  needRole(a,['owner','admin']);
+  if(!limiter(simulationAttempts,'train-speech:'+a.user_id,60000,6))
+   throw fail(429,'Limite de gravações atingido. Tente novamente mais tarde.');
+  const {data}=await body(req,5_200_000);
+  return json(res,200,await transcribeTrainingAudio({audioBase64:data.audioBase64,mime:data.mime}));
+ }
  // A guided interview can only create a reviewable Markdown draft. Never activates the agent.
  if(pathname==='/api/training/interview'&&method==='GET'){
   requirePermission(a,'training.manage');
