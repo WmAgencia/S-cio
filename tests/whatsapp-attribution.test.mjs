@@ -76,6 +76,18 @@ test('real PostgreSQL: attribution only for tenant-bound inbound messages, first
   assert.equal(ar.length,1);assert.equal(br.length,1);
   assert.equal(ar[0].conversations,1);assert.equal(br[0].conversations,1);
   assert.equal(ar[0].quote_requests,0);assert.equal(ar[0].purchase_intents,0);
+  const quoteId=id(),intentId=id();
+  await db.query("INSERT INTO quote_requests(id,tenant_id,conversation_id,inbound_message_id,summary) VALUES($1,$2,$3,$4,'Solicitação real')",
+   [quoteId,t1,convA,messageA]);
+  await db.query("INSERT INTO sale_intents(id,tenant_id,conversation_id,inbound_message_id,summary) VALUES($1,$2,$3,$4,'Cliente demonstrou interesse')",
+   [intentId,t1,convA,messageA]);
+  let updated=(await trackingReport(db,ownerA)).items[0];
+  assert.equal(updated.quote_requests,1);assert.equal(updated.purchase_intents,1);
+  // A quote from before the tracked message must not be attributed to this link.
+  await db.query("UPDATE quote_requests SET created_at=(SELECT created_at FROM messages WHERE id=$1)-interval '1 hour' WHERE id=$2",
+   [messageA,quoteId]);
+  updated=(await trackingReport(db,ownerA)).items[0];
+  assert.equal(updated.quote_requests,0);assert.equal(updated.purchase_intents,1);
   assert.equal((await listTrackingLinks(db,ownerB)).links[0].accountId,'act_2222222222');
   assert.equal((await db.query('SELECT count(*)::int AS n FROM wa_lead_attributions')).rows[0].n,2);
   await assert.rejects(deactivateTrackingLink(db,ownerB,a.id),e=>e.status===404);
