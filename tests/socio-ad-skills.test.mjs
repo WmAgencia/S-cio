@@ -58,6 +58,9 @@ test('campaign brief understands spoken Brazilian Portuguese and separates buyin
  assert.equal(b.destination,undefined);
  const numeric=extractCampaignBrief('Quero anunciar roupa feminina em Sorocaba por R$ 6 por dia');
  assert.equal(numeric.dailyBudgetCents,600);
+ const other=extractCampaignBrief('Quero vender bolos caseiros em Sorocaba gastando R$ 6 por dia');
+ assert.equal(other.category,'bolos caseiros');
+ assert.equal(other.cityName,'Sorocaba');
  const money=extractCampaignBrief('Quero vender roupa feminina em Sorocaba gastando R$ 6,50 por dia');
  assert.equal(money.dailyBudgetCents,650);
  assert.equal(chooseMetaCity([{key:'654321',name:'Sorocaba'}],'Sorocaba').key,'654321');
@@ -116,6 +119,16 @@ test('skill asks only for creative when assets do not match and lets owner provi
  assert.equal(withImage.status,'ready');
  assert.equal(prepared.length,1);
  assert.equal(prepared[0].imageHash,imageHash);
+});
+test('non-fashion businesses can answer a simple product question conversationally',async()=>{
+ const pool=fakePool(),opts={resolve,read};
+ const started=await speakToAdSkill(pool,actor,{message:'Crie uma campanha em Sorocaba gastando R$ 6 por dia'},opts);
+ assert.equal(started.status,'collecting');
+ assert.match(started.message,/produto ou serviço/);
+ const replied=await speakToAdSkill(pool,actor,{message:'Bolos caseiros',runId:started.runId},opts);
+ assert.equal(replied.status,'collecting');
+ assert.equal(replied.brief.category,'Bolos caseiros');
+ assert.match(replied.message,/foto/i);
 });
 test('missing Meta connection, permissions and currency stop orchestration',async()=>{
  const pool=fakePool();
