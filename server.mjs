@@ -241,7 +241,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/attribution-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
