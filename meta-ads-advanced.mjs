@@ -5,6 +5,7 @@ import {officialConfig,resolveSelectedOfficialAccount} from './meta-official.mjs
 import {openMarketingSecret} from './marketing-integrations.mjs';
 import {requirePermission} from './team-permissions.mjs';
 import {assertApiFeature} from './tenant-features.mjs';
+import {diagnoseMetaTraffic} from './meta-traffic-diagnostics.mjs';
 
 const fail=(status,msg)=>Object.assign(new Error(msg),{status});
 export const META_REPORT_PERIODS=Object.freeze(['today','yesterday','last_7d','last_30d']);
@@ -60,7 +61,7 @@ async function context(pool,a,options={}){
  return {account,token:value.token,env:options.env||process.env,request:options.request||fetch};
 }
 async function graph(c,edge,params={}){
- if(!/^[a-z][a-z_]{2,25}$/.test(edge)||!['insights','adcreatives','advideos','customaudiences','adspixels','customconversions'].includes(edge))
+ if(!/^[a-z][a-z_]{2,25}$/.test(edge)||!['insights','ads','adcreatives','advideos','customaudiences','adspixels','customconversions'].includes(edge))
   throw fail(422,'Ferramenta Meta inválida.');
  const cfg=officialConfig(c.env),url=new URL('https://graph.facebook.com/'+cfg.version+'/'+c.account.id+'/'+edge);
  for(const [key,value] of Object.entries(params))url.searchParams.set(key,typeof value==='object'?JSON.stringify(value):String(value));
@@ -98,16 +99,20 @@ export async function readAdvancedMetaTool(pool,a,kind,input={},options={}){
  if(report.daily&&kind==='reports')params.time_increment='1';
  const result=await graph(c,'insights',params),rows=Array.isArray(result.data)?result.data:[];
  const summary=summarizeMetaInsights(rows,{currency:c.account.currency,period:report.period,level:params.level});
- const diagnostics=kind==='diagnosis'?rows.map(row=>{
-  const spend=Number(row.spend||0),clicks=Number(row.clicks||0),impressions=Number(row.impressions||0);
-  return {id:row.campaign_id||null,name:row.campaign_name||'Campanha',spend,clicks,impressions,
-   ctrPercent:impressions?+(100*clicks/impressions).toFixed(2):null,
-   cpc:clicks?+(spend/clicks).toFixed(2):null,
-   note:!impressions?'Sem impressões suficientes para diagnóstico.':
-    !clicks?'Sem cliques no período; revise criativo, público e posicionamentos.':
-    'Compare custo por resultado e leads reais antes de otimizar. Não houve alterações automáticas.'};
- }):null;
- return {kind,accountId:c.account.id,items:rows,summary,diagnostics,
+ let diagnosis=null;
+ if(kind==='diagnosis'){
+  let ads=[],adsHasMore=false,adsUnavailable=false;
+  try{
+   const adResponse=await graph(c,'ads',{fields:'id,name,campaign_id,effective_status,status',limit:100});
+   if(!Array.isArray(adResponse.data))adsUnavailable=true;
+   else{ads=adResponse.data;adsHasMore=Boolean(adResponse.paging?.next);}
+  }catch{adsUnavailable=true;}
+  diagnosis=diagnoseMetaTraffic({insights:rows,ads,period:report.period,
+   currency:c.account.currency,insightsHasMore:Boolean(result.paging?.next),
+   adsHasMore,adsUnavailable});
+ }
+ return {kind,accountId:c.account.id,items:rows,summary,
+  diagnostics:diagnosis?.diagnostics||null,diagnosis,
   hasMore:Boolean(result.paging?.next),after:result.paging?.cursors?.after||null,
-  readOnly:true,warning:summary.qualification};
+  readOnly:true,warning:diagnosis?.warning||summary.qualification};
 }
