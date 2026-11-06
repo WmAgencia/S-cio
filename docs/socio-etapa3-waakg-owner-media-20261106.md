@@ -14,6 +14,7 @@ Worker e importação:
 - `SOCIO_OWNER_COMMANDS_ENABLED=true`: ponte privada de texto, somente após homologação real e saída WA-AKG autorizada.
 - `SOCIO_OWNER_MEDIA_ENABLED=true`: leitura e processamento de mídia do owner; requer flag de comandos e `SOCIO_OUTBOUND_ENABLED=true`.
 - `SOCIO_OWNER_AUDIO_ENABLED=true`: somente áudios recebidos pela ponte de mídia, requer `GROQ_API_KEY` válida e autorização de tratamento de voz.
+- `SOCIO_OWNER_MEDIA_TENANT_ID=<UUID do tenant de teste>`: obrigatório na primeira homologação; impede varredura de mídias das outras empresas quando a ponte for ativada.
 
 **Estas flags não são ligadas por esta PR.** O gateway WA-AKG é mantido. Como não havia sessões ativas no último diagnóstico, não há teste físico de mídia nem autorização para ativar este processamento para todos os tenants.
 
