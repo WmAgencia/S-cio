@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {readAdvancedMetaTool} from '../../meta-ads-advanced.mjs';
+import {speakToAdSkill} from '../../socio-ad-skills.mjs';
 import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from '../../meta-report-schedules.mjs';
 import {officialPersistenceScenario} from './meta-official-fixture.mjs';
 import {selectOfficialAccount} from '../../meta-official.mjs';
@@ -125,6 +126,29 @@ export async function metaToolsScenario(pool){
  const expired=await prepareAdsPlan(pool,a,'status',{entity:'campaign',id:'998877',status:'PAUSED'},opts);
  await pool.query("UPDATE meta_ads_plans SET expires_at=now()-interval '1 minute' WHERE id=$1",[expired.id]);
  await assert.rejects(executeAdsPlan(pool,a,expired.id,true,opts),{status:409});
+ const skillWritesBefore=writes.length;
+ const skill=await speakToAdSkill(pool,a,
+  {message:'Quero divulgar roupa feminina em Sorocaba gastando seis reais por dia'},opts);
+ assert.equal(skill.status,'collecting','Unknown image is never auto-selected for product');
+ assert.match(skill.message,/foto/);
+ assert.equal(writes.length,skillWritesBefore,'Skill questions do not write to Meta');
+ const skillReady=await speakToAdSkill(pool,a,{message:'',runId:skill.runId,imageHash:'image-hash'},opts);
+ assert.equal(skillReady.status,'ready');
+ assert.equal(writes.length,skillWritesBefore,'Skill preview does not write to Meta');
+ const skillStored=await pool.query('SELECT brief FROM socio_skill_runs WHERE id=$1 AND tenant_id=$2',
+  [skill.runId,a.active_tenant_id]);
+ assert.equal(skillStored.rows[0].brief.dailyBudgetCents,600);
+ const skillPlan=await pool.query('SELECT payload FROM meta_ads_plans WHERE id=$1 AND tenant_id=$2',
+  [skillReady.planId,a.active_tenant_id]);
+ assert.deepEqual(skillPlan.rows[0].payload.genders,[2]);
+ assert.equal(skillPlan.rows[0].payload.whatsappPhone,'5515999999999');
+ const skillApproved=await speakToAdSkill(pool,a,{message:'pode criar',runId:skill.runId},opts);
+ assert.equal(skillApproved.status,'completed');
+ assert.equal(skillApproved.result.result.delivery,'PAUSED');
+ assert.equal(writes.length,skillWritesBefore+4,'One text authorization creates paused entities');
+ const skillReplay=await speakToAdSkill(pool,a,{message:'pode criar',runId:skill.runId},opts);
+ assert.equal(skillReplay.status,'completed');
+ assert.equal(writes.length,skillWritesBefore+4,'One skill run cannot create twice');
  const sharp=(await import('sharp')).default;const bytes=await sharp({create:{width:100,height:100,channels:3,background:'#333'}}).png().toBuffer();
  assert.equal((await uploadAdImage(pool,a,bytes.toString('base64'),opts)).hash,'image-hash');
  // Pixel creation must reuse the exact selected account, ask for confirmation,
