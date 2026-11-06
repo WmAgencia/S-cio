@@ -10,7 +10,7 @@ export function reviewCommercialReply(reply,{products=[]}={}){
  const text=String(reply||'').trim(),lower=normalize(text);
  if(!text)return {approved:false,reason:'EMPTY_REPLY'};
  if(text.length>700)return {approved:false,reason:'TOO_LONG'};
- if(/(?:pagamento (?:ja )?(?:recebido|compensado|confirmado)|pix (?:pago|confirmado)|comprovante (?:aprovado|validado)|(?:pedido|contrato|reserva|agendamento) (?:ja )?(?:confirmado|feito|assinado)|garant(?:o|imos) (?:vendas|resultado))/.test(lower))
+ if(/(?:pagamento (?:ja )?(?:foi )?(?:recebido|compensado|confirmado)|pix (?:pago|confirmado)|comprovante (?:aprovado|validado)|(?:pedido|contrato|reserva|agendamento) (?:ja )?(?:confirmado|feito|assinado)|garant(?:o|imos) (?:vendas|resultado))/.test(lower))
   return {approved:false,reason:'UNVERIFIED_OPERATION'};
  if(/\b(?:sou (?:o|a) (?:dono|proprietari|wesley)|sou humano|sou uma pessoa real)\b/.test(lower))
   return {approved:false,reason:'MISREPRESENTED_IDENTITY'};
