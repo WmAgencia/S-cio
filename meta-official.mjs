@@ -84,7 +84,7 @@ export async function officialStatus(pool,a,{env=process.env}={}){
  access(a);let configured=true;try{officialConfig(env);}catch{configured=false;}
  const r=await pool.query('SELECT meta_user_id,scopes,expires_at FROM meta_official_grants WHERE tenant_id=$1 AND user_id=$2',[a.active_tenant_id,a.user_id]);
  const selected=await pool.query('SELECT account_id,account_name,currency,updated_at FROM meta_official_account_selections WHERE tenant_id=$1',[a.active_tenant_id]);
- const grant=r.rows[0];return {configured,appId:env.SOCIO_META_APP_ID||'2827016234367972',connected:configured&&Boolean(grant&&new Date(grant.expires_at)>new Date()),grant:grant||null,selectedAccount:selected.rows[0]||null,writesEnabled:false};
+ const grant=r.rows[0];return {configured,appId:env.SOCIO_META_APP_ID||'2827016234367972',connected:configured&&Boolean(grant&&new Date(grant.expires_at)>new Date()),grant:grant||null,selectedAccount:selected.rows[0]||null,writesEnabled:true};
 }
 export async function officialAccounts(pool,a,{env=process.env,request=fetch}={}){
  access(a);const r=await pool.query('SELECT token_encrypted FROM meta_official_grants WHERE tenant_id=$1 AND user_id=$2 AND expires_at>now()',[a.active_tenant_id,a.user_id]);
@@ -131,6 +131,7 @@ export async function handleMetaRemoval(pool,signedRequest,{env=process.env}={})
   await client.query('BEGIN');
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[userHash]);
   await client.query('INSERT INTO meta_official_revocations(meta_user_hash,revoked_at) VALUES($1,now()) ON CONFLICT(meta_user_hash) DO UPDATE SET revoked_at=now()',[userHash]);
+  await client.query('DELETE FROM meta_ads_plans p USING meta_official_grants g WHERE p.tenant_id=g.tenant_id AND p.user_id=g.user_id AND g.meta_user_id=$1',[String(data.user_id)]);
   await client.query('DELETE FROM meta_official_grants WHERE meta_user_id=$1',[String(data.user_id)]);
   await client.query('INSERT INTO meta_official_deletions(confirmation_code) VALUES($1) ON CONFLICT DO NOTHING',[code]);
   await client.query('COMMIT');

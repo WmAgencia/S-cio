@@ -1,3 +1,4 @@
+import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory} from './meta-ads-tools.mjs';
 import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectOfficial,selectOfficialAccount,handleMetaRemoval,metaRemovalStatus} from './meta-official.mjs';
 
 import http from 'node:http';
@@ -140,7 +141,7 @@ async function handle(req,res){
  res.setHeader('X-Content-Type-Options','nosniff');
  res.setHeader('Referrer-Policy','no-referrer');
  res.setHeader('X-Frame-Options','DENY');
- res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+ res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob: https://*.fbcdn.net https://*.fbsbx.com; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
  if(method==='GET'&&pathname==='/health'){
   // Railway only considers the app ready when the tenant database is usable.
   // A static 200 here used to hide Postgres outages from the healthcheck.
@@ -236,7 +237,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -388,6 +389,27 @@ async function handle(req,res){
   csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
  // Feature restrictions are server-side. Hidden navigation never constitutes authorization.
  assertApiFeature(a.features,pathname);
+ const adsRead=pathname.match(/^\/api\/marketing\/tools\/(campaigns|adsets|ads|images|pages|insights|finance|cities)$/);
+ if(adsRead&&method==='GET'){
+  const qs=new URL(req.url,'http://local').searchParams;
+  return json(res,200,await readAdsTool(pool,a,adsRead[1],{query:qs.get('q'),period:qs.get('period'),after:qs.get('after')}));
+ }
+ if(pathname==='/api/marketing/tools/history'&&method==='GET')return json(res,200,await adsToolHistory(pool,a));
+ if(pathname==='/api/marketing/tools/image'&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  if(!limiter(simulationAttempts,'meta-image:'+a.user_id,60000,8))throw fail(429,'Aguarde antes de enviar outra imagem.');
+  const {data}=await body(req,4500000);const result=await uploadAdImage(pool,a,data.contentBase64);
+  await audit(a,'marketing.official.image.uploaded',{hash:result.hash,accountId:result.accountId});return json(res,201,result);
+ }
+ if(pathname==='/api/marketing/tools/plan'&&method==='POST'){
+  requirePermission(a,'marketing.manage');const {data}=await body(req,12000);
+  return json(res,201,await prepareAdsPlan(pool,a,data.kind,data.input));
+ }
+ if(pathname==='/api/marketing/tools/execute'&&method==='POST'){
+  requirePermission(a,'marketing.manage');const {data}=await body(req,2000);
+  const result=await executeAdsPlan(pool,a,data.planId,data.confirmed);
+  await audit(a,'marketing.official.operation',{planId:data.planId,status:result.status});return json(res,200,result);
+ }
  if(pathname==='/api/marketing/official/status'&&method==='GET')return json(res,200,await officialStatus(pool,a));
  if(pathname==='/api/marketing/official/accounts'&&method==='GET')return json(res,200,await officialAccounts(pool,a));
  if(pathname==='/api/marketing/official/account'&&method==='POST'){
