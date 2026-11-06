@@ -850,10 +850,11 @@ DO $socio_meta_whatsapp_kind$
 BEGIN
  IF EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='meta_ads_plans'::regclass
   AND conname='meta_ads_plans_kind_check'
-  AND pg_get_constraintdef(oid) NOT LIKE '%create_whatsapp%') THEN
+  AND (pg_get_constraintdef(oid) NOT LIKE '%create_whatsapp%'
+   OR pg_get_constraintdef(oid) NOT LIKE '%create_ad%')) THEN
   ALTER TABLE meta_ads_plans DROP CONSTRAINT meta_ads_plans_kind_check;
   ALTER TABLE meta_ads_plans ADD CONSTRAINT meta_ads_plans_kind_check
-   CHECK(kind IN ('create','create_whatsapp','status','rename','budget'));
+   CHECK(kind IN ('create','create_whatsapp','create_ad','status','rename','budget'));
  END IF;
 END $socio_meta_whatsapp_kind$;
 
