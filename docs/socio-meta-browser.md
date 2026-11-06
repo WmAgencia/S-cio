@@ -1,5 +1,7 @@
 # Meta Ads no Sócio sem app Meta
 
+> O fluxo principal foi substituído pelo [conector local Windows](socio-meta-local.md). Este documento descreve o backend remoto legado, ainda disponível para diagnóstico. Ele não é mais exibido na tela principal de Meta Ads.
+
 A seção Meta Ads usa `api-anything@0.4.0` e Chromium remoto. Não exige App ID, App Secret, OAuth ou token da Marketing API. As integrações antigas ficam preservadas no backend, mas o fluxo principal da tela agora usa a sessão de navegador.
 
 O usuário autenticado clica em **Conectar Facebook**, entra na página real da Meta exibida remotamente, conclui verificações e clica em **Concluí o login: salvar sessão**. A interface explica que teclas e cliques passam pelo servidor do Sócio. Não há armazenamento de senha nem registro do conteúdo digitado em logs/auditoria.

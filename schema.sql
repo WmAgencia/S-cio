@@ -784,3 +784,22 @@ CREATE TABLE IF NOT EXISTS meta_browser_writes (
  result jsonb, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
  UNIQUE(connection_id,key_hash)
 );
+CREATE TABLE IF NOT EXISTS meta_local_connections (
+ id text PRIMARY KEY CHECK (id ~ '^[a-f0-9]{32}$'),
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ status text NOT NULL CHECK (status IN ('pending','active','disconnected')),
+ pair_hash text UNIQUE, pair_expires_at timestamptz, token_hash text UNIQUE,
+ device_label text NOT NULL DEFAULT '', last_seen_at timestamptz,
+ session_present boolean NOT NULL DEFAULT false, browser_open boolean NOT NULL DEFAULT false,
+ created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS meta_local_active_actor ON meta_local_connections(tenant_id,user_id) WHERE status='active';
+CREATE TABLE IF NOT EXISTS meta_local_jobs (
+ id uuid PRIMARY KEY, connection_id text NOT NULL REFERENCES meta_local_connections(id) ON DELETE CASCADE,
+ kind text NOT NULL CHECK(kind IN ('login','status','plan','execute')),
+ input jsonb NOT NULL DEFAULT '{}', status text NOT NULL CHECK(status IN ('pending','leased','done')),
+ key_hash text, payload_hash text, lease_hash text, result jsonb,
+ created_at timestamptz NOT NULL DEFAULT now(), claimed_at timestamptz, completed_at timestamptz,
+ UNIQUE(connection_id,key_hash)
+);
