@@ -36,6 +36,8 @@ export async function createTrackingLink(pool,actor,input){
  const row=await pool.query(
   "SELECT ch.id,ch.phone,s.account_id FROM channels ch "+
   "JOIN meta_official_account_selections s ON s.tenant_id=ch.tenant_id AND s.user_id=$3 "+
+  "JOIN meta_official_grants g ON g.tenant_id=s.tenant_id AND g.user_id=s.user_id "+
+  "AND g.expires_at>now() AND 'ads_read'=ANY(g.scopes) "+
   "WHERE ch.tenant_id=$1 AND ch.id=$2 AND ch.provider='waakg' AND ch.status='connected'",
   [actor.active_tenant_id,data.channelId,actor.user_id]);
  if(!row.rowCount)throw fail(409,'Conecte o WhatsApp da empresa e selecione sua conta Meta autorizada.');
@@ -102,8 +104,11 @@ export async function trackingReport(pool,actor){
   "COUNT(DISTINCT si.id)::int AS purchase_intents "+
   "FROM wa_tracking_links l "+
   "LEFT JOIN wa_lead_attributions a ON a.tenant_id=l.tenant_id AND a.link_id=l.id "+
+  "LEFT JOIN messages source ON source.tenant_id=a.tenant_id AND source.id=a.inbound_message_id "+
   "LEFT JOIN quote_requests qr ON qr.tenant_id=a.tenant_id AND qr.conversation_id=a.conversation_id "+
+  "AND qr.created_at>=source.created_at "+
   "LEFT JOIN sale_intents si ON si.tenant_id=a.tenant_id AND si.conversation_id=a.conversation_id "+
+  "AND si.created_at>=source.created_at "+
   "WHERE l.tenant_id=$1 GROUP BY l.id ORDER BY l.created_at DESC LIMIT 100",[actor.active_tenant_id]);
  return {period:'Desde a criação de cada link',method:'message_code',confidence:'indicative',items:result.rows,
   note:'Código observado na mensagem ≠ atribuição confirmada pela Meta. Intenções e orçamentos ≠ vendas pagas. Cliques e receita não são estimados.'};
