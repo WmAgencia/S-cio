@@ -102,11 +102,11 @@ function publicBrief(b){
   destination:b.destination||null,genders:Array.isArray(b.genders)?b.genders:[],hasPhoto:Boolean(b.imageHash),
   pageId:b.pageId||null,whatsappPhone:b.whatsappPhone||null,url:b.url||null,cityKey:b.cityKey||null};
 }
-async function enrich(pool,a,brief,{read=readAdsTool}={}){
+async function enrich(pool,a,brief,{read=readAdsTool,options={}}={}){
  const resources={pages:[],images:[],channels:[]};
  // Only the selected authorized Meta ad account is ever read.
  if(!brief.cityName||!brief.category||!brief.dailyBudgetCents)return {brief,resources};
- const city=await read(pool,a,'cities',{query:brief.cityName});
+ const city=await read(pool,a,'cities',{query:brief.cityName},options);
  const chosen=chooseMetaCity(city.items,brief.cityName);
  if(chosen){brief.cityKey=String(chosen.key);brief.cityName=String(chosen.name);}
  if(!brief.destination){
@@ -121,11 +121,11 @@ async function enrich(pool,a,brief,{read=readAdsTool}={}){
   if(channels.length===1)brief.whatsappPhone=digits(channels[0].phone);
  }
  if(!brief.pageId){
-  try{resources.pages=(await read(pool,a,'pages')).items||[];}catch{}
+  try{resources.pages=(await read(pool,a,'pages',{},options)).items||[];}catch{}
   if(resources.pages.length===1)brief.pageId=resources.pages[0].id;
  }
  if(!brief.imageHash){
-  try{resources.images=(await read(pool,a,'images')).items||[];}catch{}
+  try{resources.images=(await read(pool,a,'images',{},options)).items||[];}catch{}
   // Only auto-use an existing image when it unambiguously mentions the requested product.
   const keyword=clean(brief.category).split(' ')[0];
   const matches=resources.images.filter(x=>validImageHash(x.hash)&&clean(x.name).includes(keyword));
@@ -203,7 +203,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
  }
  const brief=extractCampaignBrief(message,run.brief||{});
  if(imageHash)brief.imageHash=imageHash;
- const {resources}=await enrich(pool,a,brief,{read:opts.read||readAdsTool});
+ const {resources}=await enrich(pool,a,brief,{read:opts.read||readAdsTool,options:opts});
  const prompt=promptFor(brief,resources);
  if(prompt){
   await pool.query(
