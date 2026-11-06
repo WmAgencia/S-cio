@@ -144,7 +144,7 @@ export async function processOwnerSkillMedia(pool,{
  if(!current.connected||current.connectedNumber!==String(owner.connected_phone).replace(/\D/g,''))
   return {processed:false,reason:'SESSION_NOT_VERIFIED'};
  const active=await pool.query(
-  "SELECT id,brief FROM socio_skill_runs WHERE tenant_id=$1 AND user_id=$2 "+
+  "SELECT id,brief,updated_at FROM socio_skill_runs WHERE tenant_id=$1 AND user_id=$2 "+
   "AND origin_conversation_id=$3 AND skill='ads.campaign.launch' "+
   "AND status='collecting' AND expires_at>now() ORDER BY updated_at DESC LIMIT 1",
   [owner.tenant_id,owner.user_id,owner.conversation_id]);
@@ -160,10 +160,12 @@ export async function processOwnerSkillMedia(pool,{
   [owner.tenant_id,owner.channel_id]);
  const seen=new Set(existing.rows.map(x=>x.provider_message_id));
  // Only consume images while the owner is actively waiting for an ad creative.
- const allowImage=active.rowCount===1&&!active.rows[0].brief?.imageHash;
+ const runUpdatedAt=active.rowCount?timestamp(active.rows[0].updated_at):null;
+ const allowImage=active.rowCount===1&&!active.rows[0].brief?.imageHash&&runUpdatedAt!==null;
  const filtered=(Array.isArray(messages)?messages:[]).filter(m=>{
   const type=mediaType(m?.type);
-  return type==='audio'||type==='image'&&allowImage;
+  return type==='audio'||type==='image'&&allowImage&&timestamp(m.timestamp)!==null&&
+   timestamp(m.timestamp)>=runUpdatedAt-10000;
  });
  const selected=selectRecentOwnerMedia(filtered,jid,{now,seen,
   audioEnabled:env.SOCIO_OWNER_AUDIO_ENABLED==='true'});
