@@ -89,7 +89,12 @@ export function validateAdsPlan(kind,input){
   if(!name||(!whatsapp&&!url)||(whatsapp&&!/^55[1-9][0-9]{9,10}$/.test(phone))||!message||!headline||!numeric(input.pageId)||!text(input.imageHash,100)||!numeric(input.cityKey)||!text(input.cityName,100)||!money(input.dailyBudgetCents))throw fail(422,'Preencha nome, página, imagem, cidade, link HTTPS, texto, título e orçamento diário (de 1 a 100.000 na moeda da conta).');
   const ageMin=Number(input.ageMin||18),ageMax=Number(input.ageMax||65);
   if(!Number.isInteger(ageMin)||!Number.isInteger(ageMax)||ageMin<18||ageMax>65||ageMin>ageMax)throw fail(422,'Faixa etária inválida.');
-  return {name,url,whatsappPhone:phone,message,headline,pageId:input.pageId,imageHash:input.imageHash,cityKey:input.cityKey,cityName:input.cityName.trim(),dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax};
+  const genders=input.genders===undefined?[]:input.genders;
+  if(!Array.isArray(genders)||genders.length>2||genders.some(g=>g!==1&&g!==2)||
+     new Set(genders).size!==genders.length)throw fail(422,'Segmentação de gênero inválida.');
+  return {name,url,whatsappPhone:phone,message,headline,pageId:input.pageId,imageHash:input.imageHash,
+   cityKey:input.cityKey,cityName:input.cityName.trim(),dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax,genders};
+
  }
  if(kind==='create_pixel'){
   const name=text(input.name,120);
@@ -192,7 +197,7 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
     billing_event:'IMPRESSIONS',optimization_goal:whatsapp?'CONVERSATIONS':'LINK_CLICKS',
     bid_strategy:'LOWEST_COST_WITHOUT_CAP',destination_type:whatsapp?'WHATSAPP':'WEBSITE',
     ...(whatsapp?{promoted_object:{page_id:p.pageId,whatsapp_phone_number:p.whatsappPhone}}:{}),
-    targeting:{geo_locations:{cities:[{key:p.cityKey}]},age_min:p.ageMin,age_max:p.ageMax},status:'PAUSED'},'POST');
+    targeting:{geo_locations:{cities:[{key:p.cityKey}]},age_min:p.ageMin,age_max:p.ageMax,...(p.genders?.length?{genders:p.genders}:{})},status:'PAUSED'},'POST');
    if(!numeric(adset.id))throw Object.assign(fail(503,'A Meta não retornou o ID do conjunto.'),{uncertain:true});result.adsetId=adset.id;await progress();
    const chatLink='https://wa.me/'+p.whatsappPhone;
    const destination=whatsapp?chatLink:p.url;
