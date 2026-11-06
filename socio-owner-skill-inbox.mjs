@@ -28,6 +28,10 @@ export async function processOwnerSkillInbox(pool,{
   "JOIN users u ON u.tenant_id=m.tenant_id AND u.active=true "+
   "AND u.role IN ('owner','admin') AND u.phone IS NOT NULL "+
   "AND regexp_replace(u.phone,'[^0-9]','','g')=c.customer_phone "+
+  "AND (SELECT COUNT(*) FROM users verified_owner WHERE verified_owner.tenant_id=m.tenant_id "+
+  "AND verified_owner.active=true AND verified_owner.role IN ('owner','admin') "+
+  "AND regexp_replace(verified_owner.phone,'[^0-9]','','g')=c.customer_phone)=1 "+
+
   "JOIN tenants t ON t.id=m.tenant_id AND t.status<>'paused' "+
   "WHERE m.direction='inbound' AND m.provider_id LIKE 'waakg:%' "+
   "AND m.created_at>now()-interval '3 minutes' "+

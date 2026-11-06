@@ -36,3 +36,21 @@ Worker e importação:
 - O gateway de mídia precisa de homologação real do formato de mensagens e do endpoint binário em fotos/áudios. Seus contratos foram deduzidos de vídeo existente e testados com mocks, portanto não chamar mídia de homologada até o teste físico.
 - O Google Ads OAuth/API não foi integrado; não pode ser tratado como Meta Ads. Sites/pixels/CAPI continuam em etapa separada.
 - A IA não deve inferir vendas ou resultados apenas de conversas de WhatsApp sem confirmação de pagamento.
+
+
+## Complemento: diagnóstico no painel (Etapa 3)
+
+Novo endpoint somente leitura `GET /api/marketing/skills/whatsapp-readiness`, protegido pela permissão `marketing.manage`, módulos habilitados e isolamento pelo tenant autenticado. O endpoint não divulga tokens, números ou IDs de sessão; resume:
+
+- Quantidade de canais WA-AKG vinculados e sessões confirmadas pelo gateway;
+- Se existe conversa privada de proprietário/admin com telefone único verificado;
+- Se texto, mídia e áudio estão tecnicamente habilitados para o piloto;
+- Quais dependências impedem iniciar uma homologação.
+
+O painel de skills ganhou a ação **Verificar conexão WA-AKG**. Consultar o diagnóstico não habilita workers, não envia mensagens, não cria anúncios, não muda sessões e não informa que grupos estão suportados.
+
+A consulta de comandos privados por texto passou a exigir unicidade do proprietário cadastrado, mesma proteção já exigida pela ponte de mídia. É uma etapa de segurança que antecede a ativação do piloto.
+
+### Situação operacional desta verificação
+
+Os logs recentes da produção indicam `reachable:true`, `authorized:true` e `sessions:0` para o gateway. Assim, comandos privados, fotos e áudios estão implementados em código, mas **não homologados fisicamente e não habilitados para clientes**. O próximo passo operacional é o proprietário conectar uma sessão de teste e conferir a identidade do número no Sócio, para validar o recebimento e a resposta reais.

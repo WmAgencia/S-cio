@@ -7,6 +7,29 @@
   section.append(E('h2','Peça à IA. O Sócio cuida da campanha.'));
   section.append(E('p','Descreva seu objetivo normalmente. O Sócio identifica a especialidade correta, consulta os recursos permitidos e só pede o que faltar. Criação de anúncios Meta sempre PAUSADA; Google Ads ainda não está conectado.'));
   const overview=E('div');overview.className='panel';section.append(overview);
+  const waCheck=E('details');waCheck.append(E('summary','Diagnóstico do WhatsApp do proprietário'));section.append(waCheck);
+  waCheck.append(E('p','Conferir ligação WA-AKG, identidade e habilitação de texto, fotos e áudio. Diagnóstico apenas de leitura; não inicia sessões nem envia mensagens.'));
+  const waBtn=E('button','Verificar conexão WA-AKG');waBtn.type='button';waBtn.className='btn soft';waCheck.append(waBtn);
+  const waFeedback=E('p');waFeedback.setAttribute('role','status');waCheck.append(waFeedback);
+  const waResults=E('div');waCheck.append(waResults);
+  waBtn.addEventListener('click',async()=>{
+   waBtn.disabled=true;waFeedback.textContent='Verificando canal e permissões da sua empresa…';waResults.replaceChildren();
+   try{
+    const status=await api('/api/marketing/skills/whatsapp-readiness');
+    waFeedback.textContent=status.textReady?'Comandos privados de texto prontos para homologação.':'Há pendências antes de habilitar os comandos privados.';
+    for(const line of [
+     'Canais cadastrados: '+status.channels+' · Sessões WA-AKG conectadas e verificadas: '+status.connectedSessions,
+     'Conversas privadas de proprietários verificadas: '+status.verifiedOwnerConversations,
+     'Texto: '+(status.textReady?'pronto para piloto':'pendente')+
+       ' · Fotos: '+(status.photoReady?'prontas para piloto':'pendentes')+
+       ' · Áudio: '+(status.audioReady?'pronto para piloto':'pendente'),
+     ...(status.blockers||[]).map(x=>'Pendente: '+x),
+     status.nextStep,status.note
+    ])waResults.append(E('p',line));
+   }catch(error){waFeedback.textContent='Diagnóstico indisponível: '+error.message;}
+   finally{waBtn.disabled=false;}
+  });
+
   const start=E('p','Exemplo: Quero vender roupa feminina em Sorocaba gastando seis reais por dia.');
   overview.append(start);
   const conversations=E('div');conversations.setAttribute('role','log');conversations.setAttribute('aria-label','Conversa com as skills de Meta Ads');section.append(conversations);
