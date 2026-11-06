@@ -110,6 +110,10 @@ export async function processOwnerSkillMedia(pool,{
  if(env.SOCIO_OWNER_COMMANDS_ENABLED!=='true'||env.SOCIO_OWNER_MEDIA_ENABLED!=='true')
   return {processed:false,reason:'OWNER_MEDIA_DISABLED'};
  if(!outboundEnabled(env))return {processed:false,reason:'OUTBOUND_NOT_READY'};
+ const targetTenant=String(env.SOCIO_OWNER_MEDIA_TENANT_ID||'');
+ if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetTenant))
+  return {processed:false,reason:'OWNER_MEDIA_TENANT_NOT_ALLOWED'};
+
  const found=await pool.query(
   "SELECT c.id AS conversation_id,c.tenant_id,c.channel_id,c.customer_phone,"+
   "l.session_id,ch.phone AS connected_phone,u.id AS user_id,u.role,u.platform_owner,"+
@@ -125,11 +129,12 @@ export async function processOwnerSkillMedia(pool,{
 
   "JOIN tenants t ON t.id=c.tenant_id AND t.status<>'paused' "+
   "WHERE ch.provider='waakg' AND ch.status='connected' "+
+  "AND c.tenant_id=$1 "+
   "AND c.customer_phone ~ '^[0-9]{10,15}$' "+
   "AND COALESCE((t.features->>'whatsapp')::boolean,true)=true "+
   "AND COALESCE((t.features->>'meta_ads')::boolean,true)=true "+
   "AND COALESCE((t.features->>'ai')::boolean,true)=true "+
-  "ORDER BY c.last_message_at DESC,c.id LIMIT 1 OFFSET $1",[cursor]);
+  "ORDER BY c.last_message_at DESC,c.id LIMIT 1 OFFSET $2",[targetTenant,cursor]);
  if(!found.rowCount){
   cursor=0;return {processed:false,reason:'NO_VERIFIED_OWNER_CHAT'};
  }
