@@ -12,7 +12,10 @@
   const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.className='btn';b.addEventListener('click',async()=>{b.disabled=true;try{await fn();}catch(e){status.textContent=e.message;}finally{b.disabled=false;}});actions.append(b);return b;};
   try{
    const data=await api('/api/marketing/official/status');
-   status.textContent=!data.configured?'A conexão oficial aguarda configuração na hospedagem.':data.connected?'Conta Meta conectada. Operações exigem conta selecionada e confirmação da prévia.':'Conecte sua conta Meta para autorizar o acesso.';
+   status.textContent=!data.configured?'A conexão oficial aguarda configuração na hospedagem.':
+    data.connected?(data.writesEnabled?'Conta Meta conectada, com permissão para preparar operações. Execução exige prévia e confirmação.':
+     'Conta Meta conectada somente para leitura. Reconecte com ads_management se quiser criar ou modificar anúncios.'):
+    'Conecte sua conta Meta para autorizar o acesso.';
    if(canManage){const b=button('Conectar com Facebook',async()=>{const r=await api('/api/marketing/official/connect','POST');location.assign(r.authorizationUrl);});b.disabled=!data.configured;}
    if(data.connected){
     const selected=document.createElement('p');selected.setAttribute('role','status');root.append(selected);
@@ -37,7 +40,80 @@
     select.addEventListener('change',()=>{save.disabled=!canManage||!select.value;});
     button('Atualizar contas',load);
     await load();
-    if(data.selectedAccount&&globalThis.SocioAdsTools)await globalThis.SocioAdsTools.render({root,api,canManage,account:data.selectedAccount});
+    if(data.selectedAccount){
+     const report=document.createElement('section');report.className='card card-pad';root.append(report);
+     const heading=document.createElement('h2');heading.textContent='Testar minha integração Meta';report.append(heading);
+     const description=document.createElement('p');
+     description.textContent='Teste somente leitura usando a autorização do aplicativo Sócio desta empresa, não a conexão Meta do ChatGPT. Nenhum anúncio será alterado.';
+     report.append(description);
+     const feedback=document.createElement('p');feedback.setAttribute('role','status');report.append(feedback);
+     const details=document.createElement('div');report.append(details);
+     button('Testar conexão oficial (sem alterações)',async()=>{
+      feedback.textContent='Consultando a conta e as ferramentas da Meta…';details.replaceChildren();
+      const result=await api('/api/marketing/official/preflight');
+      feedback.textContent=result.status==='read_ready'?'Consultas principais funcionando no Sócio.':
+       result.reason||'Teste concluído com pendências.';
+      const summary=document.createElement('p');
+      summary.textContent='Conta: '+(result.accountName||'não selecionada')+' · '+(result.accountId||'')+
+       ' · ads_read: '+(result.hasAdsRead?'sim':'não')+' · ads_management: '+(result.hasAdsManagement?'sim':'não');
+      details.append(summary);
+      for(const check of result.checks||[]){
+       const line=document.createElement('p');
+       line.textContent=(check.ok?'✓ ':'✕ ')+check.kind+': '+(check.ok?check.count+' registros recebidos'+(check.more?' (há mais)':''):check.error);
+       details.append(line);
+      }
+      const note=document.createElement('p');
+      note.textContent='Este teste confirma consultas somente quando a própria API do Sócio retorna sucesso. Não testa publicações, pagamentos ou o WhatsApp.';
+      details.append(note);
+     });
+     const auditTitle=document.createElement('h3');auditTitle.textContent='Conferir campanha por ID (sem alterações)';
+     report.append(auditTitle);
+     const auditHelp=document.createElement('p');
+     auditHelp.textContent='Informe o ID da campanha para conferir sua situação, conjuntos, anúncios e resultados na conta selecionada. Não publica nem modifica anúncios.';
+     report.append(auditHelp);
+     const auditForm=document.createElement('form');auditForm.className='form-stack';report.append(auditForm);
+     const label=document.createElement('label');label.textContent='ID numérico da campanha';auditForm.append(label);
+     const campaignInput=document.createElement('input');campaignInput.type='text';
+     campaignInput.inputMode='numeric';campaignInput.pattern='[0-9]{4,30}';
+     campaignInput.maxLength=30;campaignInput.required=true;campaignInput.placeholder='Ex.: 120260000000000000';
+     label.append(campaignInput);
+     const lookup=document.createElement('button');lookup.type='submit';lookup.textContent='Conferir campanha na Meta';
+     lookup.className='btn soft';auditForm.append(lookup);
+     const auditOutput=document.createElement('div');report.append(auditOutput);
+     auditForm.addEventListener('submit',async event=>{
+      event.preventDefault();const id=campaignInput.value.trim();
+      if(!/^[0-9]{4,30}$/.test(id)){feedback.textContent='Digite um ID numérico válido.';return;}
+      lookup.disabled=true;auditOutput.replaceChildren();feedback.textContent='Verificando a campanha na Meta, somente leitura…';
+      try{
+       const result=await api('/api/marketing/official/campaign/'+id+'/audit');
+       const campaign=result.campaign;
+       const summary=document.createElement('p');
+       summary.textContent=campaign.name+' · '+campaign.id+' · Situação: '+campaign.effective_status+
+        ' · Conta: '+result.accountId;
+       auditOutput.append(summary);
+       const counts=document.createElement('p');counts.textContent='Conjuntos: '+result.adsets.length+
+        ' · Anúncios: '+result.ads.length+(result.hasMore?' · existem outras páginas':'');auditOutput.append(counts);
+       for(const ad of result.ads.slice(0,20)){
+        const row=document.createElement('p');
+        row.textContent=(ad.name||ad.id)+' · '+(ad.effective_status||ad.status||'sem situação');
+        auditOutput.append(row);
+       }
+       if(result.insights?.length){
+        const record=result.insights[0],line=document.createElement('p');
+        line.textContent='Últimos 7 dias: R$ '+(record.spend||'0')+' gastos · '+
+         (record.impressions||0)+' impressões · '+(record.clicks||0)+' cliques.';
+        auditOutput.append(line);
+       }
+       const warning=document.createElement('p');warning.textContent=result.warning;auditOutput.append(warning);
+       feedback.textContent='Campanha localizada e consultada sem alterações.';
+      }catch(error){feedback.textContent='Não foi possível conferir a campanha: '+error.message;}
+      finally{lookup.disabled=false;}
+     });
+    }
+    if(data.selectedAccount&&globalThis.SocioAdsTools)await globalThis.SocioAdsTools.render({root,api,canManage:canManage&&data.writesEnabled,account:data.selectedAccount});
+    if(data.selectedAccount&&globalThis.SocioMetaAdvanced)await globalThis.SocioMetaAdvanced.render({root,api,account:data.selectedAccount});
+    if(data.selectedAccount&&globalThis.SocioMetaCommandUI)await globalThis.SocioMetaCommandUI.render({root,api,canManage:canManage&&data.writesEnabled,account:data.selectedAccount});
+    if(data.selectedAccount&&globalThis.SocioMetaScheduleUI)await globalThis.SocioMetaScheduleUI.render({root,api,canManage,account:data.selectedAccount});
     if(data.selectedAccount&&globalThis.SocioAttribution)await globalThis.SocioAttribution.render({root,api,canManage,account:data.selectedAccount});
     if(canManage)button('Desconectar do Sócio',async()=>{await api('/api/marketing/official/disconnect','POST');await render({root,api,canManage});});
    }

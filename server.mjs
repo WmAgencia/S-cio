@@ -1,4 +1,8 @@
-import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory} from './meta-ads-tools.mjs';
+import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
+import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
+import {previewMetaCommand} from './meta-ads-commands.mjs';
+import {metaConnectionPreflight} from './meta-integration-preflight.mjs';
+import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from './meta-report-schedules.mjs';
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
 import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectOfficial,selectOfficialAccount,handleMetaRemoval,metaRemovalStatus} from './meta-official.mjs';
 
@@ -238,7 +242,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/attribution-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -408,6 +412,31 @@ async function handle(req,res){
   await audit(a,'marketing.attribution.link.disabled',{id:result.id});
   return json(res,200,result);
  }
+ if(pathname==='/api/marketing/report-schedule'&&method==='GET')
+  return json(res,200,await listMetaReportSchedule(pool,a));
+ if(pathname==='/api/marketing/report-schedule'&&method==='PUT'){
+  if(!limiter(simulationAttempts,'meta-schedule:'+a.user_id,60000,8))
+   throw fail(429,'Aguarde para alterar o agendamento.');
+  const {data}=await body(req,1500);
+  const result=await saveMetaReportSchedule(pool,a,data);
+  await audit(a,'marketing.report.schedule.updated',{enabled:result.schedule.enabled,hour:result.schedule.hour});
+  return json(res,200,result);
+ }
+ if(pathname==='/api/marketing/commands/preview'&&method==='POST'){
+  if(!limiter(simulationAttempts,'marketing-command:'+a.user_id,60000,15))
+   throw fail(429,'Aguarde antes de preparar outra consulta.');
+  const {data}=await body(req,3000);
+  return json(res,200,await previewMetaCommand(pool,a,data.text));
+ }
+ if(pathname==='/api/marketing/advanced/catalog'&&method==='GET')
+  return json(res,200,{tools:META_TOOL_CATALOG});
+ const advancedRoute=pathname.match(/^\/api\/marketing\/advanced\/(account|creatives|videos|audiences|pixels|conversions|reports|diagnosis)$/);
+ if(advancedRoute&&method==='GET'){
+  const qs=new URL(req.url,'http://local').searchParams;
+  return json(res,200,await readAdvancedMetaTool(pool,a,advancedRoute[1],
+   {period:qs.get('period'),level:qs.get('level'),breakdown:qs.get('breakdown'),
+    daily:qs.get('daily'),after:qs.get('after')}));
+ }
  const adsRead=pathname.match(/^\/api\/marketing\/tools\/(campaigns|adsets|ads|images|pages|insights|finance|cities)$/);
  if(adsRead&&method==='GET'){
   const qs=new URL(req.url,'http://local').searchParams;
@@ -430,6 +459,18 @@ async function handle(req,res){
   await audit(a,'marketing.official.operation',{planId:data.planId,status:result.status});return json(res,200,result);
  }
  if(pathname==='/api/marketing/official/status'&&method==='GET')return json(res,200,await officialStatus(pool,a));
+ const campaignAuditRoute=pathname.match(/^\/api\/marketing\/official\/campaign\/([0-9]{4,30})\/audit$/);
+ if(campaignAuditRoute&&method==='GET'){
+  if(!limiter(simulationAttempts,'meta-campaign-audit:'+a.user_id,60000,6))
+   throw fail(429,'Aguarde antes de repetir o diagnóstico.');
+  return json(res,200,await inspectOfficialCampaign(pool,a,campaignAuditRoute[1]));
+ }
+ if(pathname==='/api/marketing/official/preflight'&&method==='GET'){
+  if(!limiter(simulationAttempts,'meta-official-preflight:'+a.user_id,60000,4))
+   throw fail(429,'Aguarde um minuto antes de repetir o diagnóstico.');
+  return json(res,200,await metaConnectionPreflight(pool,a));
+ }
+
  if(pathname==='/api/marketing/official/accounts'&&method==='GET')return json(res,200,await officialAccounts(pool,a));
  if(pathname==='/api/marketing/official/account'&&method==='POST'){
   requirePermission(a,'marketing.manage');
@@ -1615,6 +1656,17 @@ async function main(){
   finally{attributionBusy=false;}
  },17000);
  attributionWorker.unref();
+ // Official Meta reporting worker. Generates private, read-only snapshots.
+ // It is opt-in and does not send WA-AKG messages or alter campaigns.
+ let metaReportBusy=false;
+ const metaReportsWorker=setInterval(async()=>{
+  if(metaReportBusy||workersBlocked()||process.env.SOCIO_META_REPORTS_ENABLED!=='true')return;
+  metaReportBusy=true;
+  try{await processDueMetaReport(pool);}
+  catch(error){console.warn('[socio-meta-report]',String(error?.code||'REPORT_ERROR').slice(0,40));}
+  finally{metaReportBusy=false;}
+ },60000);
+ metaReportsWorker.unref();
  // Quote lead intake scans only recent inbound messages. It never sends any
  // quote to the customer and cannot create a paid order automatically.
  let quoteBusy=false;

@@ -5,7 +5,13 @@ test('campaign plans reject invalid budgets, destinations and targeting',()=>{
  const valid={name:'Campaign',url:'https://example.test',headline:'Headline',message:'Description',pageId:'123456',imageHash:'image-hash',cityKey:'654321',cityName:'Sorocaba',dailyBudgetCents:2000};
  assert.equal(validateAdsPlan('create',valid).dailyBudgetCents,2000);
  for(const patch of [{url:'javascript:alert(1)'},{dailyBudgetCents:20},{dailyBudgetCents:2000.5},{pageId:'other'},{cityKey:''},{ageMin:12},{ageMin:60,ageMax:20}])assert.throws(()=>validateAdsPlan('create',{...valid,...patch}));
+ const wa={...valid,whatsappPhone:'5515999999999'};delete wa.url;
+ assert.equal(validateAdsPlan('create_whatsapp',wa).whatsappPhone,'5515999999999');
+ assert.throws(()=>validateAdsPlan('create_whatsapp',{...wa,whatsappPhone:'551599'}));
+ assert.equal(validateAdsPlan('create_ad',{...valid,adsetId:'222222'}).adsetId,'222222');
+ assert.throws(()=>validateAdsPlan('create_ad',{...valid,adsetId:'xyz'}));
  assert.throws(()=>validateAdsPlan('delete',{entity:'campaign',id:'123456'}));
- assert.throws(()=>validateAdsPlan('budget',{entity:'campaign',id:'123456',dailyBudgetCents:2000}));
+ assert.equal(validateAdsPlan('budget',{entity:'campaign',id:'123456',dailyBudgetCents:2000}).entity,'campaign');
+ assert.throws(()=>validateAdsPlan('budget',{entity:'ad',id:'123456',dailyBudgetCents:2000}));
  assert.throws(()=>validateAdsPlan('status',{entity:'campaign',id:'123456',status:'DELETED'}));
 });

@@ -845,6 +845,19 @@ CREATE TABLE IF NOT EXISTS meta_ads_plans (
  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS meta_ads_plans_tenant_idx ON meta_ads_plans(tenant_id,created_at DESC);
+-- Permit the new WhatsApp destination without weakening existing approvals.
+DO $socio_meta_whatsapp_kind$
+BEGIN
+ IF EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='meta_ads_plans'::regclass
+  AND conname='meta_ads_plans_kind_check'
+  AND (pg_get_constraintdef(oid) NOT LIKE '%create_whatsapp%'
+   OR pg_get_constraintdef(oid) NOT LIKE '%create_ad%')) THEN
+  ALTER TABLE meta_ads_plans DROP CONSTRAINT meta_ads_plans_kind_check;
+  ALTER TABLE meta_ads_plans ADD CONSTRAINT meta_ads_plans_kind_check
+   CHECK(kind IN ('create','create_whatsapp','create_ad','status','rename','budget'));
+ END IF;
+END $socio_meta_whatsapp_kind$;
+
 
 -- WhatsApp attribution phase 1: codes embedded in prefilled click-to-chat messages.
 -- The code is not a credential and does NOT prove a Meta click or paid sale.
@@ -882,3 +895,32 @@ CREATE TABLE IF NOT EXISTS wa_lead_attributions (
  FOREIGN KEY(tenant_id,link_id) REFERENCES wa_tracking_links(tenant_id,id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS wa_lead_attributions_link_idx ON wa_lead_attributions(tenant_id,link_id,created_at DESC);
+
+-- Daily Meta reports: generated privately for a business owner, never delivered by WA-AKG yet.
+CREATE TABLE IF NOT EXISTS meta_report_schedules (
+ tenant_id uuid PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL,
+ account_id text NOT NULL CHECK(account_id ~ '^act_[0-9]{4,20}$'),
+ hour text NOT NULL DEFAULT '20:00' CHECK(hour ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
+ time_zone text NOT NULL DEFAULT 'America/Sao_Paulo',
+ period text NOT NULL DEFAULT 'yesterday'
+   CHECK(period IN ('today','yesterday','last_7d','last_30d')),
+ enabled boolean NOT NULL DEFAULT false,
+ next_run_at timestamptz NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(tenant_id,user_id) REFERENCES meta_official_grants(tenant_id,user_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS meta_report_schedules_due_idx ON meta_report_schedules(next_run_at)
+ WHERE enabled=true;
+CREATE TABLE IF NOT EXISTS meta_report_runs (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ scheduled_for timestamptz NOT NULL,
+ status text NOT NULL CHECK(status IN ('running','completed','failed')),
+ summary jsonb,
+ error_code text,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(tenant_id,scheduled_for)
+);
+CREATE INDEX IF NOT EXISTS meta_report_runs_recent_idx ON meta_report_runs(tenant_id,scheduled_for DESC);

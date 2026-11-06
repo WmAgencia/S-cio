@@ -84,7 +84,12 @@ export async function officialStatus(pool,a,{env=process.env}={}){
  access(a);let configured=true;try{officialConfig(env);}catch{configured=false;}
  const r=await pool.query('SELECT meta_user_id,scopes,expires_at FROM meta_official_grants WHERE tenant_id=$1 AND user_id=$2',[a.active_tenant_id,a.user_id]);
  const selected=await pool.query('SELECT account_id,account_name,currency,updated_at FROM meta_official_account_selections WHERE tenant_id=$1',[a.active_tenant_id]);
- const grant=r.rows[0];return {configured,appId:env.SOCIO_META_APP_ID||'2827016234367972',connected:configured&&Boolean(grant&&new Date(grant.expires_at)>new Date()),grant:grant||null,selectedAccount:selected.rows[0]||null,writesEnabled:true};
+ const grant=r.rows[0],connected=configured&&Boolean(grant&&new Date(grant.expires_at)>new Date());
+ const scopes=Array.isArray(grant?.scopes)?grant.scopes:[];
+ return {configured,appId:env.SOCIO_META_APP_ID||'2827016234367972',
+  connected,grant:grant||null,selectedAccount:selected.rows[0]||null,
+  writesEnabled:connected&&scopes.includes('ads_management'),
+  readsEnabled:connected&&scopes.includes('ads_read')};
 }
 export async function officialAccounts(pool,a,{env=process.env,request=fetch}={}){
  access(a);const r=await pool.query('SELECT token_encrypted FROM meta_official_grants WHERE tenant_id=$1 AND user_id=$2 AND expires_at>now()',[a.active_tenant_id,a.user_id]);
