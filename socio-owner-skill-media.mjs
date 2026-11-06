@@ -119,6 +119,10 @@ export async function processOwnerSkillMedia(pool,{
   "JOIN users u ON u.tenant_id=c.tenant_id AND u.active=true AND "+
   "u.role IN ('owner','admin') AND u.phone IS NOT NULL "+
   "AND regexp_replace(u.phone,'[^0-9]','','g')=c.customer_phone "+
+  "AND (SELECT count(*) FROM users verified_owner WHERE verified_owner.tenant_id=c.tenant_id "+
+  "AND verified_owner.active=true AND verified_owner.role IN ('owner','admin') "+
+  "AND regexp_replace(verified_owner.phone,'[^0-9]','','g')=c.customer_phone)=1 "+
+
   "JOIN tenants t ON t.id=c.tenant_id AND t.status<>'paused' "+
   "WHERE ch.provider='waakg' AND ch.status='connected' "+
   "AND c.customer_phone ~ '^[0-9]{10,15}$' "+
@@ -188,7 +192,7 @@ export async function processOwnerSkillMedia(pool,{
    else{
     const spoken=stripOwnerPrefix(transcript);
     // Spoken approvals are not considered reliable for changing an ad account.
-    if(/^(pode criar|pode executar|pode fazer|confirmo|autorizo|aprovo|sim)/i.test(spoken.trim()))
+    if(/^(pode criar|pode executar|pode fazer|confirmo|confirma|autorizo|aprovo|sim)/i.test(spoken.trim()))
      answer={status:'action_required',runId:null,
       message:'Entendi sua autorização por áudio. Por segurança, responda em TEXTO: Sócio, pode criar. Nenhuma campanha foi executada.'};
     else answer=await speak(pool,a,{message:spoken,runId:active.rows[0]?.id||null},{
