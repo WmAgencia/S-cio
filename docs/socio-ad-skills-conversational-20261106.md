@@ -26,10 +26,11 @@ O sistema usa a Marketing API oficial do aplicativo Sócio. O atendimento segue 
 3. Consulta cidades reais na Meta, Página autorizada e fotos já enviadas. Só escolhe automaticamente quando a correspondência é inequívoca.
 4. Se não houver foto correta, pergunta **apenas pela foto**. O dono pode anexá-la na conversa do painel; upload é feito à conta Meta autorizada.
 5. Se houver somente um WhatsApp WA-AKG autorizado, escolhe esse destino. Se não houver, pergunta ou solicita a conexão; não usa número de outra empresa.
-6. Prepara título e texto sem inventar preços, estoques ou descontos. Pode ajustar mulheres `genders: [2]` para moda feminina, mas isso **não representa uma opção comprovada de segmentar pessoas com intenção de compra**. Se a Meta rejeitar o direcionamento, o Sócio deve reportar o problema sem disparar a campanha.
-7. Salva a prévia por 15 minutos; o dono responde `pode criar` na conversa. A skill reutiliza o mesmo executor oficial, com registro e proteção contra execução repetida.
-8. Cria campanha, conjunto, criativo e anúncio **PAUSADOS**. Ativação com gasto financeiro continua sendo uma decisão separada, sujeita a autorização e limites.
-9. Registra IDs reais retornados e permite conferir resultado no histórico. Resultados parciais ou incertos não são repetidos automaticamente.
+6. Quando o destino é **site**, consulta Pixels da conta e prepara a criação de um novo apenas se a Meta não listar nenhum. Se já existe, não duplica. O novo Pixel e a campanha ficam sob **uma única aprovação textual**, mas os eventos só funcionam após instalação no site.
+7. Prepara título e texto sem inventar preços, estoques ou descontos. Pode ajustar mulheres `genders: [2]` para moda feminina, mas isso **não representa uma opção comprovada de segmentar pessoas com intenção de compra**. Se a Meta rejeitar o direcionamento, o Sócio deve reportar o problema sem disparar a campanha.
+8. Salva a prévia por 15 minutos; o dono responde `pode criar` na conversa. A skill reutiliza o mesmo executor oficial, com registro e proteção contra execução repetida.
+9. Cria o Pixel, quando necessário, e depois campanha, conjunto, criativo e anúncio **PAUSADOS**. Ativação com gasto financeiro continua sendo uma decisão separada, sujeita a autorização e limites.
+10. Registra IDs reais retornados e permite conferir resultado no histórico. Resultados parciais ou incertos não são repetidos automaticamente.
 
 ### Canais
 
