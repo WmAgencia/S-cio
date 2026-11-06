@@ -1,3 +1,4 @@
+import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectOfficial,handleMetaRemoval,metaRemovalStatus} from './meta-official.mjs';
 
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
@@ -158,6 +159,22 @@ async function handle(req,res){
   res.setHeader('Cache-Control','public,max-age=1800');
   return json(res,200,oauthClientMetadata());
  }
+ if(method==='POST'&&['/api/marketing/official/deauthorize','/api/marketing/official/data-deletion'].includes(pathname)){
+  let raw='';for await(const chunk of req){raw+=chunk.toString('utf8');if(Buffer.byteLength(raw)>20000)throw fail(413,'Solicitação muito grande.');}
+  const signed=new URLSearchParams(raw).get('signed_request');
+  return json(res,200,await handleMetaRemoval(pool,signed));
+ }
+ if(method==='GET'&&pathname==='/meta-exclusao-status'){
+  const qs=new URL(req.url,'http://local').searchParams;
+  return json(res,200,await metaRemovalStatus(pool,qs.get('code')));
+ }
+ if(method==='GET'&&pathname==='/api/marketing/official/callback'){
+  const qs=new URL(req.url,'http://local').searchParams;
+  let outcome='failed';
+  if(qs.get('error'))outcome='cancelled';
+  else try{await finishOfficial(pool,qs.get('state'),qs.get('code'));outcome='authorized';}catch{}
+  res.writeHead(303,{Location:'/?meta_official='+outcome,'Cache-Control':'no-store'});return res.end();
+ }
  if(method==='GET'&&pathname==='/api/marketing/oauth/callback'){
   const qs=new URL(req.url,'http://local').searchParams;
   const isDenied=Boolean(qs.get('error'));
@@ -219,7 +236,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -371,6 +388,13 @@ async function handle(req,res){
   csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
  // Feature restrictions are server-side. Hidden navigation never constitutes authorization.
  assertApiFeature(a.features,pathname);
+ if(pathname==='/api/marketing/official/status'&&method==='GET')return json(res,200,await officialStatus(pool,a));
+ if(pathname==='/api/marketing/official/accounts'&&method==='GET')return json(res,200,await officialAccounts(pool,a));
+ if(pathname==='/api/marketing/official/connect'&&method==='POST'){
+  if(!limiter(authAttempts,'meta-official:'+a.user_id,600000,10))throw fail(429,'Aguarde antes de tentar novamente.');
+  return json(res,200,await startOfficial(pool,a));
+ }
+ if(pathname==='/api/marketing/official/disconnect'&&method==='POST')return json(res,200,await disconnectOfficial(pool,a));
  if(pathname==='/api/marketing/local/status'&&method==='GET')return json(res,200,await localConnectionStatus(pool,a));
  if(pathname==='/api/marketing/local/pairing'&&method==='POST'){
   if(!limiter(authAttempts,'local-pairing:'+a.user_id,600000,10))throw fail(429,'Muitas tentativas. Aguarde antes de conectar novamente.');

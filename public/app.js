@@ -502,6 +502,7 @@ async function channels(){
  }));
 }
 async function marketing(){
+ if(globalThis.SocioMetaOfficial)return globalThis.SocioMetaOfficial.render({root:view,api,canManage:(state.me?.user?.permissions||[]).includes('marketing.manage')});
  if(!globalThis.SocioMetaLocal)throw Error('Recarregue a página para conectar o Ads Manager.');
  return globalThis.SocioMetaLocal.render({root:view,api,canManage:(state.me?.user?.permissions||[]).includes('marketing.manage')});
 }
