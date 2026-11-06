@@ -1,4 +1,4 @@
-import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory} from './meta-ads-tools.mjs';
+import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {previewMetaCommand} from './meta-ads-commands.mjs';
 import {metaConnectionPreflight} from './meta-integration-preflight.mjs';
@@ -459,6 +459,12 @@ async function handle(req,res){
   await audit(a,'marketing.official.operation',{planId:data.planId,status:result.status});return json(res,200,result);
  }
  if(pathname==='/api/marketing/official/status'&&method==='GET')return json(res,200,await officialStatus(pool,a));
+ const campaignAuditRoute=pathname.match(/^\/api\/marketing\/official\/campaign\/([0-9]{4,30})\/audit$/);
+ if(campaignAuditRoute&&method==='GET'){
+  if(!limiter(simulationAttempts,'meta-campaign-audit:'+a.user_id,60000,6))
+   throw fail(429,'Aguarde antes de repetir o diagnóstico.');
+  return json(res,200,await inspectOfficialCampaign(pool,a,campaignAuditRoute[1]));
+ }
  if(pathname==='/api/marketing/official/preflight'&&method==='GET'){
   if(!limiter(simulationAttempts,'meta-official-preflight:'+a.user_id,60000,4))
    throw fail(429,'Aguarde um minuto antes de repetir o diagnóstico.');
