@@ -35,6 +35,7 @@ export async function metaToolsScenario(pool){
   if(path==='/998877/ads')return response({data:[{id:'343434',name:'Anúncio de teste',effective_status:'ACTIVE'}]});
   if(path==='/998877/insights')return response({data:[{campaign_id:'998877',spend:'12.27',clicks:'488',impressions:'3098'}]});
   if(path==='/998877')return response({id:'998877',account_id:'123456',name:'Existing'});
+  if(path==='/998866')return response({id:'998866',account_id:'123456',name:'Anúncio rejeitado',status:'PAUSED',effective_status:'WITH_ISSUES'});
   if(path==='/887766')return response({id:'887766',account_id:'999999',name:'Other tenant account'});
   if(path.endsWith('/campaigns'))return response({data:[{id:'998877',name:'Existing',status:'PAUSED'}]});
   return oauthRequest(url,options);
@@ -74,6 +75,11 @@ export async function metaToolsScenario(pool){
  assert.match(diagnostic.warning,/não são mensagens/);
  const finance=await readAdsTool(pool,a,'finance',{},opts);assert.equal(new URL(finance.paymentsUrl).pathname,'/billing_hub/payment_settings/');assert.equal(new URL(finance.paymentsUrl).searchParams.get('business_id'),'777888');
  await assert.rejects(prepareAdsPlan(pool,a,'status',{entity:'campaign',id:'887766',status:'ACTIVE'},opts),{status:403});
+ await assert.rejects(prepareAdsPlan(pool,a,'status',{entity:'ad',id:'998866',status:'ACTIVE'},opts),{status:409});
+ const rejectedPaused=await prepareAdsPlan(pool,a,'status',{entity:'ad',id:'998866',status:'PAUSED'},opts);
+ assert.equal(rejectedPaused.summary.changes.status,'PAUSED');
+ assert.equal(writes.length,0,'Rejected ads cannot be activated by an unconfirmed command');
+
  await assert.rejects(prepareAdsPlan(pool,{...a,role:'agent'},'status',{entity:'campaign',id:'998877',status:'ACTIVE'},opts),{status:403});
  fallbackPages=true;assert.equal((await readAdsTool(pool,a,'pages',{},opts)).items[0].id,'445566');
  const input={name:'Tráfego teste',url:'https://example.test',headline:'Teste',message:'Descrição do anúncio',pageId:'445566',imageHash:'image-hash',cityKey:'654321',cityName:'Sorocaba',dailyBudgetCents:2000};
