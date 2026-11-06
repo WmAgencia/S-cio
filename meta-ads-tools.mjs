@@ -109,7 +109,15 @@ export function validateAdsPlan(kind,input){
   throw fail(422,'Informe orçamento diário de uma campanha CBO ou conjunto de anúncios.');
  return {entity:input.entity,id:input.id,dailyBudgetCents:input.dailyBudgetCents};
 }
-async function owned(c,id){const data=await graph(c,'/'+id,{fields:'id,account_id,name'});if('act_'+data.account_id!==c.account.id)throw fail(403,'Este objeto não pertence à conta selecionada.');return data;}
+async function owned(c,id){
+ const data=await graph(c,'/'+id,{fields:'id,account_id,name,status,effective_status'});
+ if('act_'+data.account_id!==c.account.id)throw fail(403,'Este objeto não pertence à conta selecionada.');
+ return data;
+}
+function ensureSafeActivation(entity,status){
+ if(status==='ACTIVE'&&['WITH_ISSUES','DISAPPROVED'].includes(entity?.effective_status))
+  throw fail(409,'Este anúncio ou campanha tem problemas de veiculação ou foi rejeitado. Corrija a causa na Meta antes de preparar uma ativação.');
+}
 async function validateAssets(c,payload){
  const pages=await availablePages(c);
  if(!(pages.data||[]).some(p=>p.id===payload.pageId))throw fail(403,'Página não autorizada para esta conta.');
@@ -143,6 +151,7 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
    pageId:payload.pageId,imageHash:payload.imageHash,destination:payload.url,adsetId:payload.adsetId};
  }else{
   const entity=await owned(c,payload.id);
+  if(kind==='status')ensureSafeActivation(entity,payload.status);
   summary={description:kind==='status'?(payload.status==='ACTIVE'?'Ativar: esta ação pode iniciar gastos conforme o orçamento da conta.':'Pausar veiculação.'):kind==='budget'?'Alterar orçamento diário: se estiver ativo, o conjunto poderá gastar o novo valor.':'Alterar nome.',account:c.account,object:entity,changes:payload};
  }
  const id=randomUUID();
@@ -198,7 +207,8 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
    if(!numeric(ad.id))throw Object.assign(fail(503,'Não foi possível confirmar o anúncio.'),{uncertain:true});
    result.adId=ad.id;result.delivery='PAUSED';await progress();
   }else{
-   await owned(c,p.id);
+   const entity=await owned(c,p.id);
+   if(plan.kind==='status')ensureSafeActivation(entity,p.status);
    const changes=plan.kind==='status'?{status:p.status}:plan.kind==='rename'?{name:p.name}:{daily_budget:p.dailyBudgetCents};
    const updated=await graph(c,'/'+p.id,changes,'POST');if(updated.success!==true)throw Object.assign(fail(503,'A Meta não confirmou a alteração.'),{uncertain:true});
    result.id=p.id;result.changes=changes;
