@@ -1,6 +1,7 @@
 import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory} from './meta-ads-tools.mjs';
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {previewMetaCommand} from './meta-ads-commands.mjs';
+import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from './meta-report-schedules.mjs';
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
 import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectOfficial,selectOfficialAccount,handleMetaRemoval,metaRemovalStatus} from './meta-official.mjs';
 
@@ -408,6 +409,16 @@ async function handle(req,res){
  if(deactivateLink&&method==='DELETE'){
   const result=await deactivateTrackingLink(pool,a,deactivateLink[1]);
   await audit(a,'marketing.attribution.link.disabled',{id:result.id});
+  return json(res,200,result);
+ }
+ if(pathname==='/api/marketing/report-schedule'&&method==='GET')
+  return json(res,200,await listMetaReportSchedule(pool,a));
+ if(pathname==='/api/marketing/report-schedule'&&method==='PUT'){
+  if(!limiter(simulationAttempts,'meta-schedule:'+a.user_id,60000,8))
+   throw fail(429,'Aguarde para alterar o agendamento.');
+  const {data}=await body(req,1500);
+  const result=await saveMetaReportSchedule(pool,a,data);
+  await audit(a,'marketing.report.schedule.updated',{enabled:result.schedule.enabled,hour:result.schedule.hour});
   return json(res,200,result);
  }
  if(pathname==='/api/marketing/commands/preview'&&method==='POST'){
@@ -1632,6 +1643,17 @@ async function main(){
   finally{attributionBusy=false;}
  },17000);
  attributionWorker.unref();
+ // Official Meta reporting worker. Generates private, read-only snapshots.
+ // It is opt-in and does not send WA-AKG messages or alter campaigns.
+ let metaReportBusy=false;
+ const metaReportsWorker=setInterval(async()=>{
+  if(metaReportBusy||workersBlocked()||process.env.SOCIO_META_REPORTS_ENABLED!=='true')return;
+  metaReportBusy=true;
+  try{await processDueMetaReport(pool);}
+  catch(error){console.warn('[socio-meta-report]',String(error?.code||'REPORT_ERROR').slice(0,40));}
+  finally{metaReportBusy=false;}
+ },60000);
+ metaReportsWorker.unref();
  // Quote lead intake scans only recent inbound messages. It never sends any
  // quote to the customer and cannot create a paid order automatically.
  let quoteBusy=false;
