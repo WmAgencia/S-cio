@@ -12,7 +12,10 @@
   const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.className='btn';b.addEventListener('click',async()=>{b.disabled=true;try{await fn();}catch(e){status.textContent=e.message;}finally{b.disabled=false;}});actions.append(b);return b;};
   try{
    const data=await api('/api/marketing/official/status');
-   status.textContent=!data.configured?'A conexão oficial aguarda configuração na hospedagem.':data.connected?'Conta Meta conectada. Operações exigem conta selecionada e confirmação da prévia.':'Conecte sua conta Meta para autorizar o acesso.';
+   status.textContent=!data.configured?'A conexão oficial aguarda configuração na hospedagem.':
+    data.connected?(data.writesEnabled?'Conta Meta conectada, com permissão para preparar operações. Execução exige prévia e confirmação.':
+     'Conta Meta conectada somente para leitura. Reconecte com ads_management se quiser criar ou modificar anúncios.'):
+    'Conecte sua conta Meta para autorizar o acesso.';
    if(canManage){const b=button('Conectar com Facebook',async()=>{const r=await api('/api/marketing/official/connect','POST');location.assign(r.authorizationUrl);});b.disabled=!data.configured;}
    if(data.connected){
     const selected=document.createElement('p');selected.setAttribute('role','status');root.append(selected);
@@ -64,9 +67,9 @@
       details.append(note);
      });
     }
-    if(data.selectedAccount&&globalThis.SocioAdsTools)await globalThis.SocioAdsTools.render({root,api,canManage,account:data.selectedAccount});
+    if(data.selectedAccount&&globalThis.SocioAdsTools)await globalThis.SocioAdsTools.render({root,api,canManage:canManage&&data.writesEnabled,account:data.selectedAccount});
     if(data.selectedAccount&&globalThis.SocioMetaAdvanced)await globalThis.SocioMetaAdvanced.render({root,api,account:data.selectedAccount});
-    if(data.selectedAccount&&globalThis.SocioMetaCommandUI)await globalThis.SocioMetaCommandUI.render({root,api,canManage,account:data.selectedAccount});
+    if(data.selectedAccount&&globalThis.SocioMetaCommandUI)await globalThis.SocioMetaCommandUI.render({root,api,canManage:canManage&&data.writesEnabled,account:data.selectedAccount});
     if(data.selectedAccount&&globalThis.SocioMetaScheduleUI)await globalThis.SocioMetaScheduleUI.render({root,api,canManage,account:data.selectedAccount});
     if(data.selectedAccount&&globalThis.SocioAttribution)await globalThis.SocioAttribution.render({root,api,canManage,account:data.selectedAccount});
     if(canManage)button('Desconectar do Sócio',async()=>{await api('/api/marketing/official/disconnect','POST');await render({root,api,canManage});});
