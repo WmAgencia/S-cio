@@ -72,7 +72,7 @@ export async function metaToolsScenario(pool){
  assert.equal(JSON.parse(writes[6].body.object_story_spec).link_data.call_to_action.type,'WHATSAPP_MESSAGE');
  await assert.rejects(prepareAdsPlan(pool,a,'create_whatsapp',{...wa,whatsappPhone:'5515888888888'},opts),{status:422});
  assert.equal(writes[1].body.daily_budget,'2000');assert.equal(JSON.parse(writes[1].body.targeting).geo_locations.cities[0].key,'654321');
- await executeAdsPlan(pool,a,plan.id,true,opts);assert.equal(writes.length,4,'Repeated execution must not duplicate entities');
+ await executeAdsPlan(pool,a,plan.id,true,opts);assert.equal(writes.length,8,'Repeated execution must not duplicate entities');
  const rename=await prepareAdsPlan(pool,a,'rename',{entity:'campaign',id:'998877',name:'Novo nome'},opts);
  assert.equal((await executeAdsPlan(pool,a,rename.id,true,opts)).status,'succeeded');
  const timed=await prepareAdsPlan(pool,a,'create',input,opts);uncertain=true;
