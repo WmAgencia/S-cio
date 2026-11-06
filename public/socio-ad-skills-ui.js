@@ -45,7 +45,7 @@
    if(!message&&!file){feedback.textContent='Escreva um pedido ou envie a foto solicitada.';return;}
    button.disabled=true;feedback.textContent='Conferindo os dados da sua empresa e da conta '+account.account_id+'…';
    try{
-    const isGoogleRequest=/(google\\s*(?:ads|adwords)|adwords|rede de pesquisa|an[uú]ncio[s]?\\s+(?:no|do|pelo)\\s+google|campanha\\s+(?:no|do|pelo)\\s+google)/i.test(message);
+    const isGoogleRequest=/(google\s*(?:ads|adwords)|adwords|rede de pesquisa|an[uú]ncio[s]?\s+(?:no|do|pelo)\s+google|campanha\s+(?:no|do|pelo)\s+google)/i.test(message);
     if(file&&isGoogleRequest)throw Error('Não vou enviar esta foto para a Meta: você pediu Google Ads, que ainda não está integrado. Envie seu pedido sem foto para ver as orientações.');
     const imageHash=await attachPhoto(file);
     const answer=await api('/api/marketing/skills/chat','POST',{message,runId,imageHash});
