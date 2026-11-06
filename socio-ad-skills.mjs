@@ -41,6 +41,12 @@ export function extractCampaignBrief(text,previous={}){
   /\b(roupas?\s+masculinas?|moda\s+masculina)\b/.test(normal)?'moda masculina':
   /\b(tenis|calcados?|sapatos?)\b/.test(normal)?'calçados':null;
  if(category)result.category=category;
+ if(!result.category){
+  const product=original.match(/\b(?:vender|vendendo|divulgar|anunciar|anunciando|promover|comprar|venda\s+de)\s+(.+?)(?=\s+(?:em|para)\s+[a-zA-ZÀ-ú]|\s+(?:gastando|investindo|com\s+or[cç]amento)|[,.;]|$)/i);
+  const value=String(product?.[1]||'').replace(/[<>\r\n]/g,' ').replace(/\s+/g,' ').trim();
+  if(value.length>=3&&value.length<=70)result.category=value;
+ }
+
  if(/\b(mulheres|publico feminino|para mulheres)\b/.test(normal)||category==='moda feminina')result.genders=[2];
  if(/\b(homens|publico masculino|para homens)\b/.test(normal))result.genders=[1];
  if(/\b(whatsapp|zap|mensagens?|conversas?|wpp)\b/.test(normal))result.destination='whatsapp';
@@ -202,6 +208,11 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
     'Criação incompleta: confira o histórico e os IDs parciais da Meta antes de tentar novamente. '+String(executed.error||'').slice(0,120)};
  }
  const brief=extractCampaignBrief(message,run.brief||{});
+ if(runId&&!run.brief?.category&&!brief.category){
+  const candidate=message.trim().replace(/[<>\r\n]/g,' ').replace(/\s+/g,' ');
+  if(candidate.length>=3&&candidate.length<=70&&!/\b(R\$|orcamento|campanha|pode criar|autorizo)\b/i.test(candidate))
+   brief.category=candidate;
+ }
  if(imageHash)brief.imageHash=imageHash;
  const {resources}=await enrich(pool,a,brief,{read:opts.read||readAdsTool,options:opts});
  const prompt=promptFor(brief,resources);
