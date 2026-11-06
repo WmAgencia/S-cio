@@ -14,16 +14,37 @@
   const status=el('p');status.setAttribute('role','status');section.append(status);
   const report=el('div');section.append(report);
   const reload=async()=>{
-   const [links,stats]=await Promise.all([
-    api('/api/marketing/attribution/links'),api('/api/marketing/attribution/report')]);
+   const [links,stats,funnel]=await Promise.all([
+    api('/api/marketing/attribution/links'),api('/api/marketing/attribution/report'),
+    api('/api/marketing/attribution/funnel')]);
    report.replaceChildren();
    const summary=el('p','Origem: código observado na mensagem, não um clique comprovado.');report.append(summary);
+   report.append(el('p','Funil de respostas e pedidos registrado pelo WA-AKG. Pagamentos de teste Stripe não são faturamento real.'));
    const table=el('div');table.className='attribution-results';report.append(table);
    if(!stats.items?.length){table.append(el('p','Nenhum anúncio com link rastreável cadastrado.'));return;}
+   const funnelById=new Map((funnel.items||[]).map(x=>[x.id,x]));
    for(const item of stats.items){
     const card=el('article');card.className='panel';table.append(card);
     card.append(el('strong',item.label),el('p','Conta '+item.account_id+(item.campaign_id?' · Campanha '+item.campaign_id:'')+(item.ad_id?' · Anúncio '+item.ad_id:'')));
-    card.append(el('p','Conversas com código: '+item.conversations+' · Orçamentos: '+item.quote_requests+' · Intenções de compra: '+item.purchase_intents));
+    const detail=funnelById.get(item.id);
+    if(detail){
+     card.append(el('p','Conversas com código: '+detail.conversations+
+      ' · Respondidas pela empresa: '+detail.businessResponded+
+      ' · Clientes que responderam novamente: '+detail.customerFollowedUp));
+     card.append(el('p','Orçamentos: '+detail.quoteRequests+' · Intenções: '+
+      detail.purchaseIntents+' · Pedidos cadastrados: '+detail.ordersCreated));
+     card.append(el('p','Primeira resposta média: '+
+      (detail.averageFirstBusinessReplySeconds===null?'sem dados':
+       Math.round(detail.averageFirstBusinessReplySeconds/60)+' min (aproximado)')));
+     if(Number(detail.sandboxPaidOrders)>0)card.append(el('p','Somente em teste Stripe: '+
+      detail.sandboxPaidOrders+' pagamento(s), '+
+      new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(detail.sandboxRevenueCents)/100)+
+      '. Esses pagamentos não são vendas reais.'));
+     card.append(el('p','Vendas reais e receita confirmada: indisponíveis sem um provedor de pagamentos de produção validado.'));
+    }else{
+     card.append(el('p','Conversas com código: '+item.conversations+
+      ' · Orçamentos: '+item.quote_requests+' · Intenções de compra: '+item.purchase_intents));
+    }
     const saved=links.links.find(x=>x.id===item.id);
     if(saved){
      const link=el('a','Abrir link do WhatsApp');link.href=saved.url;link.rel='noopener noreferrer';link.target='_blank';card.append(link);
