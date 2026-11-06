@@ -925,3 +925,42 @@ CREATE TABLE IF NOT EXISTS meta_report_runs (
  UNIQUE(tenant_id,scheduled_for)
 );
 CREATE INDEX IF NOT EXISTS meta_report_runs_recent_idx ON meta_report_runs(tenant_id,scheduled_for DESC);
+ 
+-- Conversational Meta Ads skills: one owner-approved, tenant-bound job per request.
+CREATE TABLE IF NOT EXISTS socio_skill_runs (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ account_id text NOT NULL CHECK(account_id ~ '^act_[0-9]{4,20}$'),
+ skill text NOT NULL CHECK(skill IN ('ads.campaign.launch','ads.meta.command')),
+ status text NOT NULL CHECK(status IN ('collecting','ready','executing','completed','failed')),
+ brief jsonb NOT NULL DEFAULT '{}'::jsonb,
+ origin_conversation_id uuid REFERENCES conversations(id) ON DELETE SET NULL,
+ plan_id uuid REFERENCES meta_ads_plans(id) ON DELETE SET NULL,
+ pixel_plan_id uuid REFERENCES meta_ads_plans(id) ON DELETE SET NULL,
+ result jsonb,
+ expires_at timestamptz NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS socio_skill_runs_owner_idx ON socio_skill_runs(tenant_id,user_id,updated_at DESC);
+CREATE INDEX IF NOT EXISTS socio_skill_runs_expiry_idx ON socio_skill_runs(expires_at);
+
+-- Only WA-AKG imported owner messages with matching tenant, private sender phone and prefix
+-- may be processed as owner commands. A receipt is never automatically replayed.
+CREATE TABLE IF NOT EXISTS socio_owner_skill_receipts (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ conversation_id uuid NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+ inbound_message_id uuid NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+ run_id uuid REFERENCES socio_skill_runs(id) ON DELETE SET NULL,
+ status text NOT NULL CHECK(status IN ('processing','response_ready','replied','uncertain')),
+ response_text text,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(tenant_id,inbound_message_id)
+);
+CREATE INDEX IF NOT EXISTS socio_owner_skill_receipts_tenant_idx
+ ON socio_owner_skill_receipts(tenant_id,user_id,created_at DESC);

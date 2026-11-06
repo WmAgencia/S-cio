@@ -1,6 +1,9 @@
 import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {previewMetaCommand} from './meta-ads-commands.mjs';
+import {SOCIO_AD_SKILLS} from './socio-ad-skills.mjs';
+import {speakToSocioSkill} from './socio-skill-router.mjs';
+import {processOwnerSkillInbox} from './socio-owner-skill-inbox.mjs';
 import {metaConnectionPreflight} from './meta-integration-preflight.mjs';
 import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from './meta-report-schedules.mjs';
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
@@ -242,7 +245,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -421,6 +424,20 @@ async function handle(req,res){
   const result=await saveMetaReportSchedule(pool,a,data);
   await audit(a,'marketing.report.schedule.updated',{enabled:result.schedule.enabled,hour:result.schedule.hour});
   return json(res,200,result);
+ }
+ if(pathname==='/api/marketing/skills/catalog'&&method==='GET'){
+  requirePermission(a,'marketing.read');
+  return json(res,200,{skills:SOCIO_AD_SKILLS,
+   note:'Skill WhatsApp por grupo ainda depende de validação de identidade no WA-AKG. Pixel não funciona dentro de uma conversa.'});
+ }
+ if(pathname==='/api/marketing/skills/chat'&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  if(!limiter(simulationAttempts,'marketing-skill:'+a.user_id,60000,12))
+   throw fail(429,'Muitas solicitações. Tente novamente em um minuto.');
+  const {data}=await body(req,3500);
+  const answer=await speakToSocioSkill(pool,a,{message:data.message,runId:data.runId,imageHash:data.imageHash});
+  await audit(a,'marketing.skill.request',{runId:answer.runId,status:answer.status,skill:'ads.campaign.launch'});
+  return json(res,200,answer);
  }
  if(pathname==='/api/marketing/commands/preview'&&method==='POST'){
   if(!limiter(simulationAttempts,'marketing-command:'+a.user_id,60000,15))
@@ -1646,6 +1663,17 @@ async function main(){
   finally{liveSyncBusy=false;}
  },16000);
  liveSyncWorker.unref();
+ // Owner-only WA-AKG command bridge. Requires explicit opt-in, verified sender,
+ // connected private chat and authorized outbound. Never processes group/customer commands.
+ let ownerSkillBusy=false;
+ const ownerSkillsWorker=setInterval(async()=>{
+  if(ownerSkillBusy||workersBlocked()||process.env.SOCIO_OWNER_COMMANDS_ENABLED!=='true')return;
+  ownerSkillBusy=true;
+  try{await processOwnerSkillInbox(pool);}
+  catch(error){console.warn('[socio-owner-skills]',String(error?.code||'SKILL_ERROR').slice(0,40));}
+  finally{ownerSkillBusy=false;}
+ },19000);
+ ownerSkillsWorker.unref();
  // Attribution: only observed inbound prefilled codes. Never reads/writes campaigns or sends messages.
  let attributionBusy=false;
  const attributionWorker=setInterval(async()=>{
