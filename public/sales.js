@@ -227,6 +227,26 @@
    new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n)/100);
   const count=intents.filter(x=>x.status==='pending').length;
   const orderStatus={pending_payment:'Aguardando pagamento',paid_test:'Pago apenas em teste',manual_review:'Em revisão'};
+  const kanbanStages=[
+   ['pending','Aguardando atendimento','Novas oportunidades'],
+   ['contacted','Em atendimento','Equipe já iniciou o contato'],
+   ['completed','Concluídas manualmente','Conclusão não comprova pagamento'],
+   ['dismissed','Descartadas','Oportunidades encerradas']
+  ];
+  const kanban='<section class="commerce-kanban card card-pad" aria-label="Kanban comercial">'+
+   '<div class="commerce-section-heading"><h2>Funil de oportunidades</h2><span>Dados registrados no Sócio</span></div>'+
+   '<div class="commerce-kanban-columns">'+kanbanStages.map(([status,title,subtitle])=>{
+    const rows=intents.filter(x=>x.status===status);
+    return '<section class="commerce-kanban-lane" aria-label="'+e(title)+'">'+
+     '<header><strong>'+e(title)+'</strong><span>'+rows.length+'</span></header>'+
+     '<small>'+e(subtitle)+'</small>'+
+     '<div class="commerce-kanban-items">'+(rows.length?rows.slice(0,40).map(x=>
+      '<button type="button" class="commerce-kanban-item" data-focus-intent="'+e(x.id)+'" aria-label="Ver oportunidade de '+e(x.customer_name||'cliente')+'">'+
+      '<strong>'+e(x.customer_name||'Cliente')+'</strong>'+
+      '<span>'+e((x.summary||'Sem detalhes').slice(0,95))+'</span>'+
+      '<small>'+money(x.amount_cents)+'</small></button>').join(''):
+      '<div class="commerce-kanban-empty">Nenhuma oportunidade</div>')+'</div></section>';
+   }).join('')+'</div><p class="form-note">Clique em uma oportunidade para abrir os detalhes. O Kanban não representa faturamento confirmado.</p></section>';
   const card=x=>{
    const items=Array.isArray(x.items)?x.items:[];
    const names=items.length?items.map(i=>i.quantity+'× '+i.name+(i.variantName?' · '+i.variantName:'')).join(', '):'Produtos e quantidades a confirmar';
@@ -255,6 +275,7 @@
    '<div class="commerce-summary"><div><small>Aguardando atendimento</small><strong>'+count+'</strong></div>'+
     '<div><small>Em acompanhamento</small><strong>'+intents.filter(x=>x.status==='contacted').length+'</strong></div>'+
     '<div><small>Concluídas manualmente</small><strong>'+intents.filter(x=>x.status==='completed').length+'</strong></div></div>'+
+   kanban+
    '<section class="commerce-section"><div class="commerce-section-heading"><h2>Oportunidades identificadas</h2><span>'+intents.length+' registros</span></div>'+
    (intents.length?'<div class="commerce-lead-list">'+intents.map(card).join('')+'</div>':
     '<div class="card card-pad commerce-empty"><h3>As oportunidades aparecerão aqui</h3><p>Quando um cliente demonstrar intenção clara de comprar, o Sócio registra o pedido para a equipe conferir e assumir a conversa.</p></div>')+'</section>'+
@@ -285,6 +306,14 @@
    select.innerHTML=variants.length?'<option value="">Selecione a variação</option>'+
     variants.map(v=>'<option value="'+e(v.id)+'">'+e(v.name)+'</option>').join(''):'<option value="">Padrão</option>';
   };
+  view.querySelectorAll('[data-focus-intent]').forEach(button=>button.addEventListener('click',()=>{
+   const target=[...view.querySelectorAll('[data-intent]')].find(article=>article.dataset.intent===button.dataset.focusIntent);
+   if(!target)return;
+   target.scrollIntoView({behavior:'auto',block:'center'});
+   target.focus({preventScroll:true});
+   const details=target.querySelector('[data-lead-detail]');
+   if(details?.classList.contains('hidden'))target.querySelector('[data-lead-expand]')?.click();
+  }));
   view.querySelectorAll('[data-intent]').forEach(article=>{
    const item=intents.find(x=>x.id===article.dataset.intent);
    article.addEventListener('click',event=>{

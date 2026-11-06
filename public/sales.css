@@ -130,3 +130,22 @@
 
 .quote-request-item .quote-mentioned-products{margin:10px 0 0;padding:8px 11px;border-radius:10px;background:#3d281a;border:1px solid #755039;color:#f3cfac;font-size:11px;line-height:1.6}
 .quote-mentioned-products strong{font-weight:750;color:#ffc58b}
+
+/* Sales Kanban, adapted from Prospector patterns but using real Sócio statuses. */
+.commerce-kanban{min-width:0}
+.commerce-kanban-columns{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.commerce-kanban-lane{min-width:0;border:1px solid #67442e;background:#24160f;border-radius:13px;padding:13px;display:flex;flex-direction:column;gap:8px}
+.commerce-kanban-lane header{display:flex;align-items:center;justify-content:space-between;gap:6px;color:#fbe2c9;font-size:12px}
+.commerce-kanban-lane header span{border:1px solid #92603f;background:#56321e;color:#ffd9b7;border-radius:999px;padding:2px 8px;font-size:10px}
+.commerce-kanban-lane>small{color:#be9e87;font-size:10px;line-height:1.5;min-height:29px}
+.commerce-kanban-items{display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto}
+.commerce-kanban-item{text-align:left;width:100%;min-width:0;padding:12px;border:1px solid #69432e;border-radius:10px;background:#362218;color:#fce5ce;cursor:pointer;display:flex;flex-direction:column;gap:7px}
+.commerce-kanban-item:hover{background:#4a2a1c;border-color:#d18a53}
+.commerce-kanban-item:focus-visible{outline:2px solid #ffb77c;outline-offset:2px}
+.commerce-kanban-item strong{font-size:12px;overflow-wrap:anywhere}
+.commerce-kanban-item span{font-size:11px;line-height:1.4;color:#c5aa96;overflow-wrap:anywhere}
+.commerce-kanban-item small{font-size:11px;font-weight:700;color:#ffb47a}
+.commerce-kanban-empty{border:1px dashed #6c4932;border-radius:9px;padding:15px;text-align:center;color:#a98c76;font-size:11px}
+@media(max-width:1050px){.commerce-kanban-columns{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.commerce-kanban-columns{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.commerce-kanban-item{transition:none}}

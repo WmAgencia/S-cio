@@ -803,3 +803,41 @@ CREATE TABLE IF NOT EXISTS meta_local_jobs (
  created_at timestamptz NOT NULL DEFAULT now(), claimed_at timestamptz, completed_at timestamptz,
  UNIQUE(connection_id,key_hash)
 );
+
+
+-- Guided Prospector-inspired onboarding, evidence and supervised closing.
+-- All tables are exclusive to Sócio and scoped by tenant_id.
+CREATE TABLE IF NOT EXISTS socio_interviews (
+ tenant_id uuid PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+ state jsonb NOT NULL DEFAULT '{}'::jsonb,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS socio_social_proofs (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ kind text NOT NULL CHECK(kind IN ('portfolio','case','testimonial')),
+ title text NOT NULL CHECK(char_length(title) BETWEEN 3 AND 120),
+ description text NOT NULL DEFAULT '' CHECK(char_length(description)<=500),
+ url text NOT NULL DEFAULT '' CHECK(char_length(url)<=800),
+ object_key text,
+ media_type text CHECK(media_type IS NULL OR media_type IN ('image/jpeg','application/pdf')),
+ approved boolean NOT NULL DEFAULT false,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ approved_at timestamptz,
+ UNIQUE(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS socio_social_proofs_tenant ON socio_social_proofs(tenant_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS socio_closing_policies (
+ tenant_id uuid PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+ mode text NOT NULL DEFAULT 'handoff' CHECK(mode IN ('handoff','proposal')),
+ methods text[] NOT NULL DEFAULT ARRAY[]::text[],
+ deposit_percent integer NOT NULL DEFAULT 0 CHECK(deposit_percent BETWEEN 0 AND 100),
+ pix_ciphertext text,
+ pix_name text NOT NULL DEFAULT '',
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+-- Trial dates are explicit; existing customers remain unchanged (NULL means legacy).
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_started_at timestamptz;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at timestamptz;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS contracted_at timestamptz;
+CREATE INDEX IF NOT EXISTS tenants_trials_due ON tenants(trial_ends_at) WHERE status='trial';
