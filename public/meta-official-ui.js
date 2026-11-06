@@ -38,6 +38,7 @@
     button('Atualizar contas',load);
     await load();
     if(data.selectedAccount&&globalThis.SocioAdsTools)await globalThis.SocioAdsTools.render({root,api,canManage,account:data.selectedAccount});
+    if(data.selectedAccount&&globalThis.SocioAttribution)await globalThis.SocioAttribution.render({root,api,canManage,account:data.selectedAccount});
     if(canManage)button('Desconectar do Sócio',async()=>{await api('/api/marketing/official/disconnect','POST');await render({root,api,canManage});});
    }
   }catch(e){status.textContent=e.message;}

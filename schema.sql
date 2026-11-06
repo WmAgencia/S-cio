@@ -845,3 +845,40 @@ CREATE TABLE IF NOT EXISTS meta_ads_plans (
  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS meta_ads_plans_tenant_idx ON meta_ads_plans(tenant_id,created_at DESC);
+
+-- WhatsApp attribution phase 1: codes embedded in prefilled click-to-chat messages.
+-- The code is not a credential and does NOT prove a Meta click or paid sale.
+CREATE TABLE IF NOT EXISTS wa_tracking_links (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ channel_id uuid NOT NULL,
+ created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+ account_id text NOT NULL CHECK(account_id ~ '^act_[0-9]{4,20}$'),
+ label text NOT NULL CHECK(char_length(label) BETWEEN 3 AND 90),
+ campaign_id text CHECK(campaign_id IS NULL OR campaign_id ~ '^[0-9]{4,30}$'),
+ adset_id text CHECK(adset_id IS NULL OR adset_id ~ '^[0-9]{4,30}$'),
+ ad_id text CHECK(ad_id IS NULL OR ad_id ~ '^[0-9]{4,30}$'),
+ code text NOT NULL UNIQUE CHECK(code ~ '^SC[A-F0-9]{20}$'),
+ active boolean NOT NULL DEFAULT true,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ expires_at timestamptz NOT NULL,
+ UNIQUE(tenant_id,id),
+ FOREIGN KEY(tenant_id,channel_id) REFERENCES channels(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS wa_tracking_links_tenant_idx ON wa_tracking_links(tenant_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS wa_lead_attributions (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ conversation_id uuid NOT NULL,
+ inbound_message_id uuid NOT NULL,
+ link_id uuid NOT NULL,
+ method text NOT NULL CHECK(method='message_code'),
+ confidence text NOT NULL CHECK(confidence='indicative'),
+ created_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(tenant_id,conversation_id),
+ UNIQUE(tenant_id,inbound_message_id),
+ FOREIGN KEY(tenant_id,conversation_id) REFERENCES conversations(tenant_id,id) ON DELETE CASCADE,
+ FOREIGN KEY(tenant_id,inbound_message_id) REFERENCES messages(tenant_id,id) ON DELETE CASCADE,
+ FOREIGN KEY(tenant_id,link_id) REFERENCES wa_tracking_links(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS wa_lead_attributions_link_idx ON wa_lead_attributions(tenant_id,link_id,created_at DESC);
