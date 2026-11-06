@@ -18,9 +18,9 @@ test('stage1 preserves per-tenant instructions and catalog and never promotes th
 });
 test('stage1 keeps safety gates for owner WhatsApp commands and financial workers',()=>{
  const source=contentOf('../server.mjs'),wa=contentOf('../socio-owner-skill-inbox.mjs');
- assert.match(source,/SOCIO_OWNER_COMMANDS_ENABLED'!=='true'/);
- assert.match(source,/SOCIO_ATTRIBUTION_ENABLED'!=='true'/);
- assert.match(source,/SOCIO_META_REPORTS_ENABLED'!=='true'/);
+ assert.match(source,/SOCIO_OWNER_COMMANDS_ENABLED!=='true'/);
+ assert.match(source,/SOCIO_ATTRIBUTION_ENABLED!=='true'/);
+ assert.match(source,/SOCIO_META_REPORTS_ENABLED!=='true'/);
  assert.match(wa,/m\.provider_id LIKE 'waakg:%'/);
  assert.match(wa,/u\.role IN \('owner','admin'\)/);
  assert.match(wa,/m\.direction='inbound'/);
