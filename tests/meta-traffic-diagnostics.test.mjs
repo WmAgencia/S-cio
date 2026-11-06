@@ -43,10 +43,13 @@ test('status without insights is reported, not misrepresented as sales or spend'
    {id:'999992',campaign_id:'888888',effective_status:'PAUSED',name:'Pausado'}
   ]});
  assert.equal(result.diagnostics.length,1);
- assert.equal(result.diagnostics[0].impressions,0);
+ assert.equal(result.diagnostics[0].impressions,null);
+ assert.equal(result.diagnostics[0].spend,null);
+ assert(result.diagnostics[0].notices.some(x=>x.code==='metrics_unavailable'));
  assert(result.diagnostics[0].notices.some(x=>x.code==='under_review'));
- assert(result.diagnostics[0].notices.some(x=>x.code==='no_delivery'));
+ assert(!result.diagnostics[0].notices.some(x=>x.code==='no_delivery'));
  assert(result.diagnostics[0].notices.some(x=>x.code==='paused_ads'));
+ assert.match(formatMetaTrafficDiagnosis(result),/métricas não retornadas/i);
 });
 test('partial and unavailable ad status are disclosed, and invalid numbers never become fake success metrics',()=>{
  const result=diagnoseMetaTraffic({insights:[
