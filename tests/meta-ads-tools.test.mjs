@@ -8,6 +8,9 @@ test('campaign plans reject invalid budgets, destinations and targeting',()=>{
  const wa={...valid,whatsappPhone:'5515999999999'};delete wa.url;
  assert.equal(validateAdsPlan('create_whatsapp',wa).whatsappPhone,'5515999999999');
  assert.throws(()=>validateAdsPlan('create_whatsapp',{...wa,whatsappPhone:'551599'}));
+ assert.equal(validateAdsPlan('create_pixel',{name:'Pixel empresa Sorocaba'}).name,'Pixel empresa Sorocaba');
+ assert.throws(()=>validateAdsPlan('create_pixel',{name:'x'}),{status:422});
+ assert.throws(()=>validateAdsPlan('create_pixel',{name:42}),{status:422});
  assert.equal(validateAdsPlan('create_ad',{...valid,adsetId:'222222'}).adsetId,'222222');
  assert.throws(()=>validateAdsPlan('create_ad',{...valid,adsetId:'xyz'}));
  assert.throws(()=>validateAdsPlan('delete',{entity:'campaign',id:'123456'}));
