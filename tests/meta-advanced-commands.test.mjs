@@ -51,7 +51,7 @@ test('both WhatsApp and website plans validate independently and remain paused v
  const original={name:'Teste Local',pageId:'123456',imageHash:'abc123',cityName:'Sorocaba',cityKey:'654321',
   headline:'Manutenção',message:'Chame a equipe',dailyBudgetCents:2000};
  assert.equal(validateAdsPlan('create_whatsapp',{...original,whatsappPhone:'5515999999999'}).whatsappPhone,'5515999999999');
- assert.equal(validateAdsPlan('create',{...original,url:'https://site.example.test'}).url,'https://site.example.test');
+ assert.equal(validateAdsPlan('create',{...original,url:'https://site.example.test'}).url,'https://site.example.test/');
  assert.throws(()=>validateAdsPlan('create_whatsapp',{...original,whatsappPhone:'551500'}));
  const source=readFileSync(new URL('../meta-ads-tools.mjs',import.meta.url),'utf8');
  assert.match(source,/destination_type:whatsapp\?'WHATSAPP':'WEBSITE'/);
