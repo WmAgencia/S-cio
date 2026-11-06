@@ -19,6 +19,7 @@ import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs
 import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
 import {processNextWaakgScan} from './waakg-history.mjs';
 import {startAutoTraining,autoTrainingStatus,cancelAutoTraining,processNextAutoTraining} from './training-auto.mjs';
+import {interviewStatus,startInterview,submitInterviewAnswer,createInterviewDraft,listProofs,createProof,approveProof,removeProof,readProofMedia,getClosingPolicy,updateClosingPolicy} from './socio-training-service.mjs';
 import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
@@ -1074,6 +1075,82 @@ async function handle(req,res){
   const r=await query('UPDATE agents SET name=$2,tone=$3,instructions=$4,enabled=$5,updated_at=now() WHERE tenant_id=$1 RETURNING name,tone,instructions,knowledge_md,enabled',[a.active_tenant_id,data.name.trim(),data.tone.trim(),data.instructions.trim(),data.enabled]);
   await audit(a,'agent.updated',{enabled:data.enabled});return json(res,200,r.rows[0]);
  }
+
+ // A guided interview can only create a reviewable Markdown draft. Never activates the agent.
+ if(pathname==='/api/training/interview'&&method==='GET'){
+  requirePermission(a,'training.manage');
+  return json(res,200,await interviewStatus(pool,a.active_tenant_id));
+ }
+ if(pathname==='/api/training/interview/start'&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const result=await startInterview(pool,a.active_tenant_id);
+  await audit(a,'training.interview.started',{});
+  return json(res,201,result);
+ }
+ if(pathname==='/api/training/interview/answer'&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const {data}=await body(req,5000);
+  if(typeof data.answer!=='string'||data.answer.length>1000)throw fail(422,'Responda com até mil caracteres.');
+  return json(res,200,await submitInterviewAnswer(pool,a.active_tenant_id,data.answer));
+ }
+ if(pathname==='/api/training/interview/draft'&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const result=await createInterviewDraft(pool,a.active_tenant_id);
+  await audit(a,'training.interview.draft',{version:result.version});
+  return json(res,201,result);
+ }
+ if(pathname==='/api/training/proofs'&&method==='GET'){
+  requirePermission(a,'training.manage');return json(res,200,await listProofs(pool,a.active_tenant_id));
+ }
+ if(pathname==='/api/training/proofs'&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const {data}=await body(req,11_000_000);
+  const result=await createProof(pool,a.active_tenant_id,data);
+  await audit(a,'training.proof.added',{proofId:result.id});
+  return json(res,201,result);
+ }
+ const proofMedia=pathname.match(/^\/api\/training\/proofs\/([0-9a-f-]{36})\/media$/);
+ if(proofMedia&&method==='GET'){
+  requirePermission(a,'training.manage');
+  const asset=await readProofMedia(pool,a.active_tenant_id,proofMedia[1]);
+  res.writeHead(200,{'Content-Type':asset.mime,'Cache-Control':'private, no-store',
+   'X-Content-Type-Options':'nosniff','Content-Disposition':asset.mime==='application/pdf'?'attachment; filename="prova-social.pdf"':'inline'});
+  return res.end(asset.bytes);
+ }
+ const proofAction=pathname.match(/^\/api\/training\/proofs\/([0-9a-f-]{36})\/(approve|revoke)$/);
+ if(proofAction&&method==='POST'){
+  needRole(a,['owner','admin']);
+  const proof=await approveProof(pool,a.active_tenant_id,proofAction[1],proofAction[2]==='approve');
+  await audit(a,'training.proof.reviewed',{proofId:proof.id,approved:proof.approved});
+  return json(res,200,proof);
+ }
+ const proofDelete=pathname.match(/^\/api\/training\/proofs\/([0-9a-f-]{36})$/);
+ if(proofDelete&&method==='DELETE'){
+  needRole(a,['owner','admin']);
+  const response=await removeProof(pool,a.active_tenant_id,proofDelete[1]);
+  await audit(a,'training.proof.deleted',{proofId:proofDelete[1]});
+  return json(res,200,response);
+ }
+ if(pathname==='/api/training/closing'&&method==='GET'){
+  requirePermission(a,'training.manage');
+  return json(res,200,await getClosingPolicy(pool,a.active_tenant_id));
+ }
+ if(pathname==='/api/training/closing'&&method==='PUT'){
+  needRole(a,['owner','admin']);
+  const {data}=await body(req,5000);
+  const policy=await updateClosingPolicy(pool,a.active_tenant_id,data);
+  await audit(a,'training.closing.updated',{mode:policy.mode,methods:policy.methods,pixConfigured:policy.pixConfigured});
+  return json(res,200,policy);
+ }
+ if(pathname==='/api/trial'&&method==='GET'){
+  const result=await query('SELECT status,trial_started_at,trial_ends_at,contracted_at FROM tenants WHERE id=$1',[a.active_tenant_id]);
+  const trial=result.rows[0]||{};
+  return json(res,200,{status:trial.status,startedAt:trial.trial_started_at,
+   endsAt:trial.trial_ends_at,contractedAt:trial.contracted_at,
+   expired:trial.status==='trial'&&!!trial.trial_ends_at&&new Date(trial.trial_ends_at)<new Date(),
+   note:'Sem cobrança automática. Contrato e liberação comercial requerem aceite e ação administrativa.'});
+ }
+
  if(method==='GET'&&pathname==='/api/training/auto'){
   requirePermission(a,'training.manage');
   return json(res,200,{run:await autoTrainingStatus(pool,a.active_tenant_id),groqConfigured:groqReady(),groqModel:groqModel()});
@@ -1405,6 +1482,19 @@ async function handle(req,res){
   await audit(a,'platform.tenant_features.updated',{targetTenantId:tenantFeaturesRoute[1],features});
   return json(res,200,updated.rows[0]);
  }
+
+ const contractTrial=pathname.match(/^\/api\/admin\/tenants\/([0-9a-f-]{36})\/contract$/);
+ if(contractTrial&&method==='POST'){
+  needPlatform(a);
+  const {data}=await body(req,3000);
+  if(data.accepted!==true)throw fail(422,'Confirme que o contrato foi aceito pela empresa.');
+  const r=await query("UPDATE tenants SET status='active',contracted_at=now() WHERE id=$1 AND status='trial' RETURNING id,status,contracted_at",
+   [contractTrial[1]]);
+  if(!r.rowCount)throw fail(409,'Empresa não está em período de teste.');
+  await audit(a,'trial.contract_accepted',{targetTenantId:contractTrial[1]});
+  return json(res,200,r.rows[0]);
+ }
+
  if(method==='POST'&&pathname==='/api/admin/tenants'){
   needPlatform(a);const {data}=await body(req);
   if(!validText(data.company,120)||!validText(data.ownerName,100)||!emailOk(data.ownerEmail)||!['essencial','equipe','voz'].includes(data.plan||'essencial'))throw fail(422,'Dados da empresa inválidos.');
@@ -1431,7 +1521,7 @@ async function handle(req,res){
   const hash=await hashPassword(data.ownerPassword),tenant=id(),user=id(),client=await pool.connect();
   try{
    await client.query('BEGIN');
-   await client.query("INSERT INTO tenants(id,name,slug,plan,status,cnpj,legal_name,trade_name,company_profile,features) VALUES($1,$2,$3,$4,'trial',$5,$6,$7,$8,$9)",[tenant,data.company.trim(),slugify(data.company)+'-'+tenant.slice(0,6),data.plan||'essencial',companyCnpj,legalName,tradeName,JSON.stringify(companyProfile),JSON.stringify(features)]);
+   await client.query("INSERT INTO tenants(id,name,slug,plan,status,cnpj,legal_name,trade_name,company_profile,features,trial_started_at,trial_ends_at) VALUES($1,$2,$3,$4,'trial',$5,$6,$7,$8,$9,now(),now()+interval '7 days')",[tenant,data.company.trim(),slugify(data.company)+'-'+tenant.slice(0,6),data.plan||'essencial',companyCnpj,legalName,tradeName,JSON.stringify(companyProfile),JSON.stringify(features)]);
    await client.query('INSERT INTO users(id,tenant_id,email,phone,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6,$7)',[user,tenant,data.ownerEmail.trim().toLowerCase(),phone,data.ownerName.trim(),hash,'owner']);
    await client.query('INSERT INTO agents(tenant_id) VALUES($1)',[tenant]);
    await client.query('COMMIT');
