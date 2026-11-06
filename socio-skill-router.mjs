@@ -9,6 +9,8 @@ import {parseMetaCommand,previewMetaCommand} from './meta-ads-commands.mjs';
 import {prepareAdsPlan,executeAdsPlan} from './meta-ads-tools.mjs';
 import {speakToAdSkill} from './socio-ad-skills.mjs';
 import {selectExpertSkill} from './socio-expert-skills.mjs';
+import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
+import {formatMetaTrafficDiagnosis} from './meta-traffic-diagnostics.mjs';
 
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const uuid=x=>typeof x==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
@@ -115,6 +117,17 @@ export async function speakToSocioSkill(pool,a,request={},opts={}){
     'Você mencionou Meta Ads e Google Ads. O Sócio já possui ferramentas Meta, mas o Google Ads ainda precisa de integração OAuth e API. Não criei campanhas em nenhuma plataforma. Podemos preparar uma campanha Meta separada quando você pedir explicitamente.' :
     'Entendi que você quer Google Ads. O especialista está preparado para planejar campanhas, mas a conta e a API oficial do Google Ads ainda não foram conectadas ao Sócio. Não criei campanha, Pixel ou conversão em outra plataforma.',
    note:'Integração Google Ads pendente: OAuth, autorização por empresa, API, testes e mensuração. Nenhum custo foi gerado.'};
+ }
+ if(expert.id==='meta.optimization'){
+  const cleaned=clean(raw);
+  const period=/\b(hoje|dia atual)\b/.test(cleaned)?'today':
+   /\b(ontem)\b/.test(cleaned)?'yesterday':
+   /\b(30 dias|mes|mensal)\b/.test(cleaned)?'last_30d':'last_7d';
+  const answer=await (opts.diagnose||readAdvancedMetaTool)(pool,a,'diagnosis',{period},opts);
+  if(!answer?.diagnosis)throw fail(503,'A Meta não confirmou o diagnóstico. Confira a conta e tente consultar novamente.');
+  return {runId:null,status:'completed',readOnly:true,executed:false,
+   skillId:'meta.optimization',period,data:answer.diagnosis,
+   message:formatMetaTrafficDiagnosis(answer.diagnosis)};
  }
  if(expert.id==='whatsapp.sales'){
   return {runId:null,status:'action_required',skillId:'whatsapp.sales',platform:'whatsapp',executed:false,

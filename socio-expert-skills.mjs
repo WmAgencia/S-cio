@@ -15,6 +15,8 @@ const normalize=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
 const google=/\b(google ads|google adwords|adwords|anuncio(?:s)? (?:no|do|pelo) google|campanha(?:s)? (?:no|do|pelo|para o) google|rede de pesquisa|google tag|google analytics|ga4)\b/;
 const meta=/\b(meta ads|facebook ads|instagram ads|gerenciador de anuncios da meta|facebook|instagram)\b/;
 const tracking=/\b(capi|conversions api|api de conversoes|rastrear (?:compra|venda|whatsapp)|rastreamento (?:de|do|no) whatsapp|pixel (?:no|dentro do) whatsapp|instalar (?:o )?pixel (?:no|em|dentro do) whatsapp|conversao (?:no|do|pelo) whatsapp)\b/;
+const optimize=/\b(otimizar|otimize|otimizacao|melhorar|melhore|analisar|analise|diagnostico|rejeitado|rejeitados|reprovado|reprovados|bloqueado|bloqueados|sem entrega|nao entrega|baixo desempenho|resultado ruim)\b/;
+const adTerms=/\b(campanha|campanhas|anuncio|anuncios|criativo|criativos|meta ads|trafego|facebook ads|instagram ads)\b/;
 const whatsReport=/\b(whatsapp|zap|wa-akg)\b.*\b(relatorio|resultado|quantas? conversas?|quantos? leads?|quantas? vendas?|atribui|rastre)\b|\b(relatorio|resultado|quantas? conversas?|quantas? vendas?|atribui|rastre)\b.*\b(whatsapp|zap|wa-akg)\b/;
 
 export function listExpertSkills(){
@@ -38,6 +40,7 @@ export function selectExpertSkill(message){
    !/\b(criar|crie|campanha|anuncio|anunciar)\b/.test(text)))
   return {id:'whatsapp.sales',reason:'whatsapp_attribution_request'};
  if(tracking.test(text))return {id:'tracking.conversions',reason:'tracking_request'};
+ if(optimize.test(text)&&adTerms.test(text))return {id:'meta.optimization',reason:'meta_diagnosis'};
  // Existing Meta Ads router owns mutations and reads when request is otherwise supported.
  return {id:'meta.campaigns',reason:'meta_default'};
 }
