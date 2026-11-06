@@ -30,7 +30,7 @@
    finally{waBtn.disabled=false;}
   });
 
-  const start=E('p','Exemplo: Quero vender roupa feminina em Sorocaba gastando seis reais por dia.');
+  const start=E('p','Exemplos: “Quero vender roupa feminina em Sorocaba gastando seis reais por dia” ou “Analise meus anúncios e explique o que melhorar”.');
   overview.append(start);
   const conversations=E('div');conversations.setAttribute('role','log');conversations.setAttribute('aria-label','Conversa com as skills de Meta Ads');section.append(conversations);
   const form=E('form');form.className='form-stack';section.append(form);
