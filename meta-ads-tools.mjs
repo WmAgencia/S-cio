@@ -85,7 +85,7 @@ export function validateAdsPlan(kind,input){
  if(kind==='create'||kind==='create_whatsapp'){
   const whatsapp=kind==='create_whatsapp';
   const name=text(input.name,120),url=whatsapp?null:safeUrl(input.url),message=text(input.message,2200),headline=text(input.headline,120);
-  const phone=whatsapp?String(input.whatsappPhone||'').replace(/\\D/g,''):null;
+  const phone=whatsapp?String(input.whatsappPhone||'').replace(/\D/g,''):null;
   if(!name||(!whatsapp&&!url)||(whatsapp&&!/^55[1-9][0-9]{9,10}$/.test(phone))||!message||!headline||!numeric(input.pageId)||!text(input.imageHash,100)||!numeric(input.cityKey)||!text(input.cityName,100)||!money(input.dailyBudgetCents))throw fail(422,'Preencha nome, página, imagem, cidade, link HTTPS, texto, título e orçamento diário (de 1 a 100.000 na moeda da conta).');
   const ageMin=Number(input.ageMin||18),ageMax=Number(input.ageMax||65);
   if(!Number.isInteger(ageMin)||!Number.isInteger(ageMax)||ageMin<18||ageMax>65||ageMin>ageMax)throw fail(422,'Faixa etária inválida.');
