@@ -82,12 +82,14 @@ export async function uploadAdImage(pool,a,base64,options={}){
 }
 export function validateAdsPlan(kind,input){
  if(!input||typeof input!=='object'||Array.isArray(input))throw fail(422,'Operação inválida.');
- if(kind==='create'){
-  const name=text(input.name,120),url=safeUrl(input.url),message=text(input.message,2200),headline=text(input.headline,120);
-  if(!name||!url||!message||!headline||!numeric(input.pageId)||!text(input.imageHash,100)||!numeric(input.cityKey)||!text(input.cityName,100)||!money(input.dailyBudgetCents))throw fail(422,'Preencha nome, página, imagem, cidade, link HTTPS, texto, título e orçamento diário (de 1 a 100.000 na moeda da conta).');
+ if(kind==='create'||kind==='create_whatsapp'){
+  const whatsapp=kind==='create_whatsapp';
+  const name=text(input.name,120),url=whatsapp?null:safeUrl(input.url),message=text(input.message,2200),headline=text(input.headline,120);
+  const phone=whatsapp?String(input.whatsappPhone||'').replace(/\\D/g,''):null;
+  if(!name||(!whatsapp&&!url)||(whatsapp&&!/^55[1-9][0-9]{9,10}$/.test(phone))||!message||!headline||!numeric(input.pageId)||!text(input.imageHash,100)||!numeric(input.cityKey)||!text(input.cityName,100)||!money(input.dailyBudgetCents))throw fail(422,'Preencha nome, página, imagem, cidade, link HTTPS, texto, título e orçamento diário (de 1 a 100.000 na moeda da conta).');
   const ageMin=Number(input.ageMin||18),ageMax=Number(input.ageMax||65);
   if(!Number.isInteger(ageMin)||!Number.isInteger(ageMax)||ageMin<18||ageMax>65||ageMin>ageMax)throw fail(422,'Faixa etária inválida.');
-  return {name,url,message,headline,pageId:input.pageId,imageHash:input.imageHash,cityKey:input.cityKey,cityName:input.cityName.trim(),dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax};
+  return {name,url,whatsappPhone:phone,message,headline,pageId:input.pageId,imageHash:input.imageHash,cityKey:input.cityKey,cityName:input.cityName.trim(),dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax};
  }
  if(!['status','rename','budget'].includes(kind)||!['campaign','adset','ad'].includes(input.entity)||!numeric(input.id))throw fail(422,'Selecione uma campanha, conjunto ou anúncio válido.');
  if(kind==='status'){
@@ -108,13 +110,22 @@ async function validateAssets(c,payload){
 export async function prepareAdsPlan(pool,a,kind,input,options={}){
  const c=await context(pool,a,options,true),payload=validateAdsPlan(kind,input);
  let summary;
- if(kind==='create'){
+ if(kind==='create'||kind==='create_whatsapp'){
   await validateAssets(c,payload);
+  if(kind==='create_whatsapp'){
+   const channel=await pool.query("SELECT id FROM channels WHERE tenant_id=$1 AND provider='waakg' AND phone=$2 AND status='connected' LIMIT 1",
+    [a.active_tenant_id,payload.whatsappPhone]);
+   if(!channel.rowCount)throw fail(422,'Este número WhatsApp não está conectado ao WA-AKG da sua empresa.');
+  }
   const locations=await graph(c,'/search',{type:'adgeolocation',location_types:['city'],country_code:'BR',q:payload.cityName,limit:100});
   const city=(locations.data||[]).find(x=>String(x.key)===payload.cityKey);
   if(!city)throw fail(422,'Pesquise e selecione novamente a cidade desejada.');
   payload.cityName=[city.name,city.region,city.country_name].filter(Boolean).join(' · ');
-  summary={description:'Criar campanha de tráfego para site, conjunto, criativo e anúncio. Todos serão criados PAUSADOS.',account:c.account,name:payload.name,message:payload.message,headline:payload.headline,pageId:payload.pageId,imageHash:payload.imageHash,dailyBudgetCents:payload.dailyBudgetCents,destination:payload.url,city:payload.cityName,ageMin:payload.ageMin,ageMax:payload.ageMax};
+  summary={description:kind==='create_whatsapp'?
+   'Criar campanha para mensagens WhatsApp, conjunto, criativo e anúncio PAUSADOS. A Meta precisa validar se o número está vinculado à Página. O WA-AKG continua sendo o canal de atendimento.':
+   'Criar campanha de tráfego para site, conjunto, criativo e anúncio. Todos serão criados PAUSADOS.',
+   account:c.account,name:payload.name,message:payload.message,headline:payload.headline,pageId:payload.pageId,imageHash:payload.imageHash,dailyBudgetCents:payload.dailyBudgetCents,
+   destination:kind==='create_whatsapp'?'WhatsApp +'+payload.whatsappPhone:payload.url,city:payload.cityName,ageMin:payload.ageMin,ageMax:payload.ageMax};
  }else{
   const entity=await owned(c,payload.id);
   summary={description:kind==='status'?(payload.status==='ACTIVE'?'Ativar: esta ação pode iniciar gastos conforme o orçamento da conta.':'Pausar veiculação.'):kind==='budget'?'Alterar orçamento diário: se estiver ativo, o conjunto poderá gastar o novo valor.':'Alterar nome.',account:c.account,object:entity,changes:payload};
@@ -135,14 +146,26 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
  const plan=claim.rows[0],p=plan.payload,result={};
  const progress=async()=>pool.query('UPDATE meta_ads_plans SET result=$2,updated_at=now() WHERE id=$1',[planId,JSON.stringify(result)]);
  try{
-  if(plan.kind==='create'){
+  if(plan.kind==='create'||plan.kind==='create_whatsapp'){
+   const whatsapp=plan.kind==='create_whatsapp';
    await validateAssets(c,p);
-   const campaign=await graph(c,'/'+c.account.id+'/campaigns',{name:p.name,objective:'OUTCOME_TRAFFIC',special_ad_categories:[],status:'PAUSED',is_adset_budget_sharing_enabled:false},'POST');
+   const campaign=await graph(c,'/'+c.account.id+'/campaigns',{name:p.name,objective:whatsapp?'OUTCOME_ENGAGEMENT':'OUTCOME_TRAFFIC',special_ad_categories:[],status:'PAUSED',is_adset_budget_sharing_enabled:false},'POST');
    if(!numeric(campaign.id))throw Object.assign(fail(503,'A Meta não retornou o ID da campanha.'),{uncertain:true});
    result.campaignId=campaign.id;await progress();
-   const adset=await graph(c,'/'+c.account.id+'/adsets',{name:p.name+' · Público',campaign_id:campaign.id,daily_budget:p.dailyBudgetCents,billing_event:'IMPRESSIONS',optimization_goal:'LINK_CLICKS',bid_strategy:'LOWEST_COST_WITHOUT_CAP',destination_type:'WEBSITE',targeting:{geo_locations:{cities:[{key:p.cityKey}]},age_min:p.ageMin,age_max:p.ageMax},status:'PAUSED'},'POST');
+   const adset=await graph(c,'/'+c.account.id+'/adsets',{
+    name:p.name+' · Público',campaign_id:campaign.id,daily_budget:p.dailyBudgetCents,
+    billing_event:'IMPRESSIONS',optimization_goal:whatsapp?'CONVERSATIONS':'LINK_CLICKS',
+    bid_strategy:'LOWEST_COST_WITHOUT_CAP',destination_type:whatsapp?'WHATSAPP':'WEBSITE',
+    ...(whatsapp?{promoted_object:{page_id:p.pageId,whatsapp_phone_number:p.whatsappPhone}}:{}),
+    targeting:{geo_locations:{cities:[{key:p.cityKey}]},age_min:p.ageMin,age_max:p.ageMax},status:'PAUSED'},'POST');
    if(!numeric(adset.id))throw Object.assign(fail(503,'A Meta não retornou o ID do conjunto.'),{uncertain:true});result.adsetId=adset.id;await progress();
-   const creative=await graph(c,'/'+c.account.id+'/adcreatives',{name:p.name+' · Criativo',object_story_spec:{page_id:p.pageId,link_data:{image_hash:p.imageHash,link:p.url,message:p.message,name:p.headline,call_to_action:{type:'LEARN_MORE',value:{link:p.url}}}}},'POST');
+   const chatLink='https://wa.me/'+p.whatsappPhone;
+   const destination=whatsapp?chatLink:p.url;
+   const creative=await graph(c,'/'+c.account.id+'/adcreatives',{
+    name:p.name+' · Criativo',
+    object_story_spec:{page_id:p.pageId,link_data:{image_hash:p.imageHash,link:destination,
+     message:p.message,name:p.headline,call_to_action:{type:whatsapp?'WHATSAPP_MESSAGE':'LEARN_MORE',value:{link:destination}}}}
+   },'POST');
    if(!numeric(creative.id))throw Object.assign(fail(503,'A Meta não retornou o ID do criativo.'),{uncertain:true});result.creativeId=creative.id;await progress();
    const ad=await graph(c,'/'+c.account.id+'/ads',{name:p.name+' · Anúncio',adset_id:adset.id,creative:{creative_id:creative.id},status:'PAUSED'},'POST');
    if(!numeric(ad.id))throw Object.assign(fail(503,'A Meta não retornou o ID do anúncio.'),{uncertain:true});result.adId=ad.id;result.delivery='PAUSED';await progress();
