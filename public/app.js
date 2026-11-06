@@ -1199,6 +1199,7 @@ async function admin(){
    '<td>'+badge(t.plan)+'</td><td>'+badge(t.status,t.status==='active'?'green':'gray')+
    (t.status==='trial'&&t.trial_ends_at?'<div class="table-detail">Teste até '+e(date(t.trial_ends_at))+(new Date(t.trial_ends_at)<new Date()?' · vencido':'')+'</div>':'')+'</td>'+
    '<td><button type="button" class="btn sm soft" data-feature-edit="'+e(t.id)+'">Funcionalidades</button> '+
+   (t.trial_started_at?'<button type="button" class="btn sm soft" data-trial-report="'+e(t.id)+'">Resumo 7 dias</button> ':'')+
    (t.status==='trial'&&t.trial_ends_at?'<button type="button" class="btn sm soft" data-contract="'+e(t.id)+'">Contrato aceito</button> ':'')+
    '<button class="btn sm ghost" data-switch="'+e(t.id)+'">'+
    (t.id===state.me.tenant.id?'Atual':'Acessar')+'</button></td></tr>').join('');
@@ -1206,7 +1207,7 @@ async function admin(){
   '<button type="button" class="btn primary" id="newCompany">+ Nova empresa</button>')+
  '<section class="card card-pad socio-list-panel"><div class="socio-clean-head"><h2>Empresas cadastradas</h2><small>'+tenants.length+' ambientes</small></div>'+
  '<div class="table-wrap"><table class="data-table"><thead><tr><th>Empresa</th><th>Plano</th><th>Situação</th><th>Acesso</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
- '<div class="socio-popup-backdrop hidden" id="companyModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="companyHeading">'+
+ '<div class="socio-popup-backdrop hidden" id="trialReportModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="trialReportTitle"><div class="socio-popup-header"><div><small>DEMONSTRAÇÃO DE 7 DIAS</small><h2 id="trialReportTitle">Resumo de resultados</h2><p>Somente registros comprováveis do Sócio.</p></div><button type="button" class="socio-popup-close" id="trialReportClose" aria-label="Fechar relatório">×</button></div><div id="trialReportContent" role="status"></div></section></div>'+\n '<div class="socio-popup-backdrop hidden" id="companyModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="companyHeading">'+
   '<div class="socio-popup-header"><div><small>ADMINISTRAÇÃO MASTER</small><h2 id="companyHeading">Nova empresa</h2>'+
   '<p>Consulte o CNPJ para preencher os dados públicos automaticamente.</p></div>'+
   '<button type="button" class="socio-popup-close" id="companyClose" aria-label="Fechar cadastro">×</button></div>'+
@@ -1288,6 +1289,28 @@ async function admin(){
  const closeFeatures=()=>{featureModal.classList.add('hidden');editingTenant=null;};
  $('#featuresClose').addEventListener('click',closeFeatures);
  featureModal.addEventListener('click',ev=>{if(ev.target===featureModal)closeFeatures();});
+ const trialModal=$('#trialReportModal');
+ const closeTrial=()=>trialModal?.classList.add('hidden');
+ $('#trialReportClose')?.addEventListener('click',closeTrial);
+ trialModal?.addEventListener('click',ev=>{if(ev.target===trialModal)closeTrial();});
+ view.querySelectorAll('[data-trial-report]').forEach(button=>button.addEventListener('click',async()=>{
+  const destination=$('#trialReportContent');
+  trialModal?.classList.remove('hidden');
+  destination.textContent='Carregando indicadores do período experimental...';
+  try{
+   const report=await api('/api/admin/tenants/'+button.dataset.trialReport+'/trial-report');
+   const item=report.activity,period=report.period;
+   $('#trialReportTitle').textContent='Resumo · '+report.tenant.name;
+   const metrics=[['Mensagens recebidas',item.inboundMessages],['Conversas iniciadas',item.conversationsStarted],
+    ['Pedidos de orçamento',item.quoteRequests],['Intenções de compra',item.purchaseIntents],
+    ['Treinamentos aprovados',item.trainingVersionsApproved],['WhatsApps conectados agora',item.currentlyConnectedChannels]];
+   destination.innerHTML='<p class="form-note">Período: '+e(date(period.start))+' a '+e(date(period.end))+
+    ' · Dados até '+e(date(period.observedUntil))+'</p>'+
+    '<div class="commerce-summary">'+metrics.map(([name,value])=>'<div><small>'+e(name)+'</small><strong>'+e(value)+'</strong></div>').join('')+'</div>'+
+    '<p class="form-note">'+e(report.note)+'</p>';
+  }catch(error){destination.textContent='Não foi possível gerar o resumo: '+errMsg(error);}
+  $('#trialReportClose')?.focus();
+ }));
  view.querySelectorAll('[data-feature-edit]').forEach(b=>b.addEventListener('click',()=>{
   const tenant=tenants.find(x=>x.id===b.dataset.featureEdit);
   if(!tenant)return;
