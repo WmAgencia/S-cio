@@ -21,6 +21,7 @@ import {processNextWaakgScan} from './waakg-history.mjs';
 import {startAutoTraining,autoTrainingStatus,cancelAutoTraining,processNextAutoTraining} from './training-auto.mjs';
 import {interviewStatus,startInterview,submitInterviewAnswer,createInterviewDraft,listProofs,createProof,approveProof,removeProof,readProofMedia,getClosingPolicy,updateClosingPolicy} from './socio-training-service.mjs';
 import {transcribeTrainingAudio} from './socio-training-speech.mjs';
+import {ownerSummary,ownerReadOnlyAnswer} from './socio-owner-assistant.mjs';
 import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
@@ -1149,6 +1150,17 @@ async function handle(req,res){
   const policy=await updateClosingPolicy(pool,a.active_tenant_id,data);
   await audit(a,'training.closing.updated',{mode:policy.mode,methods:policy.methods,pixConfigured:policy.pixConfigured});
   return json(res,200,policy);
+ }
+ if(pathname==='/api/assistant/query'&&method==='POST'){
+  needRole(a,['owner','admin']);
+  requirePermission(a,'training.manage');
+  if(!limiter(simulationAttempts,'owner-assistant:'+a.user_id,60000,15))
+   throw fail(429,'Limite de consultas atingido.');
+  const {data}=await body(req,3000);
+  if(!validText(data.question,500))throw fail(422,'Escreva uma pergunta de até 500 caracteres.');
+  const facts=await ownerSummary(pool,a.active_tenant_id);
+  return json(res,200,{reply:ownerReadOnlyAnswer(data.question,facts),readOnly:true,
+   verified:false,scope:'current_tenant',period:facts.period});
  }
  if(pathname==='/api/trial'&&method==='GET'){
   const result=await query('SELECT status,trial_started_at,trial_ends_at,contracted_at FROM tenants WHERE id=$1',[a.active_tenant_id]);
