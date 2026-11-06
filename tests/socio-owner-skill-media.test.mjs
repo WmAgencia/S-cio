@@ -6,19 +6,21 @@ import {selectRecentOwnerMedia,downloadOwnerMedia,transcribeOwnerAudio,processOw
  from '../socio-owner-skill-media.mjs';
 
 const now=Date.parse('2026-11-06T21:00:00Z');
+const pilotTenant='11111111-1111-4111-8111-111111111111';
 const jid='5515991234567@s.whatsapp.net';
 const media=(type='IMAGE',id='key-image-a',extra={})=>({
  remoteJid:jid,fromMe:false,keyId:id,type,timestamp:new Date(now-30000).toISOString(),...extra
 });
 const actorRow=()=>({
- conversation_id:randomUUID(),tenant_id:randomUUID(),channel_id:randomUUID(),customer_phone:'5515991234567',
+ conversation_id:randomUUID(),tenant_id:pilotTenant,channel_id:randomUUID(),customer_phone:'5515991234567',
  session_id:'socio_test_001',connected_phone:'5515888123456',user_id:randomUUID(),role:'owner',
  platform_owner:false,tenant_status:'active',features:{meta_ads:true,ai:true,whatsapp:true},tenant_name:'Loja Segura'
 });
 const env={SOCIO_OWNER_COMMANDS_ENABLED:'true',SOCIO_OWNER_MEDIA_ENABLED:'true',SOCIO_OWNER_AUDIO_ENABLED:'true',
  SOCIO_OUTBOUND_ENABLED:'true',WA_AKG_API_KEY:'gateway-key-for-tests-not-real',WA_AKG_BASE_URL:'https://wa.test',
  GROQ_API_KEY:'groq-key-for-tests-not-real-123456',
- CHANNEL_ENCRYPTION_KEY:'owner-media-bridge-unit-test-key-long-32-char'};
+ CHANNEL_ENCRYPTION_KEY:'owner-media-bridge-unit-test-key-long-32-char',
+ SOCIO_OWNER_MEDIA_TENANT_ID:pilotTenant};
 function poolFor(row,{pending=true,claimed=true}={}){
  const calls=[];return {calls,query:async(sql,args=[])=>{
   calls.push({sql,args});
@@ -29,6 +31,8 @@ function poolFor(row,{pending=true,claimed=true}={}){
    assert.match(sql,/count\(\*\) FROM users verified_owner/);
    assert.match(sql,/ch\.provider='waakg'/);
    assert.match(sql,/ch\.status='connected'/);
+   assert.match(sql,/c\.tenant_id=\$1/);
+   assert.equal(args[0],pilotTenant);
    return {rowCount:1,rows:[row]};
   }
   if(sql.startsWith('SELECT id,brief FROM socio_skill_runs'))return pending?{
@@ -92,6 +96,13 @@ test('worker is OFF unless both owner commands and owner media are opted-in',asy
   assert.equal(result.reason,'OWNER_MEDIA_DISABLED');
  }
  assert.equal(queries,0);
+});
+test('media worker cannot scan all tenant inboxes when tenant opt-in is missing',async()=>{
+ let calls=0;
+ const res=await processOwnerSkillMedia({query:async()=>{calls++;throw Error('Forbidden database read')}},{
+  env:{...env,SOCIO_OWNER_MEDIA_TENANT_ID:''},now});
+ assert.equal(res.reason,'OWNER_MEDIA_TENANT_NOT_ALLOWED');
+ assert.equal(calls,0);
 });
 test('verified owner photo joins a collecting campaign, never publishes an ad or sends twice',async()=>{
  const row=actorRow(),pool=poolFor(row),invoked=[];
