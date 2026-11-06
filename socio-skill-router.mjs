@@ -29,10 +29,15 @@ export function formatSkillRead(command,result){
 }
 function summaryOf(plan,kind){
  const s=plan.summary||{};
- return kind==='create_pixel'?'Preparei um Pixel chamado '+(s.pixelName||s.name||'novo')+
-  ' para a conta '+(s.account?.id||'selecionada')+'.': 
-  'Preparei a operação '+kind+' para a conta '+(s.account?.id||'selecionada')+'. '+
-  String(s.description||'').slice(0,300);
+ if(kind==='create_pixel')return 'Preparei um Pixel chamado '+(s.pixelName||s.name||'novo')+
+  ' para a conta '+(s.account?.id||'selecionada')+'.';
+ const ch=s.changes||{},object=s.object||{};
+ const facts=[object.id?'Objeto '+(object.name||'')+' (ID '+object.id+')':null,
+  ch.status?'Nova situação: '+ch.status+(ch.status==='ACTIVE'?' (pode gerar gastos)':''):null,
+  Number.isFinite(ch.dailyBudgetCents)?'Orçamento diário: '+(ch.dailyBudgetCents/100).toFixed(2)+' '+(s.account?.currency||'BRL'):null,
+  ch.name?'Novo nome: '+ch.name:null].filter(Boolean).join(' · ');
+ return 'Preparei a operação '+kind+' para a conta '+(s.account?.id||'selecionada')+'. '+
+  facts+'. '+String(s.description||'').slice(0,300);
 }
 async function insertCommandRun(pool,a,accountId,{kind,name=null,planId=null,originConversationId=null}={}){
  if(originConversationId&&!uuid(originConversationId))throw fail(422,'Origem da conversa inválida.');
@@ -122,6 +127,10 @@ export async function speakToSocioSkill(pool,a,request={},opts={}){
   return {runId:id,status:'ready',message:summaryOf(data.plan,command.kind)+
    " Responda 'pode criar' para autorizar a operação na Meta. Ações de ativação ou orçamento podem gerar gastos."};
  }
+ if(command.intent==='plan'&&command.missing?.length)
+  return {runId:null,status:'collecting',
+   message:'Para preparar a alteração, preciso de '+command.missing.join(' e ')+
+    '. Reenvie a frase completa com o ID do item e o valor, se houver.'};
  if(command.kind==='create_pixel')throw fail(422,'Para criar um Pixel, diga o nome desejado.');
  if(/(capi|conversions api|convers[oõ]es? do site|rastrear compras|rastrear whatsapp)/.test(clean(raw)))
   return {runId:null,status:'completed',message:'Para rastrear compras no site preciso integrar o domínio e o checkout, obter autorização do dataset e validar Purchase por webhook. Para WhatsApp, uso WA-AKG e não instalo Pixel na conversa.'};
