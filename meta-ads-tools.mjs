@@ -22,7 +22,7 @@ async function context(pool,a,options={},write=false){
  return {account,token:secret.token,options};
 }
 async function graph(c,path,params={},method='GET'){
- if(!/^\/(act_\d+|\d+|search)(\/(campaigns|adsets|ads|adcreatives|adimages|insights|promote_pages))?$/.test(path))throw fail(422,'Operação Meta inválida.');
+ if(!/^\/(act_\d+|\d+|search)(\/(campaigns|adsets|ads|adcreatives|adimages|adspixels|insights|promote_pages))?$/.test(path))throw fail(422,'Operação Meta inválida.');
  const cfg=officialConfig(c.options.env||process.env),url=new URL('https://graph.facebook.com/'+cfg.version+path);
  const body=new URLSearchParams();
  for(const [k,v] of Object.entries(params))body.set(k,typeof v==='object'?JSON.stringify(v):String(v));
@@ -91,6 +91,11 @@ export function validateAdsPlan(kind,input){
   if(!Number.isInteger(ageMin)||!Number.isInteger(ageMax)||ageMin<18||ageMax>65||ageMin>ageMax)throw fail(422,'Faixa etária inválida.');
   return {name,url,whatsappPhone:phone,message,headline,pageId:input.pageId,imageHash:input.imageHash,cityKey:input.cityKey,cityName:input.cityName.trim(),dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax};
  }
+ if(kind==='create_pixel'){
+  const name=text(input.name,120);
+  if(!name||name.length<3)throw fail(422,'Informe um nome para o Pixel, de 3 a 120 caracteres.');
+  return {name};
+ }
  if(kind==='create_ad'){
   const name=text(input.name,120),url=safeUrl(input.url),message=text(input.message,2200),
    headline=text(input.headline,120);
@@ -143,6 +148,12 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
    'Criar campanha de tráfego para site, conjunto, criativo e anúncio. Todos serão criados PAUSADOS.',
    account:c.account,name:payload.name,message:payload.message,headline:payload.headline,pageId:payload.pageId,imageHash:payload.imageHash,dailyBudgetCents:payload.dailyBudgetCents,
    destination:kind==='create_whatsapp'?'WhatsApp +'+payload.whatsappPhone:payload.url,city:payload.cityName,ageMin:payload.ageMin,ageMax:payload.ageMax};
+ }else if(kind==='create_pixel'){
+  const pixels=await graph(c,'/'+c.account.id+'/adspixels',{fields:'id,name,last_fired_time',limit:100});
+  if(!Array.isArray(pixels.data))throw fail(503,'A Meta não confirmou a lista de Pixels. Não é seguro criar um novo.');
+  if(pixels.data.length||pixels.paging?.next)throw fail(409,'Esta conta já possui Pixel. Consulte e utilize o Pixel existente antes de criar outro.');
+  summary={description:'Criar um Pixel (conjunto de dados) na conta selecionada, somente após confirmação. Não instala código no site, não envia eventos e não configura CAPI automaticamente.',
+   account:c.account,name:payload.name,pixelName:payload.name,operation:'create_pixel',createsPixel:true};
  }else if(kind==='create_ad'){
   await owned(c,payload.adsetId);
   await validateAssets(c,payload);
@@ -193,6 +204,16 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
    if(!numeric(creative.id))throw Object.assign(fail(503,'A Meta não retornou o ID do criativo.'),{uncertain:true});result.creativeId=creative.id;await progress();
    const ad=await graph(c,'/'+c.account.id+'/ads',{name:p.name+' · Anúncio',adset_id:adset.id,creative:{creative_id:creative.id},status:'PAUSED'},'POST');
    if(!numeric(ad.id))throw Object.assign(fail(503,'A Meta não retornou o ID do anúncio.'),{uncertain:true});result.adId=ad.id;result.delivery='PAUSED';await progress();
+  }else if(plan.kind==='create_pixel'){
+   // Check again at execution to avoid a duplicate pixel created after the preview.
+   const existing=await graph(c,'/'+c.account.id+'/adspixels',{fields:'id,name',limit:100});
+   if(!Array.isArray(existing.data))throw fail(503,'A Meta não confirmou os Pixels desta conta; operação cancelada.');
+   if(existing.data.length||existing.paging?.next)throw fail(409,'Já existe Pixel nesta conta. Nenhum novo Pixel foi criado.');
+   const pixel=await graph(c,'/'+c.account.id+'/adspixels',{name:p.name},'POST');
+   if(!numeric(pixel?.id))throw Object.assign(fail(503,'A Meta não confirmou o ID do novo Pixel. Verifique o Gerenciador de Eventos antes de tentar novamente.'),{uncertain:true});
+   result.pixelId=pixel.id;result.accountId=c.account.id;
+   result.note='Pixel criado. O site e a Conversions API ainda precisam de instalação e validação dos eventos.';
+   await progress();
   }else if(plan.kind==='create_ad'){
    await owned(c,p.adsetId);
    await validateAssets(c,p);

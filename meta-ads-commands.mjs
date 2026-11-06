@@ -15,6 +15,19 @@ export function parseMetaCommand(text){
   return {intent:'read',kind:'reports',input:{period,level:/\banuncio/.test(s)?'ad':/\bconjunto/.test(s)?'adset':'campaign',breakdown:'none'},
    label:'Consultar indicadores reais na conta Meta selecionada',willSpend:false};
  }
+ if(/\b(pixel|pixels)\b/.test(s)){
+  if(/\b(listar|liste|ver|mostrar|mostre|consultar|consulte|quais|existentes|tenho)\b/.test(s))
+   return {intent:'read',kind:'pixels',input:{},label:'Consultar Pixels da conta Meta autorizada',willSpend:false};
+  if(/\b(criar|crie|cria|fazer|faca|gerar|gere|novo)\b/.test(s)){
+   const match=raw.match(/(?:\bchamado|\bchamada|\bnome(?:ado)?|\bdenominado)\s*[:=-]?\s*(.+)$/i);
+   const name=match?.[1]?.trim()||null;
+   if(name&&name.length>=3&&name.length<=120)
+    return {intent:'plan',kind:'create_pixel',input:{name},missing:[],willSpend:false,
+     note:'Sócio consultará Pixels existentes, exigirá aprovação e não instalará eventos automaticamente.'};
+   return {intent:'needs_details',kind:'create_pixel',missing:['Nome do Pixel de 3 a 120 caracteres'],
+    note:'Diga, por exemplo, crie um Pixel chamado Loja Consecom. A criação exige confirmação.',willSpend:false};
+  }
+ }
  const entity=/\b(conjunto|adset)\b/.test(s)?'adset':/\b(anuncio|ad )\b/.test(s)?'ad':'campaign';
  const id=raw.match(/\b(?:id\s*[:#]?\s*|#)(\d{4,30})\b/i)?.[1]||
   raw.match(/\b(?:campanha|conjunto|an[uú]ncio|adset)\s+(\d{4,30})\b/i)?.[1]||null;

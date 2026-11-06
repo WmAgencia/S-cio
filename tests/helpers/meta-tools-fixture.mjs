@@ -7,7 +7,7 @@ import {selectOfficialAccount} from '../../meta-official.mjs';
 import {readAdsTool,prepareAdsPlan,executeAdsPlan,uploadAdImage,inspectOfficialCampaign} from '../../meta-ads-tools.mjs';
 export async function metaToolsScenario(pool){
  const {actors,env,request:oauthRequest}=await officialPersistenceScenario(pool),a=actors[0];
- let writes=[],uncertain=false,fallbackPages=false;
+ let writes=[],uncertain=false,fallbackPages=false,existingPixels=true;
  const response=data=>({ok:true,json:async()=>data});
  const request=async(url,options={})=>{
   const u=new URL(url),path=u.pathname.replace(/^\/v\d+\.0/,'');
@@ -22,7 +22,7 @@ export async function metaToolsScenario(pool){
   if(path.endsWith('/adcreatives'))return response({data:[{id:'334455',name:'Criativo da conta'}]});
   if(path.endsWith('/advideos'))return response({data:[{id:'112233',title:'Vídeo da conta'}]});
   if(path.endsWith('/customaudiences'))return response({data:[{id:'12345678',name:'Público permitido'}]});
-  if(path.endsWith('/adspixels'))return response({data:[{id:'12345678',name:'Pixel'}]});
+  if(path.endsWith('/adspixels'))return response({data:existingPixels?[{id:'12345678',name:'Pixel já conectado'}]:[]});
   if(path.endsWith('/customconversions'))return response({data:[{id:'12345678',name:'Conversão'}]});
   if(path==='/act_123456/insights')return response({data:[{campaign_id:'123456',campaign_name:'Teste',spend:'12.50',clicks:'5',impressions:'100',reach:'80'}]});
 
@@ -127,4 +127,32 @@ export async function metaToolsScenario(pool){
  await assert.rejects(executeAdsPlan(pool,a,expired.id,true,opts),{status:409});
  const sharp=(await import('sharp')).default;const bytes=await sharp({create:{width:100,height:100,channels:3,background:'#333'}}).png().toBuffer();
  assert.equal((await uploadAdImage(pool,a,bytes.toString('base64'),opts)).hash,'image-hash');
+ // Pixel creation must reuse the exact selected account, ask for confirmation,
+ // and stop before a POST if an existing pixel is detected.
+ const writesBeforePixel=writes.length;
+ await assert.rejects(prepareAdsPlan(pool,a,'create_pixel',{name:'Pixel já existente'},opts),{status:409});
+ assert.equal(writes.length,writesBeforePixel);
+ existingPixels=false;
+ const pixelPlan=await prepareAdsPlan(pool,a,'create_pixel',{name:'Pixel da loja'},opts);
+ assert.equal(pixelPlan.summary.createsPixel,true);
+ assert.equal(writes.length,writesBeforePixel,'Preparing a pixel never creates it');
+ await assert.rejects(executeAdsPlan(pool,a,pixelPlan.id,false,opts),{status:422});
+ const created=await executeAdsPlan(pool,a,pixelPlan.id,true,opts);
+ assert.equal(created.status,'succeeded');
+ assert.match(created.result.pixelId,/^[0-9]+$/);
+ assert.equal(created.result.accountId,'act_123456');
+ assert.equal(writes.length,writesBeforePixel+1);
+ assert.equal(writes.at(-1).path,'/act_123456/adspixels');
+ assert.equal(writes.at(-1).body.name,'Pixel da loja');
+ const replay=await executeAdsPlan(pool,a,pixelPlan.id,true,opts);
+ assert.equal(replay.replayed,true);
+ assert.equal(writes.length,writesBeforePixel+1,'Pixel creation is idempotent for same plan');
+ const second=await prepareAdsPlan(pool,a,'create_pixel',{name:'Duplicado'},opts);
+ existingPixels=true; // Another operator added a pixel after this preview.
+ const rejected=await executeAdsPlan(pool,a,second.id,true,opts);
+ assert.equal(rejected.status,'failed');
+ assert.match(rejected.error,/Já existe Pixel/);
+ assert.equal(writes.length,writesBeforePixel+1,'No extra pixel created when Meta lists an existing one');
+ await assert.rejects(prepareAdsPlan(pool,{...a,role:'agent'},'create_pixel',{name:'Outro pixel'},opts),{status:403});
+
 }
