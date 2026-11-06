@@ -150,7 +150,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   if(!run)throw bad(404,'Conversa expirada. Descreva seu pedido novamente.');
   if(run.account_id!==accountId)throw bad(409,'A conta de anúncios mudou. Comece um novo pedido para proteger a empresa.');
  }else{
-  if(!/(\b(criar|crie|cria|quero|fazer|faz|anunci|campanha|divulgar|vender|vendas)\b)/i.test(clean(message)))
+  if(!/\b(criar|crie|cria|quero|fazer|faz|anuncie|anuncia|anunciar|campanha|divulgar|divulgue|vender|venda|vendas|clientes)\b/i.test(clean(message)))
    throw bad(422,'Peça uma campanha, por exemplo: quero divulgar roupas femininas em Sorocaba, R$ 6 por dia.');
   const id=randomUUID();
   const initial=extractCampaignBrief(message);
