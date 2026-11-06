@@ -62,3 +62,9 @@ test('commercial Kanban uses stored statuses, not fabricated sales or payment',(
  assert.match(css,/commerce-kanban-columns/);
  assert.match(css,/@media\(max-width:600px\)/);
 });
+
+test('owner companion endpoint honors tenant AI feature gate',async()=>{
+ const {requiredFeatureForApi,assertApiFeature}=await import('../tenant-features.mjs');
+ assert.equal(requiredFeatureForApi('/api/assistant/query'),'ai');
+ assert.throws(()=>assertApiFeature({whatsapp:true,catalog:true,quotes:true,meta_ads:true,ai:false,team:true},'/api/assistant/query'),/não está habilitada/);
+});
