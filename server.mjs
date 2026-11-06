@@ -1,4 +1,5 @@
 import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory} from './meta-ads-tools.mjs';
+import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
 import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectOfficial,selectOfficialAccount,handleMetaRemoval,metaRemovalStatus} from './meta-official.mjs';
 
@@ -407,6 +408,15 @@ async function handle(req,res){
   const result=await deactivateTrackingLink(pool,a,deactivateLink[1]);
   await audit(a,'marketing.attribution.link.disabled',{id:result.id});
   return json(res,200,result);
+ }
+ if(pathname==='/api/marketing/advanced/catalog'&&method==='GET')
+  return json(res,200,{tools:META_TOOL_CATALOG});
+ const advancedRoute=pathname.match(/^\/api\/marketing\/advanced\/(account|creatives|videos|audiences|pixels|conversions|reports|diagnosis)$/);
+ if(advancedRoute&&method==='GET'){
+  const qs=new URL(req.url,'http://local').searchParams;
+  return json(res,200,await readAdvancedMetaTool(pool,a,advancedRoute[1],
+   {period:qs.get('period'),level:qs.get('level'),breakdown:qs.get('breakdown'),
+    daily:qs.get('daily'),after:qs.get('after')}));
  }
  const adsRead=pathname.match(/^\/api\/marketing\/tools\/(campaigns|adsets|ads|images|pages|insights|finance|cities)$/);
  if(adsRead&&method==='GET'){
