@@ -5,6 +5,7 @@ import {SOCIO_AD_SKILLS} from './socio-ad-skills.mjs';
 import {listExpertSkills,getExpertSkillGuide} from './socio-expert-skills.mjs';
 import {speakToSocioSkill} from './socio-skill-router.mjs';
 import {processOwnerSkillInbox} from './socio-owner-skill-inbox.mjs';
+import {processOwnerSkillMedia} from './socio-owner-skill-media.mjs';
 import {metaConnectionPreflight} from './meta-integration-preflight.mjs';
 import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from './meta-report-schedules.mjs';
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
@@ -1681,6 +1682,20 @@ async function main(){
   finally{ownerSkillBusy=false;}
  },19000);
  ownerSkillsWorker.unref();
+ // WA-AKG photo/audio owner bridge: separate explicit opt-in, never processes groups.
+ // Only content from a verified, currently connected private owner conversation.
+ // Voice can prepare requests but cannot authorize Meta spending or activation.
+ let ownerMediaBusy=false;
+ const ownerMediaWorker=setInterval(async()=>{
+  if(ownerMediaBusy||workersBlocked()||process.env.SOCIO_OWNER_COMMANDS_ENABLED!=='true'||
+   process.env.SOCIO_OWNER_MEDIA_ENABLED!=='true')return;
+  ownerMediaBusy=true;
+  try{await processOwnerSkillMedia(pool);}
+  catch(error){console.warn('[socio-owner-media]',String(error?.code||'MEDIA_ERROR').slice(0,40));}
+  finally{ownerMediaBusy=false;}
+ },23000);
+ ownerMediaWorker.unref();
+
  // Attribution: only observed inbound prefilled codes. Never reads/writes campaigns or sends messages.
  let attributionBusy=false;
  const attributionWorker=setInterval(async()=>{
