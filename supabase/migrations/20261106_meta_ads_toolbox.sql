@@ -6,10 +6,11 @@ BEGIN
   WHERE conrelid='socio_app.meta_ads_plans'::regclass
   AND conname='meta_ads_plans_kind_check'
   AND (pg_get_constraintdef(oid) NOT LIKE '%create_whatsapp%'
-   OR pg_get_constraintdef(oid) NOT LIKE '%create_ad%')) THEN
+   OR pg_get_constraintdef(oid) NOT LIKE '%create_ad%'
+   OR pg_get_constraintdef(oid) NOT LIKE '%create_pixel%')) THEN
   ALTER TABLE socio_app.meta_ads_plans DROP CONSTRAINT meta_ads_plans_kind_check;
   ALTER TABLE socio_app.meta_ads_plans ADD CONSTRAINT meta_ads_plans_kind_check
-   CHECK(kind IN ('create','create_whatsapp','create_ad','status','rename','budget'));
+   CHECK(kind IN ('create','create_whatsapp','create_ad','create_pixel','status','rename','budget'));
  END IF;
 END $socio_meta_toolbox$;
 CREATE TABLE IF NOT EXISTS socio_app.meta_report_schedules (
