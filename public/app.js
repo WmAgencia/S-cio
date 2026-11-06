@@ -145,7 +145,7 @@ async function boot(){
     if(typeof history==='object')history.replaceState(null,'',location.pathname);
    }
    await changeView(state.view);
-   window.SocioOwner?.mount({api,enabled:state.me?.user?.platformOwner||['owner','admin'].includes(state.me?.user?.role)&&featureAvailable('ai')});
+   window.SocioOwner?.mount({api,tenantId:state.me?.tenant?.id,enabled:(state.me?.user?.platformOwner||['owner','admin'].includes(state.me?.user?.role))&&featureAvailable('ai')});
    if(marketingStatus==='authorized'){
     toast('Login autorizado. Verificando contas de anúncios disponíveis...');
     if(marketingProvider==='meta')void (async()=>{
