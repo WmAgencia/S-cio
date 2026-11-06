@@ -6,6 +6,7 @@ import {listExpertSkills,getExpertSkillGuide} from './socio-expert-skills.mjs';
 import {speakToSocioSkill} from './socio-skill-router.mjs';
 import {processOwnerSkillInbox} from './socio-owner-skill-inbox.mjs';
 import {processOwnerSkillMedia} from './socio-owner-skill-media.mjs';
+import {ownerWhatsAppReadiness} from './socio-owner-skill-readiness.mjs';
 import {metaConnectionPreflight} from './meta-integration-preflight.mjs';
 import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from './meta-report-schedules.mjs';
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
@@ -426,6 +427,11 @@ async function handle(req,res){
   const result=await saveMetaReportSchedule(pool,a,data);
   await audit(a,'marketing.report.schedule.updated',{enabled:result.schedule.enabled,hour:result.schedule.hour});
   return json(res,200,result);
+ }
+ if(pathname==='/api/marketing/skills/whatsapp-readiness'&&method==='GET'){
+  if(!limiter(simulationAttempts,'wa-owner-readiness:'+a.user_id,60000,6))
+   throw fail(429,'Aguarde antes de repetir o diagnóstico.');
+  return json(res,200,await ownerWhatsAppReadiness(pool,a));
  }
  if(pathname==='/api/marketing/skills/catalog'&&method==='GET'){
   requirePermission(a,'marketing.read');
