@@ -33,7 +33,7 @@ export function extractCampaignBrief(text,previous={}){
   if(!Number.isFinite(numeric)||numeric<1||numeric>100000)throw bad(422,'Informe um orçamento diário de R$ 1 a R$ 100.000.');
   result.dailyBudgetCents=Math.round(numeric*100);
  }
- const city=original.match(/\b(?:em|para)\s+([A-ZÀ-Ú][a-zA-ZÀ-ú]+(?:[\s-]+[A-ZÀ-Ú][a-zA-ZÀ-ú]+){0,3})(?=\s*(?:[,.;]|$|\s+(?:gastando|com|investindo|e\s+gastando|no\s+whatsapp|por\s+dia)))/i);
+ const city=original.match(/\b(?:em|para)\s+(.{3,75}?)(?=\s+(?:gastando|investindo|por\s+dia|com\s+orcamento|com\s+R\$|e\s+gastando|no\s+whatsapp)|[,.;]|$)/i);
  if(city&&city[1].trim().length>=3)result.cityName=city[1].trim();
  const category=/\b(roupas?\s+feminin[ao]s?|moda\s+feminina|vestidos?|blusas?\s+femininas?)\b/.test(normal)?'moda feminina':
   /\b(roupas?\s+masculinas?|moda\s+masculina)\b/.test(normal)?'moda masculina':
