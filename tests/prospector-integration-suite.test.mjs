@@ -25,6 +25,29 @@ test('interview visits each service and only prepares a reviewable Markdown draf
  assert.doesNotMatch(md,/Depoimento não aprovado/);
  assert.match(md,/Rascunho preparado/);
 });
+test('training asks one optional channel preference, persists selection and never assumes group buttons',()=>{
+ const run=choice=>{
+  let state=initialInterview();
+  let guard=0;
+  while(interviewView(state).phase==='answering'){
+   const {step}=interviewView(state);
+   const data={company:'Empresa Teste',services:'Buffet infantil',interactionMode:choice};
+   state=advanceInterview(state,data[step]||'A confirmar');
+   if(++guard>50)throw new Error('Interview loop');
+  }
+  return state;
+ };
+ const buttons=run('1');
+ assert.equal(buttons.answers.interactionMode,'interactive');
+ const md=compileInterviewMarkdown(buttons);
+ assert.match(md,/Preferir botões e listas em conversas individuais/);
+ assert.match(md,/usar mensagens de texto quando não houver suporte/);
+ const text=run('apenas mensagens');
+ assert.equal(text.answers.interactionMode,'text');
+ assert.match(compileInterviewMarkdown(text),/não enviar botões ou listas interativas/);
+ let state=initialInterview();state.index=15;
+ assert.throws(()=>advanceInterview(state,'invento outra modalidade'),/Escolha 1/);
+});
 test('incomplete or invalid training cannot be silently activated',()=>{
  assert.throws(()=>compileInterviewMarkdown(initialInterview()));
  assert.throws(()=>advanceInterview(initialInterview(),''));
