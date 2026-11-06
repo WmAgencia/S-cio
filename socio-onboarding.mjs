@@ -1,6 +1,6 @@
 // Sócio: deterministic, tenant-scoped guided onboarding. This module has no database or network actions.
 // It prepares a draft; only the existing version approval flow activates knowledge.
-export const ONBOARDING_VERSION=1;
+export const ONBOARDING_VERSION=2;
 const clean=(input,max=800)=>String(input??'').replace(/[\u0000-\u001f\u007f<>]/g,' ').replace(/\s+/g,' ').trim().slice(0,max);
 const norm=input=>clean(input).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 export const ONBOARDING_FIELDS=Object.freeze([
@@ -18,7 +18,8 @@ export const ONBOARDING_FIELDS=Object.freeze([
  {key:'restrictions',q:'O que eu nunca devo prometer, oferecer ou executar sem autorização?'},
  {key:'proofs',q:'Você tem depoimentos, portfólio ou cases autorizados? Cadastre os links na biblioteca de provas sociais no painel.'},
  {key:'closing',q:'Você quer apenas que eu qualifique e transfira a oportunidade, ou conduza até uma proposta aprovada?'},
- {key:'notifications',q:'Em quais situações você gostaria de receber notificações do Sócio?'}
+ {key:'notifications',q:'Em quais situações você gostaria de receber notificações do Sócio?'},
+ {key:'interactionMode',q:'Como você quer que a IA faça perguntas aos seus clientes pelo WhatsApp? Responda 1 para usar botões e listas quando disponíveis, com texto como alternativa, ou 2 para conversar apenas por mensagens de texto.'}
 ]);
 export function initialInterview(){return {version:ONBOARDING_VERSION,phase:'answering',index:0,serviceIndex:0,answers:{services:[]},startedAt:new Date().toISOString()};}
 function currentStep(state){return ONBOARDING_FIELDS[state.index]||null;}
@@ -49,6 +50,13 @@ export function advanceInterview(prior,input){
   item[step.key==='serviceDetails'?'details':'price']=answer;
  }else if(step.key==='closing'){
   state.answers[step.key]=/^(?:completo|fechar|conduzir|vender|2|proposta)/i.test(norm(answer))?'proposal':'handoff';
+ }else if(step.key==='interactionMode'){
+  const v=norm(answer);
+  if(/^(?:1|botoes?|com botoes|listas?|interativo|interativa|opcoes?|usar botoes)(?: e listas?)?$/.test(v))
+   state.answers.interactionMode='interactive';
+  else if(/^(?:2|texto|mensagem|mensagens|apenas mensagens|somente mensagens|conversa por texto|sem botoes|mensagens de texto)$/.test(v))
+   state.answers.interactionMode='text';
+  else throw new Error('Escolha 1 (botões/listas quando disponíveis) ou 2 (somente texto).');
  }else{
   state.answers[step.key]=answer;
  }
@@ -74,6 +82,9 @@ export function compileInterviewMarkdown(state,proofs=[]){
   '- Valor permitido: '+fallback(s.price),'');
  lines.push('## Atendimento e processo','- Compra/agendamento: '+fallback(a.purchase),
   '- Qualificação: '+fallback(a.qualification),'- Tom de voz: '+fallback(a.tone),
+  '- Formato de interação: '+(a.interactionMode==='interactive'?
+   'Preferir botões e listas em conversas individuais quando o canal oferecer suporte; sempre usar mensagens de texto quando não houver suporte.':
+   'Conversar somente por mensagens de texto; não enviar botões ou listas interativas.'),
   '- Objeções: '+fallback(a.objections),'- Encaminhar para humano: '+fallback(a.handoff),
   '- Restrições: '+fallback(a.restrictions),
   '- Modo comercial: '+(a.closing==='proposal'?'Conduzir somente até proposta com valores aprovados; negociação ou pagamento real exigem autorização do sistema.':'Qualificar e encaminhar ao humano.'),
