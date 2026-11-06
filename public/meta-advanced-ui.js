@@ -63,8 +63,8 @@
      for(const d of data.diagnostics||[]){
       const card=E('article');card.className='panel';list.append(card);
       card.append(E('strong',d.name+' (ID '+d.id+')'),
-       E('p','Investimento: '+d.spend+' '+(assessment?.currency||'')+' · Impressões: '+d.impressions+
-        ' · Cliques: '+d.clicks+' · CTR: '+(d.ctrPercent??'n/d')+'% · CPC: '+(d.cpc??'n/d')));
+       E('p','Investimento: '+(d.spend??'n/d')+' '+(assessment?.currency||'')+' · Impressões: '+(d.impressions??'n/d')+
+        ' · Cliques: '+(d.clicks??'n/d')+' · CTR: '+(d.ctrPercent??'n/d')+'% · CPC: '+(d.cpc??'n/d')));
       if(!d.notices.length)card.append(E('p','Nenhum alerta suficiente para orientar alteração; valide leads e compras antes de otimizar.'));
       for(const notice of d.notices){
        card.append(E('p',notice.label+': '+notice.evidence),
