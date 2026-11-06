@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {readAdvancedMetaTool} from '../../meta-ads-advanced.mjs';
+import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from '../../meta-report-schedules.mjs';
 import {officialPersistenceScenario} from './meta-official-fixture.mjs';
 import {selectOfficialAccount} from '../../meta-official.mjs';
 import {readAdsTool,prepareAdsPlan,executeAdsPlan,uploadAdImage} from '../../meta-ads-tools.mjs';
@@ -36,6 +37,19 @@ export async function metaToolsScenario(pool){
   return oauthRequest(url,options);
  };
  const opts={env,request};await selectOfficialAccount(pool,a,'act_123456',opts);
+ const scheduled=await saveMetaReportSchedule(pool,a,{hour:'20:00',timeZone:'America/Sao_Paulo',period:'yesterday',enabled:true},opts);
+ assert.equal(scheduled.schedule.account_id,'act_123456');
+ assert.equal(scheduled.delivery,'panel_only');
+ await pool.query("UPDATE meta_report_schedules SET next_run_at=now()-interval '1 minute' WHERE tenant_id=$1",[a.active_tenant_id]);
+ const reportRun=await processDueMetaReport(pool,{env:{SOCIO_META_REPORTS_ENABLED:'true'},read:async(_pool,actor,kind,input)=>{
+  assert.equal(actor.active_tenant_id,a.active_tenant_id);
+  assert.equal(kind,'reports');assert.equal(input.period,'yesterday');
+  return {accountId:'act_123456',summary:{spend:12.50,currency:'BRL',clicks:5,impressions:100},items:[]};
+ }});
+ assert.equal(reportRun.status,'completed');
+ assert.equal((await listMetaReportSchedule(pool,a)).runs[0].summary.spend,12.5);
+ assert.equal((await processDueMetaReport(pool,{env:{SOCIO_META_REPORTS_ENABLED:'false'}})).reason,'REPORTS_DISABLED');
+
  assert.equal((await readAdsTool(pool,a,'campaigns',{},opts)).items[0].id,'998877');
  const beforeReadWrites=writes.length;
  for(const kind of ['creatives','videos','audiences','pixels','conversions','reports','diagnosis','account']){
