@@ -37,6 +37,33 @@
     select.addEventListener('change',()=>{save.disabled=!canManage||!select.value;});
     button('Atualizar contas',load);
     await load();
+    if(data.selectedAccount){
+     const report=document.createElement('section');report.className='card card-pad';root.append(report);
+     const heading=document.createElement('h2');heading.textContent='Testar minha integração Meta';report.append(heading);
+     const description=document.createElement('p');
+     description.textContent='Teste somente leitura usando a autorização do aplicativo Sócio desta empresa, não a conexão Meta do ChatGPT. Nenhum anúncio será alterado.';
+     report.append(description);
+     const feedback=document.createElement('p');feedback.setAttribute('role','status');report.append(feedback);
+     const details=document.createElement('div');report.append(details);
+     button('Testar conexão oficial (sem alterações)',async()=>{
+      feedback.textContent='Consultando a conta e as ferramentas da Meta…';details.replaceChildren();
+      const result=await api('/api/marketing/official/preflight');
+      feedback.textContent=result.status==='read_ready'?'Consultas principais funcionando no Sócio.':
+       result.reason||'Teste concluído com pendências.';
+      const summary=document.createElement('p');
+      summary.textContent='Conta: '+(result.accountName||'não selecionada')+' · '+(result.accountId||'')+
+       ' · ads_read: '+(result.hasAdsRead?'sim':'não')+' · ads_management: '+(result.hasAdsManagement?'sim':'não');
+      details.append(summary);
+      for(const check of result.checks||[]){
+       const line=document.createElement('p');
+       line.textContent=(check.ok?'✓ ':'✕ ')+check.kind+': '+(check.ok?check.count+' registros recebidos'+(check.more?' (há mais)':''):check.error);
+       details.append(line);
+      }
+      const note=document.createElement('p');
+      note.textContent='Este teste confirma consultas somente quando a própria API do Sócio retorna sucesso. Não testa publicações, pagamentos ou o WhatsApp.';
+      details.append(note);
+     });
+    }
     if(data.selectedAccount&&globalThis.SocioAdsTools)await globalThis.SocioAdsTools.render({root,api,canManage,account:data.selectedAccount});
     if(data.selectedAccount&&globalThis.SocioMetaAdvanced)await globalThis.SocioMetaAdvanced.render({root,api,account:data.selectedAccount});
     if(data.selectedAccount&&globalThis.SocioMetaCommandUI)await globalThis.SocioMetaCommandUI.render({root,api,canManage,account:data.selectedAccount});
