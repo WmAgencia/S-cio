@@ -17,7 +17,7 @@ O sistema usa a Marketing API oficial do aplicativo Sócio. O atendimento segue 
 | `ads.performance.read` | Consultar campanhas/insights oficiais | Existia |
 | `ads.whatsapp.attribution` | Atribuição indicativa por código no WA-AKG | Disponível, não é atribuição Meta confirmada |
 | `ads.whatsapp.owner_commands` | Comandos para número privado do proprietário via WA-AKG | Código opt-in; NÃO habilitar sem homologação |
-| `ads.conversions.capI` | Pixel no site, CAPI, deduplicação e Purchase por webhook | **Pendente:** cada site precisa de integração própria |
+| `ads.conversions.capi` | Pixel no site, CAPI, deduplicação e Purchase por webhook | **Pendente:** cada site precisa de integração própria |
 
 ## Como funciona a skill de campanha
 
