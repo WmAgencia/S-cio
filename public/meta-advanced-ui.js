@@ -10,7 +10,7 @@
  async function render({root,api,account}){
   const section=E('section');section.className='card card-pad socio-meta-advanced';
   root.append(section);section.append(E('h2','Ferramentas avançadas da Marketing API'),
-   E('p','Consultas da conta autorizada '+account.account_id+'. Nenhuma ferramenta desta seção altera campanhas ou gera gastos.'));
+   E('p','Consultas e diagnósticos da conta autorizada '+account.account_id+'. Recomendações são apenas leitura: mudanças e gastos precisam de uma aprovação separada.'));
   const buttons=E('div');buttons.className='form-actions';section.append(buttons);
   const options=E('div');options.className='form-actions';section.append(options);
   const period=select('Período',[['today','Hoje'],['yesterday','Ontem'],['last_7d','7 dias'],['last_30d','30 dias']],'last_7d'),
@@ -42,7 +42,7 @@
     }
     const safe=data.items||[];
     if(!safe.length&&!next){list.append(E('p','Nenhum registro encontrado para esta consulta.'));}
-    for(const item of safe){
+    if(selected!=='diagnosis')for(const item of safe){
      const card=E('article');card.className='panel';list.append(card);
      card.append(E('strong',item.name||item.campaign_name||item.adset_name||item.ad_name||item.title||item.id||'Registro'));
      const table=E('dl');card.append(table);
@@ -52,11 +52,24 @@
       table.append(E('dt',field.replace(/_/g,' ')),E('dd',v));
      }
     }
-    if(data.diagnostics?.length){
-     for(const d of data.diagnostics){
+    if(selected==='diagnosis'){
+     const assessment=data.diagnosis;
+     if(assessment){
+      summary.append(E('p','Diagnóstico de '+assessment.totalCampaigns+' campanha(s); '+assessment.alerts+
+       ' anúncio(s) com possível restrição. '+(assessment.partial?'Resultado parcial. ':'')+
+       (assessment.adsUnavailable?'Não foi possível verificar o status dos anúncios.':'Status dos anúncios consultados quando disponíveis.')));
+     }
+     if(!data.diagnostics?.length)list.append(E('p','Nenhuma campanha com métricas ou status neste período. Isso não comprova que a conta não possui campanhas.'));
+     for(const d of data.diagnostics||[]){
       const card=E('article');card.className='panel';list.append(card);
-      card.append(E('strong',d.name),E('p','Gasto: '+d.spend+' · Cliques: '+d.clicks+' · CPC: '+(d.cpc??'n/d')),
-       E('p',d.note));
+      card.append(E('strong',d.name+' (ID '+d.id+')'),
+       E('p','Investimento: '+d.spend+' '+(assessment?.currency||'')+' · Impressões: '+d.impressions+
+        ' · Cliques: '+d.clicks+' · CTR: '+(d.ctrPercent??'n/d')+'% · CPC: '+(d.cpc??'n/d')));
+      if(!d.notices.length)card.append(E('p','Nenhum alerta suficiente para orientar alteração; valide leads e compras antes de otimizar.'));
+      for(const notice of d.notices){
+       card.append(E('p',notice.label+': '+notice.evidence),
+        E('p','Próximo passo sugerido: '+notice.recommendation));
+      }
      }
     }
     cursor=data.after||null;
