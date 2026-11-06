@@ -68,3 +68,20 @@ test('owner companion endpoint honors tenant AI feature gate',async()=>{
  assert.equal(requiredFeatureForApi('/api/assistant/query'),'ai');
  assert.throws(()=>assertApiFeature({whatsapp:true,catalog:true,quotes:true,meta_ads:true,ai:false,team:true},'/api/assistant/query'),/não está habilitada/);
 });
+
+test('seven-day report reads only own tenant and does not count inferred revenue',async()=>{
+ const {getTrialReport}=await import('../socio-trial-report.mjs');
+ const tenant='11111111-1111-4111-8111-111111111111',queries=[];
+ const db={query:async(sql,args)=>{queries.push({sql,args});return sql.startsWith('SELECT id,name,status')?
+  {rowCount:1,rows:[{id:tenant,name:'Loja Modelo',status:'trial',plan:'essencial',
+   trial_started_at:new Date('2026-11-01T12:00:00Z'),trial_ends_at:new Date('2026-11-08T12:00:00Z')}]}
+  :{rowCount:1,rows:[{n:3}]};}};
+ const report=await getTrialReport(db,tenant);
+ assert.equal(report.activity.inboundMessages,3);
+ assert.equal(report.activity.purchaseIntents,3);
+ assert.match(report.note,/não estima faturamento/);
+ assert(queries.every(x=>x.args[0]===tenant));
+ const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ assert.match(app,/data-trial-report/);
+ assert.match(app,/trialReportModal/);
+});
