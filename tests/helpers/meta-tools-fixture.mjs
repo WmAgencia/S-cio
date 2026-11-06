@@ -71,8 +71,19 @@ export async function metaToolsScenario(pool){
  assert.equal(JSON.parse(writes[5].body.promoted_object).whatsapp_phone_number,'5515999999999');
  assert.equal(JSON.parse(writes[6].body.object_story_spec).link_data.call_to_action.type,'WHATSAPP_MESSAGE');
  await assert.rejects(prepareAdsPlan(pool,a,'create_whatsapp',{...wa,whatsappPhone:'5515888888888'},opts),{status:422});
+ const adOnly=await prepareAdsPlan(pool,a,'create_ad',{...input,adsetId:'998877'},opts);
+ assert.equal(writes.length,8,'Standalone ad preview does not write to Meta');
+ const adOnlyResult=await executeAdsPlan(pool,a,adOnly.id,true,opts);
+ assert.equal(adOnlyResult.status,'succeeded');
+ assert.equal(writes.length,10);
+ assert.equal(writes[9].body.status,'PAUSED');
+ assert.equal(writes[9].body.adset_id,'998877');
+ const campaignBudget=await prepareAdsPlan(pool,a,'budget',{entity:'campaign',id:'998877',dailyBudgetCents:4000},opts);
+ assert.match(campaignBudget.summary.description,/orçamento/i);
+ assert.equal(writes.length,10,'Budget preview does not write to Meta');
+
  assert.equal(writes[1].body.daily_budget,'2000');assert.equal(JSON.parse(writes[1].body.targeting).geo_locations.cities[0].key,'654321');
- await executeAdsPlan(pool,a,plan.id,true,opts);assert.equal(writes.length,8,'Repeated execution must not duplicate entities');
+ await executeAdsPlan(pool,a,plan.id,true,opts);assert.equal(writes.length,10,'Repeated execution must not duplicate entities');
  const rename=await prepareAdsPlan(pool,a,'rename',{entity:'campaign',id:'998877',name:'Novo nome'},opts);
  assert.equal((await executeAdsPlan(pool,a,rename.id,true,opts)).status,'succeeded');
  const timed=await prepareAdsPlan(pool,a,'create',input,opts);uncertain=true;
