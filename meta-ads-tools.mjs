@@ -50,8 +50,11 @@ export async function readAdsTool(pool,a,kind,input={},options={}){
  const c=await context(pool,a,options),id=c.account.id;
  const fields={campaigns:'id,name,status,effective_status,objective,daily_budget,lifetime_budget',adsets:'id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,targeting',ads:'id,name,campaign_id,adset_id,status,effective_status,creative{id,name,thumbnail_url}',images:'hash,name,url,width,height',pages:'id,name'};
  if(kind==='finance'){
-  const data=await graph(c,'/'+id,{fields:'id,name,currency,amount_spent,spend_cap,account_status'});
-  return {account:data,paymentsUrl:'https://adsmanager.facebook.com/adsmanager/billing?act='+id.slice(4),manualPayment:true};
+  const data=await graph(c,'/'+id,{fields:'id,name,currency,amount_spent,spend_cap,account_status,business{id}'});
+  const billing=new URL('https://adsmanager.facebook.com/billing_hub/payment_settings/');
+  billing.searchParams.set('asset_id',id.slice(4));billing.searchParams.set('payment_account_id_from_jsmodule',id.slice(4));billing.searchParams.set('placement','ads_manager');
+  if(numeric(data.business?.id))billing.searchParams.set('business_id',data.business.id);
+  return {account:data,paymentsUrl:billing.href,manualPayment:true};
  }
  if(kind==='pages')return listing(await availablePages(c));
  if(kind==='insights'){
