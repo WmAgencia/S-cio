@@ -152,10 +152,11 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
    throw bad(422,'Peça uma campanha, por exemplo: quero divulgar roupas femininas em Sorocaba, R$ 6 por dia.');
   const id=randomUUID();
   const initial=extractCampaignBrief(message);
+  if(opts.originConversationId&&!uuid(opts.originConversationId))throw bad(422,'Conversa de origem inválida.');
   const inserted=await pool.query(
-   "INSERT INTO socio_skill_runs(id,tenant_id,user_id,account_id,skill,status,brief,expires_at) "+
-   "VALUES($1,$2,$3,$4,'ads.campaign.launch','collecting',$5::jsonb,now()+interval '2 hours') RETURNING *",
-   [id,a.active_tenant_id,a.user_id,accountId,JSON.stringify(initial)]);
+   "INSERT INTO socio_skill_runs(id,tenant_id,user_id,account_id,skill,status,brief,origin_conversation_id,expires_at) "+
+   "VALUES($1,$2,$3,$4,'ads.campaign.launch','collecting',$5::jsonb,$6,now()+interval '2 hours') RETURNING *",
+   [id,a.active_tenant_id,a.user_id,accountId,JSON.stringify(initial),opts.originConversationId||null]);
   run=inserted.rows[0];
  }
  if(['completed','failed','executing'].includes(run.status))
