@@ -71,7 +71,7 @@ export function diagnoseMetaTraffic({insights=[],ads=[],period='last_7d',currenc
   partial:Boolean(insightsHasMore||adsHasMore),
   adsUnavailable:Boolean(adsUnavailable),
   readOnly:true,
-  warning:'Diagnóstico com dados Meta Ads. Cliques, ações relatadas pela plataforma e mensagens não provam leads qualificados, compras ou receita. Amostra e período podem limitar conclusões.'};
+  warning:'Diagnóstico com dados Meta Ads. Cliques não são mensagens, leads ou vendas confirmadas. Ações relatadas pela plataforma e mensagens não comprovam compras nem receita. Amostra e período podem limitar conclusões.'};
 }
 export function formatMetaTrafficDiagnosis(result,{max=5}={}){
  if(!result||!Array.isArray(result.diagnostics))throw Object.assign(new Error('Diagnóstico indisponível.'),{status:503});
