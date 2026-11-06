@@ -765,3 +765,22 @@ CREATE TABLE IF NOT EXISTS ads_oauth_tokens (
  created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ads_oauth_tokens_owner ON ads_oauth_tokens(tenant_id,user_id);
+-- API Anything: browser sessions are scoped to both company and signed-in user.
+CREATE TABLE IF NOT EXISTS meta_browser_connections (
+ id text PRIMARY KEY CHECK (id ~ '^[a-f0-9]{32}$'),
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ status text NOT NULL CHECK (status IN ('active','disconnected')) DEFAULT 'active',
+ created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS meta_browser_active_actor ON meta_browser_connections(tenant_id,user_id) WHERE status='active';
+CREATE TABLE IF NOT EXISTS meta_browser_writes (
+ id uuid PRIMARY KEY,
+ connection_id text NOT NULL REFERENCES meta_browser_connections(id) ON DELETE CASCADE,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ key_hash text NOT NULL, payload_hash text NOT NULL,
+ status text NOT NULL CHECK (status IN ('pending','done')),
+ result jsonb, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(connection_id,key_hash)
+);

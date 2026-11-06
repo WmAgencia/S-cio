@@ -23,8 +23,8 @@ function toast(message,error=false){
  const el=$('#toast');el.textContent=message;el.className='toast'+(error?' error':'');
  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.add('hidden'),5000);
 }
-async function api(path,method='GET',body){
- const opts={method,credentials:'same-origin',headers:{'Accept':'application/json'}};
+async function api(path,method='GET',body,headers={}){
+ const opts={method,credentials:'same-origin',headers:{'Accept':'application/json',...headers}};
  if(body!==undefined){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
  if(method!=='GET'&&state.csrf)opts.headers['X-CSRF-Token']=state.csrf;
  const resp=await fetch(path,opts);
@@ -191,6 +191,7 @@ async function changeView(next,conversationId=null){
  if(next==='reports'&&!access.has('audit.read'))next='overview';
  if(next==='instagram')next='marketing';
  if(next==='marketing'&&!access.has('marketing.read'))next='overview';
+ globalThis.SocioMetaBrowser?.dispose();
  state.view=next;
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
  $('#topTitle').textContent=titles[next]||'Sócio';
@@ -500,6 +501,10 @@ async function channels(){
  }));
 }
 async function marketing(){
+ if(!globalThis.SocioMetaBrowser)throw Error('Recarregue a página para conectar o Ads Manager.');
+ return globalThis.SocioMetaBrowser.render({root:view,api,canManage:(state.me?.user?.permissions||[]).includes('marketing.manage')});
+}
+async function legacyMarketing(){
  const [data,auth]=await Promise.all([api('/api/marketing'),api('/api/marketing/oauth')]);
  const grants=(auth.grants||[]).filter(x=>x.provider==='meta'),connections=(data.connections||[]).filter(x=>x.provider==='pipeboard_meta'),reports=(data.reports||[]).filter(x=>x.provider==='pipeboard_meta');
  const scope=key=>grants.find(x=>x.provider===key&&x.status==='authorized');
@@ -1164,7 +1169,7 @@ function featureChecks(flags={},prefix='feature-'){
  return '<div class="feature-grid" role="group" aria-label="Funcionalidades da empresa">'+
   featureKeys.map(key=>'<label class="feature-choice"><input type="checkbox" name="'+prefix+key+
    '" '+(flags[key]!==false?'checked':'')+'><span><strong>'+e(featureLabels[key])+
-   '</strong><small>'+(key==='quotes'?'Precisa de WhatsApp e catálogo':key==='meta_ads'?'Conexão opcional via Pipeboard':'Ativar neste ambiente')+
+   '</strong><small>'+(key==='quotes'?'Precisa de WhatsApp e catálogo':key==='meta_ads'?'Sessão de navegador do Ads Manager':'Ativar neste ambiente')+
    '</small></span></label>').join('')+'</div>';
 }
 function selectedFeatures(form,prefix='feature-'){

@@ -1,6 +1,6 @@
 # Sócio — por Consecom
 
-> **Integração de anúncios vigente:** somente **Meta Ads via Pipeboard**. O Google Ads foi removido das conexões e da interface; credenciais locais antigas são desativadas sem apagar histórico. Consulte [o guia atualizado](docs/socio-conexao-um-clique.md).
+> **Conexão de anúncios vigente:** **Meta Ads com API Anything e navegador remoto**, sem aplicativo Meta. O Google Ads permanece desativado. As operações de anúncios precisam de captura e validação após login. Consulte [o guia atual](docs/socio-meta-browser.md).
 
 
 SaaS multiempresa de atendimento e vendas. Projeto independente do Prospector: nunca compartilha banco, sessões ou informações de clientes com o sistema de prospecção.
@@ -222,3 +222,7 @@ evitando pedir senhas de Instagram na aplicação.
 Veja o [guia de conexão de um clique](docs/socio-conexao-um-clique.md).
 O fluxo anterior de Pipeboard por token e Google Ads Scripts permanece apenas
 como alternativa técnica de compatibilidade, fora da interface principal.
+# Conexão Meta Ads sem aplicativo Meta
+
+A seção **Meta Ads** agora oferece login na página real da Meta por navegador remoto, integrado à sessão e às permissões do Sócio. Configuração, limites e aprendizado: [socio-meta-browser.md](docs/socio-meta-browser.md). As operações de anúncios precisam de captura e validação após login; sessão presente não significa campanha ou upload disponíveis.
+

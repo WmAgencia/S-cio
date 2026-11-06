@@ -33,6 +33,8 @@ import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,
 import {reserveAdVideo,listAdVideos,storeAdVideo,adVideoExportUrl,resolveSignedAsset,serveSignedVideo,importWhatsAppAdVideo,createMediaMcpToken,revokeMediaMcpTokens,MAX_AD_VIDEO_BYTES} from './ads-media.mjs';
 import {handleAdsMediaMcp} from './ads-media-mcp.mjs';
 import {handleMediaOAuth} from './ads-media-oauth.mjs';
+import {createMetaBrowser} from './meta-browser.mjs';
+const metaBrowser=createMetaBrowser();
 
 const PORT=Number(process.env.PORT||3000);
 const DATABASE_URL=process.env.DATABASE_URL;
@@ -135,7 +137,7 @@ async function handle(req,res){
  res.setHeader('X-Content-Type-Options','nosniff');
  res.setHeader('Referrer-Policy','no-referrer');
  res.setHeader('X-Frame-Options','DENY');
- res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+ res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
  if(method==='GET'&&pathname==='/health'){
   // Railway only considers the app ready when the tenant database is usable.
   // A static 200 here used to hide Postgres outages from the healthcheck.
@@ -215,7 +217,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -345,6 +347,26 @@ async function handle(req,res){
   csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
  // Feature restrictions are server-side. Hidden navigation never constitutes authorization.
  assertApiFeature(a.features,pathname);
+
+ // API Anything uses only the actor's isolated browser profile in the active tenant.
+ if(pathname==='/api/marketing/browser/status'&&method==='GET')return json(res,200,await metaBrowser.status(pool,a));
+ const browserRoute=pathname.match(/^\/api\/marketing\/browser\/(open|screen|input|finish|close|disconnect|plan|execute)$/);
+ if(browserRoute){
+  const kind=browserRoute[1];
+  if(kind==='screen'&&method==='GET'){
+   const result=await metaBrowser.action(pool,a,'screen');
+   res.writeHead(200,{'Content-Type':'image/jpeg','Cache-Control':'private,no-store'});
+   return res.end(Buffer.from(result.jpeg,'base64'));
+  }
+  if(kind!=='screen'&&method==='POST'){
+   const {data}=await body(req,250000);
+   const result=await metaBrowser.action(pool,a,kind,data,req.headers['idempotency-key']);
+   // Input may contain a password/2FA. Never include it in audit or error logs.
+   if(['open','finish','close','disconnect'].includes(kind))await audit(a,'marketing.browser.'+kind,{});
+   return json(res,200,result);
+  }
+  throw fail(405,'Método não permitido.');
+ }
 
  // Tenant-scoped Media Bridge: uploads here do not publish or modify Meta campaigns.
  if(method==='GET'&&pathname==='/api/ads-media'){
@@ -1563,6 +1585,6 @@ async function main(){
   else res.end();
  }));
  server.listen(PORT,'0.0.0.0',()=>console.log('Socio listening on '+PORT));
- process.on('SIGTERM',()=>server.close(()=>pool.end().then(()=>process.exit(0))));
+ process.on('SIGTERM',()=>server.close(()=>metaBrowser.close().then(()=>pool.end()).then(()=>process.exit(0))));
 }
 main().catch(e=>{console.error('startup failed',e.message);process.exit(1);});

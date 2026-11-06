@@ -46,6 +46,7 @@ jobs:
         continue-on-error: true
         timeout-minutes: 1
         run: node --input-type=module -e 'import {probePipeboardOAuth} from "./marketing-oauth.mjs"; for(const provider of ["meta"]){console.log(JSON.stringify({provider,...await probePipeboardOAuth(provider)}));}'
+      - run: node --check meta-browser.mjs && node --check meta-browser/remote-worker.js && node --check meta-browser/remote-pool.js && node --check public/meta-browser-ui.js
       - run: npm test
       - run: npm audit --omit=dev --audit-level=high
 
