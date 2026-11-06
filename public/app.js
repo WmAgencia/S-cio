@@ -940,6 +940,9 @@ async function training(){
   await training();
  }));
  mountAiGuideTabs();
+ if(window.SocioTraining?.mount)await window.SocioTraining.mount({
+  api,toast,canManage,refresh:()=>training()
+ });
  if(ongoing)trainingTimer=setTimeout(()=>{
   if(state.view==='training'&&state.aiTab==='training')
    training().catch(error=>toast(errMsg(error),true));
