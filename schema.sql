@@ -803,3 +803,17 @@ CREATE TABLE IF NOT EXISTS meta_local_jobs (
  created_at timestamptz NOT NULL DEFAULT now(), claimed_at timestamptz, completed_at timestamptz,
  UNIQUE(connection_id,key_hash)
 );
+
+-- Official Meta grants are private and scoped to both tenant and user.
+CREATE TABLE IF NOT EXISTS meta_official_states (
+ state_hash text PRIMARY KEY, tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, session_hash text NOT NULL,
+ expires_at timestamptz NOT NULL
+);
+CREATE TABLE IF NOT EXISTS meta_official_grants (
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ meta_user_id text NOT NULL, token_encrypted text NOT NULL, scopes text[] NOT NULL,
+ expires_at timestamptz NOT NULL, updated_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(tenant_id,user_id)
+);
