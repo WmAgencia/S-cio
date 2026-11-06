@@ -1,5 +1,6 @@
 import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory} from './meta-ads-tools.mjs';
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
+import {previewMetaCommand} from './meta-ads-commands.mjs';
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
 import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectOfficial,selectOfficialAccount,handleMetaRemoval,metaRemovalStatus} from './meta-official.mjs';
 
@@ -408,6 +409,12 @@ async function handle(req,res){
   const result=await deactivateTrackingLink(pool,a,deactivateLink[1]);
   await audit(a,'marketing.attribution.link.disabled',{id:result.id});
   return json(res,200,result);
+ }
+ if(pathname==='/api/marketing/commands/preview'&&method==='POST'){
+  if(!limiter(simulationAttempts,'marketing-command:'+a.user_id,60000,15))
+   throw fail(429,'Aguarde antes de preparar outra consulta.');
+  const {data}=await body(req,3000);
+  return json(res,200,await previewMetaCommand(pool,a,data.text));
  }
  if(pathname==='/api/marketing/advanced/catalog'&&method==='GET')
   return json(res,200,{tools:META_TOOL_CATALOG});
