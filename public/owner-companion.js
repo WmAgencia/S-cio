@@ -1,11 +1,13 @@
 // Read-only Sócio panel companion, tenant-bound through the authenticated API.
 (function(){
- let root=null,activeApi=null;
+ let root=null,activeApi=null,currentTenant=null;
  const e=v=>String(v||'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
- function mount({api,enabled=false}={}){
+ function mount({api,enabled=false,tenantId=null}={}){
   activeApi=api;
   if(root&&!root.isConnected)root=null;
-  if(!enabled){root?.remove();root=null;return;}
+  if(!enabled||!tenantId){root?.remove();root=null;currentTenant=null;return;}
+  if(root&&currentTenant!==tenantId){root.remove();root=null;}
+  currentTenant=tenantId;
   if(root)return;
   root=document.createElement('div');root.className='socio-owner-companion';
   root.innerHTML='<button type="button" class="socio-owner-launch" id="socioOwnerLaunch" aria-expanded="false" aria-controls="socioOwnerPanel" title="Consultar meu Sócio">✳ <span>Perguntar ao Sócio</span></button>'+
