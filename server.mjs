@@ -2,6 +2,7 @@ import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory,i
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {previewMetaCommand} from './meta-ads-commands.mjs';
 import {SOCIO_AD_SKILLS,speakToAdSkill} from './socio-ad-skills.mjs';
+import {processOwnerSkillInbox} from './socio-owner-skill-inbox.mjs';
 import {metaConnectionPreflight} from './meta-integration-preflight.mjs';
 import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from './meta-report-schedules.mjs';
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
@@ -1661,6 +1662,17 @@ async function main(){
   finally{liveSyncBusy=false;}
  },16000);
  liveSyncWorker.unref();
+ // Owner-only WA-AKG command bridge. Requires explicit opt-in, verified sender,
+ // connected private chat and authorized outbound. Never processes group/customer commands.
+ let ownerSkillBusy=false;
+ const ownerSkillsWorker=setInterval(async()=>{
+  if(ownerSkillBusy||workersBlocked()||process.env.SOCIO_OWNER_COMMANDS_ENABLED!=='true')return;
+  ownerSkillBusy=true;
+  try{await processOwnerSkillInbox(pool);}
+  catch(error){console.warn('[socio-owner-skills]',String(error?.code||'SKILL_ERROR').slice(0,40));}
+  finally{ownerSkillBusy=false;}
+ },19000);
+ ownerSkillsWorker.unref();
  // Attribution: only observed inbound prefilled codes. Never reads/writes campaigns or sends messages.
  let attributionBusy=false;
  const attributionWorker=setInterval(async()=>{
