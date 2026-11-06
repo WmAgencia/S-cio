@@ -1476,7 +1476,7 @@ async function handle(req,res){
  }
  if(method==='GET'&&pathname==='/api/admin/tenants'){
   needPlatform(a);
-  const r=await query("SELECT t.id,t.name,t.slug,t.plan,t.status,t.cnpj,t.legal_name,t.trade_name,t.features,t.quote_alert_whatsapp,t.created_at,(SELECT count(*)::int FROM users u WHERE u.tenant_id=t.id) AS members FROM tenants t ORDER BY t.created_at DESC");
+  const r=await query("SELECT t.id,t.name,t.slug,t.plan,t.status,t.cnpj,t.legal_name,t.trade_name,t.features,t.quote_alert_whatsapp,t.created_at,t.trial_started_at,t.trial_ends_at,t.contracted_at,(SELECT count(*)::int FROM users u WHERE u.tenant_id=t.id) AS members FROM tenants t ORDER BY t.created_at DESC");
   return json(res,200,r.rows);
  }
  const tenantFeaturesRoute=pathname.match(/^\/api\/admin\/tenants\/([a-f0-9-]{36})\/features$/i);
