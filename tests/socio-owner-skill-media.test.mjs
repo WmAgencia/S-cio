@@ -25,6 +25,8 @@ function poolFor(row,{pending=true,claimed=true}={}){
   if(sql.startsWith('SELECT c.id AS conversation_id')){
    assert.match(sql,/u\.role IN \('owner','admin'\)/);
    assert.match(sql,/regexp_replace\(u\.phone/);
+   assert.match(sql,/verified_owner\.tenant_id=c\.tenant_id/);
+   assert.match(sql,/count\(\*\) FROM users verified_owner/);
    assert.match(sql,/ch\.provider='waakg'/);
    assert.match(sql,/ch\.status='connected'/);
    return {rowCount:1,rows:[row]};
@@ -131,6 +133,8 @@ test('voice requests can be transcribed into plans but spoken approval never exe
  assert.deepEqual(started.invoked,['speak','deliver']);
  const refused=await run('Sócio, pode criar');
  assert.deepEqual(refused.invoked,['deliver']);
+ const confirms=await run('Sócio, confirma');
+ assert.deepEqual(confirms.invoked,['deliver']);
  assert.equal(refused.result.processed,true);
 });
 test('media workers refuse disconnected or mismatched gateway sessions and never download',async()=>{
