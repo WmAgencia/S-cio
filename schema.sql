@@ -937,6 +937,7 @@ CREATE TABLE IF NOT EXISTS socio_skill_runs (
  brief jsonb NOT NULL DEFAULT '{}'::jsonb,
  origin_conversation_id uuid REFERENCES conversations(id) ON DELETE SET NULL,
  plan_id uuid REFERENCES meta_ads_plans(id) ON DELETE SET NULL,
+ pixel_plan_id uuid REFERENCES meta_ads_plans(id) ON DELETE SET NULL,
  result jsonb,
  expires_at timestamptz NOT NULL,
  created_at timestamptz NOT NULL DEFAULT now(),
