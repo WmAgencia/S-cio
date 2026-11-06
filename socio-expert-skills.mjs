@@ -34,8 +34,8 @@ export function selectExpertSkill(message){
  const hasGoogle=google.test(text),hasMeta=meta.test(text);
  if(hasGoogle)return {id:'google.ads',reason:hasMeta?'multi_platform':'explicit_google'};
  if(whatsReport.test(text)||
-  (/\\b(whatsapp|zap|wa-akg)\\b/.test(text)&&/\\b(quantos|quantas|chegando|respondendo|responderam|taxa de resposta|vendas|leads|origem|atribui|rastre)\\b/.test(text)&&
-   !/\\b(criar|crie|campanha|anuncio|anunciar)\\b/.test(text)))
+  (/\b(whatsapp|zap|wa-akg)\b/.test(text)&&/\b(quantos|quantas|chegando|respondendo|responderam|taxa de resposta|vendas|leads|origem|atribui|rastre)\b/.test(text)&&
+   !/\b(criar|crie|campanha|anuncio|anunciar)\b/.test(text)))
   return {id:'whatsapp.sales',reason:'whatsapp_attribution_request'};
  if(tracking.test(text))return {id:'tracking.conversions',reason:'tracking_request'};
  // Existing Meta Ads router owns mutations and reads when request is otherwise supported.
