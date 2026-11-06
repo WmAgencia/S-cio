@@ -31,3 +31,11 @@ Testes locais: sete testes de segurança do módulo oficial e oito testes relaci
 ## Próximos recursos além da conexão
 
 A atribuição de leads pelo WA-AKG, comandos de grupos, relatórios programados e executor autônomo de campanhas não fazem parte desta primeira integração. A origem de lead só poderá ser marcada como confirmada quando existir identificador verificável; mensagem com código/UTM sozinha não prova causalidade de venda. Conferir payloads reais do gateway antes de definir garantias.
+
+## Complemento para homologação
+
+Implementadas páginas públicas `/privacidade.html`, `/exclusao-dados.html` e `/termos.html` (condições específicas do teste), com estilo responsivo. Retornos assinados: `/api/marketing/official/deauthorize` e `/api/marketing/official/data-deletion`; recebem `signed_request` em formulário e validam HMAC-SHA256, usuário e data antes de remover credenciais. O status público contém somente confirmação e escopo, sem identificadores de usuário ou empresa. Revogações invalidam autorizações iniciadas anteriormente, com trava transacional por conta/ator. Desconexão local remove apenas o vínculo daquele usuário/empresa; solicitação assinada da Meta remove todos os vínculos daquela conta Meta.
+
+A interface passa a mostrar a conexão oficial mesmo enquanto aguarda configuração, com mensagem explícita e sem encaminhar ao instalador local. A versão Graph aceita `SOCIO_META_GRAPH_VERSION` ou a variável já existente `META_GRAPH_VERSION`.
+
+Validação adicional: cenário completo executado em PostgreSQL embarcado (PGlite): duas empresas, troca de código, replay rejeitado, isolamento, empresa pausada, criptografia persistida, remoção assinada, repetição idempotente e reconexão nova. O mesmo cenário foi incluído na CI com PostgreSQL real via `DATABASE_URL`. Esse teste não substitui a autorização no Meta nem a homologação visual autenticada.
