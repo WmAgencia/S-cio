@@ -20,6 +20,7 @@
    report.replaceChildren();
    const summary=el('p','Origem: código observado na mensagem, não um clique comprovado.');report.append(summary);
    report.append(el('p','Funil de respostas e pedidos registrado pelo WA-AKG. Pagamentos de teste Stripe não são faturamento real.'));
+   if(funnel.collectionEnabled===false)report.append(el('p','A coleta automática de novos códigos está desligada. As contagens podem estar incompletas. Conecte e homologue um número WA-AKG antes de habilitá-la.'));
    const table=el('div');table.className='attribution-results';report.append(table);
    if(!stats.items?.length){table.append(el('p','Nenhum anúncio com link rastreável cadastrado.'));return;}
    const funnelById=new Map((funnel.items||[]).map(x=>[x.id,x]));
