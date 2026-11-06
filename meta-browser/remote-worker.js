@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mkdirSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
+import {allowRemoteResource,isMetaURL} from './network-policy.js';
 const require = createRequire(import.meta.url);
 const dist = dirname(require.resolve('api-anything'));
 const internal = name => import(pathToFileURL(join(dist, `${name}.js`)).href);
@@ -23,12 +24,6 @@ function activePage() {
   if (!page || page.isClosed()) throw new Error('BROWSER_NOT_OPEN');
   return page;
 }
-const allowed = value => {
-  try {
-    const url = new URL(value);
-    return ['https:', 'wss:'].includes(url.protocol) && ['facebook.com', 'facebook.net', 'fbcdn.net', 'fbsbx.com', 'instagram.com', 'cdninstagram.com', 'meta.com'].some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`));
-  } catch { return false; }
-};
 async function closeRemote() {
   if (context) await context.close().catch(() => {});
   context = null; page = null;
@@ -46,7 +41,7 @@ async function command(method, data = {}) {
   if (method === 'status') {
     const session = sessions.loadSession(SITE);
     return { engine: 'api-anything', requires_meta_app: false, session_present: session.cookies.some(c => c.name === 'c_user' && c.value) && session.cookies.some(c => c.name === 'xs' && c.value),
-      browser_page: page && !page.isClosed() && allowed(page.url()) ? new URL(page.url()).origin + new URL(page.url()).pathname : null,
+      browser_page: page && !page.isClosed() && isMetaURL(page.url()) ? new URL(page.url()).origin + new URL(page.url()).pathname : null,
       remote_browser_open: Boolean(context), operations: host.hostSite(SITE)?.operations || [], live_validated: false };
   }
   if (method === 'open') {
@@ -57,13 +52,13 @@ async function command(method, data = {}) {
         acceptDownloads: false, serviceWorkers: 'block',
         chromiumSandbox: process.platform === 'linux' && process.env.SOCIO_META_BROWSER_SANDBOX !== 'false',
       });
-      await context.route('**/*', route => allowed(route.request().url()) ? route.continue() : route.abort());
-      await context.routeWebSocket('**/*', socket => { if (allowed(socket.url())) socket.connectToServer(); else socket.close(); });
+      await context.route('**/*', route => allowRemoteResource(route.request().url()) ? route.continue() : route.abort());
+      await context.routeWebSocket('**/*', socket => { if (isMetaURL(socket.url())) socket.connectToServer(); else socket.close(); });
       context.on('page', popup => { page = popup; popup.on('dialog', dialog => dialog.dismiss().catch(() => {})); });
       page = context.pages()[0] || await context.newPage();
       page.on('dialog', dialog => dialog.dismiss().catch(() => {}));
       await page.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
-      if (!allowed(page.url())) { await closeRemote(); throw new Error('BROWSER_NAVIGATION_FAILED'); }
+      if (!isMetaURL(page.url())) { await closeRemote(); throw new Error('BROWSER_NAVIGATION_FAILED'); }
     }
     expiresAt = Date.now() + 20 * 60000;
     return { open: true, width: 1280, height: 800, expires_in: 1200 };

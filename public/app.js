@@ -192,6 +192,7 @@ async function changeView(next,conversationId=null){
  if(next==='instagram')next='marketing';
  if(next==='marketing'&&!access.has('marketing.read'))next='overview';
  globalThis.SocioMetaBrowser?.dispose();
+ globalThis.SocioMetaLocal?.dispose();
  state.view=next;
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
  $('#topTitle').textContent=titles[next]||'Sócio';
@@ -501,8 +502,8 @@ async function channels(){
  }));
 }
 async function marketing(){
- if(!globalThis.SocioMetaBrowser)throw Error('Recarregue a página para conectar o Ads Manager.');
- return globalThis.SocioMetaBrowser.render({root:view,api,canManage:(state.me?.user?.permissions||[]).includes('marketing.manage')});
+ if(!globalThis.SocioMetaLocal)throw Error('Recarregue a página para conectar o Ads Manager.');
+ return globalThis.SocioMetaLocal.render({root:view,api,canManage:(state.me?.user?.permissions||[]).includes('marketing.manage')});
 }
 async function legacyMarketing(){
  const [data,auth]=await Promise.all([api('/api/marketing'),api('/api/marketing/oauth')]);

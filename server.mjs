@@ -34,6 +34,8 @@ import {reserveAdVideo,listAdVideos,storeAdVideo,adVideoExportUrl,resolveSignedA
 import {handleAdsMediaMcp} from './ads-media-mcp.mjs';
 import {handleMediaOAuth} from './ads-media-oauth.mjs';
 import {createMetaBrowser} from './meta-browser.mjs';
+import {startLocalPairing,claimLocalPairing,authorizeLocalConnector,localHeartbeat,pollLocalJob,finishLocalJob,localConnectionStatus,enqueueLocalJob,getLocalJob,disconnectLocalConnector} from './meta-local.mjs';
+import {connectorBundle} from './meta-connector/bundle.mjs';
 const metaBrowser=createMetaBrowser();
 
 const PORT=Number(process.env.PORT||3000);
@@ -217,7 +219,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -270,6 +272,28 @@ async function handle(req,res){
   return json(res,200,result);
  }
  if(mutations.has(method))sameOrigin(req);
+ if(pathname==='/downloads/socio-meta-connector.zip'&&method==='GET'){
+  const archive=await connectorBundle();
+  res.writeHead(200,{'Content-Type':'application/zip','Content-Disposition':'attachment; filename="socio-meta-connector.zip"','Cache-Control':'no-store'});
+  return res.end(archive);
+ }
+ if(pathname.startsWith('/api/meta-connector/')){
+  if(method!=='POST')throw fail(405,'Método não permitido.');
+  if(pathname==='/api/meta-connector/pair'){
+   if(!limiter(authAttempts,'local-pair:'+clientIp(req),600000,40))throw fail(429,'Aguarde para conectar novamente.');
+   const {data}=await body(req,2000);return json(res,200,await claimLocalPairing(pool,data));
+  }
+  const connection=await authorizeLocalConnector(pool,req.headers.authorization);
+  if(!limiter(authAttempts,'connector:'+connection.id,60000,90))throw fail(429,'Aguarde antes de consultar novamente.');
+  if(pathname==='/api/meta-connector/heartbeat'){
+   const {data}=await body(req,2000);return json(res,200,await localHeartbeat(pool,connection,data));
+  }
+  if(pathname==='/api/meta-connector/poll')return json(res,200,await pollLocalJob(pool,connection));
+  if(pathname==='/api/meta-connector/result'){
+   const {data}=await body(req,500000);return json(res,200,await finishLocalJob(pool,connection,data));
+  }
+  throw fail(404,'Operação não encontrada.');
+ }
  // Opaque buyer approval link; no access to unrelated tenant records.
  const publicQuotePath=pathname.match(/^\/api\/public\/quotes\/([a-f0-9]{64})$/);
  if(publicQuotePath&&method==='GET'){
@@ -347,6 +371,18 @@ async function handle(req,res){
   csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
  // Feature restrictions are server-side. Hidden navigation never constitutes authorization.
  assertApiFeature(a.features,pathname);
+ if(pathname==='/api/marketing/local/status'&&method==='GET')return json(res,200,await localConnectionStatus(pool,a));
+ if(pathname==='/api/marketing/local/pairing'&&method==='POST'){
+  if(!limiter(authAttempts,'local-pairing:'+a.user_id,600000,10))throw fail(429,'Muitas tentativas. Aguarde antes de conectar novamente.');
+  const result=await startLocalPairing(pool,a);await audit(a,'marketing.local.pairing',{});return json(res,200,result);
+ }
+ if(pathname==='/api/marketing/local/disconnect'&&method==='POST')return json(res,200,await disconnectLocalConnector(pool,a));
+ if(pathname==='/api/marketing/local/jobs'&&method==='POST'){
+  if(!limiter(authAttempts,'local-job:'+a.user_id,60000,12))throw fail(429,'Aguarde a operação atual.');
+  const {data}=await body(req,250000);return json(res,200,await enqueueLocalJob(pool,a,data.kind,data.input,req.headers['idempotency-key']));
+ }
+ const localJob=pathname.match(/^\/api\/marketing\/local\/jobs\/([0-9a-f-]{36})$/i);
+ if(localJob&&method==='GET')return json(res,200,await getLocalJob(pool,a,localJob[1]));
 
  // API Anything uses only the actor's isolated browser profile in the active tenant.
  if(pathname==='/api/marketing/browser/status'&&method==='GET')return json(res,200,await metaBrowser.status(pool,a));

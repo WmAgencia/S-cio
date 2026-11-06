@@ -1,6 +1,6 @@
 # Sócio — por Consecom
 
-> **Conexão de anúncios vigente:** **Meta Ads com API Anything e navegador remoto**, sem aplicativo Meta. O Google Ads permanece desativado. As operações de anúncios precisam de captura e validação após login. Consulte [o guia atual](docs/socio-meta-browser.md).
+> **Conexão de anúncios vigente:** **Meta Ads com API Anything e conector local Windows**, sem aplicativo Meta. O login abre no navegador do computador. O Google Ads permanece desativado. As operações de anúncios precisam de captura e validação após login. Consulte [o guia atual](docs/socio-meta-local.md).
 
 
 SaaS multiempresa de atendimento e vendas. Projeto independente do Prospector: nunca compartilha banco, sessões ou informações de clientes com o sistema de prospecção.
@@ -224,5 +224,5 @@ O fluxo anterior de Pipeboard por token e Google Ads Scripts permanece apenas
 como alternativa técnica de compatibilidade, fora da interface principal.
 # Conexão Meta Ads sem aplicativo Meta
 
-A seção **Meta Ads** agora oferece login na página real da Meta por navegador remoto, integrado à sessão e às permissões do Sócio. Configuração, limites e aprendizado: [socio-meta-browser.md](docs/socio-meta-browser.md). As operações de anúncios precisam de captura e validação após login; sessão presente não significa campanha ou upload disponíveis.
+A seção **Meta Ads** oferece um conector local para abrir a página real da Meta em uma janela de Chrome/Edge no computador. Instalação, privacidade e limites: [socio-meta-local.md](docs/socio-meta-local.md). As operações de anúncios precisam de captura e validação após login; sessão presente não significa campanha ou upload disponíveis.
 
