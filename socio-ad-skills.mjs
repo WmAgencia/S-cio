@@ -9,7 +9,7 @@ import {readAdsTool,prepareAdsPlan,executeAdsPlan} from './meta-ads-tools.mjs';
 
 const bad=(status,message)=>Object.assign(new Error(message),{status});
 const digits=x=>String(x||'').replace(/\D/g,'');
-const uuid=x=>typeof x==='string'&&/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(x);
+const uuid=x=>typeof x==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(x);
 const moneyWords=Object.freeze({um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,quinze:15,vinte:20,trinta:30,quarenta:40,cinquenta:50,cem:100});
 const clean=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 export const SOCIO_AD_SKILLS=Object.freeze([
@@ -137,6 +137,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
  if(imageHash!==null&&!validImageHash(imageHash))throw bad(422,'Imagem enviada inválida.');
  const selected=await (opts.resolve||resolveSelectedOfficialAccount)(pool,a,opts);
  const accountId=selected.id;
+ if(selected.currency!=='BRL')throw bad(409,'Esta skill está configurada para orçamento em reais. Selecione uma conta Meta em BRL antes de continuar.');
  let run;
  if(runId){
   if(!uuid(runId))throw bad(422,'Conversa inválida.');
@@ -171,7 +172,11 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
    "WHERE id=$1 AND tenant_id=$2 AND user_id=$3 AND status='ready' AND expires_at>now() RETURNING *",
    [run.id,a.active_tenant_id,a.user_id]);
   if(!claim.rowCount)throw bad(409,'Este pedido já foi reivindicado. Não repita a operação.');
-  const executed=await (opts.execute||executeAdsPlan)(pool,a,run.plan_id,true,opts);
+  let executed;
+  try{executed=await (opts.execute||executeAdsPlan)(pool,a,run.plan_id,true,opts);}
+  catch(error){
+   executed={status:'failed',error:String(error?.message||'Falha não confirmada').slice(0,180)};
+  }
   const status=executed.status==='succeeded'?'completed':'failed';
   await pool.query(
    'UPDATE socio_skill_runs SET status=$2,result=$3::jsonb,updated_at=now() WHERE id=$1 AND tenant_id=$4',
@@ -208,7 +213,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   [run.id,JSON.stringify(brief),plan.id,a.active_tenant_id,a.user_id]);
  return {runId:run.id,status:'ready',brief:publicBrief(brief),planId:plan.id,
   message:'Preparei a campanha '+creative.name+'. Público: '+(brief.genders?.[0]===2?'mulheres, ':'')+
-   'maiores de 18 anos em '+brief.cityName+'. Orçamento máximo configurado: R$ '+
+   'maiores de 18 anos em '+brief.cityName+'. Orçamento diário definido: R$ '+
    (brief.dailyBudgetCents/100).toFixed(2).replace('.',',')+'/dia. Destino: '+
    (brief.destination==='whatsapp'?'WhatsApp WA-AKG':'site')+'. '+
    'Texto: '+creative.message+' A Meta fará a revisão do anúncio. '+
