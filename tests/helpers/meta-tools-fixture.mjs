@@ -28,7 +28,7 @@ export async function metaToolsScenario(pool){
  await assert.rejects(prepareAdsPlan(pool,a,'status',{entity:'campaign',id:'887766',status:'ACTIVE'},opts),{status:403});
  await assert.rejects(prepareAdsPlan(pool,{...a,role:'agent'},'status',{entity:'campaign',id:'998877',status:'ACTIVE'},opts),{status:403});
  const input={name:'Tráfego teste',url:'https://example.test',headline:'Teste',message:'Descrição do anúncio',pageId:'445566',imageHash:'image-hash',cityKey:'654321',cityName:'Sorocaba',dailyBudgetCents:2000};
- const plan=await prepareAdsPlan(pool,a,'create',input,opts);assert.equal(writes.length,0,'A preview must not write to Meta');
+ const plan=await prepareAdsPlan(pool,a,'create',input,opts);assert.equal(writes.length,0,'A preview must not write to Meta');assert.equal(plan.summary.message,input.message);assert.equal(plan.summary.imageHash,input.imageHash);
  await assert.rejects(executeAdsPlan(pool,a,plan.id,false,opts),{status:422});
  const result=await executeAdsPlan(pool,a,plan.id,true,opts);assert.equal(result.status,'succeeded');assert.equal(writes.length,4);
  assert.equal(writes[0].body.status,'PAUSED');assert.equal(writes[1].body.status,'PAUSED');assert.equal(writes[3].body.status,'PAUSED');

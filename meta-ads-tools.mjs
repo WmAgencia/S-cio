@@ -99,7 +99,7 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
   const city=(locations.data||[]).find(x=>String(x.key)===payload.cityKey);
   if(!city)throw fail(422,'Pesquise e selecione novamente a cidade desejada.');
   payload.cityName=[city.name,city.region,city.country_name].filter(Boolean).join(' · ');
-  summary={description:'Criar campanha de tráfego para site, conjunto, criativo e anúncio. Todos serão criados PAUSADOS.',account:c.account,name:payload.name,dailyBudgetCents:payload.dailyBudgetCents,destination:payload.url,city:payload.cityName,ageMin:payload.ageMin,ageMax:payload.ageMax};
+  summary={description:'Criar campanha de tráfego para site, conjunto, criativo e anúncio. Todos serão criados PAUSADOS.',account:c.account,name:payload.name,message:payload.message,headline:payload.headline,pageId:payload.pageId,imageHash:payload.imageHash,dailyBudgetCents:payload.dailyBudgetCents,destination:payload.url,city:payload.cityName,ageMin:payload.ageMin,ageMax:payload.ageMax};
  }else{
   const entity=await owned(c,payload.id);
   summary={description:kind==='status'?(payload.status==='ACTIVE'?'Ativar: esta ação pode iniciar gastos conforme o orçamento da conta.':'Pausar veiculação.'):kind==='budget'?'Alterar orçamento diário: se estiver ativo, o conjunto poderá gastar o novo valor.':'Alterar nome.',account:c.account,object:entity,changes:payload};
