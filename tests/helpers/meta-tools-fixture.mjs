@@ -4,7 +4,7 @@ import {readAdvancedMetaTool} from '../../meta-ads-advanced.mjs';
 import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from '../../meta-report-schedules.mjs';
 import {officialPersistenceScenario} from './meta-official-fixture.mjs';
 import {selectOfficialAccount} from '../../meta-official.mjs';
-import {readAdsTool,prepareAdsPlan,executeAdsPlan,uploadAdImage} from '../../meta-ads-tools.mjs';
+import {readAdsTool,prepareAdsPlan,executeAdsPlan,uploadAdImage,inspectOfficialCampaign} from '../../meta-ads-tools.mjs';
 export async function metaToolsScenario(pool){
  const {actors,env,request:oauthRequest}=await officialPersistenceScenario(pool),a=actors[0];
  let writes=[],uncertain=false,fallbackPages=false;
@@ -31,6 +31,9 @@ export async function metaToolsScenario(pool){
   if(path.endsWith('/ads'))return response({data:[{id:'554433',creative:{object_story_spec:{page_id:'445566'}}}]});
   if(path==='/act_123456')return response({id:'act_123456',currency:'BRL',amount_spent:'1234',spend_cap:'2000',business:{id:'777888'}});
   if(path==='/445566')return response({id:'445566',name:'Página existente na conta'});
+  if(path==='/998877/adsets')return response({data:[{id:'121212',name:'Conjunto de teste',effective_status:'ACTIVE'}]});
+  if(path==='/998877/ads')return response({data:[{id:'343434',name:'Anúncio de teste',effective_status:'ACTIVE'}]});
+  if(path==='/998877/insights')return response({data:[{campaign_id:'998877',spend:'12.27',clicks:'488',impressions:'3098'}]});
   if(path==='/998877')return response({id:'998877',account_id:'123456',name:'Existing'});
   if(path==='/887766')return response({id:'887766',account_id:'999999',name:'Other tenant account'});
   if(path.endsWith('/campaigns'))return response({data:[{id:'998877',name:'Existing',status:'PAUSED'}]});
@@ -51,6 +54,15 @@ export async function metaToolsScenario(pool){
  assert.equal((await processDueMetaReport(pool,{env:{SOCIO_META_REPORTS_ENABLED:'false'}})).reason,'REPORTS_DISABLED');
 
  assert.equal((await readAdsTool(pool,a,'campaigns',{},opts)).items[0].id,'998877');
+ const campaignAudit=await inspectOfficialCampaign(pool,a,'998877',opts);
+ assert.equal(campaignAudit.accountId,'act_123456');
+ assert.equal(campaignAudit.readOnly,true);
+ assert.equal(campaignAudit.adsets.length,1);
+ assert.equal(campaignAudit.ads[0].effective_status,'ACTIVE');
+ assert.equal(campaignAudit.insights[0].spend,'12.27');
+ assert.equal(writes.length,0,'Read-only campaign audit may never write to Meta');
+ await assert.rejects(inspectOfficialCampaign(pool,a,'887766',opts),{status:403});
+
  const beforeReadWrites=writes.length;
  for(const kind of ['creatives','videos','audiences','pixels','conversions','reports','diagnosis','account']){
   const advanced=await readAdvancedMetaTool(pool,a,kind,{period:'last_7d',level:'ad',breakdown:'none'},opts);
