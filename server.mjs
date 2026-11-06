@@ -1,6 +1,7 @@
 import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory} from './meta-ads-tools.mjs';
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {previewMetaCommand} from './meta-ads-commands.mjs';
+import {metaConnectionPreflight} from './meta-integration-preflight.mjs';
 import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from './meta-report-schedules.mjs';
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
 import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectOfficial,selectOfficialAccount,handleMetaRemoval,metaRemovalStatus} from './meta-official.mjs';
@@ -458,6 +459,12 @@ async function handle(req,res){
   await audit(a,'marketing.official.operation',{planId:data.planId,status:result.status});return json(res,200,result);
  }
  if(pathname==='/api/marketing/official/status'&&method==='GET')return json(res,200,await officialStatus(pool,a));
+ if(pathname==='/api/marketing/official/preflight'&&method==='GET'){
+  if(!limiter(simulationAttempts,'meta-official-preflight:'+a.user_id,60000,4))
+   throw fail(429,'Aguarde um minuto antes de repetir o diagnóstico.');
+  return json(res,200,await metaConnectionPreflight(pool,a));
+ }
+
  if(pathname==='/api/marketing/official/accounts'&&method==='GET')return json(res,200,await officialAccounts(pool,a));
  if(pathname==='/api/marketing/official/account'&&method==='POST'){
   requirePermission(a,'marketing.manage');
