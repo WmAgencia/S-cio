@@ -22,6 +22,7 @@ import {startAutoTraining,autoTrainingStatus,cancelAutoTraining,processNextAutoT
 import {interviewStatus,startInterview,submitInterviewAnswer,createInterviewDraft,listProofs,createProof,approveProof,removeProof,readProofMedia,getClosingPolicy,updateClosingPolicy} from './socio-training-service.mjs';
 import {transcribeTrainingAudio} from './socio-training-speech.mjs';
 import {ownerSummary,ownerReadOnlyAnswer} from './socio-owner-assistant.mjs';
+import {getTrialReport} from './socio-trial-report.mjs';
 import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
@@ -1503,6 +1504,11 @@ async function handle(req,res){
   return json(res,200,updated.rows[0]);
  }
 
+ const trialReportRoute=pathname.match(/^\/api\/admin\/tenants\/([0-9a-f-]{36})\/trial-report$/);
+ if(trialReportRoute&&method==='GET'){
+  needPlatform(a);
+  return json(res,200,await getTrialReport(pool,trialReportRoute[1]));
+ }
  const contractTrial=pathname.match(/^\/api\/admin\/tenants\/([0-9a-f-]{36})\/contract$/);
  if(contractTrial&&method==='POST'){
   needPlatform(a);
