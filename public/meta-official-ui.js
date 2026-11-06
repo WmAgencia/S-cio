@@ -110,6 +110,7 @@
       finally{lookup.disabled=false;}
      });
     }
+    if(data.selectedAccount&&globalThis.SocioAdSkillsUI)await globalThis.SocioAdSkillsUI.render({root,api,canManage:canManage&&data.writesEnabled,account:data.selectedAccount});
     if(data.selectedAccount&&globalThis.SocioAdsTools)await globalThis.SocioAdsTools.render({root,api,canManage:canManage&&data.writesEnabled,account:data.selectedAccount});
     if(data.selectedAccount&&globalThis.SocioMetaAdvanced)await globalThis.SocioMetaAdvanced.render({root,api,account:data.selectedAccount});
     if(data.selectedAccount&&globalThis.SocioMetaCommandUI)await globalThis.SocioMetaCommandUI.render({root,api,canManage:canManage&&data.writesEnabled,account:data.selectedAccount});
