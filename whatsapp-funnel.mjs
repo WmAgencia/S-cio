@@ -53,14 +53,14 @@ const SQL=[
  " GROUP BY l.id ORDER BY l.created_at DESC LIMIT 100"
 ].join(' ');
 
-export async function readWhatsAppFunnel(pool,actor){
+export async function readWhatsAppFunnel(pool,actor,{env=process.env}={}){
  requirePermission(actor,'marketing.read');
  assertApiFeature(actor.features,'/api/marketing/tools');
  assertApiFeature(actor.features,'/api/waakg');
  if(actor.tenant_status==='paused')throw fail(403,'Empresa pausada.');
  const result=await pool.query(SQL,[actor.active_tenant_id]);
  return {period:'Desde o primeiro código observado em cada link',method:'message_code',confidence:'indicative',
-  readOnly:true,partial:result.rows.length===100,
+  readOnly:true,partial:result.rows.length===100,collectionEnabled:env.SOCIO_ATTRIBUTION_ENABLED==='true',
   items:result.rows.map(row=>({
    id:row.id,label:row.label,accountId:row.account_id,campaignId:row.campaign_id,
    adsetId:row.adset_id,adId:row.ad_id,active:row.active,
@@ -86,10 +86,12 @@ export function formatWhatsAppFunnel(report,{max=5}={}){
    Number(row.customerFollowedUp||0)+' com nova resposta do cliente, '+
    Number(row.quoteRequests||0)+' pedidos de orçamento, '+
    Number(row.purchaseIntents||0)+' intenções e '+
-   Number(row.ordersCreated||0)+' pedidos cadastrados.');
+   Number(row.ordersCreated||0)+' pedido(s) cadastrados.');
   if(Number(row.sandboxPaidOrders||0)>0)
-   lines.push('  Apenas em sandbox: '+Number(row.sandboxPaidOrders)+' pagamento(s) de teste Stripe. Não são vendas reais.');
+   lines.push('  Somente em sandbox: '+Number(row.sandboxPaidOrders)+' pagamento(s) de teste Stripe. Não são vendas reais.');
  }
+ if(report.collectionEnabled===false)
+  lines.push('Coleta automática de novos códigos desativada. Números podem estar incompletos.');
  if(report.partial||report.items.length>rows.length)
   lines.push('Relatório parcial: consulte todos os links antes de comparar resultados.');
  lines.push('Vendas reais e receita confirmada: indisponíveis; sem integração de pagamento de produção validada. Não calcule ROAS com esses dados.');
