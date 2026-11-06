@@ -1,7 +1,8 @@
 import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {previewMetaCommand} from './meta-ads-commands.mjs';
-import {SOCIO_AD_SKILLS,speakToAdSkill} from './socio-ad-skills.mjs';
+import {SOCIO_AD_SKILLS} from './socio-ad-skills.mjs';
+import {speakToSocioSkill} from './socio-skill-router.mjs';
 import {processOwnerSkillInbox} from './socio-owner-skill-inbox.mjs';
 import {metaConnectionPreflight} from './meta-integration-preflight.mjs';
 import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from './meta-report-schedules.mjs';
@@ -434,7 +435,7 @@ async function handle(req,res){
   if(!limiter(simulationAttempts,'marketing-skill:'+a.user_id,60000,12))
    throw fail(429,'Muitas solicitações. Tente novamente em um minuto.');
   const {data}=await body(req,3500);
-  const answer=await speakToAdSkill(pool,a,{message:data.message,runId:data.runId,imageHash:data.imageHash});
+  const answer=await speakToSocioSkill(pool,a,{message:data.message,runId:data.runId,imageHash:data.imageHash});
   await audit(a,'marketing.skill.request',{runId:answer.runId,status:answer.status,skill:'ads.campaign.launch'});
   return json(res,200,answer);
  }
