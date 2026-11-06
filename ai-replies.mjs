@@ -73,14 +73,16 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
   "UPDATE ai_reply_attempts SET status=$2,reason=$3,finished_at=now() WHERE id=$1",
   [attemptId,status,reason]);
  try{
-  const [history,products,proofs,closing]=await Promise.all([
+  const [history,products]=await Promise.all([
    // Internal notes belong to staff only and must never be passed to a customer-facing model.
    pool.query("SELECT direction,body FROM messages WHERE tenant_id=$1 AND conversation_id=$2 "+
     "AND direction IN ('inbound','outbound') ORDER BY created_at DESC LIMIT 18",
     [m.tenant_id,m.conversation_id]),
    m.tenant_features?.catalog===false?Promise.resolve({rows:[]}):
    pool.query("SELECT name,price_cents,stock_quantity FROM products WHERE tenant_id=$1 AND active=true ORDER BY created_at DESC LIMIT 40",
-    [m.tenant_id]),
+    [m.tenant_id])
+  ]);
+  const [proofs,closing]=await Promise.all([
    approvedEvidenceText(pool,m.tenant_id),getClosingPolicy(pool,m.tenant_id)
   ]);
   const context=history.rows.reverse().map(item=>
