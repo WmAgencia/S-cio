@@ -28,7 +28,7 @@
      '<div class="train-suite-progress"><div class="train-suite-track"><i style="width:'+Number(v.progress||0)+'%"></i></div><small>'+Number(v.progress||0)+'% concluído</small></div>'+
      (phase==='answering'?'<div class="train-suite-question"><div class="train-suite-avatar" aria-hidden="true">✳</div><p>'+e(v.question)+'</p></div>'+
        (canManage?'<form id="trainInterviewAnswer" class="train-suite-form"><label for="trainInterviewText">Sua resposta</label><textarea id="trainInterviewText" name="answer" maxlength="1000" rows="3" placeholder="Responda por escrito; você pode detalhar o quanto for necessário."></textarea>'+
-       '<div class="train-suite-controls"><button type="button" class="btn soft" data-interview-reset>Recomeçar</button><button class="btn primary" type="submit">Próxima pergunta →</button></div></form>':''):
+       '<p class="form-note" id="trainVoiceStatus" role="status">Você pode gravar, revisar a transcrição e só então enviar.</p><div class="train-suite-controls"><button type="button" class="btn soft" id="trainVoiceRecord">🎙 Gravar resposta</button><button type="button" class="btn soft" data-interview-reset>Recomeçar</button><button class="btn primary" type="submit">Próxima pergunta →</button></div></form>':''):
        '<div class="train-suite-review"><strong>Entrevista concluída.</strong><p>Você pode gerar uma versão preliminar e editar o Markdown antes de aprová-lo.</p>'+
        (canManage?'<div class="train-suite-controls"><button type="button" class="btn soft" data-interview-reset>Refazer entrevista</button><button type="button" class="btn primary" id="trainInterviewDraft">Gerar rascunho</button></div>':'')+'</div>'))+
    '</section><div class="train-suite-grid"><section class="card card-pad train-suite-card"><div class="socio-clean-head"><div><span class="eyebrow">REFERÊNCIAS COMERCIAIS</span><h2>Portfólio e provas sociais</h2></div><span class="badge">'+proofs.filter(x=>x.approved).length+' aprovados</span></div>'+
@@ -76,6 +76,48 @@
     const form=ev.currentTarget,answer=String(new FormData(form).get('answer')||'');
     if(!answer.trim())return toast('Digite uma resposta. Se não souber, escreva não informado.',true);
     doAction(()=>api('/api/training/interview/answer','POST',{answer}));
+   });
+   let voiceRecorder=null,voiceStream=null,recordStopTimer=null;
+   host.querySelector('#trainVoiceRecord')?.addEventListener('click',async ev=>{
+    const button=ev.currentTarget,status=host.querySelector('#trainVoiceStatus');
+    if(voiceRecorder&&voiceRecorder.state==='recording'){
+     voiceRecorder.stop();
+     button.disabled=true;
+     if(status)status.textContent='Transcrevendo sua gravação...';
+     return;
+    }
+    if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==='undefined'){
+     toast('Este navegador não permite gravação. Você pode escrever sua resposta.',true);return;
+    }
+    try{
+     const options=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'].find(x=>MediaRecorder.isTypeSupported(x));
+     if(!options)throw new Error('Formato de gravação não suportado neste navegador.');
+     voiceStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+     const chunks=[];
+     voiceRecorder=new MediaRecorder(voiceStream,{mimeType:options});
+     voiceRecorder.ondataavailable=evt=>{if(evt.data?.size)chunks.push(evt.data);};
+     voiceRecorder.onerror=()=>{toast('Gravação interrompida.',true);voiceStream?.getTracks().forEach(t=>t.stop());};
+     voiceRecorder.onstop=async()=>{
+      clearTimeout(recordStopTimer);
+      voiceStream?.getTracks().forEach(t=>t.stop());
+      const blob=new Blob(chunks,{type:voiceRecorder.mimeType||options});
+      button.disabled=false;button.textContent='🎙 Gravar novamente';
+      try{
+       if(blob.size>3_500_000)throw new Error('Áudio excede 3,5 MB. Grave uma resposta menor.');
+       const data=await new Promise((resolve,reject)=>{
+        const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]||'');
+        reader.onerror=()=>reject(new Error('Não foi possível ler o áudio.'));reader.readAsDataURL(blob);
+       });
+       const result=await api('/api/training/transcribe','POST',{audioBase64:data,mime:blob.type});
+       const field=host.querySelector('#trainInterviewText');if(field){field.value=result.text;field.focus();}
+       if(status)status.textContent='Transcrição pronta. Revise o texto antes de avançar.';
+      }catch(error){toast(error.message||'Falha na transcrição.',true);if(status)status.textContent='Você pode escrever a resposta manualmente.';}
+     };
+     voiceRecorder.start(200);
+     button.textContent='Parar gravação';
+     if(status)status.textContent='Gravando. Ao parar, o áudio será enviado para transcrição pelo Groq.';
+     recordStopTimer=setTimeout(()=>{if(voiceRecorder?.state==='recording')voiceRecorder.stop();},60000);
+    }catch(error){voiceStream?.getTracks().forEach(t=>t.stop());toast(error.message||'Microfone indisponível.',true);}
    });
    host.querySelector('#trainInterviewDraft')?.addEventListener('click',()=>doAction(async()=>{
     await api('/api/training/interview/draft','POST',{});
