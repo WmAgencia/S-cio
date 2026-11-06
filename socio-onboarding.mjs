@@ -92,6 +92,7 @@ export function compileInterviewMarkdown(state,proofs=[]){
 export function validateSocialProof(data={}){
  const kind=clean(data.kind,30),title=clean(data.title,120),description=clean(data.description,500),url=clean(data.url,800);
  if(!['portfolio','case','testimonial'].includes(kind)||title.length<3)throw new Error('Tipo e título de prova social inválidos.');
+ if(!url)return {kind,title,description,url:''};
  let parsed;try{parsed=new URL(url);}catch{throw new Error('Informe um link HTTPS válido.');}
  if(parsed.protocol!=='https:'||parsed.username||parsed.password||!parsed.hostname.includes('.')||url.length>800)
   throw new Error('Somente links HTTPS públicos são permitidos.');
