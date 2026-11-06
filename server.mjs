@@ -1,4 +1,5 @@
 import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory} from './meta-ads-tools.mjs';
+import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
 import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectOfficial,selectOfficialAccount,handleMetaRemoval,metaRemovalStatus} from './meta-official.mjs';
 
 import http from 'node:http';
@@ -389,6 +390,24 @@ async function handle(req,res){
   csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
  // Feature restrictions are server-side. Hidden navigation never constitutes authorization.
  assertApiFeature(a.features,pathname);
+
+ if(pathname==='/api/marketing/attribution/links'&&method==='GET')
+  return json(res,200,await listTrackingLinks(pool,a));
+ if(pathname==='/api/marketing/attribution/report'&&method==='GET')
+  return json(res,200,await trackingReport(pool,a));
+ if(pathname==='/api/marketing/attribution/links'&&method==='POST'){
+  if(!limiter(simulationAttempts,'tracking-link:'+a.user_id,60000,12))throw fail(429,'Aguarde antes de gerar outro link.');
+  const {data}=await body(req,3000);
+  const result=await createTrackingLink(pool,a,data);
+  await audit(a,'marketing.attribution.link.created',{id:result.id,channelId:result.channelId});
+  return json(res,201,result);
+ }
+ const deactivateLink=pathname.match(/^\/api\/marketing\/attribution\/links\/([0-9a-f-]{36})$/i);
+ if(deactivateLink&&method==='DELETE'){
+  const result=await deactivateTrackingLink(pool,a,deactivateLink[1]);
+  await audit(a,'marketing.attribution.link.disabled',{id:result.id});
+  return json(res,200,result);
+ }
  const adsRead=pathname.match(/^\/api\/marketing\/tools\/(campaigns|adsets|ads|images|pages|insights|finance|cities)$/);
  if(adsRead&&method==='GET'){
   const qs=new URL(req.url,'http://local').searchParams;
@@ -1586,6 +1605,16 @@ async function main(){
   finally{liveSyncBusy=false;}
  },16000);
  liveSyncWorker.unref();
+ // Attribution: only observed inbound prefilled codes. Never reads/writes campaigns or sends messages.
+ let attributionBusy=false;
+ const attributionWorker=setInterval(async()=>{
+  if(attributionBusy||workersBlocked()||process.env.SOCIO_ATTRIBUTION_ENABLED!=='true')return;
+  attributionBusy=true;
+  try{await scanTrackingAttribution(pool);}
+  catch(error){console.warn('[socio-attribution]',String(error?.code||'ATTRIBUTION_ERROR').slice(0,40));}
+  finally{attributionBusy=false;}
+ },17000);
+ attributionWorker.unref();
  // Quote lead intake scans only recent inbound messages. It never sends any
  // quote to the customer and cannot create a paid order automatically.
  let quoteBusy=false;
