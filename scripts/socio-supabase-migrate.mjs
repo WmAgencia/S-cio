@@ -9,7 +9,7 @@ export const TABLES=Object.freeze([
  'training_versions','waakg_links','waakg_scans','waakg_scan_chats',
  'waakg_import_snapshots','product_variants','product_media','product_campaign_links',
  'conversation_ui_state','message_ui_state','training_auto_runs',
- 'message_outbox','ai_reply_attempts','sales_quotes','sales_orders','sales_payment_events','quote_requests','sale_intents','wa_tracking_links','wa_lead_attributions','meta_report_schedules','meta_report_runs'
+ 'message_outbox','ai_reply_attempts','sales_quotes','sales_orders','sales_payment_events','quote_requests','sale_intents','wa_tracking_links','wa_lead_attributions','meta_report_schedules','meta_report_runs','socio_skill_runs'
 ]);
 const validName=v=>/^[a-z][a-z0-9_]*$/.test(v);
 const qi=v=>{if(!validName(v))throw new Error('Unsafe SQL identifier');return '"'+v+'"';};
