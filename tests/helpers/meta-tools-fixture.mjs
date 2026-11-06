@@ -19,6 +19,7 @@ export async function metaToolsScenario(pool){
   if(path.endsWith('/adimages'))return response({data:[{hash:'image-hash',name:'Imagem'}]});
   if(path==='/search')return response({data:[{key:'654321',name:'Sorocaba',region:'São Paulo',country_name:'Brasil'}]});
   if(path.endsWith('/ads'))return response({data:[{id:'554433',creative:{object_story_spec:{page_id:'445566'}}}]});
+  if(path==='/act_123456')return response({id:'act_123456',currency:'BRL',amount_spent:'1234',spend_cap:'2000',business:{id:'777888'}});
   if(path==='/445566')return response({id:'445566',name:'Página existente na conta'});
   if(path==='/998877')return response({id:'998877',account_id:'123456',name:'Existing'});
   if(path==='/887766')return response({id:'887766',account_id:'999999',name:'Other tenant account'});
@@ -27,6 +28,7 @@ export async function metaToolsScenario(pool){
  };
  const opts={env,request};await selectOfficialAccount(pool,a,'act_123456',opts);
  assert.equal((await readAdsTool(pool,a,'campaigns',{},opts)).items[0].id,'998877');
+ const finance=await readAdsTool(pool,a,'finance',{},opts);assert.equal(new URL(finance.paymentsUrl).pathname,'/billing_hub/payment_settings/');assert.equal(new URL(finance.paymentsUrl).searchParams.get('business_id'),'777888');
  await assert.rejects(prepareAdsPlan(pool,a,'status',{entity:'campaign',id:'887766',status:'ACTIVE'},opts),{status:403});
  await assert.rejects(prepareAdsPlan(pool,{...a,role:'agent'},'status',{entity:'campaign',id:'998877',status:'ACTIVE'},opts),{status:403});
  fallbackPages=true;assert.equal((await readAdsTool(pool,a,'pages',{},opts)).items[0].id,'445566');
