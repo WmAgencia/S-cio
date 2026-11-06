@@ -3,13 +3,13 @@
 // Disabled by default, because real WA-AKG outbound / phone identity must be validated.
 import {randomUUID} from 'node:crypto';
 import {outboundEnabled,deliverToConversation} from './socio-outbound.mjs';
-import {speakToAdSkill} from './socio-ad-skills.mjs';
+import {speakToSocioSkill} from './socio-skill-router.mjs';
 
 const prefix=/^\s*s[oó]cio(?:[,:\s]+|$)/i;
 export const isOwnerSkillCommand=text=>typeof text==='string'&&text.length<=1400&&prefix.test(text);
 export const stripOwnerPrefix=text=>String(text||'').replace(prefix,'').trim();
 export async function processOwnerSkillInbox(pool,{
- env=process.env,deliver=deliverToConversation,speak=speakToAdSkill,
+ env=process.env,deliver=deliverToConversation,speak=speakToSocioSkill,
  enabled=outboundEnabled(env)
 }={}){
  if(env.SOCIO_OWNER_COMMANDS_ENABLED!=='true')return {processed:false,reason:'OWNER_COMMANDS_DISABLED'};
