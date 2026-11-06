@@ -19,7 +19,7 @@ export function parseMetaCommand(text){
   if(/\b(listar|liste|ver|mostrar|mostre|consultar|consulte|quais|existentes|tenho)\b/.test(s))
    return {intent:'read',kind:'pixels',input:{},label:'Consultar Pixels da conta Meta autorizada',willSpend:false};
   if(/\b(criar|crie|fazer|faca|gerar|gere|novo)\b/.test(s)){
-   const match=raw.match(/(?:\\bchamado|\bchamada|\bnome(?:ado)?|\bdenominado)\s*[:=-]?\s*(.+)$/i);
+   const match=raw.match(/(?:\bchamado|\bchamada|\bnome(?:ado)?|\bdenominado)\s*[:=-]?\s*(.+)$/i);
    const name=match?.[1]?.trim()||null;
    if(name&&name.length>=3&&name.length<=120)
     return {intent:'plan',kind:'create_pixel',input:{name},missing:[],willSpend:false,
