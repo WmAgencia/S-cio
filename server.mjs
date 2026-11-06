@@ -1,6 +1,7 @@
 import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {previewMetaCommand} from './meta-ads-commands.mjs';
+import {SOCIO_AD_SKILLS,speakToAdSkill} from './socio-ad-skills.mjs';
 import {metaConnectionPreflight} from './meta-integration-preflight.mjs';
 import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from './meta-report-schedules.mjs';
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
@@ -421,6 +422,20 @@ async function handle(req,res){
   const result=await saveMetaReportSchedule(pool,a,data);
   await audit(a,'marketing.report.schedule.updated',{enabled:result.schedule.enabled,hour:result.schedule.hour});
   return json(res,200,result);
+ }
+ if(pathname==='/api/marketing/skills/catalog'&&method==='GET'){
+  requirePermission(a,'marketing.read');
+  return json(res,200,{skills:SOCIO_AD_SKILLS,
+   note:'Skill WhatsApp por grupo ainda depende de validação de identidade no WA-AKG. Pixel não funciona dentro de uma conversa.'});
+ }
+ if(pathname==='/api/marketing/skills/chat'&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  if(!limiter(simulationAttempts,'marketing-skill:'+a.user_id,60000,12))
+   throw fail(429,'Muitas solicitações. Tente novamente em um minuto.');
+  const {data}=await body(req,3500);
+  const answer=await speakToAdSkill(pool,a,{message:data.message,runId:data.runId,imageHash:data.imageHash});
+  await audit(a,'marketing.skill.request',{runId:answer.runId,status:answer.status,skill:'ads.campaign.launch'});
+  return json(res,200,answer);
  }
  if(pathname==='/api/marketing/commands/preview'&&method==='POST'){
   if(!limiter(simulationAttempts,'marketing-command:'+a.user_id,60000,15))
