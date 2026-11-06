@@ -18,17 +18,17 @@ export function parseMetaCommand(text){
  const entity=/\b(conjunto|adset)\b/.test(s)?'adset':/\b(anuncio|ad )\b/.test(s)?'ad':'campaign';
  const id=raw.match(/\b(?:id\s*[:#]?\s*|#)(\d{4,30})\b/i)?.[1]||
   raw.match(/\b(?:campanha|conjunto|an[uú]ncio|adset)\s+(\d{4,30})\b/i)?.[1]||null;
- if(/\b(pausar|pause|desativar|parar)\b/.test(s))
+ if(/\b(pausar|pausa|pause|desativar|desative|parar|pare)\b/.test(s))
   return {intent:'plan',kind:'status',input:{entity,id,status:'PAUSED'},missing:id?[]:['ID da campanha, conjunto ou anúncio'],willSpend:false};
- if(/\b(ativar|iniciar|publicar|ligar)\b/.test(s)&&id)
+ if(/\b(ativar|ative|ativa|iniciar|inicie|publicar|publique|ligar|ligue)\b/.test(s)&&id)
   return {intent:'plan',kind:'status',input:{entity,id,status:'ACTIVE'},missing:[],willSpend:true};
- if(/\b(orcamento|budget|valor diario)\b/.test(s)&&/\b(alterar|mudar|definir|colocar|aumentar|reduzir|ajustar)\b/.test(s)){
+ if(/\b(orcamento|budget|valor diario)\b/.test(s)&&/\b(alterar|altere|mudar|mude|definir|defina|colocar|coloque|aumentar|aumente|reduzir|reduza|ajustar|ajuste)\b/.test(s)){
   const value=raw.match(/(?:R\$\s*)?(\d{1,6}(?:[.,]\d{1,2})?)\s*(?:reais?|por dia|\/dia)?\s*$/i)?.[1];
   const cents=value?Math.round(Number(value.replace(',','.'))*100):null;
   return {intent:'plan',kind:'budget',input:{entity,id,dailyBudgetCents:cents},
    missing:[...(!id?['ID do item']:[]),...(!cents?['Orçamento em reais']:[])],willSpend:true};
  }
- if(/\b(criar|fazer|subir|montar|novo)\b/.test(s)&&/\b(campanha|anuncio|publicidade|propaganda)\b/.test(s)){
+ if(/\b(criar|crie|fazer|faca|subir|suba|montar|monte|novo)\b/.test(s)&&/\b(campanha|anuncio|publicidade|propaganda)\b/.test(s)){
   const amount=raw.match(/R\$\s*(\d{1,6}(?:[.,]\d{1,2})?)/i)?.[1];
   const budget=amount?Math.round(Number(amount.replace(',','.'))*100):null;
   const city=raw.match(/\b(?:para|em)\s+(sorocaba|s[aã]o paulo|campinas|rio de janeiro)\b/i)?.[1]||null;
