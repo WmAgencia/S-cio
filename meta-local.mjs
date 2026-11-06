@@ -64,7 +64,7 @@ export async function localConnectionStatus(pool,a){
  requirePermission(a,'marketing.read');
  const row=(await pool.query("SELECT id,device_label,last_seen_at,session_present,browser_open FROM meta_local_connections WHERE tenant_id=$1 AND user_id=$2 AND status='active' ORDER BY created_at DESC LIMIT 1",[a.active_tenant_id,a.user_id])).rows[0];
  if(!row)return {mode:'local',paired:false,online:false,sessionPresent:false,requiresMetaApp:false};
- return {mode:'local',paired:true,online:Date.now()-new Date(row.last_seen_at).getTime()<45000,sessionPresent:row.session_present,browserOpen:row.browser_open,deviceLabel:row.device_label,lastSeenAt:row.last_seen_at,requiresMetaApp:false};
+ return {mode:'local',connectionId:row.id,paired:true,online:Date.now()-new Date(row.last_seen_at).getTime()<45000,sessionPresent:row.session_present,browserOpen:row.browser_open,deviceLabel:row.device_label,lastSeenAt:row.last_seen_at,requiresMetaApp:false};
 }
 export async function enqueueLocalJob(pool,a,kind,input={},key,env=process.env){
  requirePermission(a,'marketing.manage');
