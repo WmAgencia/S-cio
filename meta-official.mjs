@@ -83,7 +83,8 @@ export async function finishOfficial(pool,state,code,{env=process.env,request=fe
 export async function officialStatus(pool,a,{env=process.env}={}){
  access(a);let configured=true;try{officialConfig(env);}catch{configured=false;}
  const r=await pool.query('SELECT meta_user_id,scopes,expires_at FROM meta_official_grants WHERE tenant_id=$1 AND user_id=$2',[a.active_tenant_id,a.user_id]);
- const grant=r.rows[0];return {configured,appId:env.SOCIO_META_APP_ID||'2827016234367972',connected:configured&&Boolean(grant&&new Date(grant.expires_at)>new Date()),grant:grant||null,writesEnabled:false};
+ const selected=await pool.query('SELECT account_id,account_name,currency,updated_at FROM meta_official_account_selections WHERE tenant_id=$1',[a.active_tenant_id]);
+ const grant=r.rows[0];return {configured,appId:env.SOCIO_META_APP_ID||'2827016234367972',connected:configured&&Boolean(grant&&new Date(grant.expires_at)>new Date()),grant:grant||null,selectedAccount:selected.rows[0]||null,writesEnabled:false};
 }
 export async function officialAccounts(pool,a,{env=process.env,request=fetch}={}){
  access(a);const r=await pool.query('SELECT token_encrypted FROM meta_official_grants WHERE tenant_id=$1 AND user_id=$2 AND expires_at>now()',[a.active_tenant_id,a.user_id]);
@@ -141,4 +142,28 @@ export async function metaRemovalStatus(pool,code){
  const r=await pool.query('SELECT completed_at FROM meta_official_deletions WHERE confirmation_code=$1',[code]);
  if(!r.rows[0])throw fail(404,'Solicitação não encontrada.');
  return {status:'completed',completedAt:r.rows[0].completed_at,scope:'Credenciais da integração Meta Ads removidas do banco ativo. Nenhum anúncio ou dado na Meta foi excluído.'};
+}
+
+export async function selectOfficialAccount(pool,a,accountId,options={}){
+ access(a,'marketing.manage');
+ if(typeof accountId!=='string'||!/^act_\d{4,20}$/.test(accountId))throw fail(422,'Selecione uma conta de anúncios válida.');
+ // Validate against the current actor's live grant, never against client-supplied labels.
+ const {accounts}=await officialAccounts(pool,a,options);
+ const account=accounts.find(x=>x.id===accountId);
+ if(!account)throw fail(403,'Esta conta não está disponível na sua autorização Meta. Atualize as contas e tente novamente.');
+ await pool.query(`INSERT INTO meta_official_account_selections(tenant_id,user_id,account_id,account_name,currency)
+ VALUES($1,$2,$3,$4,$5) ON CONFLICT(tenant_id) DO UPDATE SET user_id=EXCLUDED.user_id,
+ account_id=EXCLUDED.account_id,account_name=EXCLUDED.account_name,currency=EXCLUDED.currency,updated_at=now()`,
+ [a.active_tenant_id,a.user_id,account.id,account.name||account.id,account.currency||null]);
+ return {selectedAccount:{account_id:account.id,account_name:account.name||account.id,currency:account.currency||null}};
+}
+// Future campaign executors must resolve the saved destination and recheck live access.
+export async function resolveSelectedOfficialAccount(pool,a,options={}){
+ access(a);
+ const r=await pool.query('SELECT account_id FROM meta_official_account_selections WHERE tenant_id=$1',[a.active_tenant_id]);
+ if(!r.rows[0])throw fail(409,'Escolha a conta de anúncios desta empresa antes de continuar.');
+ const {accounts}=await officialAccounts(pool,a,options);
+ const account=accounts.find(x=>x.id===r.rows[0].account_id);
+ if(!account)throw fail(403,'Sua autorização não permite acessar a conta selecionada. Conecte a conta correta.');
+ return account;
 }

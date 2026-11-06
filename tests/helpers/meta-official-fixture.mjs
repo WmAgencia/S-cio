@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID,createHmac} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
-import {startOfficial,finishOfficial,officialAccounts,handleMetaRemoval,metaRemovalStatus} from '../../meta-official.mjs';
+import {startOfficial,finishOfficial,officialAccounts,handleMetaRemoval,metaRemovalStatus,selectOfficialAccount,resolveSelectedOfficialAccount,officialStatus} from '../../meta-official.mjs';
 export async function officialPersistenceScenario(pool){
  await pool.query(await readFile(new URL('../../schema.sql',import.meta.url),'utf8'));
  const env={SOCIO_PUBLIC_URL:'https://socio.example',SOCIO_META_APP_SECRET:'private-test-secret',SOCIO_META_GRAPH_VERSION:'v26.0',CHANNEL_ENCRYPTION_KEY:'isolated-key-at-least-32-characters-for-tests'};
@@ -29,6 +29,12 @@ export async function officialPersistenceScenario(pool){
   await assert.rejects(finishOfficial(pool,state,'replay',{env,request}),{status:400});
   assert.equal((await officialAccounts(pool,actor,{env,request})).accounts.length,1);
  }
+ await assert.rejects(selectOfficialAccount(pool,actors[0],'act_999999',{env,request}),{status:403});
+ await assert.rejects(selectOfficialAccount(pool,{...actors[0],role:'agent'},'act_123456',{env,request}),{status:403});
+ await selectOfficialAccount(pool,actors[0],'act_123456',{env,request});
+ assert.equal((await officialStatus(pool,actors[0],{env})).selectedAccount.account_id,'act_123456');
+ assert.equal((await resolveSelectedOfficialAccount(pool,actors[0],{env,request})).id,'act_123456');
+ await assert.rejects(resolveSelectedOfficialAccount(pool,actors[1],{env,request}),{status:409});
  const grants=await pool.query('SELECT * FROM meta_official_grants');
  assert.equal(grants.rows.length,2);assert(!JSON.stringify(grants.rows).includes('test-token-long-enough-for-fixture'));
  await assert.rejects(officialAccounts(pool,{...actors[0],active_tenant_id:randomUUID()},{env,request}),{status:409});
@@ -42,6 +48,7 @@ export async function officialPersistenceScenario(pool){
  assert.equal((await pool.query('SELECT * FROM meta_official_grants')).rows.length,2);
  const deletion=await handleMetaRemoval(pool,signed,{env});
  assert.equal((await pool.query('SELECT * FROM meta_official_grants')).rows.length,0);
+ assert.equal((await pool.query('SELECT * FROM meta_official_account_selections')).rows.length,0);
  assert.equal((await metaRemovalStatus(pool,deletion.confirmation_code)).status,'completed');
  assert.equal((await handleMetaRemoval(pool,signed,{env})).confirmation_code,deletion.confirmation_code);
  assert.equal((await pool.query('SELECT * FROM meta_official_deletions')).rows.length,1);

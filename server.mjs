@@ -1,4 +1,4 @@
-import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectOfficial,handleMetaRemoval,metaRemovalStatus} from './meta-official.mjs';
+import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectOfficial,selectOfficialAccount,handleMetaRemoval,metaRemovalStatus} from './meta-official.mjs';
 
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
@@ -390,6 +390,13 @@ async function handle(req,res){
  assertApiFeature(a.features,pathname);
  if(pathname==='/api/marketing/official/status'&&method==='GET')return json(res,200,await officialStatus(pool,a));
  if(pathname==='/api/marketing/official/accounts'&&method==='GET')return json(res,200,await officialAccounts(pool,a));
+ if(pathname==='/api/marketing/official/account'&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  const {data}=await body(req,2000);
+  const result=await selectOfficialAccount(pool,a,data.accountId);
+  await audit(a,'marketing.official.account.selected',{accountId:result.selectedAccount.account_id});
+  return json(res,200,result);
+ }
  if(pathname==='/api/marketing/official/connect'&&method==='POST'){
   if(!limiter(authAttempts,'meta-official:'+a.user_id,600000,10))throw fail(429,'Aguarde antes de tentar novamente.');
   return json(res,200,await startOfficial(pool,a));
