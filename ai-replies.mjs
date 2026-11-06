@@ -83,7 +83,8 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
     [m.tenant_id])
   ]);
   const [proofs,closing]=await Promise.all([
-   approvedEvidenceText(pool,m.tenant_id),getClosingPolicy(pool,m.tenant_id)
+   // Optional commerce context fails closed if storage is unavailable during a migration.
+   approvedEvidenceText(pool,m.tenant_id).catch(()=>''),getClosingPolicy(pool,m.tenant_id).catch(()=>null)
   ]);
   const context=history.rows.reverse().map(item=>
    (item.direction==='inbound'?'Cliente':item.direction==='outbound'?'Atendente':'Nota interna')+': '+
