@@ -32,5 +32,10 @@ test('real PostgreSQL local relay: one-time enrollment, user/tenant isolation, d
   await pool.query("UPDATE tenants SET features=jsonb_set(features,'{meta_ads}','true') WHERE id=$1",[tenant]);
   await disconnectLocalConnector(pool,a);await assert.rejects(()=>authorizeLocalConnector(pool,'Bearer '+linked.token),{status:401});
   const raw=(await pool.query('SELECT token_hash,pair_hash FROM meta_local_connections WHERE id=$1',[linked.connectionId])).rows[0];assert.equal(raw.token_hash,null);assert.equal(raw.pair_hash,null);
- }finally{await pool.end();await admin.query('DROP DATABASE IF EXISTS '+name+' WITH (FORCE)');await admin.end();}
+ }finally{
+  // Close the fixture pool gracefully before deleting its disposable database.
+  // FORCE can terminate an in-flight pg connection and trigger an uncaught test error.
+  await pool.end();
+  try{await admin.query('DROP DATABASE IF EXISTS '+name);}finally{await admin.end();}
+ }
 });
