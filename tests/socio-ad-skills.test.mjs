@@ -163,5 +163,5 @@ test('skill catalog reports WhatsApp group and CAPI as unfinished and does not m
  const source=SOCIO_AD_SKILLS.map(x=>x.id);
  assert(source.includes('ads.campaign.launch'));
  assert.equal(SOCIO_AD_SKILLS.find(x=>x.id==='ads.whatsapp.owner_commands').availability,'pending_gateway_validation');
- assert.equal(SOCIO_AD_SKILLS.find(x=>x.id==='ads.conversions.capI').availability,'pending_website_integration');
+ assert.equal(SOCIO_AD_SKILLS.find(x=>x.id==='ads.conversions.capi').availability,'pending_website_integration');
 });
