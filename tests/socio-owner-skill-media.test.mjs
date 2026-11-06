@@ -35,7 +35,7 @@ function poolFor(row,{pending=true,claimed=true}={}){
    assert.equal(args[0],pilotTenant);
    return {rowCount:1,rows:[row]};
   }
-  if(sql.startsWith('SELECT id,brief FROM socio_skill_runs'))return pending?{
+  if(sql.startsWith('SELECT id,brief,updated_at FROM socio_skill_runs'))return pending?{
    rowCount:1,rows:[{id:'8c6249cc-7e81-4920-8924-4723401ec9b9',brief:{category:'moda feminina'},updated_at:new Date(now-60000).toISOString()}]
   }:{rowCount:0,rows:[]};
   if(sql.startsWith('SELECT provider_message_id FROM socio_owner_media_receipts'))
