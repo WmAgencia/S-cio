@@ -120,9 +120,9 @@ export async function speakToSocioSkill(pool,a,request={},opts={}){
  }
  if(expert.id==='meta.optimization'){
   const cleaned=clean(raw);
-  const period=/\\b(hoje|dia atual)\\b/.test(cleaned)?'today':
-   /\\b(ontem)\\b/.test(cleaned)?'yesterday':
-   /\\b(30 dias|mes|mensal)\\b/.test(cleaned)?'last_30d':'last_7d';
+  const period=/\b(hoje|dia atual)\b/.test(cleaned)?'today':
+   /\b(ontem)\b/.test(cleaned)?'yesterday':
+   /\b(30 dias|mes|mensal)\b/.test(cleaned)?'last_30d':'last_7d';
   const answer=await (opts.diagnose||readAdvancedMetaTool)(pool,a,'diagnosis',{period},opts);
   if(!answer?.diagnosis)throw fail(503,'A Meta não confirmou o diagnóstico. Confira a conta e tente consultar novamente.');
   return {runId:null,status:'completed',readOnly:true,executed:false,
