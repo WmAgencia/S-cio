@@ -91,14 +91,23 @@ export function validateAdsPlan(kind,input){
   if(!Number.isInteger(ageMin)||!Number.isInteger(ageMax)||ageMin<18||ageMax>65||ageMin>ageMax)throw fail(422,'Faixa etária inválida.');
   return {name,url,whatsappPhone:phone,message,headline,pageId:input.pageId,imageHash:input.imageHash,cityKey:input.cityKey,cityName:input.cityName.trim(),dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax};
  }
+ if(kind==='create_ad'){
+  const name=text(input.name,120),url=safeUrl(input.url),message=text(input.message,2200),
+   headline=text(input.headline,120);
+  if(!name||!url||!message||!headline||!numeric(input.adsetId)||
+   !numeric(input.pageId)||!text(input.imageHash,100))
+   throw fail(422,'Escolha conjunto, página, imagem, link HTTPS, título e texto para o novo anúncio.');
+  return {name,url,message,headline,adsetId:input.adsetId,pageId:input.pageId,imageHash:input.imageHash};
+ }
  if(!['status','rename','budget'].includes(kind)||!['campaign','adset','ad'].includes(input.entity)||!numeric(input.id))throw fail(422,'Selecione uma campanha, conjunto ou anúncio válido.');
  if(kind==='status'){
   if(!['ACTIVE','PAUSED'].includes(input.status))throw fail(422,'Status inválido.');
   return {entity:input.entity,id:input.id,status:input.status};
  }
  if(kind==='rename'){if(!text(input.name,120))throw fail(422,'Nome inválido.');return {entity:input.entity,id:input.id,name:input.name.trim()};}
- if(input.entity!=='adset'||!money(input.dailyBudgetCents))throw fail(422,'Informe orçamento diário válido para um conjunto de anúncios.');
- return {entity:'adset',id:input.id,dailyBudgetCents:input.dailyBudgetCents};
+ if(!['adset','campaign'].includes(input.entity)||!money(input.dailyBudgetCents))
+  throw fail(422,'Informe orçamento diário de uma campanha CBO ou conjunto de anúncios.');
+ return {entity:input.entity,id:input.id,dailyBudgetCents:input.dailyBudgetCents};
 }
 async function owned(c,id){const data=await graph(c,'/'+id,{fields:'id,account_id,name'});if('act_'+data.account_id!==c.account.id)throw fail(403,'Este objeto não pertence à conta selecionada.');return data;}
 async function validateAssets(c,payload){
@@ -126,6 +135,12 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
    'Criar campanha de tráfego para site, conjunto, criativo e anúncio. Todos serão criados PAUSADOS.',
    account:c.account,name:payload.name,message:payload.message,headline:payload.headline,pageId:payload.pageId,imageHash:payload.imageHash,dailyBudgetCents:payload.dailyBudgetCents,
    destination:kind==='create_whatsapp'?'WhatsApp +'+payload.whatsappPhone:payload.url,city:payload.cityName,ageMin:payload.ageMin,ageMax:payload.ageMax};
+ }else if(kind==='create_ad'){
+  await owned(c,payload.adsetId);
+  await validateAssets(c,payload);
+  summary={description:'Adicionar anúncio com imagem a um conjunto existente da conta selecionada. Criativo e anúncio serão criados PAUSADOS.',
+   account:c.account,name:payload.name,message:payload.message,headline:payload.headline,
+   pageId:payload.pageId,imageHash:payload.imageHash,destination:payload.url,adsetId:payload.adsetId};
  }else{
   const entity=await owned(c,payload.id);
   summary={description:kind==='status'?(payload.status==='ACTIVE'?'Ativar: esta ação pode iniciar gastos conforme o orçamento da conta.':'Pausar veiculação.'):kind==='budget'?'Alterar orçamento diário: se estiver ativo, o conjunto poderá gastar o novo valor.':'Alterar nome.',account:c.account,object:entity,changes:payload};
@@ -169,6 +184,19 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
    if(!numeric(creative.id))throw Object.assign(fail(503,'A Meta não retornou o ID do criativo.'),{uncertain:true});result.creativeId=creative.id;await progress();
    const ad=await graph(c,'/'+c.account.id+'/ads',{name:p.name+' · Anúncio',adset_id:adset.id,creative:{creative_id:creative.id},status:'PAUSED'},'POST');
    if(!numeric(ad.id))throw Object.assign(fail(503,'A Meta não retornou o ID do anúncio.'),{uncertain:true});result.adId=ad.id;result.delivery='PAUSED';await progress();
+  }else if(plan.kind==='create_ad'){
+   await owned(c,p.adsetId);
+   await validateAssets(c,p);
+   const creative=await graph(c,'/'+c.account.id+'/adcreatives',{
+    name:p.name+' · Criativo',object_story_spec:{page_id:p.pageId,link_data:{
+     image_hash:p.imageHash,link:p.url,message:p.message,name:p.headline,
+     call_to_action:{type:'LEARN_MORE',value:{link:p.url}}}}},'POST');
+   if(!numeric(creative.id))throw Object.assign(fail(503,'Não foi possível confirmar o criativo.'),{uncertain:true});
+   result.creativeId=creative.id;await progress();
+   const ad=await graph(c,'/'+c.account.id+'/ads',{
+    name:p.name,adset_id:p.adsetId,creative:{creative_id:creative.id},status:'PAUSED'},'POST');
+   if(!numeric(ad.id))throw Object.assign(fail(503,'Não foi possível confirmar o anúncio.'),{uncertain:true});
+   result.adId=ad.id;result.delivery='PAUSED';await progress();
   }else{
    await owned(c,p.id);
    const changes=plan.kind==='status'?{status:p.status}:plan.kind==='rename'?{name:p.name}:{daily_budget:p.dailyBudgetCents};
