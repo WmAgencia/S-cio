@@ -18,8 +18,8 @@ export function diagnoseMetaTraffic({insights=[],ads=[],period='last_7d',currenc
   const id=code(row?.campaign_id);if(!id)continue;
   const spend=amount(row.spend),clicks=integer(row.clicks),impressions=integer(row.impressions);
   if(spend===null||clicks===null||impressions===null)continue;
-  const prev=byCampaign.get(id)||{id,name:name(row.campaign_name),spend:0,clicks:0,impressions:0,ads:[],notices:[]};
-  prev.spend+=spend;prev.clicks+=clicks;prev.impressions+=impressions;
+  const prev=byCampaign.get(id)||{id,name:name(row.campaign_name),spend:0,clicks:0,impressions:0,hasInsights:false,ads:[],notices:[]};
+  prev.spend+=spend;prev.clicks+=clicks;prev.impressions+=impressions;prev.hasInsights=true;
   byCampaign.set(id,prev);
  }
  // Ads can have no insight rows because they have not delivered yet.
@@ -41,13 +41,16 @@ export function diagnoseMetaTraffic({insights=[],ads=[],period='last_7d',currenc
   if(reviews.length)c.notices.push(notice(2,'under_review','Anúncio em revisão',
    reviews.length+' anúncio(s) aguardando ou passando por revisão.',
    'Aguarde a decisão da Meta antes de avaliar a entrega ou modificar o criativo.'));
-  if(c.impressions===0&&c.spend===0)c.notices.push(notice(2,'no_delivery','Sem entrega observada no período',
+  if(!c.hasInsights)c.notices.push(notice(3,'metrics_unavailable','Sem métricas retornadas',
+   'A Meta não retornou uma linha de insights para esta campanha no período.',
+   'Verifique o período, acesso e status na Meta. Ausência de dados não comprova zero entrega.'));
+  else if(c.impressions===0&&c.spend===0)c.notices.push(notice(2,'no_delivery','Sem entrega observada no período',
    'Zero impressões e investimento nas linhas de insights consultadas.',
    'Verifique período, situação da campanha, aprovação, saldo, orçamento e público; não conclua que há falha antes da conferência.'));
   else if(c.impressions>=300&&c.clicks===0)c.notices.push(notice(2,'no_clicks','Cliques não registrados',
    c.impressions+' impressões, zero cliques e '+c.spend.toFixed(2)+' '+currency+' de gasto.',
    'Revise criativo, oferta e destino. Faça comparação controlada, sem afirmar que o anúncio é ruim apenas por uma métrica.'));
-  else if(c.impressions<300||c.clicks<10)c.notices.push(notice(3,'limited_sample','Amostra limitada',
+  else if(c.hasInsights&&(c.impressions<300||c.clicks<10))c.notices.push(notice(3,'limited_sample','Amostra limitada',
    c.impressions+' impressões e '+c.clicks+' cliques.',
    'Acompanhe mais dados e não pause ou redistribua verba apenas com esta amostra.'));
   if(paused.length)c.notices.push(notice(3,'paused_ads','Anúncios pausados identificados',
@@ -56,12 +59,13 @@ export function diagnoseMetaTraffic({insights=[],ads=[],period='last_7d',currenc
   const ctr=c.impressions?+(100*c.clicks/c.impressions).toFixed(2):null;
   const cpc=c.clicks?+(c.spend/c.clicks).toFixed(2):null;
   c.notices.sort((a,b)=>a.priority-b.priority);
-  return {id:c.id,name:c.name,spend:+c.spend.toFixed(2),impressions:c.impressions,
-   clicks:c.clicks,ctrPercent:ctr,cpc,adIssues:issues.map(x=>({id:x.id,status:x.status})),
+  return {id:c.id,name:c.name,hasInsights:c.hasInsights,spend:c.hasInsights?+c.spend.toFixed(2):null,
+   impressions:c.hasInsights?c.impressions:null,clicks:c.hasInsights?c.clicks:null,
+   ctrPercent:c.hasInsights?ctr:null,cpc:c.hasInsights?cpc:null,adIssues:issues.map(x=>({id:x.id,status:x.status})),
    notices:c.notices,priority:c.notices[0]?.priority||4,
    recommendations:c.notices.map(x=>x.recommendation)};
  });
- diagnostics.sort((a,b)=>a.priority-b.priority||b.spend-a.spend||a.id.localeCompare(b.id));
+ diagnostics.sort((a,b)=>a.priority-b.priority||(b.spend||0)-(a.spend||0)||a.id.localeCompare(b.id));
  return {period,currency,diagnostics:diagnostics.slice(0,30),totalCampaigns:diagnostics.length,
   alerts:diagnostics.reduce((n,c)=>n+c.adIssues.length,0),
   partial:Boolean(insightsHasMore||adsHasMore),
@@ -76,8 +80,8 @@ export function formatMetaTrafficDiagnosis(result,{max=5}={}){
  if(!rows.length)lines.push('Sem dados de campanhas nesse período. Verifique datas e contas; isso não comprova ausência de campanhas.');
  for(const c of rows){
   const n=c.notices?.[0];
-  lines.push('• '+c.name+' (ID '+c.id+'): '+c.spend.toFixed(2)+' '+result.currency+
-   ', '+c.impressions+' impressões e '+c.clicks+' cliques. '+
+  lines.push('• '+c.name+' (ID '+c.id+'): '+(c.hasInsights?c.spend.toFixed(2)+' '+result.currency+
+   ', '+c.impressions+' impressões e '+c.clicks+' cliques. ':'métricas não retornadas neste período. ')+
    (n?n.label+': '+n.evidence+' Próximo passo: '+n.recommendation:
     'Sem alerta suficiente para recomendar alteração. Confirme leads e vendas antes de otimizar.'));
  }
