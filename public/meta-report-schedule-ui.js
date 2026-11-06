@@ -34,7 +34,7 @@
     enabled.checked=result.schedule.enabled;
     state.textContent='Conta '+result.schedule.account_id+' · Próxima data: '+
       new Date(result.schedule.next_run_at).toLocaleString('pt-BR')+
-      ' · '+(result.schedule.enabled?'Ativo':'Desativado');
+      ' · '+(result.schedule.enabled?(result.serviceEnabled?'Ativo':'Salvo, aguardando habilitação do worker'):'Desativado');
    }else state.textContent='Nenhum relatório diário agendado para esta empresa.';
    history.replaceChildren(el('h3','Relatórios disponíveis'));
    if(!result.runs.length)history.append(el('p','Ainda não há relatórios gerados. A geração automática depende da configuração do serviço.'));
