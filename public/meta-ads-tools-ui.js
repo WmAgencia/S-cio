@@ -28,7 +28,7 @@
        button(card,'Preparar ativação',()=>prepare('status',{entity,id:item.id,status:'ACTIVE'}));
        const name=el('input');name.type='text';name.maxLength=120;name.value=item.name||'';name.setAttribute('aria-label','Novo nome de '+(item.name||item.id));card.append(name);
        button(card,'Preparar alteração de nome',()=>prepare('rename',{entity,id:item.id,name:name.value}));
-       if(kind==='adsets'){const budget=el('input');budget.type='number';budget.min='1';budget.max='100000';budget.step='0.01';budget.value=item.daily_budget?(Number(item.daily_budget)/100).toFixed(2):'';budget.setAttribute('aria-label','Novo orçamento diário de '+(item.name||item.id));card.append(budget);button(card,'Preparar orçamento',()=>prepare('budget',{entity,id:item.id,dailyBudgetCents:Math.round(Number(budget.value)*100)}));}
+       if(kind==='adsets'||kind==='campaigns'){const budget=el('input');budget.type='number';budget.min='1';budget.max='100000';budget.step='0.01';budget.value=item.daily_budget?(Number(item.daily_budget)/100).toFixed(2):'';budget.setAttribute('aria-label','Novo orçamento diário de '+(item.name||item.id));card.append(budget);button(card,'Preparar orçamento',()=>prepare('budget',{entity,id:item.id,dailyBudgetCents:Math.round(Number(budget.value)*100)}));}
       }
      }
     }
@@ -89,6 +89,33 @@
     headline:inputs.headline.value,message:inputs.message.value,dailyBudgetCents:Math.round(Number(budget.value)*100),
     pageId:pages.value,imageHash:images.value,cityKey:cities.value,
     cityName:cities.selectedOptions[0]?.textContent.split(' · ')[0]||'',ageMin:18,ageMax:65});
+  });
+  const newAd=el('details');section.append(newAd);newAd.append(el('summary','Adicionar anúncio a um conjunto existente'));
+  newAd.append(el('p','Cria um criativo e um anúncio PAUSADO em um conjunto da conta selecionada, sem alterar orçamento ou campanhas.'));
+  const adForm=el('div');adForm.className='form-stack';newAd.append(adForm);
+  const adField=(label,type='text')=>{const wrap=el('label',label),field=el('input');field.type=type;wrap.append(field);adForm.append(wrap);return field;};
+  const adName=adField('Nome do anúncio');
+  const adText=adField('Texto do anúncio');
+  const adHeadline=adField('Título');
+  const adUrl=adField('Destino HTTPS','url');
+  const adSelect=(label)=>{const wrap=el('label',label),node=el('select');wrap.append(node);adForm.append(wrap);return node;};
+  const adsets=adSelect('Conjunto da conta');
+  const adPages=adSelect('Página da conta');
+  const adImages=adSelect('Imagem da conta');
+  button(adForm,'Carregar conjuntos, páginas e imagens',async()=>{
+   const [sets,pages,images]=await Promise.all([read('adsets'),read('pages'),read('images')]);
+   const populate=(node,items,key,label)=>{
+    node.replaceChildren();const empty=el('option','Selecione…');empty.value='';node.append(empty);
+    for(const x of items){const option=el('option',label(x));option.value=x[key];node.append(option);}
+   };
+   populate(adsets,sets.items,'id',x=>x.name+' · '+x.id);
+   populate(adPages,pages.items,'id',x=>x.name+' · '+x.id);
+   populate(adImages,images.items,'hash',x=>x.name||x.hash);
+   feedback.textContent='Escolha os recursos e prepare a prévia; nenhum anúncio foi criado.';
+  });
+  button(adForm,'Preparar anúncio pausado',()=>{
+   return prepare('create_ad',{name:adName.value,message:adText.value,headline:adHeadline.value,
+    url:adUrl.value,adsetId:adsets.value,pageId:adPages.value,imageHash:adImages.value});
   });
  }
  globalThis.SocioAdsTools={render};
