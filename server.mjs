@@ -2,6 +2,7 @@ import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory,i
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {previewMetaCommand} from './meta-ads-commands.mjs';
 import {SOCIO_AD_SKILLS} from './socio-ad-skills.mjs';
+import {listExpertSkills,getExpertSkillGuide} from './socio-expert-skills.mjs';
 import {speakToSocioSkill} from './socio-skill-router.mjs';
 import {processOwnerSkillInbox} from './socio-owner-skill-inbox.mjs';
 import {metaConnectionPreflight} from './meta-integration-preflight.mjs';
@@ -427,8 +428,14 @@ async function handle(req,res){
  }
  if(pathname==='/api/marketing/skills/catalog'&&method==='GET'){
   requirePermission(a,'marketing.read');
-  return json(res,200,{skills:SOCIO_AD_SKILLS,
-   note:'Skill WhatsApp por grupo ainda depende de validação de identidade no WA-AKG. Pixel não funciona dentro de uma conversa.'});
+  return json(res,200,{skills:SOCIO_AD_SKILLS,experts:listExpertSkills(),
+   note:'Meta Ads usa integração oficial. Google Ads ainda não está conectado. Pixel não funciona dentro do WhatsApp, e CAPI depende de sites autorizados.'});
+ }
+ if(pathname==='/api/marketing/skills/guidance'&&method==='GET'){
+  requirePermission(a,'marketing.read');
+  const id=new URL(req.url,'http://local').searchParams.get('id');
+  // The allowlist resolves the file; never read arbitrary paths from a request.
+  return json(res,200,getExpertSkillGuide(id));
  }
  if(pathname==='/api/marketing/skills/chat'&&method==='POST'){
   requirePermission(a,'marketing.manage');
@@ -436,7 +443,7 @@ async function handle(req,res){
    throw fail(429,'Muitas solicitações. Tente novamente em um minuto.');
   const {data}=await body(req,3500);
   const answer=await speakToSocioSkill(pool,a,{message:data.message,runId:data.runId,imageHash:data.imageHash});
-  await audit(a,'marketing.skill.request',{runId:answer.runId,status:answer.status,skill:'ads.campaign.launch'});
+  await audit(a,'marketing.skill.request',{runId:answer.runId,status:answer.status,skill:answer.skillId||'ads.campaign.launch'});
   return json(res,200,answer);
  }
  if(pathname==='/api/marketing/commands/preview'&&method==='POST'){
