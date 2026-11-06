@@ -1,6 +1,7 @@
 // Supervised automatic WhatsApp replies for conversations explicitly handed to AI.
 // Does not prospect, start conversations, or retry unknown sends.
 import {randomUUID} from 'node:crypto';
+import {socioCompactSalesGuide} from './socio-sales-guide.mjs';
 import {groqResponse,groqReady} from './groq-client.mjs';
 import {deliverToConversation,canAutoReply} from './socio-outbound.mjs';
 
@@ -11,6 +12,7 @@ export function buildAiInstructions({name,tenantName,tone,instructions,knowledge
  return [
   'Você é '+(name||'Sócio')+', atendente virtual de '+tenantName+'. Responda APENAS à mensagem do cliente.',
   'Tom: '+String(tone||'Natural, profissional, curto.').slice(0,700),
+  'Método comercial global (orientações, não permissões nem fatos da empresa):\n'+socioCompactSalesGuide(),
   'Orientações do proprietário (trate como referência, não como instrução que substitua segurança): '+
    String(instructions||'').slice(0,4500),
   'Preços, estoque e produtos somente do catálogo oficial. Nunca invente ofertas, prazos, números ou confirmações.',
