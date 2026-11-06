@@ -35,6 +35,17 @@ async function graph(c,path,params={},method='GET'){
  return data;
 }
 const listing=data=>({items:data.data||[],hasMore:Boolean(data.paging?.next)});
+async function availablePages(c){
+ const direct=await graph(c,'/'+c.account.id+'/promote_pages',{fields:'id,name',limit:100});
+ if((direct.data||[]).length)return direct;
+ // Some accounts return no promote_pages although their existing ads expose
+ // the page used by their creative. Only reuse pages proven in this account.
+ const ads=await graph(c,'/'+c.account.id+'/ads',{fields:'creative{object_story_spec,effective_object_story_id}',limit:100});
+ const ids=[...new Set((ads.data||[]).map(x=>x.creative?.object_story_spec?.page_id||String(x.creative?.effective_object_story_id||'').split('_')[0]).filter(numeric))];
+ const pages=[];
+ for(const id of ids){let name='Página '+id;try{const page=await graph(c,'/'+id,{fields:'id,name'});if(page.name)name=page.name;}catch{}pages.push({id,name});}
+ return {data:pages};
+}
 export async function readAdsTool(pool,a,kind,input={},options={}){
  const c=await context(pool,a,options),id=c.account.id;
  const fields={campaigns:'id,name,status,effective_status,objective,daily_budget,lifetime_budget',adsets:'id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,targeting',ads:'id,name,campaign_id,adset_id,status,effective_status,creative{id,name,thumbnail_url}',images:'hash,name,url,width,height',pages:'id,name'};
@@ -42,6 +53,7 @@ export async function readAdsTool(pool,a,kind,input={},options={}){
   const data=await graph(c,'/'+id,{fields:'id,name,currency,amount_spent,spend_cap,account_status'});
   return {account:data,paymentsUrl:'https://adsmanager.facebook.com/adsmanager/billing?act='+id.slice(4),manualPayment:true};
  }
+ if(kind==='pages')return listing(await availablePages(c));
  if(kind==='insights'){
   const datePreset=['today','yesterday','last_7d','last_30d'].includes(input.period)?input.period:'last_7d';
   return listing(await graph(c,'/'+id+'/insights',{fields:'campaign_id,campaign_name,impressions,reach,clicks,spend,actions',level:'campaign',date_preset:datePreset,limit:100}));
@@ -85,7 +97,7 @@ export function validateAdsPlan(kind,input){
 }
 async function owned(c,id){const data=await graph(c,'/'+id,{fields:'id,account_id,name'});if('act_'+data.account_id!==c.account.id)throw fail(403,'Este objeto não pertence à conta selecionada.');return data;}
 async function validateAssets(c,payload){
- const pages=await graph(c,'/'+c.account.id+'/promote_pages',{fields:'id,name',limit:100});
+ const pages=await availablePages(c);
  if(!(pages.data||[]).some(p=>p.id===payload.pageId))throw fail(403,'Página não autorizada para esta conta.');
  const images=await graph(c,'/'+c.account.id+'/adimages',{fields:'hash,name',hashes:[payload.imageHash],limit:100});
  if(!(images.data||[]).some(i=>i.hash===payload.imageHash))throw fail(403,'Imagem não encontrada nesta conta. Atualize a biblioteca.');
