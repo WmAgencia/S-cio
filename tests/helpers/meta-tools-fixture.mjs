@@ -24,11 +24,11 @@ export async function metaToolsScenario(pool){
   if(path.endsWith('/customaudiences'))return response({data:[{id:'12345678',name:'Público permitido'}]});
   if(path.endsWith('/adspixels'))return response({data:[{id:'12345678',name:'Pixel'}]});
   if(path.endsWith('/customconversions'))return response({data:[{id:'12345678',name:'Conversão'}]});
-  if(path.endsWith('/insights'))return response({data:[{campaign_id:'123456',campaign_name:'Teste',spend:'12.50',clicks:'5',impressions:'100',reach:'80'}]});
+  if(path==='/act_123456/insights')return response({data:[{campaign_id:'123456',campaign_name:'Teste',spend:'12.50',clicks:'5',impressions:'100',reach:'80'}]});
 
   if(path.endsWith('/adimages'))return response({data:[{hash:'image-hash',name:'Imagem'}]});
   if(path==='/search')return response({data:[{key:'654321',name:'Sorocaba',region:'São Paulo',country_name:'Brasil'}]});
-  if(path.endsWith('/ads'))return response({data:[{id:'554433',creative:{object_story_spec:{page_id:'445566'}}}]});
+  if(path==='/act_123456/ads')return response({data:[{id:'554433',creative:{object_story_spec:{page_id:'445566'}}}]});
   if(path==='/act_123456')return response({id:'act_123456',currency:'BRL',amount_spent:'1234',spend_cap:'2000',business:{id:'777888'}});
   if(path==='/445566')return response({id:'445566',name:'Página existente na conta'});
   if(path==='/998877/adsets')return response({data:[{id:'121212',name:'Conjunto de teste',effective_status:'ACTIVE'}]});
