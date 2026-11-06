@@ -11,7 +11,7 @@ test('interview visits each service and only prepares a reviewable Markdown draf
   const {step}=interviewView(s);
   const reply={company:'Oficina Teste',audience:'Donos de automóveis',services:'Troca de óleo, Revisão de freios',
    serviceDetails:'Inclui inspeção e mão de obra',servicePrices:'Orçamento após avaliação',
-   closing:'Transferir ao atendente'}[step]||'Informação informada pelo proprietário';
+   closing:'Transferir ao atendente',interactionMode:'2'}[step]||'Informação informada pelo proprietário';
   s=advanceInterview(s,reply);count++;assert.ok(count<40);
  }
  assert.equal(s.phase,'review');
