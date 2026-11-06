@@ -52,11 +52,29 @@
    feedback.textContent='Prévia pronta. Nenhuma alteração executada.';review.scrollIntoView({block:'nearest',behavior:'smooth'});
   }
   if(!canManage)return;
-  const details=el('details');details.append(el('summary','Criar campanha com imagem · tráfego para site'));section.append(details);
-  details.append(el('p','Cria campanha, conjunto, criativo e anúncio pausados. A veiculação exige ativar os itens após revisão. Este formulário atende tráfego para site; outras modalidades ainda não estão disponíveis.'));
+  const details=el('details');details.append(el('summary','Criar campanha com imagem · site ou WhatsApp'));section.append(details);
+  details.append(el('p','Cria campanha, conjunto, criativo e anúncio sempre PAUSADOS. Para WhatsApp, selecione um número conectado pelo WA-AKG; ele precisa estar vinculado à Página na Meta. A Meta pode recusar combinações incompatíveis.'));
   const form=el('div');form.className='form-stack';details.append(form);const inputs={};
   const input=(key,label,type='text')=>{const wrap=el('label',label),field=el('input');field.type=type;wrap.append(field);form.append(wrap);inputs[key]=field;return field;};
-  input('name','Nome da campanha');input('url','Link do site (HTTPS)','url');input('headline','Título do anúncio');input('message','Texto do anúncio');const budget=input('budget','Orçamento diário em '+(account.currency||'moeda da conta'),'number');budget.min='1';budget.max='100000';budget.step='0.01';
+  const kindLabel=el('label','Destino do anúncio'),kind=el('select');
+  for(const [id,name] of [['create','Visitas ao site'],['create_whatsapp','Conversas pelo WhatsApp']]){
+   const opt=el('option',name);opt.value=id;kind.append(opt);
+  }
+  kindLabel.append(kind);form.append(kindLabel);
+  input('name','Nome da campanha');
+  const website=input('url','Link do site (HTTPS)','url');
+  const waLabel=el('label','WhatsApp de atendimento');
+  const wa=el('select');waLabel.append(wa);waLabel.hidden=true;form.append(waLabel);
+  kind.addEventListener('change',()=>{website.parentElement.hidden=kind.value==='create_whatsapp';waLabel.hidden=kind.value!=='create_whatsapp';});
+  try{
+   const channels=await api('/api/waakg/channels');
+   const option=el('option','Selecione um WhatsApp conectado');option.value='';wa.append(option);
+   for(const x of Array.isArray(channels)?channels:[]){
+    if(x.status!=='connected'||!/^[0-9]{10,15}$/.test(x.phone||''))continue;
+    const o=el('option',x.label+' · '+x.phone);o.value=x.phone;wa.append(o);
+   }
+  }catch{const opt=el('option','WhatsApp não disponível');opt.value='';wa.append(opt);}
+  input('headline','Título do anúncio');input('message','Texto do anúncio');const budget=input('budget','Orçamento diário em '+(account.currency||'moeda da conta'),'number');budget.min='1';budget.max='100000';budget.step='0.01';
   const pageLabel=el('label','Página do Facebook');const pages=el('select');pageLabel.append(pages);form.append(pageLabel);
   const imageLabel=el('label','Imagem da conta');const images=el('select');imageLabel.append(images);form.append(imageLabel);
   const fill=(select,items,key,label)=>{select.replaceChildren();const empty=el('option','Selecione…');empty.value='';select.append(empty);for(const item of items){const o=el('option',label(item));o.value=item[key];select.append(o);}};
@@ -65,7 +83,13 @@
   button(form,'Enviar imagem para a Meta',async()=>{const f=file.files?.[0];if(!f||f.size>3000000)throw Error('Selecione uma imagem de até 3 MB.');const encoded=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=()=>reject(Error('Falha ao ler imagem.'));r.readAsDataURL(f);});const r=await api('/api/marketing/tools/image','POST',{contentBase64:encoded});const o=el('option','Imagem enviada · '+r.hash);o.value=r.hash;images.append(o);images.value=r.hash;feedback.textContent='Imagem enviada para a conta selecionada. Nenhum anúncio publicado.';});
   input('city','Pesquisar cidade no Brasil');const cityLabel=el('label','Cidade encontrada');const cities=el('select');cityLabel.append(cities);form.append(cityLabel);
   button(form,'Buscar cidade',async()=>{const r=await api('/api/marketing/tools/cities?q='+encodeURIComponent(inputs.city.value));fill(cities,r.items,'key',x=>[x.name,x.region,x.country_name].filter(Boolean).join(' · '));});
-  button(form,'Preparar campanha pausada',()=>prepare('create',{name:inputs.name.value,url:inputs.url.value,headline:inputs.headline.value,message:inputs.message.value,dailyBudgetCents:Math.round(Number(budget.value)*100),pageId:pages.value,imageHash:images.value,cityKey:cities.value,cityName:cities.selectedOptions[0]?.textContent.split(' · ')[0]||'',ageMin:18,ageMax:65}));
+  button(form,'Preparar campanha pausada',()=>{
+   if(kind.value==='create_whatsapp'&&!wa.value)throw Error('Selecione um número WA-AKG conectado.');
+   return prepare(kind.value,{name:inputs.name.value,url:inputs.url.value,whatsappPhone:wa.value,
+    headline:inputs.headline.value,message:inputs.message.value,dailyBudgetCents:Math.round(Number(budget.value)*100),
+    pageId:pages.value,imageHash:images.value,cityKey:cities.value,
+    cityName:cities.selectedOptions[0]?.textContent.split(' · ')[0]||'',ageMin:18,ageMax:65});
+  });
  }
  globalThis.SocioAdsTools={render};
 })();
