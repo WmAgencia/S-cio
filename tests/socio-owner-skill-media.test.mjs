@@ -17,7 +17,8 @@ const actorRow=()=>({
 });
 const env={SOCIO_OWNER_COMMANDS_ENABLED:'true',SOCIO_OWNER_MEDIA_ENABLED:'true',SOCIO_OWNER_AUDIO_ENABLED:'true',
  SOCIO_OUTBOUND_ENABLED:'true',WA_AKG_API_KEY:'gateway-key-for-tests-not-real',WA_AKG_BASE_URL:'https://wa.test',
- GROQ_API_KEY:'groq-key-for-tests-not-real-123456'};
+ GROQ_API_KEY:'groq-key-for-tests-not-real-123456',
+ CHANNEL_ENCRYPTION_KEY:'owner-media-bridge-unit-test-key-long-32-char'};
 function poolFor(row,{pending=true,claimed=true}={}){
  const calls=[];return {calls,query:async(sql,args=[])=>{
   calls.push({sql,args});
@@ -153,8 +154,8 @@ test('gateway ambiguity after a processed image is never retried',async()=>{
 });
 test('server worker fails closed and keeps WA-AKG as the unchanged provider',()=>{
  const s=readFileSync(new URL('../server.mjs',import.meta.url),'utf8');
- assert.match(s,/SOCIO_OWNER_MEDIA_ENABLED'!=='true'/);
- assert.match(s,/SOCIO_OWNER_COMMANDS_ENABLED'!=='true'/);
+ assert.match(s,/SOCIO_OWNER_MEDIA_ENABLED!=='true'/);
+ assert.match(s,/SOCIO_OWNER_COMMANDS_ENABLED!=='true'/);
  assert.match(s,/processOwnerSkillMedia\(pool\)/);
  const source=readFileSync(new URL('../socio-owner-skill-media.mjs',import.meta.url),'utf8');
  assert.match(source,/mode:'human'/);
