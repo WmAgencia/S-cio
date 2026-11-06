@@ -87,3 +87,23 @@ export async function checkMediaStorage(env=process.env){
   }
  }catch{return {configured:true,reachable:false,readWrite:false};}
 }
+
+
+export function normalizePdf(base64){
+ if(typeof base64!=='string'||base64.length<80||base64.length>11_000_000||!/^[A-Za-z0-9+/]*={0,2}$/.test(base64))
+  throw fail(422,'PDF inválido ou muito grande (limite 8 MB).');
+ const bytes=Buffer.from(base64,'base64');
+ if(bytes.length<40||bytes.length>8_000_000||!bytes.subarray(0,8).toString('ascii').startsWith('%PDF-'))
+  throw fail(422,'Envie um PDF válido de até 8 MB.');
+ if(!bytes.subarray(-2048).toString('latin1').includes('%%EOF'))
+  throw fail(422,'PDF incompleto.');
+ return bytes;
+}
+export async function putPrivatePdf(key,bytes,env=process.env){
+ if(!key||!Buffer.isBuffer(bytes)||bytes.length>8_000_000||!key.endsWith('.pdf'))
+  throw fail(422,'PDF inválido.');
+ if(useMemory(env)){storedTest.set(key,Buffer.from(bytes));return;}
+ const {client,lib}=await s3(env);
+ await client.send(new lib.PutObjectCommand({Bucket:env.SOCIO_S3_BUCKET,Key:key,Body:bytes,
+  ContentType:'application/pdf',ContentDisposition:'attachment',CacheControl:'private, no-store'}));
+}
