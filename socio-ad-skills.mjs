@@ -6,6 +6,7 @@ import {requirePermission} from './team-permissions.mjs';
 import {assertApiFeature} from './tenant-features.mjs';
 import {resolveSelectedOfficialAccount} from './meta-official.mjs';
 import {readAdsTool,prepareAdsPlan,executeAdsPlan} from './meta-ads-tools.mjs';
+import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
 
 const bad=(status,message)=>Object.assign(new Error(message),{status});
 const digits=x=>String(x||'').replace(/\D/g,'');
@@ -174,10 +175,19 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
    "WHERE id=$1 AND tenant_id=$2 AND user_id=$3 AND status='ready' AND expires_at>now() RETURNING *",
    [run.id,a.active_tenant_id,a.user_id]);
   if(!claim.rowCount)throw bad(409,'Este pedido já foi reivindicado. Não repita a operação.');
-  let executed;
-  try{executed=await (opts.execute||executeAdsPlan)(pool,a,run.plan_id,true,opts);}
-  catch(error){
-   executed={status:'failed',error:String(error?.message||'Falha não confirmada').slice(0,180)};
+  let executed,pixelOutcome=null;
+  const execute=opts.execute||executeAdsPlan;
+  if(run.pixel_plan_id){
+   try{pixelOutcome=await execute(pool,a,run.pixel_plan_id,true,opts);}
+   catch(error){pixelOutcome={status:'failed',error:String(error?.message||'Falha de Pixel').slice(0,180)};}
+  }
+  if(pixelOutcome&&pixelOutcome.status!=='succeeded'){
+   executed={status:'failed',error:'A Meta não confirmou o Pixel; campanha não foi enviada. '+
+    String(pixelOutcome.error||'Confira o Gerenciador de Eventos.').slice(0,120),pixel:pixelOutcome};
+  }else{
+   try{executed=await execute(pool,a,run.plan_id,true,opts);}
+   catch(error){executed={status:'failed',error:String(error?.message||'Falha não confirmada').slice(0,180)};}
+   if(pixelOutcome)executed.pixel=pixelOutcome;
   }
   const status=executed.status==='succeeded'?'completed':'failed';
   await pool.query(
@@ -187,7 +197,8 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
    message:status==='completed'?
     'A Meta confirmou a criação. Campanha, conjunto e anúncio foram criados PAUSADOS. IDs: '+
      [executed.result?.campaignId,executed.result?.adsetId,executed.result?.adId].filter(Boolean).join(', ')+
-     '. Para veicular, solicite a ativação autorizada; o rastreamento WhatsApp não é Pixel.' :
+     (pixelOutcome?.result?.pixelId?' · Pixel criado: '+pixelOutcome.result.pixelId+' (instalação no site pendente).':'')+
+     '. Para veicular, solicite ativação autorizada. O Pixel não é instalado automaticamente no site.' :
     'Criação incompleta: confira o histórico e os IDs parciais da Meta antes de tentar novamente. '+String(executed.error||'').slice(0,120)};
  }
  const brief=extractCampaignBrief(message,run.brief||{});
@@ -209,15 +220,30 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   ...(brief.genders?.length?{genders:brief.genders}:{}),
   ...(brief.destination==='whatsapp'?{whatsappPhone:brief.whatsappPhone}:{url:brief.url})};
  const kind=brief.destination==='whatsapp'?'create_whatsapp':'create';
+ let pixelPlanId=null;
+ if(kind==='create'){
+  const pixels=await (opts.readPixels||readAdvancedMetaTool)(pool,a,'pixels',{},opts);
+  if(!pixels||!Array.isArray(pixels.items))throw bad(503,'A Meta não confirmou os Pixels; não é seguro preparar rastreamento.');
+  if(!pixels.items.length&&!pixels.hasMore){
+   const pixelName=('Pixel '+String(a.tenant_name||'Loja').slice(0,85)).slice(0,120);
+   const px=await (opts.prepare||prepareAdsPlan)(pool,a,'create_pixel',{name:pixelName},opts);
+   pixelPlanId=px.id;
+   brief.pixelCreationPlanned=true;
+  }else{
+   brief.pixelCreationPlanned=false;
+   brief.existingPixelIds=pixels.items.map(x=>x.id).filter(x=>typeof x==='string').slice(0,3);
+  }
+ }
  const plan=await (opts.prepare||prepareAdsPlan)(pool,a,kind,input,opts);
- await pool.query("UPDATE socio_skill_runs SET brief=$2::jsonb,plan_id=$3,status='ready',expires_at=now()+interval '15 minutes',updated_at=now() "+
-  "WHERE id=$1 AND tenant_id=$4 AND user_id=$5 AND status='collecting'",
-  [run.id,JSON.stringify(brief),plan.id,a.active_tenant_id,a.user_id]);
+ await pool.query("UPDATE socio_skill_runs SET brief=$2::jsonb,plan_id=$3,pixel_plan_id=$4,status='ready',expires_at=now()+interval '15 minutes',updated_at=now() "+
+  "WHERE id=$1 AND tenant_id=$5 AND user_id=$6 AND status='collecting'",
+  [run.id,JSON.stringify(brief),plan.id,pixelPlanId,a.active_tenant_id,a.user_id]);
  return {runId:run.id,status:'ready',brief:publicBrief(brief),planId:plan.id,
   message:'Preparei a campanha '+creative.name+'. Público: '+(brief.genders?.[0]===2?'mulheres, ':'')+
    'maiores de 18 anos em '+brief.cityName+'. Orçamento diário definido: R$ '+
    (brief.dailyBudgetCents/100).toFixed(2).replace('.',',')+'/dia. Destino: '+
    (brief.destination==='whatsapp'?'WhatsApp WA-AKG':'site')+'. '+
+   (pixelPlanId?'Um Pixel novo também está incluído na autorização, mas ainda precisará ser instalado no site. ':'' )+
    'Texto: '+creative.message+' A Meta fará a revisão do anúncio. '+
    "Responda 'pode criar' em até 15 minutos para eu criar a campanha PAUSADA, sem iniciar gastos.",
   note:brief.destination==='whatsapp'?
