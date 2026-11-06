@@ -34,7 +34,7 @@ function fakePool(){
   }
   if(sql.startsWith('UPDATE socio_skill_runs SET brief=$2::jsonb,plan_id=$3')){
    const row=runs.get(params[0]);row.brief=JSON.parse(params[1]);row.plan_id=params[2];
-   row.status='ready';return {rowCount:1};
+   row.pixel_plan_id=params[3]||null;row.status='ready';return {rowCount:1};
   }
   if(sql.startsWith("UPDATE socio_skill_runs SET status='executing'")){
    const row=runs.get(params[0]);if(!row||row.status!=='ready')return {rowCount:0,rows:[]};
@@ -123,6 +123,41 @@ test('missing Meta connection, permissions and currency stop orchestration',asyn
  await assert.rejects(speakToAdSkill(pool,{...actor,features:{...actor.features,ai:false}},{message:'Quero anunciar roupa feminina em Sorocaba R$ 6 por dia'},{resolve,read}),e=>e.status===403);
  await assert.rejects(speakToAdSkill(pool,actor,{message:'Crie uma campanha de moda feminina em Sorocaba R$ 6 por dia'},
   {resolve:async()=>({id:'act_123456789',currency:'USD'}),read}),e=>e.status===409);
+});
+test('website campaigns plan a Pixel only when none exists, and text approval creates Pixel first and paused ads second',async()=>{
+ const pool=fakePool(),prepared=[],executed=[];
+ const noImages=async(p,a,kind)=>kind==='images'?{items:[]}:read(p,a,kind);
+ const opts={resolve,read:noImages,readPixels:async()=>({items:[],hasMore:false}),
+  prepare:async(_p,_a,kind,input)=>{prepared.push({kind,input});return {id:randomUUID()};},
+  execute:async(_p,_a,id,confirmed)=>{
+   assert.equal(confirmed,true);executed.push(id);
+   return executed.length===1?{status:'succeeded',result:{pixelId:'1234567890'}}:
+    {status:'succeeded',result:{campaignId:'900111',adsetId:'900112',adId:'900113',delivery:'PAUSED'}};
+  }};
+ const initial=await speakToAdSkill(pool,actor,{
+  message:'Quero vender roupa feminina em Sorocaba gastando R$ 6 por dia no site https://example.test'},opts);
+ assert.equal(initial.status,'collecting');
+ const ready=await speakToAdSkill(pool,actor,{message:'',runId:initial.runId,imageHash},opts);
+ assert.equal(ready.status,'ready');assert.equal(prepared.length,2);
+ assert.equal(prepared[0].kind,'create_pixel');
+ assert.equal(prepared[1].kind,'create');
+ assert.equal(prepared[1].input.url,'https://example.test');
+ assert.equal(executed.length,0);
+ assert.match(ready.message,/Pixel novo/);
+ const result=await speakToAdSkill(pool,actor,{message:'pode criar',runId:initial.runId},opts);
+ assert.equal(result.status,'completed');
+ assert.equal(executed.length,2);
+ assert.match(result.message,/Pixel criado: 1234567890/);
+ assert.match(result.message,/PAUSADOS/);
+});
+test('when existing Pixel is visible, website skill reuses the account instead of creating a duplicate',async()=>{
+ const pool=fakePool(),prepared=[];
+ const opts={resolve,read,readPixels:async()=>({items:[{id:'1234567890'}],hasMore:false}),
+  prepare:async(_p,_a,kind,input)=>{prepared.push(kind);return {id:randomUUID()};}};
+ const a=await speakToAdSkill(pool,actor,
+  {message:'Anuncie roupas femininas em Sorocaba por R$ 6 por dia no site https://example.test'},opts);
+ assert.equal(a.status,'ready');
+ assert.deepEqual(prepared,['create']);
 });
 test('skill catalog reports WhatsApp group and CAPI as unfinished and does not misstate Pixel inside WhatsApp',()=>{
  const source=SOCIO_AD_SKILLS.map(x=>x.id);
