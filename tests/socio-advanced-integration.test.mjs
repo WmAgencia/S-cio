@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {reviewCommercialReply,conversationHints} from '../socio-ai-safety.mjs';
 import {rankAvailableGroqModels,groqAvailableModels} from '../socio-model-catalog.mjs';
 import {transcribeTrainingAudio} from '../socio-training-speech.mjs';
@@ -50,4 +51,14 @@ test('owner companion operates within one tenant and does not invent paid sales'
  assert.equal(stats.quotes,4);
  assert(q.every(x=>x.args.length===1&&x.args[0]===tenantId));
  assert.match(ownerReadOnlyAnswer('Quantas vendas tivemos?',stats),/Não são vendas pagas confirmadas/);
+});
+
+test('commercial Kanban uses stored statuses, not fabricated sales or payment',()=>{
+ const js=readFileSync(new URL('../public/sales.js',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../public/sales.css',import.meta.url),'utf8');
+ for(const status of ["pending","contacted","completed","dismissed"])assert.match(js,new RegExp("\\['"+status+"','"));
+ assert.match(js,/data-focus-intent/);
+ assert.match(js,/O Kanban não representa faturamento confirmado/);
+ assert.match(css,/commerce-kanban-columns/);
+ assert.match(css,/@media\(max-width:600px\)/);
 });
