@@ -15,7 +15,28 @@
    status.textContent=!data.configured?'A conexão oficial aguarda configuração na hospedagem.':data.connected?'Conta Meta conectada. Alterações de campanhas permanecem desativadas.':'Conecte sua conta Meta para autorizar o acesso.';
    if(canManage){const b=button('Conectar com Facebook',async()=>{const r=await api('/api/marketing/official/connect','POST');location.assign(r.authorizationUrl);});b.disabled=!data.configured;}
    if(data.connected){
-    button('Consultar contas autorizadas',async()=>{const r=await api('/api/marketing/official/accounts');list.replaceChildren();for(const x of r.accounts){const li=document.createElement('li');li.textContent=x.name+' · '+x.id+' · '+x.currency;list.append(li);}if(!r.accounts.length)status.textContent='Nenhuma conta de anúncios disponível nesta autorização.';if(r.hasMore)status.textContent='Exibindo as primeiras 100 contas autorizadas.';});
+    const selected=document.createElement('p');selected.setAttribute('role','status');root.append(selected);
+    const showSelected=x=>{selected.textContent=x?'Conta selecionada para esta empresa: '+x.account_name+' · '+x.account_id+' · '+(x.currency||''):'Nenhuma conta selecionada. Escolha onde esta empresa fará suas campanhas.';};
+    showSelected(data.selectedAccount);
+    const field=document.createElement('div');field.className='field';root.append(field);
+    const label=document.createElement('label');label.htmlFor='metaAdAccount';label.textContent='Conta de anúncios';field.append(label);
+    const select=document.createElement('select');select.id='metaAdAccount';select.disabled=true;field.append(select);
+    const save=button('Usar esta conta',async()=>{
+     const result=await api('/api/marketing/official/account','POST',{accountId:select.value});
+     data.selectedAccount=result.selectedAccount;showSelected(result.selectedAccount);status.textContent='Conta de anúncios salva para esta empresa.';
+    });save.hidden=!canManage;save.disabled=true;
+    const load=async()=>{
+     select.disabled=true;save.disabled=true;
+     const r=await api('/api/marketing/official/accounts');list.replaceChildren();select.replaceChildren();
+     const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Selecione uma conta de anúncios';select.append(placeholder);
+     for(const x of r.accounts){const option=document.createElement('option');option.value=x.id;option.textContent=x.name+' · '+x.id+' · '+x.currency;select.append(option);}
+     select.value=data.selectedAccount?.account_id||'';select.disabled=!canManage||!r.accounts.length;save.disabled=!canManage||!select.value;
+     if(!r.accounts.length)status.textContent='Nenhuma conta de anúncios disponível nesta autorização.';
+     if(r.hasMore)status.textContent='Exibindo as primeiras 100 contas autorizadas.';
+    };
+    select.addEventListener('change',()=>{save.disabled=!canManage||!select.value;});
+    button('Atualizar contas',load);
+    await load();
     if(canManage)button('Desconectar do Sócio',async()=>{await api('/api/marketing/official/disconnect','POST');await render({root,api,canManage});});
    }
   }catch(e){status.textContent=e.message;}

@@ -826,3 +826,11 @@ CREATE TABLE IF NOT EXISTS meta_official_deletions (
  confirmation_code text PRIMARY KEY, completed_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS meta_official_grants_meta_user_idx ON meta_official_grants(meta_user_id);
+
+-- One explicit advertising destination per company. Grant removal clears it.
+CREATE TABLE IF NOT EXISTS meta_official_account_selections (
+ tenant_id uuid PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL, account_id text NOT NULL, account_name text NOT NULL,
+ currency text, updated_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(tenant_id,user_id) REFERENCES meta_official_grants(tenant_id,user_id) ON DELETE CASCADE
+);
