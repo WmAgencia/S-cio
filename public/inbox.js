@@ -51,7 +51,7 @@
     '" id="socioInbox" aria-label="Central de conversas do Sócio">'+
     '<aside class="wa-inbox-side" aria-label="Lista de conversas">'+
      '<header class="wa-inbox-side-head"><div><span class="wa-inbox-eyebrow">SEU ATENDIMENTO</span>'+
-      '<h1>Conversas <span id="inboxCount" aria-live="polite"></span></h1></div>'+
+      '<h1>Mensagens <span id="inboxCount" aria-live="polite"></span></h1></div>'+
       '<div class="wa-side-head-buttons"><button type="button" class="wa-inbox-connect" data-inbox-connect title="Abrir a guia Conexões">+ Conectar</button></div></header>'+
      '<div class="wa-inbox-search">'+icon('⌕')+
       '<input id="inboxSearch" type="search" maxlength="90" placeholder="Buscar nome, número ou mensagem" autocomplete="off" aria-label="Pesquisar conversas" value="'+t(search,90)+'"></div>'+
