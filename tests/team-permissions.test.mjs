@@ -11,7 +11,16 @@ test('permissions are derived from a fixed server-side role matrix',()=>{
  const admin=permissionsFor('admin');
  assert(admin.includes('team.invite'));
  assert(!admin.includes('team.promote'));
- assert(!admin.includes('team.manage'));
+ assert(admin.includes('team.manage'));
+ const manager=permissionsFor('manager');
+ assert(manager.includes('training.manage')&&manager.includes('marketing.manage'));
+ assert(!manager.includes('team.promote')&&!manager.includes('team.manage'));
+ const viewer=permissionsFor('viewer');
+ assert(viewer.includes('inbox.read')&&viewer.includes('marketing.read'));
+ assert(!viewer.includes('inbox.write')&&!viewer.includes('marketing.manage')&&!viewer.includes('team.invite'));
+ assert(allowedNewMemberRole({role:'admin'},'manager'));
+ assert(allowedNewMemberRole({role:'owner'},'viewer'));
+
  assert(!admin.includes('platform.manage'));
  const owner=permissionsFor('owner');
  assert(owner.includes('team.manage')&&owner.includes('audit.read'));
