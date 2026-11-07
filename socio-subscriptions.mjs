@@ -103,7 +103,7 @@ export async function createSubscriptionCheckout(pool,actor,{env=process.env,fet
  if(secondsLeft>=48*3600)params['subscription_data[trial_end]']=String(Math.floor(trialEnd/1000));
  const sid='socio-subscribe-'+tenant+'-'+t.plan+'-'+Math.floor(new Date(now).getTime()/3600000);
  const session=await stripeForm('checkout/sessions',params,{env,fetcher,idempotencyKey:sid});
- if(!stripeId(session.id,'cs')||typeof session.url!=='string'||!session.url.startsWith('https://checkout.stripe.com/'))
+ if(!/^cs_(test_|live_)?[a-zA-Z0-9]{8,100}$/.test(session.id||'')||typeof session.url!=='string'||!session.url.startsWith('https://checkout.stripe.com/'))
   throw fault(503,'Checkout Stripe inválido.');
  // Do not replace an active subscription if another request won the race.
  const upd=await pool.query(
@@ -162,6 +162,11 @@ export async function processSubscriptionWebhook(pool,raw,signature,{env=process
   if(!/^[0-9a-f-]{36}$/i.test(String(tenantId||'')))throw fault(400,'Assinatura sem tenant autorizado.');
   const account=await c.query('SELECT stripe_customer_id,stripe_subscription_id,subscription_status,last_subscription_event_created,last_paid_invoice_id FROM socio_billing_accounts WHERE tenant_id=$1 FOR UPDATE',[tenantId]);
   const previous=account.rows[0];
+  if(!previous)throw fault(409,'Assinatura sem registro prévio de Checkout no Sócio.');
+  if(isCheckout&&previous.stripe_checkout_session_id!==obj.id)
+   throw fault(409,'Checkout recebido não corresponde ao emitido para esta empresa.');
+  if(event.type==='invoice.paid'&&previous.stripe_subscription_id!==sub)
+   throw fault(409,'Fatura não corresponde à assinatura cadastrada.');
   if(previous?.stripe_customer_id&&previous.stripe_customer_id!==customer)throw fault(409,'Cliente Stripe divergente.');
   if(previous?.stripe_subscription_id&&previous.stripe_subscription_id!==sub)throw fault(409,'Assinatura Stripe divergente.');
   if(isCheckout){
