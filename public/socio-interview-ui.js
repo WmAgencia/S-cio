@@ -3,25 +3,57 @@
 (()=>{
  const escape=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const node=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=String(txt);return e;};
- let root=null,host=null,api=null,toast=null,csrf='',user=null,state=null,versions=[],busy=false,recorder=null,stream=null,recordChunks=[],recordTimer=null,transcriptText='',speaking=false,liveVoice=null,voiceState='off',finishSpeech=null;
+ let root=null,host=null,api=null,toast=null,csrf='',user=null,state=null,versions=[],busy=false,recorder=null,stream=null,recordChunks=[],recordTimer=null,transcriptText='',speaking=false,liveVoice=null,voiceState='off',finishSpeech=null,speechAbort=null,speechPlayer=null,speechUrl=null;
  const canEdit=()=>user?.platformOwner||['owner','admin'].includes(user?.role);
- const say=text=>new Promise(resolve=>{
-  if(!state?.interview||state.interview.mode!=='voice'||!('speechSynthesis' in window)){resolve();return;}
+ // Thalita is rendered by our own authenticated Edge TTS route, not by a browser-dependent voice.
+ // Explicit playback cancellation allows users to interrupt her mid-sentence.
+ const cancelSpeech=()=>{
+  const abort=speechAbort;speechAbort=null;
+  try{abort?.abort();}catch{}
+  if(speechPlayer){try{speechPlayer.pause();speechPlayer.removeAttribute('src');speechPlayer.load();}catch{}speechPlayer=null;}
+  if(speechUrl){URL.revokeObjectURL(speechUrl);speechUrl=null;}
+  finishSpeech?.();finishSpeech=null;speaking=false;
+  updateVoiceStatus();
+ };
+ const say=async text=>{
+  if(!state?.interview||state.interview.mode!=='voice'||!liveVoice)return;
+  cancelSpeech();
+  const controller=new AbortController();speechAbort=controller;
+  speaking=true;updateVoiceStatus();
   try{
-   window.speechSynthesis.cancel();
-   const utterance=new SpeechSynthesisUtterance(text);
-   utterance.lang='pt-BR';utterance.rate=1.04;utterance.pitch=1.0;
-   let settled=false;
-   const done=()=>{if(settled)return;settled=true;speaking=false;finishSpeech=null;resolve();};
-   finishSpeech=done;speaking=true;utterance.onend=done;utterance.onerror=done;
-   window.speechSynthesis.speak(utterance);
-  }catch{speaking=false;finishSpeech=null;resolve();}
- });
+   const response=await fetch('/api/training/interview/tts',{
+    method:'POST',credentials:'same-origin',
+    headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
+    body:JSON.stringify({text:String(text||'').slice(0,650)}),signal:controller.signal});
+   if(!response.ok){
+    const result=await response.json().catch(()=>({}));
+    throw new Error(result.error||'Não foi possível gerar a voz Thalita.');
+   }
+   if(response.headers.get('X-TTS-Voice')!=='pt-BR-ThalitaMultilingualNeural')
+    throw new Error('A voz solicitada não corresponde à Thalita.');
+   const blob=await response.blob();
+   if(controller.signal.aborted)return;
+   speechUrl=URL.createObjectURL(blob);
+   const player=new Audio(speechUrl);
+   speechPlayer=player;
+   await new Promise((resolve,reject)=>{
+    let settled=false;
+    const done=()=>{if(settled)return;settled=true;finishSpeech=null;resolve();};
+    finishSpeech=done;
+    player.onended=done;
+    player.onerror=()=>{done();reject(new Error('O navegador não reproduziu a voz Thalita.'));};
+    player.play().catch(error=>{done();reject(error);});
+   });
+  }catch(error){
+   if(!controller.signal.aborted)toast('Voz Thalita indisponível. Continue pelo chat: '+String(error.message||'erro').slice(0,110),true);
+  }finally{
+   if(speechAbort===controller)cancelSpeech();
+  }
+ };
  const stopVoice=()=>{
   const active=liveVoice;liveVoice=null;voiceState='off';
   try{active?.stop();}catch{}
-  try{window.speechSynthesis?.cancel();}catch{}
-  finishSpeech?.();finishSpeech=null;speaking=false;
+  cancelSpeech();
   if(recordTimer)clearTimeout(recordTimer);recordTimer=null;
   if(recorder?.state==='recording')recorder.stop();
   if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
@@ -29,8 +61,8 @@
  };
  const voiceStatusText=()=>({
   connecting:'Conectando microfone…',listening:'Microfone ativo · pode falar',hearing:'Estou ouvindo…',
-  speaking:'O Sócio está falando · você pode interromper',processing:'Entendendo sua resposta…',
-  off:'Voz desligada · ative quando quiser'
+  speaking:'Thalita está falando · você pode interromper',processing:'Entendendo sua resposta…',
+  off:'Voz Thalita desligada · ative quando quiser'
  })[speaking?'speaking':voiceState]||'Treinamento por voz';
  function updateVoiceStatus(){
   const status=host?.querySelector('#psVoiceStatus');
@@ -43,7 +75,7 @@
   const {createSocioVoiceSession}=await import('/socio-francisca-live.mjs');
   const session=createSocioVoiceSession({
    canInterrupt:()=>speaking,
-   onInterrupt:()=>{try{window.speechSynthesis?.cancel();}catch{}finishSpeech?.();voiceState='hearing';updateVoiceStatus();},
+   onInterrupt:()=>{cancelSpeech();voiceState='hearing';updateVoiceStatus();},
    onState:status=>{voiceState=status;updateVoiceStatus();},
    onError:message=>toast(message,true),
    maxTurnMs:22000,
@@ -79,14 +111,14 @@
   '<h2>Vamos treinar o seu Sócio.</h2>'+
   '<p>Responda às perguntas sobre sua empresa. Uma conversa simples que vira um manual de atendimento para você revisar.</p>'+
   '<div class="ps-mode-grid">'+
-   '<button type="button" data-ps-start="voice" class="ps-mode"><span aria-hidden="true" class="ps-mode-icon">◉</span><strong>Conversar por voz</strong><small>Ouça as perguntas e responda com o microfone. Você pode escrever também.</small><b>Começar por voz</b></button>'+
+   '<button type="button" data-ps-start="voice" class="ps-mode"><span aria-hidden="true" class="ps-mode-icon">◉</span><strong>Conversar por voz com Thalita</strong><small>Ouça a voz neural Thalita e responda com o microfone. Você pode escrever também.</small><b>Começar por voz</b></button>'+
    '<button type="button" data-ps-start="text" class="ps-mode"><span aria-hidden="true" class="ps-mode-icon">✎</span><strong>Conversar pelo chat</strong><small>Uma pergunta por vez, sem formulários longos. Revise tudo antes de ativar.</small><b>Começar por texto</b></button>'+
   '</div><small>O atendimento atual da empresa não muda até que você aprove o novo treinamento.</small></div>';
  function conversation(i){
   const progress=Math.max(0,Math.min(100,Number(i.progress)||0));
   const choices=Array.isArray(i.choices)?i.choices:[];
   return '<section class="ps-chat-card" aria-label="Conversa de treinamento">'+
-   '<header class="ps-chat-header"><div class="ps-face">✳</div><div><strong>Sócio · Treinamento</strong><small>'+(i.mode==='voice'?'Voz e chat':'Conversa por texto')+'</small></div>'+
+   '<header class="ps-chat-header"><div class="ps-face">✳</div><div><strong>Sócio · Treinamento</strong><small>'+(i.mode==='voice'?'Thalita · voz e chat':'Conversa por texto')+'</small></div>'+
    '<span class="ps-progress-number">'+progress+'%</span>'+
    button('Recomeçar','data-ps-reset aria-label="Reiniciar entrevista"','btn sm soft')+'</header>'+
    '<div class="ps-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+progress+'" aria-label="Progresso da entrevista"><div style="width:'+progress+'%"></div></div>'+
