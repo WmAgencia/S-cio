@@ -1220,15 +1220,38 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/products'){
   needRole(a,['owner','admin']);
-  const {data}=await body(req);
+  const {data}=await body(req,22000);
+  // Validate every nested field BEFORE inserting anything, fixing the
+  // "product created but invalid variation price" partial-success bug.
   const p=validateProduct(data);
-  const count=await query('SELECT COUNT(*)::int AS count FROM products WHERE tenant_id=$1',[a.active_tenant_id]);
-  if(count.rows[0].count>=500)throw fail(422,'Limite de 500 produtos por empresa.');
-  const item=await query(
-   'INSERT INTO products(id,tenant_id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active',
-   [id(),a.active_tenant_id,p.name,p.description,p.sku,p.priceCents,p.stockQuantity,p.compareAtPriceCents,p.active]);
-  await audit(a,'product.created',{productId:item.rows[0].id});
-  return json(res,201,item.rows[0]);
+  const variants=validateVariants(data.variants||[]);
+  const campaigns=Array.isArray(data.campaigns)?data.campaigns.map(validateCampaign):[];
+  if(campaigns.length>8||new Set(campaigns.map(x=>x.provider+':'+x.campaignId)).size!==campaigns.length)
+   throw fail(422,'Selecione até oito campanhas distintas.');
+  const client=await pool.connect();let product;
+  try{
+   await client.query('BEGIN');
+   // Serialize catalog insertions per company so the 500-product limit is real.
+   await client.query('SELECT id FROM tenants WHERE id=$1 FOR UPDATE',[a.active_tenant_id]);
+   const count=await client.query('SELECT COUNT(*)::int AS count FROM products WHERE tenant_id=$1',[a.active_tenant_id]);
+   if(Number(count.rows[0].count)>=500)throw fail(422,'Limite de 500 produtos por empresa.');
+   const item=await client.query(
+    'INSERT INTO products(id,tenant_id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active',
+    [id(),a.active_tenant_id,p.name,p.description,p.sku,p.priceCents,p.stockQuantity,p.compareAtPriceCents,p.active]);
+   product=item.rows[0];
+   for(const v of variants){
+    await client.query('INSERT INTO product_variants(id,tenant_id,product_id,name,sku,price_cents,stock_quantity,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+     [id(),a.active_tenant_id,product.id,v.name,v.sku,v.priceCents,v.stockQuantity,v.active]);
+   }
+   for(const campaign of campaigns){
+    await client.query('INSERT INTO product_campaign_links(id,tenant_id,product_id,provider,campaign_id,label) VALUES($1,$2,$3,$4,$5,$6)',
+     [id(),a.active_tenant_id,product.id,campaign.provider,campaign.campaignId,campaign.label]);
+   }
+   await client.query('COMMIT');
+  }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}
+  finally{client.release();}
+  await audit(a,'product.created',{productId:product.id,variants:variants.length,campaigns:campaigns.length});
+  return json(res,201,product);
  }
  const productVariants=pathname.match(/^\/api\/products\/([a-f0-9-]{36})\/variants$/);
  if(productVariants&&method==='PUT'){
