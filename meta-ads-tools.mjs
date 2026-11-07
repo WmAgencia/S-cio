@@ -74,7 +74,7 @@ export function normalizeMetaAccountFinance(account){
   spendCapRemainingMinor:remainingCapMinor,
   spendCapMinor:cap!==null&&cap>0?cap:null,
   amountDueMinor:minor(account?.balance),
-  accountStatus:Number.isInteger(Number(account?.account_status))?
+  accountStatus:account?.account_status!==null&&account?.account_status!==undefined&&account?.account_status!==''&&Number.isInteger(Number(account.account_status))?
    Number(account.account_status):null,
   checkedAt:new Date().toISOString()
  };
@@ -84,16 +84,30 @@ export async function readAdsTool(pool,a,kind,input={},options={}){
  const fields={campaigns:'id,name,status,effective_status,objective,daily_budget,lifetime_budget',adsets:'id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,targeting',ads:'id,name,campaign_id,adset_id,status,effective_status,creative{id,name,image_url,thumbnail_url,video_id,object_story_spec}',images:'hash,name,url,width,height',pages:'id,name'};
  if(kind==='finance'){
   const core='id,name,currency,amount_spent,spend_cap,balance,is_prepay_account,account_status,business{id}';
-  let data;
+  let data;const unavailableFields=[];
   try{
    data=await graph(c,'/'+id,{fields:core+',funding_source_details'});
   }catch(error){
-   // Some ad-read tokens cannot inspect the funding source. Keep the rest of
-   // the finance card operational without claiming an unreadable balance.
-   try{data=await graph(c,'/'+id,{fields:core});}
-   catch{data=await graph(c,'/'+id,{fields:'id,name,currency,amount_spent,spend_cap,account_status,business{id}'});}
+   if(error.status!==422)throw error;
+   data=await graph(c,'/'+id,{fields:'id,name,currency,amount_spent,spend_cap,account_status,business{id}'});
+   // A restricted funding field must not hide prepay type or invoice balance.
+   const optional=['balance','is_prepay_account','funding_source_details'];
+   const values=await Promise.all(optional.map(async field=>{
+    try{return {field,value:await graph(c,'/'+id,{fields:'id,'+field})};}
+    catch(error){if(error.status!==422)throw error;return {field,unavailable:true};}
+   }));
+   for(const item of values){
+    if(item.unavailable)unavailableFields.push(item.field);
+    else if(Object.hasOwn(item.value,item.field))data[item.field]=item.value[item.field];
+   }
   }
   const finance=normalizeMetaAccountFinance(data);
+  finance.unavailableFields=unavailableFields;
+  finance.availableFundsStatus=finance.availableFundsMinor!==null?'reported':
+   unavailableFields.includes('funding_source_details')?'field_restricted':
+   finance.isPrepaid===false?'not_prepaid':'not_reported';
+  finance.pix={generationSupported:false,mode:'official_billing',
+   reason:'A integração oficial disponível não fornece emissão de Pix de recarga no Sócio. Gere o pagamento no faturamento da Meta.'};
   const billing=new URL('https://adsmanager.facebook.com/billing_hub/payment_settings/');
   billing.searchParams.set('asset_id',id.slice(4));billing.searchParams.set('payment_account_id_from_jsmodule',id.slice(4));billing.searchParams.set('placement','ads_manager');
   if(numeric(data.business?.id))billing.searchParams.set('business_id',data.business.id);

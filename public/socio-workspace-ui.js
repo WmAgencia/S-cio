@@ -365,6 +365,16 @@
    const capAvailable=Number.isSafeInteger(cap)&&cap>=0;
    const currencyCode=billing?.finance?.currency||currency;
    const prepay=billing?.finance?.isPrepaid===true;
+   const billingStatus=billing?.finance?.availableFundsStatus;
+   const billingExplanation=provider==='meta_ads'&&!fundsAvailable&&connected?
+    billingStatus==='field_restricted'?'A Meta restringiu a consulta do saldo nesta autorização.':
+    prepay?'A conta é pré-paga, mas a Meta não retornou o saldo pela API. Consulte o faturamento.':
+    billingStatus==='not_prepaid'?'Esta conta utiliza faturamento; não há saldo pré-pago informado.':
+    'A consulta financeira não retornou saldo verificável.':'';
+   const checkedAt=billing?.finance?.checkedAt;
+   let checkedLabel='';
+   if(checkedAt&&Number.isFinite(Date.parse(checkedAt)))checkedLabel='Consultado às '+
+    new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}).format(new Date(checkedAt));
    const displayFunds=fundsAvailable?moneyMinor(funds,currencyCode):'Não disponível';
    const status=!ads?'Sem permissão':!connected?'Conta não autorizada':
     fundsAvailable?'Saldo pré-pago confirmado':prepay?'Saldo pré-pago não retornado':
@@ -380,6 +390,8 @@
        '<div class="px-budget-stat"><span>Duração estimada</span><strong>—</strong></div>'+
       '</div></div>'+
     (limitText?'<small class="px-budget-limit">'+esc(limitText)+'</small>':'')+
+    (billingExplanation?'<small class="px-budget-limit">'+esc(billingExplanation)+'</small>':'')+
+    (checkedLabel?'<small class="px-budget-limit">'+esc(checkedLabel)+'</small>':'')+
     (paymentUrl?'<a class="px-budget-billing-link" href="'+esc(paymentUrl)+'" target="_blank" rel="noopener noreferrer" title="Gerar recarga Pix no faturamento oficial da Meta, se disponível">Abrir recarga na Meta</a>':'')+
     '<div class="px-budget-meter" role="img" aria-label="Percentual restante não verificado"></div>'+
     '</article>';
