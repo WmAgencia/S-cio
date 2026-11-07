@@ -15,12 +15,14 @@ const grant=sealMarketingSecret(JSON.stringify({tenant:actor.active_tenant_id,us
 function mockGraph({campaignBudget=0,adsetBudget=2500,adVideo='1979307460141410'}={}){
  const requests=[],dbWrites=[];
  const pool={query:async(sql,args=[])=>{
+  if(sql.includes('INSERT INTO meta_ads_plans')){
+   assert.equal(args[1],actor.active_tenant_id,'The new plan must be isolated by tenant');
+   assert.equal(args[2],actor.user_id,'The author must be the verified account user');
+   dbWrites.push({sql,args});return {rowCount:1,rows:[]};
+  }
   assert.equal(args[0],actor.active_tenant_id);
   if(sql.includes('meta_official_account_selections'))return {rows:[{account_id:'act_123456'}]};
   if(sql.includes('meta_official_grants'))return {rows:[{token_encrypted:grant,scopes:['ads_read','ads_management']}]};
-  if(sql.includes('INSERT INTO meta_ads_plans')){
-   dbWrites.push({sql,args});return {rowCount:1,rows:[]};
-  }
   throw Error('Unexpected SQL '+sql);
  }};
  const request=async(url,opts)=>{
