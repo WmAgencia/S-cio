@@ -45,6 +45,7 @@ import {getOperationalReadiness} from './operational-readiness.mjs';
 import {getTenantBusinessMonitor,getMasterSaasMonitor} from './socio-business-monitor.mjs';
 import {readSubscriptionStatus,createSubscriptionCheckout,createBillingPortal,processSubscriptionWebhook} from './socio-subscriptions.mjs';
 import {startGoogleAdsOAuth,finishGoogleAdsOAuth,googleAdsStatus,listGoogleAdsAccounts,selectGoogleAdsAccount,disconnectGoogleAds} from './socio-google-ads.mjs';
+import {createTrackingSite,listTrackingSites,enableTrackingSite,receiveSignedSiteEvent} from './socio-site-tracking.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {createQuote,issueQuote,cancelQuote,publicQuote,approveQuote,declineQuote,listSales,createTestCheckout,processStripeTestEvent} from './sales-commerce.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
@@ -311,6 +312,12 @@ async function handle(req,res){
  if(/^\/webhooks\/google-ads\/[0-9a-f-]{36}$/i.test(pathname))
   throw fail(410,'O conector Google Ads foi desativado.');
  // Stripe server-to-server webhook validates its raw signature before using JSON.
+ if(pathname==='/webhooks/site-events'&&method==='POST'){
+  const {raw}=await body(req,10000);
+  if(!limiter(authAttempts,'site-events:'+clientIp(req),60000,120))
+   throw fail(429,'Limite de eventos temporariamente atingido.');
+  return json(res,200,await receiveSignedSiteEvent(pool,raw,req.headers));
+ }
  if(pathname==='/webhooks/stripe-saas'&&method==='POST'){
   const {raw}=await body(req,200000);
   if(!limiter(authAttempts,'stripe-billing:'+clientIp(req),60000,250))
@@ -1008,6 +1015,19 @@ async function handle(req,res){
   return json(res,201,r.rows[0]);
  }
 
+ if(method==='GET'&&pathname==='/api/tracking/sites')
+  return json(res,200,await listTrackingSites(pool,a));
+ if(method==='POST'&&pathname==='/api/tracking/sites'){
+  if(!limiter(simulationAttempts,'tracking-sites:'+a.active_tenant_id,3600000,10))
+   throw fail(429,'Aguarde antes de cadastrar outro site.');
+  const {data}=await body(req,1400);
+  return json(res,201,await createTrackingSite(pool,a,{origin:data.origin,pixelId:data.pixelId}));
+ }
+ const siteFlag=pathname.match(/^\/api\/tracking\/sites\/([a-f0-9-]{36})\/enabled$/i);
+ if(siteFlag&&method==='PUT'){
+  const {data}=await body(req,1500);
+  return json(res,200,await enableTrackingSite(pool,a,siteFlag[1],data.enabled));
+ }
  if(method==='GET'&&pathname==='/api/google-ads/status')
   return json(res,200,await googleAdsStatus(pool,a));
  if(method==='POST'&&pathname==='/api/google-ads/connect')
