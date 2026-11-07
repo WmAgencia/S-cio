@@ -58,7 +58,7 @@ export function suggestQuoteForRequest(request,products){
 async function readCatalog(pool,tenant){
  const [products,variants]=await Promise.all([
   pool.query('SELECT id,name,description,price_cents,stock_quantity,active FROM products WHERE tenant_id=$1 AND active=true ORDER BY name,id LIMIT 500',[tenant]),
-  pool.query('SELECT v.id,v.product_id,v.name,v.price_cents,v.stock_quantity FROM product_variants v JOIN products p ON p.tenant_id=v.tenant_id AND p.id=v.product_id WHERE v.tenant_id=$1 AND v.active=true AND p.active=true ORDER BY v.product_id,v.name LIMIT 12500',[tenant])
+  pool.query('SELECT v.id,v.product_id,v.name,v.price_cents,v.stock_quantity FROM product_variants v JOIN products p ON p.tenant_id=v.tenant_id AND p.id=v.product_id WHERE v.tenant_id=$1 AND p.active=true ORDER BY v.product_id,v.name LIMIT 12500',[tenant])
  ]);
  const vByProduct=new Map();
  for(const v of variants.rows){const a=vByProduct.get(v.product_id)||[];a.push(v);vByProduct.set(v.product_id,a);}
@@ -72,7 +72,9 @@ export async function askSalesAssistant(pool,actor,{message,requestId=null}={}){
  const tenant=actor.active_tenant_id;
  const [catalog,requests,intents,training]=await Promise.all([
   readCatalog(pool,tenant),
-  pool.query("SELECT id,conversation_id,customer_name,summary,status,delivery_status,draft_text,created_at FROM quote_requests WHERE tenant_id=$1 AND status IN ('pending','preparing') ORDER BY created_at DESC LIMIT 30",[tenant]),
+  requestId?
+   pool.query("SELECT id,conversation_id,customer_name,summary,status,delivery_status,draft_text,created_at FROM quote_requests WHERE tenant_id=$1 AND id=$2 AND status IN ('pending','preparing') LIMIT 1",[tenant,requestId]):
+   pool.query("SELECT id,conversation_id,customer_name,summary,status,delivery_status,draft_text,created_at FROM quote_requests WHERE tenant_id=$1 AND status IN ('pending','preparing') ORDER BY created_at DESC LIMIT 30",[tenant]),
   pool.query("SELECT id,conversation_id,customer_name,summary,status,amount_cents,created_at FROM sale_intents WHERE tenant_id=$1 AND status IN ('pending','contacted') ORDER BY created_at DESC LIMIT 30",[tenant]),
   pool.query("SELECT EXISTS(SELECT 1 FROM training_versions WHERE tenant_id=$1 AND status='approved') AS approved",[tenant])
  ]);
@@ -92,7 +94,7 @@ export async function askSalesAssistant(pool,actor,{message,requestId=null}={}){
     '\nNenhuma proposta foi salva ou enviada. Confira as informações com o cliente antes de aprovar.'};
  }
  const wantsQuotes=/\b(orcamento|orcamentos|cotacao|cotacoes|proposta|propostas)\b/.test(trimMessage);
- const wantsOpportunities=/\b(lead|leads|interessad|oportunidade|oportunidades|vendas|pedidos|comprar|clientes)\b/.test(trimMessage);
+ const wantsOpportunities=/\b(lead|leads|interessados?|interessadas?|oportunidade|oportunidades|vendas|pedidos|comprar|clientes)\b/.test(trimMessage);
  const wantsProducts=/\b(produto|produtos|catalogo|estoque|preco|precos|valor|valores|quanto custa)\b/.test(trimMessage);
  if(wantsProducts&&!wantsQuotes&&!wantsOpportunities){
   const specific=catalog.filter(p=>norm(p.name).length>=3&&trimMessage.includes(norm(p.name)));
