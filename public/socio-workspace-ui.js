@@ -510,7 +510,7 @@
   // Ads inside a campaign use the same tenant/account-verified media endpoint as the featured ad.
   root.querySelectorAll('[data-px-ad-play]').forEach(button=>button.addEventListener('click',async()=>{
    const adId=button.dataset.pxAdPlay,holder=root.querySelector('[data-px-ad-media="'+adId+'"]');
-   if(!/^\\d{4,30}$/.test(adId||'')||!holder||button.disabled)return;
+   if(!/^\d{4,30}$/.test(adId||'')||!holder||button.disabled)return;
    button.disabled=true;button.textContent='Carregando…';
    try{
     const response=await cached(api,'/api/marketing/tools/ad-media?adId='+encodeURIComponent(adId),25000);
