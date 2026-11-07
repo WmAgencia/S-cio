@@ -132,6 +132,9 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
    const granted=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
    if(!active||generation!==thisGeneration){for(const track of granted.getTracks())track.stop();return;}
    stream=granted;
+   // If the browser revokes microphone permission or the device disconnects,
+   // release the entire voice session instead of leaving a stuck mic state.
+   for(const track of stream.getTracks())track.addEventListener?.('ended',stop,{once:true});
    context=new AudioContextImpl();
    if(context.state==='suspended')await context.resume();
    if(!active||generation!==thisGeneration){closeStream();return;}
