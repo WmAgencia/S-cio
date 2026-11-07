@@ -24,7 +24,9 @@ test('no unverified balance or exhaustion date is presented as financial fact',(
  const card=ui.slice(beginning,end);
  assert(beginning>0);
  assert(card.includes('Saldo disponível'));
- assert(card.includes('<strong>Não disponível</strong>'));
+ assert(card.includes("fundsAvailable?moneyMinor(funds,currencyCode):'Não disponível'"));
+ assert(card.includes('Saldo pré-pago confirmado'));
+ assert(card.includes('Abrir recarga na Meta'));
  assert(card.includes('Duração estimada'));
  assert(card.includes('<strong>—</strong>'));
  assert.doesNotMatch(card,/Math\.round\([^)]*balance|spend_cap|balance\s*[-+]/);

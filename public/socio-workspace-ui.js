@@ -321,13 +321,30 @@
    authorized?cached(api,'/api/reports/monitor',16000):Promise.resolve({data:null,ok:false}),
    ads?loadMeta(api,'today').catch(()=>null):Promise.resolve(null),
    ads?cached(api,'/api/google-ads/campaigns?period=today',60000):Promise.resolve({ok:false}),
+   ads?cached(api,'/api/marketing/tools/finance',45000):Promise.resolve({ok:false}),
   ];
-  const [dashboard,activity,exec,wa,monitor,meta,google]=await Promise.all(calls);
+  const [dashboard,activity,exec,wa,monitor,meta,google,metaBilling]=await Promise.all(calls);
   if(renderId!==renderSerial)return;
   const d=dashboard.data||{},ex=exec.data||{},m=ex.counts||{},realWa=Array.isArray(wa.data)?wa.data.filter(c=>c.status==='connected').length:0;
   const metaReady=meta?.insights.ok===true,googleReady=google.ok===true;
   const googleMicros=googleReady?Number(google.data?.summary?.costMicros||0)/1e6:null;
   const googleCode=google.data?.currencyCode||null;
+  const finance=metaBilling?.ok?metaBilling.data?.finance:null;
+  const metaBillingUrl=(()=>{
+   try{
+    const url=new URL(metaBilling?.data?.paymentsUrl);
+    return url.protocol==='https:'&&url.hostname==='adsmanager.facebook.com'?
+     url.href:null;
+   }catch{return null;}
+  })();
+  const moneyMinor=(minor,currency)=>{
+   if(!Number.isSafeInteger(minor)||minor<0||!/^[A-Z]{3}$/.test(currency||''))return '—';
+   try{
+    const digits=new Intl.NumberFormat('en-US',{style:'currency',currency})
+     .resolvedOptions().maximumFractionDigits;
+    return money(minor/Math.pow(10,digits),currency);
+   }catch{return '—';}
+  };
   const daily=activity.data?.points||[],received=daily.reduce((n,x)=>n+(Number(x.inbound)||0),0),sent=daily.reduce((n,x)=>n+(Number(x.outbound)||0),0);
   const connectedWa=Array.isArray(wa.data)?wa.data.filter(w=>w.status==='connected'):[];
   const products=Array.isArray(ex.popularProducts)?ex.popularProducts:[];
@@ -340,18 +357,31 @@
   const featuredIsRanked=Boolean(meta?.best);
   // A prepaid balance is not the Meta account's "balance" (often payable),
   // nor the daily campaign budget. Do not infer prepaid credit from spend.
-  const budgetHeaderItem=(provider,label,brand,connected,spent,currency)=>{
+  const budgetHeaderItem=(provider,label,brand,connected,spent,currency,billing)=>{
    const spending=connected?money(spent,currency):'—';
-   const stateLabel=!ads?'Sem permissão':connected?'Saldo não verificado':'Conta não autorizada';
+   const funds=billing?.finance?.availableFundsMinor;
+   const fundsAvailable=Number.isSafeInteger(funds)&&funds>=0;
+   const cap=billing?.finance?.spendCapRemainingMinor;
+   const capAvailable=Number.isSafeInteger(cap)&&cap>=0;
+   const currencyCode=billing?.finance?.currency||currency;
+   const prepay=billing?.finance?.isPrepaid===true;
+   const displayFunds=fundsAvailable?moneyMinor(funds,currencyCode):'Não disponível';
+   const status=!ads?'Sem permissão':!connected?'Conta não autorizada':
+    fundsAvailable?'Saldo pré-pago confirmado':prepay?'Saldo pré-pago não retornado':
+    billing?.finance?.isPrepaid===false?'Cobrança automática / faturamento':'Tipo de cobrança não identificado';
+   const limitText=capAvailable?'Limite de gastos restante: '+moneyMinor(cap,currencyCode):'';
+   const paymentUrl=billing?.paymentsUrl||null;
    return '<article class="px-budget-account" data-budget-provider="'+provider+'">'+
     '<div class="px-budget-account-main"><div class="px-budget-brand"><span class="px-brand-dot '+brand+'"></span>'+
-      '<strong>'+label+'</strong><small>'+stateLabel+'</small></div>'+
+      '<strong>'+label+'</strong><small>'+esc(status)+'</small></div>'+
       '<div class="px-budget-stats">'+
-       '<div class="px-budget-stat px-budget-balance"><span>Saldo disponível</span><strong>Não disponível</strong></div>'+
+       '<div class="px-budget-stat px-budget-balance"><span>Saldo disponível</span><strong>'+esc(displayFunds)+'</strong></div>'+
        '<div class="px-budget-stat"><span>Gasto hoje</span><strong>'+spending+'</strong></div>'+
        '<div class="px-budget-stat"><span>Duração estimada</span><strong>—</strong></div>'+
       '</div></div>'+
-    '<div class="px-budget-meter" role="img" aria-label="Saldo pré-pago não verificado; percentual restante indisponível"></div>'+
+    (limitText?'<small class="px-budget-limit">'+esc(limitText)+'</small>':'')+
+    (paymentUrl?'<a class="px-budget-billing-link" href="'+esc(paymentUrl)+'" target="_blank" rel="noopener noreferrer" title="Gerar recarga Pix no faturamento oficial da Meta, se disponível">Abrir recarga na Meta</a>':'')+
+    '<div class="px-budget-meter" role="img" aria-label="Percentual restante não verificado"></div>'+
     '</article>';
   };
 
@@ -360,7 +390,7 @@
     '<div class="px-budget-top-heading"><strong>Controle de verba</strong>'+
      '<small>Saldo pré-pago e previsão serão exibidos apenas quando confirmados pela plataforma.</small></div>'+
     '<div class="px-budget-top-grid">'+
-     budgetHeaderItem('meta_ads','Meta Ads','meta',metaReady,meta?.spend,meta?.currency)+
+     budgetHeaderItem('meta_ads','Meta Ads','meta',metaReady,meta?.spend,meta?.currency,metaBillingUrl?{finance,paymentsUrl:metaBillingUrl}:{finance})+
      budgetHeaderItem('google_ads','Google Ads','google',googleReady,googleMicros,googleCode)+
     '</div>'+
    '</section>'+

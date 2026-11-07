@@ -432,3 +432,10 @@ body .socio-catalog-clean #newProduct:hover,body .px-campaign-picker .btn.primar
 @media(max-width:1280px){.px-budget-account-main{align-items:flex-start;flex-wrap:wrap;gap:8px}.px-budget-brand{max-width:none}.px-budget-brand>small{width:auto;padding-left:3px}.px-budget-stats{flex-basis:100%}}
 @media(max-width:800px){.px-budget-top-grid{grid-template-columns:1fr}.px-budget-account-main{align-items:center}.px-budget-stats{flex-basis:auto}.px-budget-brand{max-width:32%}.px-budget-brand>small{width:100%;padding-left:17px}}
 @media(max-width:540px){.px-budget-top-heading>small{flex-basis:100%}.px-budget-account{padding:11px 12px}.px-budget-brand{flex-basis:100%;max-width:none}.px-budget-brand>small{width:auto;padding-left:3px}.px-budget-stats{grid-template-columns:repeat(3,minmax(0,1fr));flex-basis:100%;gap:8px}.px-budget-stat>strong{font-size:11px}.px-budget-stat>span{font-size:9px}}
+
+/* Direct link to the selected ad account's own billing hub, never a Socio PIX. */
+.px-budget-account{position:relative}
+.px-budget-billing-link{display:inline-flex;align-items:center;justify-content:center;align-self:flex-start;margin-top:7px;border-radius:7px;border:1px solid #ddcff7;background:#f6f1ff;padding:5px 9px;font-size:10px;line-height:1.2;color:#6540b4;text-decoration:none;font-weight:750;max-width:100%}
+.px-budget-billing-link:hover{background:#eee5ff;color:#50309b}
+.px-budget-billing-link:focus-visible{outline:2px solid #7242dc;outline-offset:2px}
+.px-budget-limit{display:block;margin-top:7px;color:#78688c;font-size:10px}
