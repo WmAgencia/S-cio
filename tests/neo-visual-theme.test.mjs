@@ -2,14 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const read=path=>readFileSync(new URL('../public/'+path,import.meta.url),'utf8');
-test('visual theme progressively upgrades to approved espresso dark without fictitious financial data',()=>{
- const old=read('neo-theme.css'),css=read('cloud-theme.css'),ember=read('ember-theme.css'),js=read('app.js'),html=read('index.html');
+test('visual theme now ends with Prospector-inspired light system without fictitious financial data',()=>{
+ const old=read('neo-theme.css'),css=read('cloud-theme.css'),ember=read('ember-theme.css'),prospector=read('prospector-socio.css'),js=read('app.js'),html=read('index.html');
  assert.match(old,/\.neo-dashboard\{display:grid/);
  assert.match(css,/--bg:#e9e6f1/);
  assert.match(css,/\.lucid-dashboard/);
  assert.ok(html.indexOf('/cloud-theme.css')>html.indexOf('/app.css'),'base contrast CSS loads first');
- assert.ok(html.indexOf('/ember-theme.css')>html.indexOf('/cloud-theme.css'),'approved dark theme loads last');
+ assert.ok(html.indexOf('/ember-theme.css')>html.indexOf('/cloud-theme.css'),'legacy styles kept');
+ assert.ok(html.indexOf('/prospector-socio.css')>html.indexOf('/ember-theme.css'),'Prospector final palette loads last');
  assert.match(ember,/--bg:#100907/);
+ assert.match(prospector,/--bg:#f7f6ff/);
  assert.match(ember,/\.ember-dashboard/);
  assert.doesNotMatch(html,/href="\/neo-theme\.css"/);
  assert.match(js,/Atividade de conversas/);
