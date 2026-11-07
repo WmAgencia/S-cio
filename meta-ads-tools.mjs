@@ -46,15 +46,59 @@ async function availablePages(c){
  for(const id of ids){let name='Página '+id;try{const page=await graph(c,'/'+id,{fields:'id,name'});if(page.name)name=page.name;}catch{}pages.push({id,name});}
  return {data:pages};
 }
+// Meta AdAccount.balance is an amount OWED, never the advertiser's wallet.
+ // Only a typed STORED_BALANCE amount from a prepay account may be surfaced
+ // as available funds. Spend-cap remaining is a separate delivery constraint.
+export function normalizeMetaAccountFinance(account){
+ const minor=v=>{
+  if(v===undefined||v===null||v==='')return null;
+  const str=String(v);
+  if(!/^\\d{1,16}$/.test(str))return null;
+  const n=Number(str);return Number.isSafeInteger(n)?n:null;
+ };
+ const detail=account?.funding_source_details;
+ const sources=Array.isArray(detail)?detail:detail?[detail]:[];
+ const stored=sources.filter(item=>String(item?.type)==='20');
+ // Never treat total/original deposit as the current balance.
+ const prepaidMinor=account?.is_prepay_account===true&&stored.length===1?
+  minor(stored[0]?.amount):null;
+ const cap=minor(account?.spend_cap),spent=minor(account?.amount_spent);
+ const remainingCapMinor=cap!==null&&cap>0&&spent!==null?
+  Math.max(0,cap-spent):null;
+ const isPrepaid=account?.is_prepay_account===true;
+ return {
+  currency:/^[A-Z]{3}$/.test(account?.currency||'')?account.currency:null,
+  isPrepaid:isPrepaid?true:account?.is_prepay_account===false?false:null,
+  availableFundsMinor:prepaidMinor,
+  availableFundsSource:prepaidMinor!==null?'meta_stored_balance':null,
+  spendCapRemainingMinor:remainingCapMinor,
+  spendCapMinor:cap!==null&&cap>0?cap:null,
+  amountDueMinor:minor(account?.balance),
+  accountStatus:Number.isInteger(Number(account?.account_status))?
+   Number(account.account_status):null,
+  checkedAt:new Date().toISOString()
+ };
+}
 export async function readAdsTool(pool,a,kind,input={},options={}){
  const c=await context(pool,a,options),id=c.account.id;
  const fields={campaigns:'id,name,status,effective_status,objective,daily_budget,lifetime_budget',adsets:'id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,targeting',ads:'id,name,campaign_id,adset_id,status,effective_status,creative{id,name,image_url,thumbnail_url,video_id,object_story_spec}',images:'hash,name,url,width,height',pages:'id,name'};
  if(kind==='finance'){
-  const data=await graph(c,'/'+id,{fields:'id,name,currency,amount_spent,spend_cap,account_status,business{id}'});
+  const core='id,name,currency,amount_spent,spend_cap,balance,is_prepay_account,account_status,business{id}';
+  let data;
+  try{
+   data=await graph(c,'/'+id,{fields:core+',funding_source_details'});
+  }catch(error){
+   // Some ad-read tokens cannot inspect the funding source. Keep the rest of
+   // the finance card operational without claiming an unreadable balance.
+   data=await graph(c,'/'+id,{fields:core});
+  }
+  const finance=normalizeMetaAccountFinance(data);
   const billing=new URL('https://adsmanager.facebook.com/billing_hub/payment_settings/');
   billing.searchParams.set('asset_id',id.slice(4));billing.searchParams.set('payment_account_id_from_jsmodule',id.slice(4));billing.searchParams.set('placement','ads_manager');
   if(numeric(data.business?.id))billing.searchParams.set('business_id',data.business.id);
-  return {account:data,paymentsUrl:billing.href,manualPayment:true};
+  const {funding_source_details:unused,...publicAccount}=data;
+  return {account:publicAccount,finance,paymentsUrl:billing.href,manualPayment:true,
+   paymentLinkType:'meta_billing_settings',pixCodeAvailable:false};
  }
  if(kind==='pages')return listing(await availablePages(c));
  if(kind==='insights'){
