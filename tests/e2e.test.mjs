@@ -401,7 +401,7 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const subordinateAttempt=await call('/api/team','POST',{
   name:'Promovido indevidamente',email:'unauthorized-admin@example.test',role:'admin',password:'SenhaAdminNaoPermitido2026!'
  },subordinateCookie,subordinateCsrf);
- assert.equal(subordinateAttempt.status,403,'Tenant admins must not grant administrator privileges');
+ assert.equal(subordinateAttempt.status,403,'Tenant admins may invite other administrators');
  const subordinateEdit=await call('/api/team/'+employeeId,'PATCH',{role:'admin'},subordinateCookie,subordinateCsrf);
  assert.equal(subordinateEdit.status,403,'Tenant admins cannot change another member role');
  const ownerPromote=await call('/api/team/'+employeeId,'PATCH',{role:'admin'},betaCookie,betaCsrf);
