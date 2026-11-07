@@ -23,8 +23,9 @@ function toast(message,error=false){
  const el=$('#toast');el.textContent=message;el.className='toast'+(error?' error':'');
  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.add('hidden'),5000);
 }
-async function api(path,method='GET',body,headers={}){
+async function api(path,method='GET',body,headers={},options={}){
  const opts={method,credentials:'same-origin',headers:{'Accept':'application/json',...headers}};
+ if(options?.signal)opts.signal=options.signal;
  if(body!==undefined){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
  if(method!=='GET'&&state.csrf)opts.headers['X-CSRF-Token']=state.csrf;
  const resp=await fetch(path,opts);
