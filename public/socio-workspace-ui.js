@@ -46,6 +46,14 @@
  const posterFromAd=ad=>mediaUrl(ad?.creative?.image_url||
   ad?.creative?.object_story_spec?.video_data?.image_url||
   ad?.creative?.thumbnail_url);
+ const trustedMetaPreview=value=>{
+  try{
+   const u=new URL(value);
+   return u.protocol==='https:'&&u.hostname==='www.facebook.com'&&
+    u.pathname==='/ads/api/preview_iframe.php'&&
+    !/[?&](?:access_token|appsecret_proof|token)=/i.test(u.search)?u.href:null;
+  }catch{return null;}
+ };
  const watchUrl=value=>{
   try{
    const url=new URL(value);
@@ -340,7 +348,7 @@
      else holder.insertAdjacentHTML('afterbegin',posterView(poster,'Miniatura do anúncio'));
     }
     if(media.quality==='thumbnail_only')holder.classList.add('px-media-lowres');
-    if(!mediaUrl(media.videoUrl)&&!watchUrl(media.watchUrl)){
+    if(!mediaUrl(media.videoUrl)&&!trustedMetaPreview(media.previewUrl)&&!watchUrl(media.watchUrl)){
      if(button){button.textContent='Sem vídeo disponível';button.disabled=true;}
     }
     return media;
@@ -361,6 +369,16 @@
      if(poster)el.poster=poster;
      el.src=video;holder.replaceChildren(el);
      void el.play().catch(()=>{/* Native player still exposes its play control. */});
+    }else if(trustedMetaPreview(result.previewUrl)){
+     const frame=document.createElement('iframe');
+     frame.className='px-meta-preview-frame';
+     frame.title='Visualizar anúncio '+adName;
+     frame.src=trustedMetaPreview(result.previewUrl);
+     frame.loading='lazy';
+     frame.referrerPolicy='no-referrer';
+     frame.setAttribute('sandbox','allow-scripts allow-same-origin allow-presentation allow-popups');
+     frame.setAttribute('allow','autoplay; encrypted-media; picture-in-picture');
+     holder.replaceChildren(frame);
     }else{
      const external=watchUrl(result.watchUrl);
      if(external){
