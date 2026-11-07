@@ -624,10 +624,16 @@ async function showWaQr(channelId){
 
 
 const catalogPrice=cents=>brl(Number(cents||0));
+// Accept the Brazilian decimal separator without modifying a saved price twice.
 const centsFromInput=text=>{
- const raw=String(text??'').trim().replace(',','.');
- if(!/^\d{1,7}(\.\d{1,2})?$/.test(raw))throw Error('Preço inválido. Use, por exemplo, 129.90.');
- return Math.round(Number(raw)*100);
+ const raw=String(text??'').trim().replace(/^R\\$\\s*/i,'').replace(/\\s/g,'');
+ let normalized;
+ if(/^\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,2})?$/.test(raw))normalized=raw.replace(/\\./g,'').replace(',','.');
+ else if(/^\\d{1,7}(?:[.,]\\d{1,2})?$/.test(raw))normalized=raw.replace(',','.');
+ else throw Error('Preço inválido. Use, por exemplo, 129,90.');
+ const n=Number(normalized);
+ if(!Number.isFinite(n)||n<0||Math.round(n*100)>=100000000)throw Error('Valor fora do limite permitido.');
+ return Math.round(n*100);
 };
 const stockFromInput=text=>{
  const value=String(text??'').trim();
@@ -657,15 +663,35 @@ async function compressCatalogImage(file){
   });
  }finally{bitmap.close();}
 }
+const catalogTypes=['Cor','Tamanho','Modelo','Outro'];
+const catalogColors=['Amarelo','Azul','Azul-marinho','Bege','Branco','Cinza','Dourado','Laranja','Marrom','Prata','Preto','Rosa','Roxo','Verde','Vermelho','Vinho'];
+const catalogSizes=['PP','P','M','G','GG','XG','XXG','Único','34','36','38','40','42','44','46','48','50','52'];
+const variantParts=name=>{
+ const raw=String(name||'').trim(),m=/^(Cor|Tamanho|Modelo|Outro)\\s*[·:-]\\s*(.+)$/i.exec(raw);
+ if(!m)return {kind:'Outro',value:raw};
+ return {kind:catalogTypes.find(x=>x.toLowerCase()===m[1].toLowerCase())||'Outro',value:m[2]};
+};
 function catalogVariantRow(variant={}){
+ const {kind,value}=variantParts(variant.name||'');
  return '<div class="catalog-variant-row" data-variant-row>'+
-  '<input data-variant-name aria-label="Nome da variação" maxlength="100" placeholder="Tamanho, cor ou modelo" value="'+e(variant.name||'')+'">'+
-  '<input data-variant-price aria-label="Preço da variação" type="number" min="0" step="0.01" placeholder="Preço R$" value="'+e(variant.price_cents===undefined?'':(variant.price_cents/100).toFixed(2))+'">'+
+  '<select data-variant-type aria-label="Tipo de variação">'+catalogTypes.map(x=>
+   '<option value="'+e(x)+'"'+(kind===x?' selected':'')+'>'+e(x)+'</option>').join('')+'</select>'+
+  '<input data-variant-value aria-label="Valor da variação" required maxlength="80" list="'+(kind==='Cor'?'catalogColorSuggestions':kind==='Tamanho'?'catalogSizeSuggestions':'catalogGenericSuggestions')+'" placeholder="'+(kind==='Cor'?'Ex.: Preto':kind==='Tamanho'?'Ex.: 40':'Ex.: Premium')+'" value="'+e(value)+'">'+
+  '<input data-variant-price aria-label="Preço da variação" type="text" inputmode="decimal" maxlength="18" placeholder="Preço R$" value="'+e(variant.price_cents===undefined?'':(variant.price_cents/100).toFixed(2).replace('.',','))+'">'+
   '<input data-variant-stock aria-label="Estoque da variação" type="number" min="0" step="1" placeholder="Estoque" value="'+e(variant.stock_quantity??'')+'">'+
   '<input data-variant-sku aria-label="SKU da variação" maxlength="50" placeholder="SKU opcional" value="'+e(variant.sku||'')+'">'+
   '<button type="button" class="btn sm ghost" data-remove-variant aria-label="Excluir variação">×</button>'+
  '</div>';
 }
+const readVariantRows=(root,basePrice)=>[...root.querySelectorAll('[data-variant-row]')].map(row=>{
+ const kind=row.querySelector('[data-variant-type]')?.value||'Outro';
+ const value=row.querySelector('[data-variant-value]')?.value.trim()||'';
+ if(!catalogTypes.includes(kind)||!value||value.length>80)throw Error('Informe um valor para cada variação, como Preto, 40 ou Premium.');
+ const price=row.querySelector('[data-variant-price]')?.value.trim()||basePrice;
+ const sku=row.querySelector('[data-variant-sku]')?.value||'';
+ return {name:kind+' · '+value,sku,priceCents:centsFromInput(price),
+  stockQuantity:stockFromInput(row.querySelector('[data-variant-stock]')?.value),active:true};
+});
 async function products(selected=null){
  const [list,storage]=await Promise.all([api('/api/products'),api('/api/products/storage')]);
  if(selected&&selected!=='new'&&!list.some(p=>p.id===selected))selected=null;
