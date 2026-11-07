@@ -576,7 +576,7 @@
    };
    const enqueue=(holder)=>{
     const id=holder?.dataset?.pxAdMedia,ad=byId.get(String(id));
-    if(!ad||!/^\\d{4,30}$/.test(String(id)))return;
+    if(!ad||!/^\d{4,30}$/.test(String(id)))return;
     queue.push([holder,ad]);run();
    };
    const holders=[...root.querySelectorAll('.px-ad-creative-media[data-px-ad-media]')];
