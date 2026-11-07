@@ -2,6 +2,7 @@ import {requirePermission} from './team-permissions.mjs';
 import {assertApiFeature} from './tenant-features.mjs';
 import {resolveSelectedOfficialAccount} from './meta-official.mjs';
 import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
+import {readAdsTool} from './meta-ads-tools.mjs';
 import {assessMetaFunds} from './meta-billing-state.mjs';
 
 function access(a){
@@ -70,4 +71,20 @@ export async function monitorMetaBilling(pool,browserService){
   }
  }
  return {checked};
+}
+
+export async function readMetaFinanceWithObservation(pool,a,options={}){
+ const result=await readAdsTool(pool,a,'finance',{},options);
+ const observed=await metaBillingStatus(pool,a,result.account.id);
+ result.balanceObservation=observed.observation;result.balanceAlert=observed.alert;
+ result.billingNeedsLogin=observed.needsLogin===true;
+ if(result.finance.availableFundsMinor===null&&observed.alert.state!=='unknown'){
+  result.finance.availableFundsMinor=observed.observation.availableFundsMinor;
+  result.finance.availableFundsSource=observed.observation.source;
+  result.finance.checkedAt=observed.observation.observedAt;
+  result.finance.validUntil=observed.observation.validUntil;
+  result.finance.availableFundsStatus='observed_browser';
+ }
+ result.assistedPix={supported:result.finance.currency==='BRL',requiresBillingSession:true,automaticPayment:false};
+ return result;
 }
