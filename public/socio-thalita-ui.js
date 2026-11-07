@@ -104,7 +104,7 @@
  }
  function unmount(){closeVoice();instance?.remove();instance=null;api=null;me=null;csrf=null;turnRunId=null;}
  function mount({client,auth,csrfToken}){
-  if(!auth?.user||!(auth.user.permissions||[]).includes('inbox.read')){unmount();return;}
+  if(!auth?.user||auth.tenant?.features?.ai===false){unmount();return;}
   if(instance){
    if(me?.tenant?.id!==auth?.tenant?.id){unmount();}
    else{api=client;me=auth;csrf=csrfToken;return;}
