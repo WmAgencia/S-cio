@@ -326,3 +326,42 @@ body .flow-image-card textarea{background:#fff!important;color:#312342!important
 .socio-user-header{display:flex;justify-content:flex-end;margin:0 0 16px}
 .socio-team-controls select{border:1px solid #ddd2f0;border-radius:9px;background:#fff;color:#44315e;padding:8px;font-size:12px;max-width:185px}
 .sidebar-bottom>.nav-item[data-view="settings"]{width:100%;display:flex;align-items:center;gap:10px;margin-bottom:8px}
+
+/* Prospector training review parity: concise actionable cards instead of a huge Markdown-only panel. */
+.ps-review-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:13px;margin:17px 0}
+.ps-review-card{display:flex;flex-direction:column;gap:9px;min-width:0;border:1px solid #e8e5f0;border-radius:16px;padding:17px;background:#fff;box-shadow:0 4px 18px #29185509;transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+.ps-review-card:hover{transform:translateY(-2px);border-color:#d6c9f6;box-shadow:0 9px 25px #3a23721a}
+.ps-review-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#827899;font-size:10px}
+.ps-review-symbol{display:grid;place-items:center;width:30px;height:30px;border-radius:10px;background:#efe9ff;color:#6a3fd2;font-size:17px}
+.ps-review-card h4{font-size:14px;line-height:1.35;color:#2d204b;margin:0;overflow-wrap:anywhere}
+.ps-review-card p{font-size:12px;line-height:1.6;color:#7c718f;margin:0;flex:1;overflow-wrap:anywhere}
+.ps-review-card details{border-top:1px solid #eee9f6;margin-top:6px;padding-top:9px}
+.ps-review-card summary,.ps-markdown-advanced>summary{cursor:pointer;color:#6239c2;font-size:11px;font-weight:750}
+.ps-review-card details pre{white-space:pre-wrap;word-break:break-word;font:11px/1.65 ui-monospace,monospace;background:#f9f6ff;padding:12px;border-radius:9px;color:#403059;max-height:220px;overflow:auto}
+.ps-review-card-actions{display:flex;gap:8px;flex-wrap:wrap;padding-top:6px}
+.ps-review-card-actions .btn{flex:1;min-height:32px}
+.ps-delete-action{color:#a94b62!important;background:#fff5f7!important;border-color:#f5dbe1!important}
+.ps-markdown-advanced{margin-top:18px;background:#faf8ff;border-radius:12px;padding:12px 15px;border:1px solid #e9e2f9}
+.ps-markdown-advanced textarea{margin-top:14px;display:block;width:100%;box-sizing:border-box}
+.ps-card-dialog{width:min(560px,calc(100vw - 24px));max-height:90dvh;padding:0;overflow:auto;border:1px solid #e6dff4;border-radius:17px;background:#fff;color:#342447;box-shadow:0 25px 90px #1b103d50}
+.ps-card-dialog::backdrop{background:#21133488;backdrop-filter:blur(4px)}
+.ps-card-dialog form{padding:22px;display:flex;flex-direction:column;gap:14px}
+.ps-card-dialog header,.ps-card-dialog footer{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.ps-card-dialog header h4{margin:0;color:#30204b;font-size:18px}
+.ps-card-dialog header button{border:0;background:#f1edfa;color:#6f5f85;border-radius:8px;width:31px;height:31px;cursor:pointer}
+.ps-card-dialog label{font-size:12px;font-weight:750;color:#554467}
+.ps-card-dialog textarea{resize:vertical;width:100%;min-height:170px;box-sizing:border-box;background:#fff;color:#352644;border:1px solid #ded3ef;border-radius:11px;padding:13px;font:12px/1.6 ui-monospace,monospace}
+.ps-card-dialog footer{justify-content:flex-end}
+@media(max-width:620px){.ps-review-cards{grid-template-columns:1fr}.ps-card-dialog form{padding:16px}}
+/* Match Prospector's light, purple messenger proportions while preserving the Sócio WhatsApp backend. */
+body .wa-inbox{border-radius:17px!important;background:#fff!important;border-color:#e9e4f7!important;box-shadow:0 7px 23px #4b2bbd0b!important}
+body .wa-inbox-side{background:#fff!important}
+body .wa-inbox-main{background:#f8f5ff!important}
+body .wa-inbox-side-head{padding:21px 20px 15px!important}
+body .wa-inbox-items .wa-list-row{min-height:72px!important;padding:12px 15px!important}
+body .wa-inbox-search{margin-inline:17px!important;border-radius:12px!important}
+body .wa-thread-header{border-bottom:1px solid #eee6fd!important}
+body .wa-inbox .wa-chat-avatar{background:#e8dfff!important;color:#5e35d3!important;border-color:#e2d4fc!important}
+body .wa-inbox .wa-mode-btn.active{background:#eee8ff!important;border-color:#d9c8ff!important;color:#5129c3!important}
+body .wa-inbox .wa-bubble{max-width:min(85%,520px)!important}
+@media(max-width:760px){body .wa-inbox{border-radius:12px!important}body .wa-inbox-side-head{padding:16px!important}}

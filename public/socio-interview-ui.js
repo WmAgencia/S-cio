@@ -104,7 +104,17 @@
   const [i,v]=await Promise.all([api('/api/training/interview'),api('/api/training/versions')]);
   state=i||{interview:null};versions=Array.isArray(v)?v:[];paint();
  }
- const getDraft=()=>versions.find(x=>x.id===state?.interview?.draftVersionId)||null;
+ const getDraft=()=>versions.find(x=>x.status==='draft')||versions.find(x=>x.id===state?.interview?.draftVersionId)||versions.find(x=>x.status==='approved')||null;
+ const trainingCards=markdown=>{
+  const text=String(markdown||'');
+  const parts=text.split(/(?=^#{1,3}\s+[^\n]+)/m).filter(Boolean);
+  return parts.map((raw,index)=>{
+   const lines=raw.trim().split('\n');
+   const title=String(lines[0]||'').replace(/^#{1,3}\s+/,'').trim()||'Orientações gerais';
+   const summary=lines.slice(1).join(' ').replace(/[*_`>#-]/g,' ').replace(/\s+/g,' ').trim().slice(0,170);
+   return {index,raw,title,summary};
+  });
+ };
  const button=(text,attr='',className='btn soft')=>'<button type="button" class="'+className+'" '+attr+'>'+escape(text)+'</button>';
  const welcome=()=>'<div class="ps-interview-welcome"><div class="ps-avatar">✳</div>'+
   '<span class="ps-kicker">TREINAMENTO GUIADO · ESTILO PROSPECTOR</span>'+
@@ -143,7 +153,17 @@
   const approved=draft.status==='approved',editable=draft.status==='draft'&&canEdit();
   return '<section class="ps-review" aria-label="Revisão do manual"><div class="ps-review-head"><div><span class="ps-kicker">REVISÃO DO PROPRIETÁRIO</span><h3>Manual de atendimento</h3><p>Versão '+escape(draft.version)+' · '+(approved?'Aprovada':'Rascunho privado. Nada será ativado sem aprovação.')+'</p></div>'+
    '<span class="ps-pill '+(approved?'approved':'')+'">'+(approved?'Ativo':'Aguardando revisão')+'</span></div>'+
-   '<textarea id="psDraftMarkdown" rows="15" maxlength="22000" aria-label="Manual Markdown" '+(editable?'':'readonly')+'>'+escape(draft.markdown)+'</textarea>'+
+   '<div class="ps-review-cards" aria-label="Orientações da IA">'+trainingCards(draft.markdown).map(card=>
+    '<article class="ps-review-card"><div class="ps-review-card-top"><span class="ps-review-symbol">✳</span><small>Orientação '+(card.index+1)+'</small></div>'+
+    '<h4>'+escape(card.title)+'</h4><p>'+escape(card.summary||'Orientações detalhadas disponíveis para revisão.')+'</p>'+
+    '<details><summary>Ler orientação completa</summary><pre>'+escape(card.raw)+'</pre></details>'+
+    (canEdit()?'<div class="ps-review-card-actions"><button type="button" class="btn sm soft" data-ps-card-edit="'+card.index+'">Editar</button>'+
+    '<button type="button" class="btn sm soft ps-delete-action" data-ps-card-delete="'+card.index+'">Excluir</button></div>':'')+'</article>').join('')+'</div>'+
+   '<details class="ps-markdown-advanced"><summary>Editar manual completo em Markdown</summary>'+
+   '<textarea id="psDraftMarkdown" rows="15" maxlength="22000" aria-label="Manual Markdown" '+(editable?'':'readonly')+'>'+escape(draft.markdown)+'</textarea></details>'+
+   '<dialog id="psCardDialog" class="ps-card-dialog"><form method="dialog"><header><h4>Editar orientação</h4><button type="submit" value="cancel" aria-label="Fechar">×</button></header>'+
+   '<label for="psCardText">Conteúdo da orientação</label><textarea id="psCardText" rows="9" maxlength="22000"></textarea>'+
+   '<footer><button type="submit" value="cancel" class="btn soft">Cancelar</button><button type="button" class="btn primary" data-ps-card-save>Salvar orientação</button></footer></form></dialog>'+
    (editable?'<div class="ps-review-actions">'+button('Salvar alterações','data-ps-save')+button('Aprovar manual','data-ps-approve','btn primary')+'</div>':
     '<p class="ps-review-note">'+(approved?'O manual está disponível para a IA da sua empresa.':'Somente o proprietário ou administrador pode aprovar.')+'</p>')+'</section>';
  };
@@ -168,6 +188,41 @@
    transcriptText='';await refresh();
   }));
   host.querySelector('[data-ps-record]')?.addEventListener('click',()=>void toggleLiveVoice());
+  let editingCardIndex=null;
+  const dialog=host.querySelector('#psCardDialog');
+  host.querySelectorAll('[data-ps-card-edit]').forEach(b=>b.addEventListener('click',()=>{
+   const draft=getDraft(),cards=trainingCards(draft?.markdown),card=cards[Number(b.dataset.psCardEdit)];
+   if(!card||!canEdit()||!dialog)return;
+   editingCardIndex=card.index;
+   dialog.querySelector('#psCardText').value=card.raw;
+   dialog.showModal();
+  }));
+  const saveCard=async(index,newText,remove=false)=>{
+   const current=getDraft(),cards=trainingCards(current?.markdown),card=cards[index];
+   if(!current||!canEdit()||!card)throw Error('Orientação indisponível.');
+   if(remove)cards.splice(index,1);else cards[index].raw=String(newText||'').trim()+'\n\n';
+   const markdown=cards.map(item=>item.raw).join('').trim();
+   if(markdown.length<20||markdown.length>22000)throw Error('O manual precisa conservar pelo menos 20 caracteres de orientações.');
+   let draftId=current.id;
+   if(current.status==='approved'){
+    const fork=await api('/api/training/versions/'+current.id+'/fork','POST',{});
+    draftId=fork.versionId;
+   }
+   await api('/api/training/versions/'+draftId+'/edit','POST',{markdown});
+   toast(remove?'Orientação excluída do novo rascunho. Aprove o manual para aplicar.':'Orientação salva no rascunho. Aprove o manual para aplicar.');
+   await refresh();
+  };
+  host.querySelectorAll('[data-ps-card-delete]').forEach(b=>b.addEventListener('click',()=>{
+   if(!window.confirm('Excluir esta orientação do próximo manual? O manual ativo permanece intacto até aprovação.'))return;
+   void run(()=>saveCard(Number(b.dataset.psCardDelete),'',true));
+  }));
+  host.querySelector('[data-ps-card-save]')?.addEventListener('click',()=>{
+   const value=dialog?.querySelector('#psCardText')?.value||'';
+   if(editingCardIndex===null)return;
+   const index=editingCardIndex;
+   if(dialog.open)dialog.close();
+   void run(()=>saveCard(index,value));
+  }));
   host.querySelector('[data-ps-save]')?.addEventListener('click',()=>run(async()=>{
    const draft=getDraft();if(!draft||draft.status!=='draft')return;
    await api('/api/training/versions/'+draft.id+'/edit','POST',{markdown:host.querySelector('#psDraftMarkdown').value});
