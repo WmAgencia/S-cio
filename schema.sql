@@ -766,6 +766,14 @@ CREATE TABLE IF NOT EXISTS ads_oauth_tokens (
 );
 CREATE INDEX IF NOT EXISTS ads_oauth_tokens_owner ON ads_oauth_tokens(tenant_id,user_id);
 -- API Anything: browser sessions are scoped to both company and signed-in user.
+-- Google Flow uses one owner account; job ownership remains tenant-scoped.
+CREATE TABLE IF NOT EXISTS flow_image_jobs (
+ job_id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS flow_image_jobs_tenant ON flow_image_jobs(tenant_id,created_at DESC);
 CREATE TABLE IF NOT EXISTS meta_browser_connections (
  id text PRIMARY KEY CHECK (id ~ '^[a-f0-9]{32}$'),
  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,

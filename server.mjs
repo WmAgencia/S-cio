@@ -48,9 +48,11 @@ import {reserveAdVideo,listAdVideos,storeAdVideo,adVideoExportUrl,resolveSignedA
 import {handleAdsMediaMcp} from './ads-media-mcp.mjs';
 import {handleMediaOAuth} from './ads-media-oauth.mjs';
 import {createMetaBrowser} from './meta-browser.mjs';
+import {createFlowImages} from './flow-images.mjs';
 import {startLocalPairing,claimLocalPairing,authorizeLocalConnector,localHeartbeat,pollLocalJob,finishLocalJob,localConnectionStatus,enqueueLocalJob,getLocalJob,disconnectLocalConnector} from './meta-local.mjs';
 import {connectorBundle} from './meta-connector/bundle.mjs';
 const metaBrowser=createMetaBrowser();
+const flowImages=createFlowImages();
 
 const PORT=Number(process.env.PORT||3000);
 const DATABASE_URL=process.env.DATABASE_URL;
@@ -249,7 +251,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/flow-images-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -401,6 +403,23 @@ async function handle(req,res){
   csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
  // Feature restrictions are server-side. Hidden navigation never constitutes authorization.
  assertApiFeature(a.features,pathname);
+
+ if(pathname==='/api/flow/status'&&method==='GET')return json(res,200,await flowImages.status(a));
+ if(pathname==='/api/flow/images'&&method==='POST'){
+  if(!limiter(simulationAttempts,'flow-images:'+a.user_id,60000,12))throw fail(429,'Aguarde antes de gerar novamente.');
+  const result=await flowImages.create(pool,a,await body(req,32768),req.headers['idempotency-key']);
+  await audit(a,'flow.image.requested',{jobId:result.id});
+  return json(res,202,result);
+ }
+ const flowImage=pathname.match(/^\/api\/flow\/images\/([a-f0-9-]{36})(\/content)?$/);
+ if(flowImage&&method==='GET'){
+  if(!flowImage[2])return json(res,200,await flowImages.read(pool,a,flowImage[1]));
+  const image=await flowImages.content(pool,a,flowImage[1]);
+  const ext={'image/png':'png','image/jpeg':'jpg','image/webp':'webp'}[image.mime];
+  res.writeHead(200,{'Content-Type':image.mime,'Content-Length':image.bytes.length,
+   'Content-Disposition':`attachment; filename="socio-${flowImage[1]}.${ext}"`,'Cache-Control':'private, no-store'});
+  return res.end(image.bytes);
+ }
 
  if(pathname==='/api/marketing/attribution/links'&&method==='GET')
   return json(res,200,await listTrackingLinks(pool,a));
@@ -1814,6 +1833,6 @@ async function main(){
   else res.end();
  }));
  server.listen(PORT,'0.0.0.0',()=>console.log('Socio listening on '+PORT));
- process.on('SIGTERM',()=>server.close(()=>metaBrowser.close().then(()=>pool.end()).then(()=>process.exit(0))));
+ process.on('SIGTERM',()=>server.close(()=>Promise.allSettled([metaBrowser.close(),flowImages.close()]).then(()=>pool.end()).then(()=>process.exit(0))));
 }
 main().catch(e=>{console.error('startup failed',e.message);process.exit(1);});

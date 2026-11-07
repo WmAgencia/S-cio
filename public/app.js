@@ -191,6 +191,7 @@ async function changeView(next,conversationId=null){
  if(next==='reports'&&!access.has('audit.read'))next='overview';
  if(next==='instagram')next='marketing';
  if(next==='marketing'&&!access.has('marketing.read'))next='overview';
+ globalThis.SocioFlowImages?.dispose();
  globalThis.SocioMetaBrowser?.dispose();
  globalThis.SocioMetaLocal?.dispose();
  state.view=next;
@@ -203,7 +204,10 @@ async function changeView(next,conversationId=null){
   if(next==='channels')await channels();
   if(next==='products')await products();
   if(next==='sales'||next==='quotes')await window.SocioSales.render({api,e,toast,view,me:state.me,navigate:changeView,mode:next});
-  if(next==='training')await (state.aiTab==='agent'?agent():training());
+  if(next==='training'){
+   if(state.aiTab==='images'){await window.SocioFlowImages.render({root:view,api,me:state.me});mountAiGuideTabs();}
+   else await (state.aiTab==='agent'?agent():training());
+  }
   if(next==='inbox'){await inbox();if(conversationId)await openThread(conversationId);}
   if(next==='marketing')await marketing();
   if(next==='team')await team();
@@ -838,12 +842,13 @@ async function products(selected=null){
 
 function mountAiGuideTabs(){
  if(state.view!=='training')return;
- const selected=state.aiTab==='agent'?'agent':'training';
+ const selected=['agent','images'].includes(state.aiTab)?state.aiTab:'training';
  const tabs='<div class="ai-guide-head"><div class="ai-guide-title"><span class="eyebrow">CENTRAL DE INTELIGÊNCIA</span>'+
- '<h1>Inteligência artificial</h1><p>Treine, configure e teste o seu Sócio em um só lugar.</p></div>'+
+ '<h1>Inteligência artificial</h1><p>Treine seu Sócio e crie imagens em um só lugar.</p></div>'+
  '<div class="ai-guide-tabs" role="tablist" aria-label="Áreas da inteligência artificial">'+
  '<button type="button" role="tab" data-ai-tab="training" aria-selected="'+(selected==='training')+'" class="'+(selected==='training'?'active':'')+'">Aprendizado e análises</button>'+
- '<button type="button" role="tab" data-ai-tab="agent" aria-selected="'+(selected==='agent')+'" class="'+(selected==='agent'?'active':'')+'">Personalidade e testes</button></div></div>';
+ '<button type="button" role="tab" data-ai-tab="agent" aria-selected="'+(selected==='agent')+'" class="'+(selected==='agent'?'active':'')+'">Personalidade e testes</button>'+
+ '<button type="button" role="tab" data-ai-tab="images" aria-selected="'+(selected==='images')+'" class="'+(selected==='images'?'active':'')+'">Criar imagens</button></div></div>';
  view.insertAdjacentHTML('afterbegin',tabs);
  // The content inside each tab retains its original API calls and handlers.
  view.querySelectorAll('[data-ai-tab]').forEach(button=>button.addEventListener('click',()=>{

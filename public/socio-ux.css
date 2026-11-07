@@ -227,3 +227,5 @@
  .socio-training-center h2{font-size:22px}
 }
 @media(prefers-reduced-motion:reduce){.ai-guide-tabs button{transition:none}}
+
+.flow-image-card{max-width:900px;margin:0 auto}.flow-image-card textarea{display:block;width:100%;box-sizing:border-box;resize:vertical;margin:12px 0 18px;padding:14px;font:inherit;line-height:1.6;color:inherit;background:var(--surface,#20150e);border:1px solid var(--border,#68452f);border-radius:12px}.flow-image-actions{display:flex;gap:10px;flex-wrap:wrap}.flow-image-result{display:block;width:100%;height:auto;border-radius:14px;margin:18px 0}.flow-image-card textarea:focus-visible{outline:2px solid #efb078;outline-offset:3px}
