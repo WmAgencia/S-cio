@@ -44,7 +44,7 @@ import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
 import {getTenantBusinessMonitor,getMasterSaasMonitor} from './socio-business-monitor.mjs';
 import {readSubscriptionStatus,createSubscriptionCheckout,createBillingPortal,processSubscriptionWebhook} from './socio-subscriptions.mjs';
-import {startGoogleAdsOAuth,finishGoogleAdsOAuth,googleAdsStatus,listGoogleAdsAccounts,selectGoogleAdsAccount,disconnectGoogleAds} from './socio-google-ads.mjs';
+import {startGoogleAdsOAuth,finishGoogleAdsOAuth,googleAdsStatus,listGoogleAdsAccounts,selectGoogleAdsAccount,disconnectGoogleAds,readGoogleAdsCampaigns} from './socio-google-ads.mjs';
 import {createTrackingSite,listTrackingSites,enableTrackingSite,receiveSignedSiteEvent} from './socio-site-tracking.mjs';
 import {integrationReadiness} from './socio-integrations-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
@@ -1037,6 +1037,8 @@ async function handle(req,res){
   return json(res,200,await startGoogleAdsOAuth(pool,a));
  if(method==='GET'&&pathname==='/api/google-ads/accounts')
   return json(res,200,await listGoogleAdsAccounts(pool,a));
+ if(method==='GET'&&pathname==='/api/google-ads/campaigns')
+  return json(res,200,await readGoogleAdsCampaigns(pool,a));
  if(method==='POST'&&pathname==='/api/google-ads/accounts/select'){
   const {data}=await body(req,1500);
   return json(res,200,await selectGoogleAdsAccount(pool,a,data.accountId));
