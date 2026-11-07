@@ -52,7 +52,7 @@
     '<aside class="wa-inbox-side" aria-label="Lista de conversas">'+
      '<header class="wa-inbox-side-head"><div><span class="wa-inbox-eyebrow">SEU ATENDIMENTO</span>'+
       '<h1>Conversas <span id="inboxCount" aria-live="polite"></span></h1></div>'+
-      '<div class="wa-side-head-buttons"><button type="button" class="wa-inbox-connect" data-inbox-connect title="Conectar WhatsApp via QR Code">+ Conectar</button>'+' <button type="button" class="wa-round-icon" data-inbox-sync aria-label="Sincronizar histórico de WhatsApps conectados" title="Sincronizar conversas">⟳</button>'+' <button type="button" class="wa-round-icon" id="inboxSettings" aria-label="Opções de acessibilidade" title="Acessibilidade">⚙</button></div></header>'+
+      '<div class="wa-side-head-buttons"><button type="button" class="wa-inbox-connect" data-inbox-connect title="Abrir a guia Conexões">+ Conectar</button></div></header>'+
      '<div class="wa-inbox-search">'+icon('⌕')+
       '<input id="inboxSearch" type="search" maxlength="90" placeholder="Buscar nome, número ou mensagem" autocomplete="off" aria-label="Pesquisar conversas" value="'+t(search,90)+'"></div>'+
      '<nav class="wa-filters" role="group" aria-label="Filtrar conversas">'+filters.map(([key,label])=>
@@ -96,7 +96,7 @@
        (unread?'<span class="wa-unread-dot" title="Não lida"></span>':'')+'</span>'+
       '</button></div>';
    }).join(''):'<div class="wa-inbox-empty-list"><strong>Nenhuma conversa encontrada</strong>'+
-    '<p>Conecte um WhatsApp ou Instagram profissional para receber mensagens, ou altere os filtros.</p>'+
+    '<p>Conecte um WhatsApp para receber mensagens, ou altere os filtros.</p>'+
     '<button class="btn soft" type="button" data-inbox-connect>Conectar WhatsApp</button></div>';
   }
   function renderHeader(c){
@@ -518,7 +518,8 @@
    const result=await api('/api/inbox/v2?'+q);
    if(disposed||request!==listRequest)return;
    const old=new Map(conversations.map(c=>[c.id,c]));
-   conversations=(result.conversations||[]).map(c=>draftDirty.has(c.id)&&old.has(c.id)?{...c,draft:old.get(c.id).draft}:c);
+   conversations=(result.conversations||[]).filter(c=>c.channel_provider!=='instagram')
+    .map(c=>draftDirty.has(c.id)&&old.has(c.id)?{...c,draft:old.get(c.id).draft}:c);
    renderList();
    if(!quiet&&active&&!conversations.some(c=>c.id===active)){
     active=null;thread=null;
@@ -528,7 +529,8 @@
    lastFetch=Date.now();
   }
   async function poll(){
-   if(disposed||document.hidden||!wrap()||lock||!active||Date.now()-lastFetch<9500)return;
+   if(disposed||document.hidden||!wrap()||lock||Date.now()-lastFetch<9500)return;
+   if(!active){try{await refreshList({quiet:true});}catch{}return;}
    const previous=thread?.messages?.at(-1)?.id;
    const conversationId=active,previousThread=thread;
    try{
@@ -599,9 +601,7 @@
   function onClick(ev){
    if(disposed)return;
    if(suppressClick){suppressClick=false;ev.preventDefault();return;}
-   if(ev.target.closest('[data-inbox-connect]')){if(typeof openQr==='function')void openQr();return;}
-   if(ev.target.closest('#inboxSettings')){showHelp();return;}
-   if(ev.target.closest('[data-inbox-sync]')){chooseSync().catch(err=>toast(err.message,true));return;}
+   if(ev.target.closest('[data-inbox-connect]')){changeView('connections');return;}
    if(ev.target.closest('[data-inbox-start-sync]')){runSync();return;}
    const action=ev.target.closest('[data-chat-action]');
    if(action){ev.preventDefault();performChatAction(action.dataset.chatAction).catch(error=>toast(error.message,true));return;}

@@ -3,51 +3,6 @@
  'use strict';
  let revision=null,linkToShare='',requestedConversationId=null,activeRequestId=null;
 
- function attachSalesAssistant(view,api){
-  const section=document.createElement('section');section.className='card card-pad';section.dataset.salesAssistant='true';
-  const h=document.createElement('h2');h.textContent='Converse com o Sócio sobre suas vendas';section.append(h);
-  const description=document.createElement('p');description.className='form-note';
-  description.textContent='Pergunte pelos clientes interessados, produtos ou orçamentos. A IA usa o catálogo da empresa e não envia propostas nem pagamentos sem sua aprovação.';section.append(description);
-  const form=document.createElement('form');form.className='form-stack';section.append(form);
-  const label=document.createElement('label');label.textContent='O que deseja fazer?';form.append(label);
-  const input=document.createElement('input');input.name='message';input.maxLength=1000;input.required=true;
-  input.placeholder='Ex.: Sócio, prepare o orçamento do último pedido';label.append(input);
-  const button=document.createElement('button');button.type='submit';button.className='btn primary';button.textContent='Perguntar ao Sócio';form.append(button);
-  const answer=document.createElement('div');answer.setAttribute('role','status');answer.style.whiteSpace='pre-wrap';section.append(answer);
-  const suggestion=document.createElement('div');section.append(suggestion);
-  async function ask(payload){
-   button.disabled=true;answer.textContent='Consultando seus registros comerciais…';suggestion.replaceChildren();
-   try{
-    const result=await api('/api/sales/assistant/chat','POST',payload);
-    answer.textContent=result.message||'Consulta concluída.';
-    if(result.preview?.readyToReview&&result.requestId){
-     const use=document.createElement('button');use.type='button';use.className='btn soft';
-     use.textContent='Colocar sugestão no rascunho para revisar';suggestion.append(use);
-     use.addEventListener('click',()=>{
-      const editor=[...view.querySelectorAll('[data-quote-draft]')].find(x=>x.dataset.quoteDraft===result.requestId);
-      if(!editor){answer.textContent+='\\nAbra Orçamentos para revisar este pedido.';return;}
-      const details=editor.closest('details');if(details)details.open=true;
-      editor.elements.text.value=result.preview.text;
-      editor.elements.amount.value=(result.preview.amountCents/100).toFixed(2);
-      answer.textContent+='\\nSugestão inserida nos campos, ainda não salva nem enviada. Revise e salve quando estiver correto.';
-      editor.elements.text.focus();
-     });
-    }
-   }catch(error){answer.textContent='Não foi possível consultar: '+error.message;}
-   finally{button.disabled=false;}
-  }
-  form.addEventListener('submit',event=>{
-   event.preventDefault();
-   const message=input.value.trim();if(message)ask({message});
-  });
-  view.querySelector('.view-heading')?.after(section);
-  view.querySelectorAll('[data-quote-ai]').forEach(btn=>btn.addEventListener('click',()=>{
-   input.value='Prepare o orçamento desta solicitação';
-   ask({message:input.value,requestId:btn.dataset.quoteAi});
-   section.scrollIntoView({behavior:'smooth',block:'nearest'});
-  }));
- }
-
  async function render({api,e,toast,view,me,navigate,mode='quotes'}){
   if(mode==='sales')return renderPurchaseQueue({api,e,toast,view,navigate});
   const [sales,products,contacts,leads]=await Promise.all([
@@ -145,7 +100,6 @@
    (sales.paymentTestAvailable?'<p class="form-note">Stripe em modo de teste: habilitado. Isso não aceita pagamentos reais.</p>':
     '<p class="form-note">Pagamento: somente fluxos de aprovação. O checkout Stripe de teste permanece desativado até receber credenciais de sandbox.</p>')+
   '</div>';
-  attachSalesAssistant(view,api);
   const $=s=>view.querySelector(s), findAll=s=>[...view.querySelectorAll(s)];
   $('#goToCatalog')?.addEventListener('click',()=>navigate?.('products'));
   $('#quoteOwnerAlerts')?.addEventListener('change',async ev=>{
@@ -311,7 +265,6 @@
     '<span class="sale-state">'+e(orderStatus[o.status]||o.status)+'</span>'+
     '<button type="button" class="btn soft" data-lead-chat="'+e(o.conversation_id)+'">Conversar</button></div>').join('')+'</div>':
     '<p class="form-note">Nenhum pedido aprovado ainda.</p>')+'</section></div>';
-  attachSalesAssistant(view,api);
   const row=(selected={})=>{
    const p=products.find(p=>p.id===selected.productId);
    const variants=(p?.variants||[]).filter(v=>v.active);

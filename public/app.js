@@ -9,7 +9,7 @@ const featuresEnabled=()=>state.me?.tenant?.features||{};
 const featureAvailable=key=>featuresEnabled()[key]!==false;
 const ownAccountAvailable=()=>!!state.me?.user?.platformOwner||(state.me?.user?.permissions||[]).includes('account.manage');
 const viewAvailable=key=>!featureView[key]||featureAvailable(featureView[key])||key==='team'&&ownAccountAvailable();
-const titles={overview:'Visão geral',reports:'Relatórios',inbox:'WhatsApp',marketing:'Meta Ads',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas',quotes:'Orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
+const titles={overview:'Visão geral',inbox:'WhatsApp',connections:'Conexões',marketing:'Meta Ads',products:'Produtos e serviços',sales:'Vendas',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -140,19 +140,26 @@ async function boot(){
    if(accountNav){accountNav.title=accountLabel;accountNav.setAttribute('aria-label',accountLabel);}
    const marketingStatus=typeof location==='object'?new URL(location.href).searchParams.get('marketing'):null;
    const marketingProvider=typeof location==='object'?new URL(location.href).searchParams.get('provider'):null;
+   const googleOAuth=typeof location==='object'?new URL(location.href).searchParams.get('google_ads'):null;
+   const officialOAuth=typeof location==='object'?new URL(location.href).searchParams.get('meta_official'):null;
+   if(googleOAuth||officialOAuth){state.view='connections';if(typeof history==='object')history.replaceState(null,'',location.pathname);}
    if(['authorized','failed','cancelled'].includes(marketingStatus)){
-    state.view='marketing';
+    state.view='connections';
     if(typeof history==='object')history.replaceState(null,'',location.pathname);
    }
+   globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf});
    await changeView(state.view);
+   if(googleOAuth==='connected')toast('Conta Google autorizada. Selecione a conta de anúncios em Conexões.');
+   if(officialOAuth==='authorized')toast('Meta autorizada. Selecione a conta de anúncios em Conexões.');
+   if(googleOAuth==='failed'||officialOAuth==='failed')toast('Não foi possível concluir a conexão. Verifique sua conta.',true);
    if(marketingStatus==='authorized'){
     toast('Login autorizado. Verificando contas de anúncios disponíveis...');
     if(marketingProvider==='meta')void (async()=>{
      const provider=marketingProvider;
      try{
       const result=await api('/api/marketing/oauth/'+provider+'/test','POST',{});
-      if(state.view==='marketing'){
-       await marketing();
+      if(state.view==='connections'){
+       await globalThis.SocioWorkspaceUI?.connections({root:view,api,me:state.me,navigate:changeView});
        const target=view.querySelector('[data-marketing-result="'+provider+'"]');
        if(target){
         target.textContent=result.message;
@@ -180,7 +187,9 @@ async function boot(){
 async function changeView(next,conversationId=null){
  globalThis.SocioInterviewUI?.dispose();
  if(next!=='inbox'&&activeInbox){activeInbox.cleanup();activeInbox=null;}
- if(next==='channels')next='inbox';
+ if(next==='channels')next='connections';
+ if(next==='reports')next='overview';
+ if(next==='quotes')next='sales';
  if(next==='agent'){state.aiTab='agent';next='training';}
  else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
@@ -189,7 +198,7 @@ async function changeView(next,conversationId=null){
  const access=new Set(state.me?.user?.permissions||[]);
  if(next==='training'&&!access.has('training.manage'))next='overview';
  if((next==='sales'||next==='quotes')&&!access.has('sales.read'))next='overview';
- if(next==='reports'&&!access.has('audit.read'))next='overview';
+ if(next==='connections'&&!access.has('marketing.read')&&!access.has('channels.manage'))next='overview';
  if(next==='instagram')next='marketing';
  if(next==='marketing'&&!access.has('marketing.read'))next='overview';
  globalThis.SocioFlowImages?.dispose();
@@ -201,8 +210,7 @@ async function changeView(next,conversationId=null){
  setLoading();
  try{
   if(next==='overview')await overview();
-   if(next==='reports')await reports();
-  if(next==='channels')await channels();
+   if(next==='connections')await globalThis.SocioWorkspaceUI.connections({root:view,api,me:state.me,navigate:changeView});
   if(next==='products')await products();
   if(next==='sales'||next==='quotes')await window.SocioSales.render({api,e,toast,view,me:state.me,navigate:changeView,mode:next});
   if(next==='training'){
@@ -287,6 +295,7 @@ function emberIcon(kind){
  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(emberIcons[kind]||emberIcons.spark)+'</svg>';
 }
 async function overview(){
+ if(globalThis.SocioWorkspaceUI)return globalThis.SocioWorkspaceUI.overview({root:view,api,me:state.me,navigate:changeView});
  const [d,trend,recent,links]=await Promise.all([
   api('/api/dashboard'),api('/api/dashboard/activity?range=1m'),
   featureAvailable('whatsapp')?api('/api/inbox'):Promise.resolve([]),
@@ -507,6 +516,7 @@ async function channels(){
  }));
 }
 async function marketing(){
+ if(globalThis.SocioWorkspaceUI)return globalThis.SocioWorkspaceUI.marketing({root:view,api,me:state.me,navigate:changeView});
  if(globalThis.SocioMetaOfficial)return globalThis.SocioMetaOfficial.render({root:view,api,canManage:(state.me?.user?.permissions||[]).includes('marketing.manage')});
  if(!globalThis.SocioMetaLocal)throw Error('Recarregue a página para conectar o Ads Manager.');
  return globalThis.SocioMetaLocal.render({root:view,api,canManage:(state.me?.user?.permissions||[]).includes('marketing.manage')});
@@ -614,10 +624,16 @@ async function showWaQr(channelId){
 
 
 const catalogPrice=cents=>brl(Number(cents||0));
+// Accept the Brazilian decimal separator without modifying a saved price twice.
 const centsFromInput=text=>{
- const raw=String(text??'').trim().replace(',','.');
- if(!/^\d{1,7}(\.\d{1,2})?$/.test(raw))throw Error('Preço inválido. Use, por exemplo, 129.90.');
- return Math.round(Number(raw)*100);
+ const raw=String(text??'').trim().replace(/^R\$\s*/i,'').replace(/\s/g,'');
+ let normalized;
+ if(/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(raw))normalized=raw.replace(/\./g,'').replace(',','.');
+ else if(/^\d{1,7}(?:[.,]\d{1,2})?$/.test(raw))normalized=raw.replace(',','.');
+ else throw Error('Preço inválido. Use, por exemplo, 129,90.');
+ const n=Number(normalized);
+ if(!Number.isFinite(n)||n<0||Math.round(n*100)>=100000000)throw Error('Valor fora do limite permitido.');
+ return Math.round(n*100);
 };
 const stockFromInput=text=>{
  const value=String(text??'').trim();
@@ -647,17 +663,73 @@ async function compressCatalogImage(file){
   });
  }finally{bitmap.close();}
 }
+const catalogTypes=['Cor','Tamanho','Modelo','Outro'];
+const catalogColors=['Amarelo','Azul','Azul-marinho','Bege','Branco','Cinza','Dourado','Laranja','Marrom','Prata','Preto','Rosa','Roxo','Verde','Vermelho','Vinho'];
+const catalogSizes=['PP','P','M','G','GG','XG','XXG','Único','34','36','38','40','42','44','46','48','50','52'];
+const variantParts=name=>{
+ const raw=String(name||'').trim(),m=/^(Cor|Tamanho|Modelo|Outro)\s*[·:-]\s*(.+)$/i.exec(raw);
+ if(!m)return {kind:'Outro',value:raw};
+ return {kind:catalogTypes.find(x=>x.toLowerCase()===m[1].toLowerCase())||'Outro',value:m[2]};
+};
 function catalogVariantRow(variant={}){
+ const {kind,value}=variantParts(variant.name||'');
  return '<div class="catalog-variant-row" data-variant-row>'+
-  '<input data-variant-name aria-label="Nome da variação" maxlength="100" placeholder="Tamanho, cor ou modelo" value="'+e(variant.name||'')+'">'+
-  '<input data-variant-price aria-label="Preço da variação" type="number" min="0" step="0.01" placeholder="Preço R$" value="'+e(variant.price_cents===undefined?'':(variant.price_cents/100).toFixed(2))+'">'+
+  '<select data-variant-type aria-label="Tipo de variação">'+catalogTypes.map(x=>
+   '<option value="'+e(x)+'"'+(kind===x?' selected':'')+'>'+e(x)+'</option>').join('')+'</select>'+
+  '<input data-variant-value aria-label="Valor da variação" required maxlength="80" list="'+(kind==='Cor'?'catalogColorSuggestions':kind==='Tamanho'?'catalogSizeSuggestions':'catalogGenericSuggestions')+'" placeholder="'+(kind==='Cor'?'Ex.: Preto':kind==='Tamanho'?'Ex.: 40':'Ex.: Premium')+'" value="'+e(value)+'">'+
+  '<input data-variant-price aria-label="Preço da variação" type="text" inputmode="decimal" maxlength="18" placeholder="Preço R$" value="'+e(variant.price_cents===undefined?'':(variant.price_cents/100).toFixed(2).replace('.',','))+'">'+
   '<input data-variant-stock aria-label="Estoque da variação" type="number" min="0" step="1" placeholder="Estoque" value="'+e(variant.stock_quantity??'')+'">'+
   '<input data-variant-sku aria-label="SKU da variação" maxlength="50" placeholder="SKU opcional" value="'+e(variant.sku||'')+'">'+
   '<button type="button" class="btn sm ghost" data-remove-variant aria-label="Excluir variação">×</button>'+
  '</div>';
 }
+const readVariantRows=(root,basePrice)=>[...root.querySelectorAll('[data-variant-row]')].map(row=>{
+ const kind=row.querySelector('[data-variant-type]')?.value||'Outro';
+ const value=row.querySelector('[data-variant-value]')?.value.trim()||'';
+ if(!catalogTypes.includes(kind)||!value||value.length>80)throw Error('Informe um valor para cada variação, como Preto, 40 ou Premium.');
+ const price=row.querySelector('[data-variant-price]')?.value.trim()||basePrice;
+ const sku=row.querySelector('[data-variant-sku]')?.value||'';
+ return {name:kind+' · '+value,sku,priceCents:centsFromInput(price),
+  stockQuantity:stockFromInput(row.querySelector('[data-variant-stock]')?.value),active:true};
+});
 async function products(selected=null){
  const [list,storage]=await Promise.all([api('/api/products'),api('/api/products/storage')]);
+ const canReadCampaigns=(state.me?.user?.permissions||[]).includes('marketing.read')&&featureAvailable('meta_ads');
+ const showDetails=selected==='new'||Boolean(selected);
+ const [metaChoices,googleChoices]=canReadCampaigns&&showDetails?await Promise.all([
+  api('/api/marketing/tools/campaigns').then(d=>d.items||[]).catch(()=>[]),
+  api('/api/google-ads/campaigns').then(d=>d.campaigns||[]).catch(()=>[])
+ ]):[[],[]];
+ const campaignOptions={
+  meta_ads:metaChoices.map(x=>({id:String(x.id),name:String(x.name||x.id),status:String(x.effective_status||x.status||'') })),
+  google_ads:googleChoices.map(x=>({id:String(x.id),name:String(x.name||x.id),status:String(x.status||'') }))
+ };
+ const campaignSelect=(scope)=>!featureAvailable('meta_ads')?'':'<div class="px-campaign-picker">'+
+  '<label>Plataforma<select data-campaign-provider aria-label="Plataforma de anúncios"'+(scope==='create'?' name="newCampaignProvider"':' name="provider"')+'>'+
+   '<option value="meta_ads">Meta Ads</option><option value="google_ads">Google Ads</option></select></label>'+
+  '<label>Campanha cadastrada<select data-campaign-target aria-label="Campanha existente"'+(scope==='create'?' name="newCampaignId"':' name="campaignId"')+'>'+
+   '<option value="">Selecione uma campanha na sua conta</option></select></label>'+
+  '<small>Selecione pelo nome. Campanhas ativas ou pausadas aparecem quando retornadas pela conta autorizada; resultados dependem do rastreamento.</small>'+
+  '</div>';
+ const fillCampaignOptions=(form)=>{
+  const provider=form?.querySelector('[data-campaign-provider]'),picker=form?.querySelector('[data-campaign-target]');
+  if(!provider||!picker||typeof picker.replaceChildren!=='function'||typeof picker.add!=='function')return;
+  const old=picker.value;picker.replaceChildren(new Option('Nenhuma campanha selecionada',''));
+  for(const x of campaignOptions[provider.value]||[]){
+   const label=x.name+(x.status?' · '+x.status:'');
+   const option=new Option(label,x.id);option.dataset.label=x.name;picker.add(option);
+  }
+  if((campaignOptions[provider.value]||[]).some(x=>x.id===old))picker.value=old;
+  picker.disabled=picker.options.length===1;
+ };
+ const campaignPayload=(form)=>{
+  const provider=form?.querySelector('[data-campaign-provider]')?.value;
+  const picker=form?.querySelector('[data-campaign-target]');
+  if(!picker?.value)return null;
+  const selected=(campaignOptions[provider]||[]).find(x=>x.id===picker.value);
+  if(!selected)throw Error('Selecione uma campanha autorizada na lista.');
+  return {provider,campaignId:selected.id,label:selected.name};
+ };
  if(selected&&selected!=='new'&&!list.some(p=>p.id===selected))selected=null;
  state.catalogProductId=selected&&selected!=='new'?selected:null;
  const current=list.find(p=>p.id===selected);
@@ -692,13 +764,13 @@ async function products(selected=null){
    '<div class="row-actions"><button class="btn soft" id="addVariant" type="button">+ Adicionar variação</button><button class="btn primary" type="submit">Salvar variações</button></div></form></section>'+
   '<section class="card card-pad section-gap"><div class="section-title">Campanhas associadas</div>'+
    '<p class="form-note">Associação manual de referência. A conexão e os resultados da conta de anúncios ainda não foram verificados.</p>'+
-   (current.campaigns.some(c=>c.provider==='meta_ads')?'<div class="catalog-campaign-list">'+current.campaigns.filter(c=>c.provider==='meta_ads').map(c=>
-     '<div><strong>Meta Ads</strong> · '+e(c.label||c.campaign_id)+
+   (current.campaigns.length?'<div class="catalog-campaign-list">'+current.campaigns.map(c=>
+     '<div><strong>'+e(c.provider==='google_ads'?'Google Ads':'Meta Ads')+'</strong> · '+e(c.label||c.campaign_id)+
      '<span class="form-note"> '+e(c.campaign_id)+' · Não verificada</span>'+
      '<button class="btn sm ghost" data-delete-campaign="'+e(c.id)+'">Remover</button></div>').join('')+'</div>':'')+
-   '<form id="catalogCampaignForm" class="form-stack"><input type="hidden" name="provider" value="meta_ads"><p class="form-note">Plataforma: Meta Ads</p>'+
-   '<label>ID da campanha<input name="campaignId" maxlength="150" required placeholder="Identificador na plataforma"></label>'+
-   '<label>Nome interno<input name="label" maxlength="120" placeholder="Ex.: Campanha Black Friday"></label>'+
+   '<form id="catalogCampaignForm" class="form-stack">'+campaignSelect('edit')+
+
+
    '<button class="btn soft" type="submit">Associar campanha →</button></form></section>':'';
  const modalOpen=selected==='new'||Boolean(current);
  view.innerHTML=heading('CATÁLOGO','Produtos e serviços.','Catálogo, preços e disponibilidade da empresa.',
@@ -719,8 +791,8 @@ async function products(selected=null){
     '<button type="button" class="socio-popup-close" id="closeProductModal" aria-label="Fechar cadastro">×</button></div>'+
     '<form class="form-stack" id="productForm">'+
      '<label>Nome ou título do produto<input name="name" required maxlength="120" placeholder="Ex.: Kit profissional" value="'+e(current?.name||'')+'"></label>'+
-     '<div class="catalog-pair"><label>Preço (R$)<input name="price" required type="number" min="0" step="0.01" value="'+e(current?(current.price_cents/100).toFixed(2):'')+'"></label>'+
-     '<label>Preço anterior (opcional)<input name="compareAtPrice" type="number" min="0" step="0.01" value="'+e(current?.compare_at_price_cents!=null?(current.compare_at_price_cents/100).toFixed(2):'')+'"></label></div>'+
+     '<div class="catalog-pair"><label>Preço (R$)<input name="price" required type="text" inputmode="decimal" placeholder="Ex.: 129,90" maxlength="18" value="'+e(current?(current.price_cents/100).toFixed(2).replace('.',','):'')+'"></label>'+
+     '<label>Preço anterior (opcional)<input name="compareAtPrice" type="text" inputmode="decimal" maxlength="18" value="'+e(current?.compare_at_price_cents!=null?(current.compare_at_price_cents/100).toFixed(2).replace('.',','):'')+'"></label></div>'+
      '<div class="catalog-pair"><label>Código / SKU<input name="sku" maxlength="50" placeholder="Opcional" value="'+e(current?.sku||'')+'"></label>'+
      '<label>Estoque disponível<input name="stock" type="number" min="0" step="1" placeholder="Sem controle" value="'+e(current?.stock_quantity??'')+'"></label></div>'+
      '<label>Descrição do produto<textarea name="description" maxlength="1200" placeholder="Características, benefícios e condições...">'+e(current?.description||'')+'</textarea></label>'+
@@ -728,12 +800,16 @@ async function products(selected=null){
        '<option value="false"'+(current?.active===false?' selected':'')+'>Indisponível</option></select></label>'+
      (!current?'<label>Fotos do produto (JPG, PNG, WebP; até 8)<input type="file" name="newPhotos" accept="image/jpeg,image/png,image/webp" multiple '+(!storage.configured?'disabled':'')+'></label>'+
      '<div class="socio-clean-section"><h3>Variações</h3><div id="newVariantRows"></div>'+
-      '<button class="btn soft" id="addNewVariant" type="button">+ Adicionar variação</button></div>':'')+
+      '<button class="btn soft" id="addNewVariant" type="button">+ Adicionar variação</button></div>'+
+     '<div class="socio-clean-section"><h3>Associar campanha (opcional)</h3>'+campaignSelect('create')+'</div>':'')+
      '<div class="form-actions"><button class="btn primary" type="submit">'+(current?'Salvar alterações':'Cadastrar produto')+'</button>'+
       (current?'<button class="btn ghost" type="button" id="clearProduct">Novo produto</button>':'')+'</div>'+
     '</form>'+
-    (current?detail:'')+
-   '</section></div>';
+    (current?detail+'<div class="px-danger-zone"><button type="button" class="btn ghost" id="deleteProduct">Excluir produto permanentemente</button></div>':'')+
+   '</section></div>'+
+   '<datalist id="catalogColorSuggestions">'+catalogColors.map(x=>'<option value="'+e(x)+'"></option>').join('')+'</datalist>'+
+   '<datalist id="catalogSizeSuggestions">'+catalogSizes.map(x=>'<option value="'+e(x)+'"></option>').join('')+'</datalist>'+
+   '<datalist id="catalogGenericSuggestions"></datalist>';
  $('#newProduct')?.addEventListener('click',()=>products('new'));
  $('#closeProductModal')?.addEventListener('click',()=>products(null));
  $('#productModal')?.addEventListener('click',ev=>{if(ev.target===$('#productModal'))products(null)});
@@ -745,6 +821,21 @@ async function products(selected=null){
  $('#newVariantRows')?.addEventListener('click',ev=>{
   const btn=ev.target.closest('[data-remove-variant]');if(btn)btn.closest('[data-variant-row]').remove();
  });
+ const modal=$('#productModal');
+ modal?.addEventListener('change',ev=>{
+  const type=ev.target.closest('[data-variant-type]');if(!type)return;
+  const value=type.closest('[data-variant-row]')?.querySelector('[data-variant-value]');
+  if(!value)return;
+  value.setAttribute('list',type.value==='Cor'?'catalogColorSuggestions':
+   type.value==='Tamanho'?'catalogSizeSuggestions':'catalogGenericSuggestions');
+  value.placeholder=type.value==='Cor'?'Ex.: Preto':type.value==='Tamanho'?'Ex.: 40':
+   type.value==='Modelo'?'Ex.: Premium':'Descreva a variação';
+ });
+ for(const form of [$('#productForm'),$('#catalogCampaignForm')]){
+  if(!form)continue;
+  fillCampaignOptions(form);
+  form.querySelector('[data-campaign-provider]')?.addEventListener('change',()=>fillCampaignOptions(form));
+ }
  if(modalOpen)$('#productForm')?.elements?.name?.focus();
  const applyCatalogFilters=()=>{
   const needle=String(state.catalogSearch||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -768,27 +859,39 @@ async function products(selected=null){
  $('#productForm').addEventListener('submit',async ev=>{
   ev.preventDefault();const form=ev.currentTarget,d=formValues(form);
   await action(async()=>{
+   // Validate EVERYTHING before creating the product. API saves variants and
+   // campaign links atomically with the product, with rollback on error.
    const data={name:d.name,description:d.description,sku:d.sku,
     priceCents:centsFromInput(d.price),compareAtPriceCents:d.compareAtPrice?centsFromInput(d.compareAtPrice):null,
     stockQuantity:stockFromInput(d.stock),active:d.active==='true'};
-   const result=await api(current?'/api/products/'+current.id:'/api/products',current?'PATCH':'POST',data);
-   const productId=current?.id||result.id;
+   let photos=[];
    if(!current){
-    const variants=[...form.querySelectorAll('#newVariantRows [data-variant-row]')].map(row=>{
-     const get=selector=>row.querySelector(selector)?.value||'';
-     return {name:get('[data-variant-name]'),sku:get('[data-variant-sku]'),
-      priceCents:centsFromInput(get('[data-variant-price]')),
-      stockQuantity:stockFromInput(get('[data-variant-stock]')),active:true};
-    });
-    if(variants.length)await api('/api/products/'+productId+'/variants','PUT',{variants});
-    const photos=[...(form.elements.newPhotos?.files||[])];
+    data.variants=readVariantRows(form.querySelector('#newVariantRows'),d.price);
+    const campaign=campaignPayload(form);
+    data.campaigns=campaign?[campaign]:[];
+    photos=[...(form.elements.newPhotos?.files||[])];
     if(photos.length>8)throw Error('Máximo de oito fotos por produto.');
-    for(const file of photos){
+    if(photos.some(file=>file.size>12000000||!['image/jpeg','image/png','image/webp'].includes(file.type)))
+     throw Error('Use até 8 imagens JPG, PNG ou WebP, cada uma com até 12 MB.');
+   }
+   const submit=form.querySelector('[type="submit"]');
+   if(submit)submit.disabled=true;
+   let result;
+   try{result=await api(current?'/api/products/'+current.id:'/api/products',current?'PATCH':'POST',data);}
+   finally{if(submit)submit.disabled=false;}
+   const productId=current?.id||result.id;let uploaded=0;
+   for(const file of photos){
+    try{
      const contentBase64=await compressCatalogImage(file);
      await api('/api/products/'+productId+'/media','POST',{contentBase64,alt:d.name});
+     uploaded++;
+    }catch(error){
+     toast('Produto e variações salvos. '+uploaded+' foto(s) enviadas; falha na próxima foto: '+errMsg(error),true);
+     await products(productId);return;
     }
    }
-   toast('Catálogo atualizado.');await products(productId);
+   toast(current?'Produto atualizado com sucesso.':'Produto cadastrado com variações e campanhas.');
+   await products(productId);
   });
  });
  if(!current)return;
@@ -817,24 +920,26 @@ async function products(selected=null){
  $('#catalogVariantForm').addEventListener('submit',async ev=>{
   ev.preventDefault();
   await action(async()=>{
-   const rows=[...$('#catalogVariantRows').querySelectorAll('[data-variant-row]')];
-   const variants=rows.map(row=>{
-    const get=selector=>row.querySelector(selector)?.value||'';
-    return {name:get('[data-variant-name]'),sku:get('[data-variant-sku]'),
-     priceCents:centsFromInput(get('[data-variant-price]')),
-     stockQuantity:stockFromInput(get('[data-variant-stock]')),active:true};
-   });
+   const variants=readVariantRows($('#catalogVariantRows'),String(current.price_cents/100));
    await api('/api/products/'+current.id+'/variants','PUT',{variants});
    toast('Variações atualizadas.');await products(current.id);
   });
  });
  $('#catalogCampaignForm').addEventListener('submit',async ev=>{
-  ev.preventDefault();const d=formValues(ev.currentTarget);
+  ev.preventDefault();
   await action(async()=>{
-   await api('/api/products/'+current.id+'/campaigns','POST',d);
-   toast('Campanha associada como referência manual.');await products(current.id);
+   const campaign=campaignPayload(ev.currentTarget);
+   if(!campaign)throw Error('Escolha uma campanha na lista vinculada à sua conta.');
+   await api('/api/products/'+current.id+'/campaigns','POST',campaign);
+   toast('Campanha associada ao produto.');await products(current.id);
   });
  });
+ $('#deleteProduct')?.addEventListener('click',()=>action(async()=>{
+  if(!window.confirm('Excluir definitivamente “'+current.name+'” e todas as suas variações, fotos e vínculos de anúncios? Esta ação não pode ser desfeita.'))return;
+  const result=await api('/api/products/'+current.id,'DELETE',{confirm:true});
+  toast(result.photoCleanupPending?'Produto excluído. Algumas imagens precisam de limpeza no armazenamento.':'Produto excluído permanentemente.');
+  await products(null);
+ }));
  view.querySelectorAll('[data-delete-campaign]').forEach(btn=>btn.addEventListener('click',()=>action(async()=>{
   await api('/api/products/'+current.id+'/campaigns/'+btn.dataset.deleteCampaign,'DELETE',{});
   toast('Associação removida.');await products(current.id);
@@ -1395,6 +1500,7 @@ async function action(fn){try{await fn();}catch(err){toast(errMsg(err),true);}}
 
 const sidebarIcons={
  overview:'<rect x="3" y="3" width="8" height="8" rx="1.7"/><rect x="13" y="3" width="8" height="8" rx="1.7"/><rect x="3" y="13" width="8" height="8" rx="1.7"/><rect x="13" y="13" width="8" height="8" rx="1.7"/>',
+ connections:'<rect x="3" y="4" width="8" height="6" rx="2"/><rect x="13" y="14" width="8" height="6" rx="2"/><path d="M11 7h3a4 4 0 0 1 4 4v2M13 17H9a4 4 0 0 1-4-4v-2"/>',
  inbox:'<path d="M4 4h16v12h-5l-3 3-3-3H4z"/><path d="M7 9h10M7 12h7"/>',
  instagram:'<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.6 6.7h.01"/>',
  reports:'<path d="M4 20V11m5 9V5m5 15v-7m5 7V8"/><path d="M2 21h20"/>',
@@ -1422,7 +1528,7 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  key!=='agent'&&key!=='channels'&&viewAvailable(key)&&
+  key!=='agent'&&key!=='channels'&&key!=='reports'&&key!=='quotes'&&viewAvailable(key)&&
   (key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&
   (key!=='reports'||(state.me?.user?.permissions||[]).includes('audit.read'))&&
   (!['sales','quotes'].includes(key)||(state.me?.user?.permissions||[]).includes('sales.read'))&&
@@ -1501,5 +1607,5 @@ $$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{
  if(b.dataset.view==='training')state.aiTab='training';
  changeView(b.dataset.view);
 }));
-$('#logoutBtn').addEventListener('click',async()=>{clearInterval(commerceAlertTimer);$('#commerceAlerts').replaceChildren();try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
+$('#logoutBtn').addEventListener('click',async()=>{globalThis.SocioThalitaUI?.unmount();clearInterval(commerceAlertTimer);$('#commerceAlerts').replaceChildren();try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
 boot();

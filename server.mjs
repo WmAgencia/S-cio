@@ -45,6 +45,8 @@ import {reconcileConfirmedOutbox} from './socio-outbound.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
 import {getTenantBusinessMonitor,getMasterSaasMonitor} from './socio-business-monitor.mjs';
+import {getExecutiveMetrics} from './socio-executive-metrics.mjs';
+import {askThalita,confirmThalita} from './socio-thalita-assistant.mjs';
 import {readSubscriptionStatus,createSubscriptionCheckout,createBillingPortal,processSubscriptionWebhook} from './socio-subscriptions.mjs';
 import {startGoogleAdsOAuth,finishGoogleAdsOAuth,googleAdsStatus,listGoogleAdsAccounts,selectGoogleAdsAccount,disconnectGoogleAds,readGoogleAdsCampaigns} from './socio-google-ads.mjs';
 import {createTrackingSite,listTrackingSites,enableTrackingSite,receiveSignedSiteEvent} from './socio-site-tracking.mjs';
@@ -259,7 +261,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/socio-workspace-ui.js','/socio-thalita-ui.js','/socio-executive.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':(file.endsWith('.js')||file.endsWith('.mjs'))?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -837,6 +839,45 @@ async function handle(req,res){
   const results=await query(sql,[a.active_tenant_id,parseTenantFeatures(a.features).whatsapp]);
   return json(res,200,{range:requested,granularity:range.unit,points:results.rows});
  }
+ // Floating Thalita: read tools for the active company; all writes need one-use approval.
+ if(method==='POST'&&pathname==='/api/thalita/ask'){
+  requirePermission(a,'inbox.read');
+  if(!limiter(simulationAttempts,'thalita-chat:'+a.user_id,60000,16))throw fail(429,'Aguarde antes de consultar novamente.');
+  const {data}=await body(req,2400);
+  const result=await askThalita(pool,a,{message:data.message,runId:data.runId});
+  await audit(a,'thalita.chat',{status:result.status,readOnly:result.readOnly===true,executed:result.executed===true});
+  return json(res,200,result);
+ }
+ if(method==='POST'&&pathname==='/api/thalita/confirm'){
+  needRole(a,['owner','admin']);
+  if(!limiter(simulationAttempts,'thalita-confirm:'+a.user_id,60000,6))throw fail(429,'Aguarde antes de executar novamente.');
+  const {data}=await body(req,1200);
+  const result=await confirmThalita(pool,a,data);
+  await audit(a,'thalita.approved_action',result.audit||{});
+  return json(res,200,result);
+ }
+ if(method==='POST'&&pathname==='/api/thalita/tts'){
+  requirePermission(a,'inbox.read');
+  if(!limiter(simulationAttempts,'thalita-tts:'+a.active_tenant_id,60000,14))throw fail(429,'Limite temporário de voz.');
+  const {data}=await body(req,1200);
+  const audio=await synthesizeSocioTrainingVoice(data.text);
+  res.writeHead(200,{'Content-Type':audio.mime,'Cache-Control':'private, no-store',
+   'Content-Length':String(audio.bytes.length),'X-TTS-Voice':audio.voice});
+  return res.end(audio.bytes);
+ }
+ if(method==='POST'&&pathname==='/api/thalita/transcribe'){
+  requirePermission(a,'inbox.read');sameOrigin(req);
+  if(!limiter(simulationAttempts,'thalita-transcribe:'+a.active_tenant_id,60000,12))throw fail(429,'Limite de áudio atingido.');
+  const mime=String(req.headers['content-type']||'').split(';')[0].toLowerCase();
+  if(!['audio/webm','audio/ogg','audio/mp4','audio/mpeg','audio/wav'].includes(mime))throw fail(422,'Formato de áudio inválido.');
+  if(Number(req.headers['content-length']||0)>3*1024*1024)throw fail(413,'Máximo de 3 MB por áudio.');
+  let total=0;const chunks=[];
+  for await(const chunk of req){total+=chunk.length;if(total>3*1024*1024)throw fail(413,'Máximo de 3 MB por áudio.');chunks.push(chunk);}
+  return json(res,200,await transcribeSocioTraining(Buffer.concat(chunks),mime));
+ }
+ if(method==='GET'&&pathname==='/api/dashboard/executive'){
+  return json(res,200,await getExecutiveMetrics(pool,a));
+ }
  if(method==='GET'&&pathname==='/api/dashboard'){
   const [ch,prod,imp,conv,msg,today]=await Promise.all([
    query('SELECT count(*)::int AS n FROM channels WHERE tenant_id=$1',[a.active_tenant_id]),
@@ -1039,8 +1080,10 @@ async function handle(req,res){
   return json(res,200,await startGoogleAdsOAuth(pool,a));
  if(method==='GET'&&pathname==='/api/google-ads/accounts')
   return json(res,200,await listGoogleAdsAccounts(pool,a));
- if(method==='GET'&&pathname==='/api/google-ads/campaigns')
-  return json(res,200,await readGoogleAdsCampaigns(pool,a));
+ if(method==='GET'&&pathname==='/api/google-ads/campaigns'){
+  const period=new URL(req.url,'http://local').searchParams.get('period');
+  return json(res,200,await readGoogleAdsCampaigns(pool,a,{period:period==='today'?'today':'last_30d'}));
+ }
  if(method==='POST'&&pathname==='/api/google-ads/accounts/select'){
   const {data}=await body(req,1500);
   return json(res,200,await selectGoogleAdsAccount(pool,a,data.accountId));
@@ -1177,15 +1220,38 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/products'){
   needRole(a,['owner','admin']);
-  const {data}=await body(req);
+  const {data}=await body(req,22000);
+  // Validate every nested field BEFORE inserting anything, fixing the
+  // "product created but invalid variation price" partial-success bug.
   const p=validateProduct(data);
-  const count=await query('SELECT COUNT(*)::int AS count FROM products WHERE tenant_id=$1',[a.active_tenant_id]);
-  if(count.rows[0].count>=500)throw fail(422,'Limite de 500 produtos por empresa.');
-  const item=await query(
-   'INSERT INTO products(id,tenant_id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active',
-   [id(),a.active_tenant_id,p.name,p.description,p.sku,p.priceCents,p.stockQuantity,p.compareAtPriceCents,p.active]);
-  await audit(a,'product.created',{productId:item.rows[0].id});
-  return json(res,201,item.rows[0]);
+  const variants=validateVariants(data.variants||[]);
+  const campaigns=Array.isArray(data.campaigns)?data.campaigns.map(validateCampaign):[];
+  if(campaigns.length>8||new Set(campaigns.map(x=>x.provider+':'+x.campaignId)).size!==campaigns.length)
+   throw fail(422,'Selecione até oito campanhas distintas.');
+  const client=await pool.connect();let product;
+  try{
+   await client.query('BEGIN');
+   // Serialize catalog insertions per company so the 500-product limit is real.
+   await client.query('SELECT id FROM tenants WHERE id=$1 FOR UPDATE',[a.active_tenant_id]);
+   const count=await client.query('SELECT COUNT(*)::int AS count FROM products WHERE tenant_id=$1',[a.active_tenant_id]);
+   if(Number(count.rows[0].count)>=500)throw fail(422,'Limite de 500 produtos por empresa.');
+   const item=await client.query(
+    'INSERT INTO products(id,tenant_id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active',
+    [id(),a.active_tenant_id,p.name,p.description,p.sku,p.priceCents,p.stockQuantity,p.compareAtPriceCents,p.active]);
+   product=item.rows[0];
+   for(const v of variants){
+    await client.query('INSERT INTO product_variants(id,tenant_id,product_id,name,sku,price_cents,stock_quantity,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+     [id(),a.active_tenant_id,product.id,v.name,v.sku,v.priceCents,v.stockQuantity,v.active]);
+   }
+   for(const campaign of campaigns){
+    await client.query('INSERT INTO product_campaign_links(id,tenant_id,product_id,provider,campaign_id,label) VALUES($1,$2,$3,$4,$5,$6)',
+     [id(),a.active_tenant_id,product.id,campaign.provider,campaign.campaignId,campaign.label]);
+   }
+   await client.query('COMMIT');
+  }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}
+  finally{client.release();}
+  await audit(a,'product.created',{productId:product.id,variants:variants.length,campaigns:campaigns.length});
+  return json(res,201,product);
  }
  const productVariants=pathname.match(/^\/api\/products\/([a-f0-9-]{36})\/variants$/);
  if(productVariants&&method==='PUT'){
@@ -1283,6 +1349,35 @@ async function handle(req,res){
   if(!result.rowCount)throw fail(404,'Produto não encontrado.');
   await audit(a,'product.updated',{productId:prodMatch[1]});
   return json(res,200,result.rows[0]);
+ }
+
+ // Product deletion removes its variants, campaign links and media rows via existing
+ // tenant-constrained cascading foreign keys. Payment/order snapshots stay intact.
+ if(prodMatch&&method==='DELETE'){
+  needRole(a,['owner','admin']);
+  if(!limiter(simulationAttempts,'catalog-delete:'+a.active_tenant_id,60000,10))
+   throw fail(429,'Muitas exclusões; aguarde.');
+  const {data}=await body(req,1000);
+  if(data.confirm!==true)throw fail(422,'Confirme a exclusão permanente do produto.');
+  const client=await pool.connect();let objects=[],removed=null;
+  try{
+   await client.query('BEGIN');
+   const check=await client.query('SELECT id,name FROM products WHERE tenant_id=$1 AND id=$2 FOR UPDATE',
+    [a.active_tenant_id,prodMatch[1]]);
+   if(!check.rowCount)throw fail(404,'Produto não encontrado nesta empresa.');
+   removed=check.rows[0];
+   const media=await client.query('SELECT object_key FROM product_media WHERE tenant_id=$1 AND product_id=$2',
+    [a.active_tenant_id,prodMatch[1]]);
+   objects=media.rows.map(x=>x.object_key);
+   await client.query('DELETE FROM products WHERE tenant_id=$1 AND id=$2',[a.active_tenant_id,prodMatch[1]]);
+   await client.query('COMMIT');
+  }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}
+  finally{client.release();}
+  const cleanup=await Promise.allSettled(objects.map(objectKey=>deletePrivateImage(objectKey)));
+  const failed=cleanup.filter(x=>x.status==='rejected').length;
+  await audit(a,'product.deleted',{productId:prodMatch[1],photoCleanupFailures:failed});
+  return json(res,200,{deleted:true,id:prodMatch[1],name:removed.name,
+   photoCleanupPending:failed>0,photosPending:failed});
  }
  // Tenant-owner operational checks: never return credentials or assert that a
  // configured integration has passed a real end-to-end test.

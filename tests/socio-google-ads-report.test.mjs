@@ -82,7 +82,7 @@ test('report is wired as an authenticated GET route with no new Google Ads write
  const server=readFileSync(new URL('../server.mjs',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../public/socio-integrations-ui.js',import.meta.url),'utf8');
  assert.match(server,/pathname==='\/api\/google-ads\/campaigns'/);
- assert.match(server,/readGoogleAdsCampaigns\(pool,a\)/);
+ assert.match(server,/readGoogleAdsCampaigns\(pool,a,\{period:/);
  assert.match(ui,/Consultar campanhas \(30 dias\)/);
  assert.doesNotMatch(server,/googleAds:mutate/);
 });
