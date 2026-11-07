@@ -2,6 +2,9 @@ import {randomBytes,createHash,randomUUID} from 'node:crypto';
 import {resolve} from 'node:path';
 import {createRemotePool} from './meta-browser/remote-pool.js';
 import {requirePermission} from './team-permissions.mjs';
+import {resolveSelectedOfficialAccount} from './meta-official.mjs';
+import {assertApiFeature} from './tenant-features.mjs';
+import {topupAmount} from './meta-billing-state.mjs';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const digest=value=>createHash('sha256').update(value).digest('hex');
 export function createMetaBrowser({env=process.env,runtime}={}){
@@ -81,6 +84,21 @@ export function createMetaBrowser({env=process.env,runtime}={}){
    }
    if(kind==='execute')return execute(pool,a,id,data,key);
    return engine().call(id,kind);
+  },
+  async billing(pool,a,kind,data={}){
+   requirePermission(a,'marketing.manage');
+   assertApiFeature(a.features,'/api/marketing/tools');
+   if(a.tenant_status==='paused')throw fail(403,'Empresa pausada.');
+   if(!['read','prepare','pix'].includes(kind))throw fail(422,'Operação inválida.');
+   if(kind==='prepare')topupAmount(data.amountMinor);
+   const account=await resolveSelectedOfficialAccount(pool,a);
+   if(account.currency!=='BRL')throw fail(422,'A recarga assistida está disponível para contas BRL.');
+   const id=await profile(pool,a,true);
+   const result=await engine().call(id,kind==='read'?'billing_read':kind==='pix'?'billing_pix_read':'billing_prepare',{
+    accountId:account.id,accountName:account.name,currency:account.currency,
+    ...(kind==='prepare'?{amountMinor:data.amountMinor}:{}),background:data.background===true});
+   if(kind==='read'&&result.state!=='busy'&&(result.observation||data.background===true))await engine().stop(id);
+   return {...result,accountId:account.id};
   },
   async close(){if(activeRuntime)await activeRuntime.close();},
  };

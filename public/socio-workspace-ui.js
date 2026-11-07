@@ -17,7 +17,7 @@
  const stopLiveRefresh=()=>{if(liveRefreshTimer){clearInterval(liveRefreshTimer);liveRefreshTimer=null;}liveRefreshSerial++;};
  const invalidateRender=()=>{renderSerial++;stopLiveRefresh();};
  const forTenant=me=>{const id=[me?.tenant?.id||'',me?.user?.id||'',me?.user?.role||''].join(':');
-  if(selectedTenant!==id){stopLiveRefresh();getCache.clear();posterCache.clear();snapshots.clear();selectedTenant=id;}
+  if(selectedTenant!==id){stopLiveRefresh();window.SocioMetaBilling?.dispose();getCache.clear();posterCache.clear();snapshots.clear();selectedTenant=id;}
  };
  const clearCache=()=>{stopLiveRefresh();getCache.clear();posterCache.clear();snapshots.clear();selectedTenant=null;};
  const startLiveRefresh=(root,kind,renderId,refresh,updateWhilePlaying)=>{
@@ -365,6 +365,8 @@
    const capAvailable=Number.isSafeInteger(cap)&&cap>=0;
    const currencyCode=billing?.finance?.currency||currency;
    const prepay=billing?.finance?.isPrepaid===true;
+   const balanceAlert=billing?.alert;
+   const browserObserved=billing?.finance?.availableFundsSource==='meta_billing_browser';
    const billingStatus=billing?.finance?.availableFundsStatus;
    const billingExplanation=provider==='meta_ads'&&!fundsAvailable&&connected?
     billingStatus==='field_restricted'?'A Meta restringiu a consulta do saldo nesta autorização.':
@@ -377,7 +379,7 @@
     new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}).format(new Date(checkedAt));
    const displayFunds=fundsAvailable?moneyMinor(funds,currencyCode):'Não disponível';
    const status=!ads?'Sem permissão':!connected?'Conta não autorizada':
-    fundsAvailable?'Saldo pré-pago confirmado':prepay?'Saldo pré-pago não retornado':
+    fundsAvailable?(browserObserved?'Saldo observado no faturamento Meta':'Saldo pré-pago confirmado'):prepay?'Saldo pré-pago não retornado':
     billing?.finance?.isPrepaid===false?'Cobrança automática / faturamento':'Tipo de cobrança não identificado';
    const limitText=capAvailable?'Limite de gastos restante: '+moneyMinor(cap,currencyCode):'';
    const paymentUrl=billing?.paymentsUrl||null;
@@ -387,11 +389,13 @@
       '<div class="px-budget-stats">'+
        '<div class="px-budget-stat px-budget-balance"><span>Saldo disponível</span><strong>'+esc(displayFunds)+'</strong></div>'+
        '<div class="px-budget-stat"><span>Gasto hoje</span><strong>'+spending+'</strong></div>'+
-       '<div class="px-budget-stat"><span>Duração estimada</span><strong>—</strong></div>'+
+       '<div class="px-budget-stat"><span>Duração estimada</span><strong>'+((Number.isFinite(balanceAlert?.daysLeft)&&balanceAlert?.state!=='unknown')?esc(balanceAlert.daysLeft)+' dias':'—')+'</strong></div>'+
       '</div></div>'+
     (limitText?'<small class="px-budget-limit">'+esc(limitText)+'</small>':'')+
     (billingExplanation?'<small class="px-budget-limit">'+esc(billingExplanation)+'</small>':'')+
     (checkedLabel?'<small class="px-budget-limit">'+esc(checkedLabel)+'</small>':'')+
+    (balanceAlert&&['low','critical'].includes(balanceAlert.state)?'<p class="px-budget-warning" role="status">'+esc(balanceAlert.reason)+'</p>':'')+
+    (provider==='meta_ads'&&connected&&can(me,'marketing.manage')?'<div class="px-budget-billing-actions"><button type="button" class="px-budget-billing-link" data-px-billing="pix">Adicionar saldo por Pix</button><button type="button" class="px-budget-billing-link" data-px-billing="balance">Atualizar saldo</button></div>':'')+
     (paymentUrl?'<a class="px-budget-billing-link" href="'+esc(paymentUrl)+'" target="_blank" rel="noopener noreferrer" title="Gerar recarga Pix no faturamento oficial da Meta, se disponível">Abrir recarga na Meta</a>':'')+
     '<div class="px-budget-meter" role="img" aria-label="Percentual restante não verificado"></div>'+
     '</article>';
@@ -402,7 +406,7 @@
     '<div class="px-budget-top-heading"><strong>Controle de verba</strong>'+
      '<small>Saldo pré-pago e previsão serão exibidos apenas quando confirmados pela plataforma.</small></div>'+
     '<div class="px-budget-top-grid">'+
-     budgetHeaderItem('meta_ads','Meta Ads','meta',metaReady,meta?.spend,meta?.currency,metaBillingUrl?{finance,paymentsUrl:metaBillingUrl}:{finance})+
+     budgetHeaderItem('meta_ads','Meta Ads','meta',metaReady,meta?.spend,meta?.currency,metaBillingUrl?{finance,paymentsUrl:metaBillingUrl,alert:metaBilling.data?.balanceAlert}:{finance,alert:metaBilling.data?.balanceAlert})+
      budgetHeaderItem('google_ads','Google Ads','google',googleReady,googleMicros,googleCode)+
     '</div>'+
    '</section>'+
@@ -482,6 +486,12 @@
     if(result.data?.quality==='thumbnail_only')placeholder?.classList.add('px-media-lowres');
    }).catch(()=>{});
   }
+  root.querySelectorAll('[data-px-billing]').forEach(button=>button.addEventListener('click',()=>{
+   window.SocioMetaBilling?.open({api,mode:button.dataset.pxBilling,onUpdated:()=>{
+    getCache.clear();
+    if(root.isConnected&&root.querySelector('.px-overview'))void overview({root,api,me,navigate,activityRange:range});
+   }});
+  }));
   root.querySelector('[data-px-reload]')?.addEventListener('click',()=>{
    getCache.clear();overview({root,api,me,navigate,activityRange:range});
   });

@@ -28,7 +28,8 @@ test('no unverified balance or exhaustion date is presented as financial fact',(
  assert(card.includes('Saldo pré-pago confirmado'));
  assert(card.includes('Abrir recarga na Meta'));
  assert(card.includes('Duração estimada'));
- assert(card.includes('<strong>—</strong>'));
+ assert(card.includes("balanceAlert?.state!=='unknown'"));
+ assert(card.includes("?esc(balanceAlert.daysLeft)+' dias':'—'"));
  assert.doesNotMatch(card,/Math\.round\([^)]*balance|spend_cap|balance\s*[-+]/);
 });
 test('budget line stays compact, mobile compatible, and does not imply a fake percentage',()=>{

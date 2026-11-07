@@ -58,6 +58,7 @@ import {reserveAdVideo,listAdVideos,storeAdVideo,adVideoExportUrl,resolveSignedA
 import {handleAdsMediaMcp} from './ads-media-mcp.mjs';
 import {handleMediaOAuth} from './ads-media-oauth.mjs';
 import {createMetaBrowser} from './meta-browser.mjs';
+import {saveMetaBillingObservation,metaBillingStatus,monitorMetaBilling} from './meta-billing-observations.mjs';
 import {createFlowImages} from './flow-images.mjs';
 import {startLocalPairing,claimLocalPairing,authorizeLocalConnector,localHeartbeat,pollLocalJob,finishLocalJob,localConnectionStatus,enqueueLocalJob,getLocalJob,disconnectLocalConnector} from './meta-local.mjs';
 import {connectorBundle} from './meta-connector/bundle.mjs';
@@ -555,7 +556,22 @@ async function handle(req,res){
  const adsRead=pathname.match(/^\/api\/marketing\/tools\/(campaigns|adsets|ads|images|pages|insights|finance|cities)$/);
  if(adsRead&&method==='GET'){
   const qs=new URL(req.url,'http://local').searchParams;
-  return json(res,200,await readAdsTool(pool,a,adsRead[1],{query:qs.get('q'),period:qs.get('period'),after:qs.get('after'),campaignId:qs.get('campaignId'),adsetId:qs.get('adsetId')}));
+  const result=await readAdsTool(pool,a,adsRead[1],{query:qs.get('q'),period:qs.get('period'),after:qs.get('after'),campaignId:qs.get('campaignId'),adsetId:qs.get('adsetId')});
+  if(adsRead[1]==='finance'){
+   const observed=await metaBillingStatus(pool,a,result.account.id);
+   result.balanceObservation=observed.observation;
+   result.balanceAlert=observed.alert;
+   result.billingNeedsLogin=observed.needsLogin===true;
+   if(result.finance.availableFundsMinor===null&&observed.alert.state!=='unknown'){
+    result.finance.availableFundsMinor=observed.observation.availableFundsMinor;
+    result.finance.availableFundsSource=observed.observation.source;
+    result.finance.checkedAt=observed.observation.observedAt;
+    result.finance.validUntil=observed.observation.validUntil;
+    result.finance.availableFundsStatus='observed_browser';
+   }
+   result.assistedPix={supported:result.finance.currency==='BRL',requiresBillingSession:true,automaticPayment:false};
+  }
+  return json(res,200,result);
  }
  if(pathname==='/api/marketing/tools/history'&&method==='GET')return json(res,200,await adsToolHistory(pool,a));
  if(pathname==='/api/marketing/tools/image'&&method==='POST'){
@@ -612,6 +628,22 @@ async function handle(req,res){
  const localJob=pathname.match(/^\/api\/marketing\/local\/jobs\/([0-9a-f-]{36})$/i);
  if(localJob&&method==='GET')return json(res,200,await getLocalJob(pool,a,localJob[1]));
 
+ // Wallet observations and Pix preparation use a server-resolved account only.
+ if(pathname==='/api/marketing/billing/status'&&method==='GET')
+  return json(res,200,await metaBillingStatus(pool,a));
+ const billingRoute=pathname.match(/^\/api\/marketing\/billing\/(refresh|prepare|pix)$/);
+ if(billingRoute&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  if(!limiter(simulationAttempts,'meta-billing:'+a.user_id+':'+a.active_tenant_id,60000,6))
+   throw fail(429,'Aguarde antes de atualizar o faturamento novamente.');
+  const {data}=await body(req,2000);
+  if(billingRoute[1]==='prepare'&&data.confirmed!==true)
+   throw fail(422,'Confira o valor antes de preparar a recarga.');
+  const result=await metaBrowser.billing(pool,a,billingRoute[1]==='refresh'?'read':billingRoute[1]==='pix'?'pix':'prepare',{amountMinor:data.amountMinor});
+  const saved=result.observation?await saveMetaBillingObservation(pool,a,result):null;
+  await audit(a,'marketing.billing.'+billingRoute[1],{accountId:result.accountId,state:result.state});
+  return json(res,200,{...result,...saved,paymentInitiated:false});
+ }
  // API Anything uses only the actor's isolated browser profile in the active tenant.
  if(pathname==='/api/marketing/browser/status'&&method==='GET')return json(res,200,await metaBrowser.status(pool,a));
  const browserRoute=pathname.match(/^\/api\/marketing\/browser\/(open|screen|input|finish|close|disconnect|plan|execute)$/);
@@ -2005,6 +2037,16 @@ async function main(){
    .catch(error=>console.warn('[socio gateway private]',JSON.stringify({reachable:false,
      code:Number(error?.status||503)})));
  }
+ // Refresh only wallets that the owner explicitly connected and observed.
+ let metaBillingBusy=false;
+ const metaBillingWorker=setInterval(async()=>{
+  if(metaBillingBusy||workersBlocked()||process.env.SOCIO_META_BILLING_MONITOR_ENABLED==='false')return;
+  metaBillingBusy=true;
+  try{await monitorMetaBilling(pool,metaBrowser);}
+  catch{console.warn('[socio-meta-wallet] refresh unavailable');}
+  finally{metaBillingBusy=false;}
+ },60000);
+ metaBillingWorker.unref();
  // Continuously import only the text available in authorized WhatsApp chats.
  // This worker NEVER sends; it detects newly arrived messages for the inbox.
  let liveSyncBusy=false;

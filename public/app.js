@@ -213,6 +213,7 @@ async function boot(){
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
 async function changeView(next,conversationId=null){
+ globalThis.SocioMetaBilling?.dispose();
  globalThis.SocioInterviewUI?.dispose();
  if(next!=='inbox'&&activeInbox){activeInbox.cleanup();activeInbox=null;}
  if(next==='channels')next='connections';
