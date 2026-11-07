@@ -8,7 +8,7 @@ const server=read('server.mjs'),style=read('public/socio-master.css');
 
 test('separate Master and production sidebars stay behind primary-owner permission',()=>{
  assert.match(html,/id="productionNav"/);
- assert.match(html,/id="masterNav"[^>]*class="[^"]*hidden"/);
+ assert.match(html,/class="nav master-side-nav hidden" id="masterNav"/);
  for(const view of ['masterOverview','admin','masterPlans'])assert.match(html,new RegExp('data-view="'+view+'"'));
  assert.match(app,/const masterViews=new Set\(\['masterOverview','admin','masterPlans'\]\)/);
  assert.match(app,/const isPrimaryMaster=\(\)=>!!\(state\.me\?\.user\?\.platformOwner&&state\.me\?\.user\?\.homeTenantId\)/);
