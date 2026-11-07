@@ -33,7 +33,7 @@ test('read-only subscription state does not call Stripe or confuse trial with pa
  assert.equal(result.subscription.status,'not_started');
  assert.equal(result.subscription.paidInvoices,0);
  assert.equal(result.checkout.available,true);
- assert.match(result.note,/Conta ativa não prova/);
+ assert.match(result.note,/conta ativa não prova/i);
 });
 test('authenticated checkout creates Stripe session only after explicit call; respects remaining trial',async()=>{
  const queries=[];
