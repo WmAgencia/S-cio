@@ -19,7 +19,7 @@ const actor={role:'owner',user_id:uid,active_tenant_id:tenant,tenant_status:'tri
 const cipher=sealMarketingSecret(JSON.stringify({tenant,uid,refresh:'mock-refresh-'+('r'.repeat(60))}),env);
 const db=(selected='1234567890',tokenCipher=cipher)=>({
  query:async(sql,args)=>{
-  assert.match(sql,/WHERE tenant_id=\\$1/);
+  assert.match(sql,/WHERE tenant_id=\$1/);
   assert.equal(args[0],tenant);
   return {rows:[{token_ciphertext:tokenCipher,selected_customer_id:selected}]};
  }
@@ -81,8 +81,8 @@ test('report refuses provider failures and inconsistent campaign data; no fake s
 test('report is wired as an authenticated GET route with no new Google Ads write operations',()=>{
  const server=readFileSync(new URL('../server.mjs',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../public/socio-integrations-ui.js',import.meta.url),'utf8');
- assert.match(server,/pathname==='\\/api\\/google-ads\\/campaigns'/);
- assert.match(server,/readGoogleAdsCampaigns\\(pool,a\\)/);
- assert.match(ui,/Consultar campanhas \\(30 dias\\)/);
+ assert.match(server,/pathname==='\/api\/google-ads\/campaigns'/);
+ assert.match(server,/readGoogleAdsCampaigns\(pool,a\)/);
+ assert.match(ui,/Consultar campanhas \(30 dias\)/);
  assert.doesNotMatch(server,/googleAds:mutate/);
 });
