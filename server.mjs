@@ -841,7 +841,7 @@ async function handle(req,res){
  }
  // Floating Thalita: read tools for the active company; all writes need one-use approval.
  if(method==='POST'&&pathname==='/api/thalita/ask'){
-  requirePermission(a,'inbox.read');
+  assertApiFeature(a.features,'/api/agent');
   if(!limiter(simulationAttempts,'thalita-chat:'+a.user_id,60000,16))throw fail(429,'Aguarde antes de consultar novamente.');
   const {data}=await body(req,2400);
   const result=await askThalita(pool,a,{message:data.message,runId:data.runId});
@@ -849,6 +849,7 @@ async function handle(req,res){
   return json(res,200,result);
  }
  if(method==='POST'&&pathname==='/api/thalita/confirm'){
+  assertApiFeature(a.features,'/api/agent');
   needRole(a,['owner','admin']);
   if(!limiter(simulationAttempts,'thalita-confirm:'+a.user_id,60000,6))throw fail(429,'Aguarde antes de executar novamente.');
   const {data}=await body(req,1200);
@@ -857,7 +858,7 @@ async function handle(req,res){
   return json(res,200,result);
  }
  if(method==='POST'&&pathname==='/api/thalita/tts'){
-  requirePermission(a,'inbox.read');
+  assertApiFeature(a.features,'/api/agent');
   if(!limiter(simulationAttempts,'thalita-tts:'+a.active_tenant_id,60000,14))throw fail(429,'Limite temporário de voz.');
   const {data}=await body(req,1200);
   const audio=await synthesizeSocioTrainingVoice(data.text);
@@ -866,7 +867,7 @@ async function handle(req,res){
   return res.end(audio.bytes);
  }
  if(method==='POST'&&pathname==='/api/thalita/transcribe'){
-  requirePermission(a,'inbox.read');sameOrigin(req);
+  assertApiFeature(a.features,'/api/agent');sameOrigin(req);
   if(!limiter(simulationAttempts,'thalita-transcribe:'+a.active_tenant_id,60000,12))throw fail(429,'Limite de áudio atingido.');
   const mime=String(req.headers['content-type']||'').split(';')[0].toLowerCase();
   if(!['audio/webm','audio/ogg','audio/mp4','audio/mpeg','audio/wav'].includes(mime))throw fail(422,'Formato de áudio inválido.');
