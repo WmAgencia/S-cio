@@ -137,3 +137,6 @@ body .px-danger-zone .btn:hover{color:#952d43!important;background:#ffeded!impor
 @media(max-width:930px){.px-kpi-grid,.px-ads-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.px-dual{grid-template-columns:1fr}.px-conn-card{grid-template-columns:1fr}.px-conn-actions{grid-column:auto}.px-marketing-kpi{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:650px){.px-kpi-grid,.px-ads-strip,.px-marketing-kpi{grid-template-columns:1fr}.px-page-heading{gap:15px}.px-kpi{padding:17px}.px-dual{grid-template-columns:1fr}.px-panel{padding:17px}.px-funnel{grid-template-columns:1fr 1fr}.px-conn-card{padding:16px}.px-conn-actions{flex-direction:column}.px-assistant-dock{right:14px;bottom:12px}.px-assistant-window{width:calc(100vw - 28px);max-height:calc(100dvh - 110px)}body .catalog-variant-row{grid-template-columns:repeat(2,minmax(0,1fr))!important}body .catalog-variant-row [data-remove-variant]{grid-column:1/-1}}
 @media(prefers-reduced-motion:reduce){.px-kpi,.px-assistant-dock *,body .btn{transition:none!important;animation:none!important}}
+
+/* Overview keeps top metrics and visual graph consistently aligned. */
+.px-overview .px-page-heading{padding-bottom:4px}
