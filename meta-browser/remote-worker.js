@@ -69,6 +69,7 @@ async function command(method, data = {}) {
       throw new Error('BILLING_ACCOUNT_INVALID');
     if(method==='billing_prepare')topupAmount(data.amountMinor);
     billingIntent=null;
+    if(method==='billing_read'&&billingIntent&&billingIntent.expires>Date.now())return {state:'busy',accountId:data.accountId};
     await command('open');
     const target=new URL('https://adsmanager.facebook.com/billing_hub/payment_settings/');
     target.searchParams.set('asset_id',data.accountId.slice(4));
