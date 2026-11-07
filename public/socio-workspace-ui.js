@@ -40,12 +40,13 @@
      '<td>'+money(spend,currency)+'</td><td>'+number(clicks)+'</td><td>'+(clicks?money(spend/clicks,currency):'—')+'</td><td>'+number(m.impressions||0)+'</td></tr>';
    }).join('')+'</tbody></table></div>';
  }
- async function loadMeta(api,period='today'){
-  const [status,campaigns,ads,insights]=await Promise.all([
+ async function loadMeta(api,period='today',includeAdLevel=false){
+  const [status,campaigns,ads,insights,adInsights]=await Promise.all([
    optional(api,'/api/marketing/official/status'),
    optional(api,'/api/marketing/tools/campaigns'),
    optional(api,'/api/marketing/tools/ads'),
-   optional(api,'/api/marketing/tools/insights?period='+encodeURIComponent(period))
+   optional(api,'/api/marketing/tools/insights?period='+encodeURIComponent(period)),
+   includeAdLevel?optional(api,'/api/marketing/advanced/reports?period='+encodeURIComponent(period)+'&level=ad'):Promise.resolve({ok:false,data:null})
   ]);
   const currency=selectedCurrency(status.data);
   const list=campaigns.data?.items||[], adList=ads.data?.items||[],daily=insights.data?.items||[];
@@ -55,7 +56,21 @@
     /(^|\.)purchase$|omni_purchase|offsite_conversion\.fb_pixel_purchase/i.test(String(x.action_type||'')))
     .reduce((n,x)=>n+(Number(x.value)||0),0):0;
   const purchases=daily.reduce((sum,x)=>sum+purchase(x),0);
-  return {status,campaigns,ads,insights,currency,list,adList,daily,clicks,spend,purchases,
+  // A ranking is comparable only within one account and reporting period.
+  const adItems=Array.isArray(adInsights.data?.items)?adInsights.data.items:[];
+  const withMetrics=adItems.map(x=>({id:String(x.ad_id||''),name:String(x.ad_name||'Anúncio'),
+   clicks:Number(x.clicks)||0,impressions:Number(x.impressions)||0,spend:Number(x.spend)||0,
+   purchases:purchase(x),ctr:Number(x.ctr)||0})).filter(x=>x.id&&x.impressions>0);
+  const purchaseAds=withMetrics.filter(x=>x.purchases>0&&x.spend>=0);
+  let bestAd=null,adRankingMethod=null;
+  if(purchaseAds.length){
+   bestAd=[...purchaseAds].sort((a,b)=>(a.spend/a.purchases)-(b.spend/b.purchases)||b.purchases-a.purchases)[0];
+   adRankingMethod='Menor custo por evento Purchase atribuído';
+  }else if(withMetrics.length){
+   bestAd=[...withMetrics].sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions)[0];
+   adRankingMethod='Maior número de cliques (sem compras atribuídas)';
+  }
+  return {status,campaigns,ads,insights,adInsights,adItems,bestAd,adRankingMethod,currency,list,adList,daily,clicks,spend,purchases,
    activeCampaigns:list.filter(x=>/ACTIVE/i.test(x.effective_status||x.status)).length,
    activeAds:adList.filter(x=>/ACTIVE/i.test(x.effective_status||x.status)).length,
    best:daily.filter(x=>Number(x.clicks)>0).sort((a,b)=>Number(b.clicks)-Number(a.clicks))[0]||null};
@@ -137,7 +152,7 @@
  async function marketing({root,api,me,navigate,period='last_7d'}){
   root.innerHTML='<div class="px-loading">Consultando campanhas da Meta…</div>';
   if(!can(me,'marketing.read')){root.textContent='Você não tem acesso às campanhas desta empresa.';return;}
-  let data=null;try{data=await loadMeta(api,period);}catch{}
+  let data=null;try{data=await loadMeta(api,period,true);}catch{}
   const connected=data?.status.data?.connected===true,selected=!!data?.status.data?.selectedAccount;
   const campaigns=data?.list||[],ads=data?.adList||[],hasData=data?.insights.ok===true,currency=data?.currency;
   const insightsMap=new Map((data?.daily||[]).map(x=>[String(x.campaign_id),x]));
@@ -160,6 +175,14 @@
    section('Suas campanhas','Ativas, pausadas e rascunhos retornados pela Meta',
     data?.campaigns.ok?(campaigns.length?advertRows(campaigns,insightsMap,currency):empty('A conta não retornou campanhas.')):
       empty(data?.campaigns.reason||'Conecte uma conta para listar campanhas.'))+
+   section('Anúncio em destaque','Comparação de resultados na mesma conta e período',
+    data?.bestAd?'<div class="px-best-ad"><span>'+esc(data.adRankingMethod||'Melhor desempenho observado')+'</span><strong>'+esc(data.bestAd.name)+'</strong>'+
+     '<div><span>Cliques <b>'+number(data.bestAd.clicks)+'</b></span>'+
+      '<span>Gasto <b>'+money(data.bestAd.spend,currency)+'</b></span>'+
+      '<span>CTR <b>'+esc(data.bestAd.ctr.toLocaleString('pt-BR',{maximumFractionDigits:2}))+'%</b></span>'+
+      '<span>Purchase atribuído <b>'+esc(number(data.bestAd.purchases))+'</b></span></div>'+
+     '<p class="px-muted">É um destaque estatístico, não prova de rentabilidade nem de venda paga.</p></div>':
+    empty(data?.adInsights.ok?'Sem anúncios com métricas suficientes no período.':'Relatório por anúncio indisponível nesta conta.'))+
    section('Anúncios e criativos','Anúncios vinculados à conta de anúncios selecionada',
     data?.ads.ok?(ads.length?'<div class="px-ads-list">'+ads.slice(0,20).map(ad=>
       '<div><div><strong>'+esc(ad.name||ad.id)+'</strong><small>'+esc(ad.id)+'</small></div>'+
