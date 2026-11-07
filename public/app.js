@@ -9,18 +9,26 @@ const featuresEnabled=()=>state.me?.tenant?.features||{};
 const featureAvailable=key=>featuresEnabled()[key]!==false;
 const ownAccountAvailable=()=>!!state.me?.user?.platformOwner||(state.me?.user?.permissions||[]).includes('account.manage');
 const isPrimaryMaster=()=>!!(state.me?.user?.platformOwner&&state.me?.user?.homeTenantId);
+const masterViews=new Set(['masterOverview','admin','masterPlans']);
+const isMasterView=()=>isPrimaryMaster()&&masterViews.has(state.view);
 function syncMasterSwitch(){
  const button=$('#masterProductionSwitch'),label=$('#masterSwitchLabel');
  if(!button||!label)return;
- const visible=isPrimaryMaster();button.classList.toggle('hidden',!visible);
+ const visible=isPrimaryMaster(),master=isMasterView();
+ button.classList.toggle('hidden',!visible);
+ document.body.classList.toggle('socio-is-master',master);
+ $('#productionNav')?.classList.toggle('hidden',master);
+ $('#masterNav')?.classList.toggle('hidden',!master);
  if(!visible)return;
- const production=state.view==='admin';
- label.textContent=production?'Ir para meu painel de produção':'Ir para o painel Master';
+ label.textContent=master?'Voltar ao meu painel de produção':'Ir para o painel Master';
  button.title=label.textContent;button.setAttribute('aria-label',label.textContent);
+ const workspace=$('#workspaceName'),initial=$('#workspaceInitial');
+ if(workspace)workspace.textContent=master?'Administração Master':state.me?.tenant?.name||'Seu espaço';
+ if(initial)initial.textContent=master?'M':(state.me?.tenant?.name?.[0]||'S').toUpperCase();
 }
 
 const viewAvailable=key=>!featureView[key]||featureAvailable(featureView[key])||key==='team'&&ownAccountAvailable();
-const titles={overview:'Visão geral',inbox:'WhatsApp',connections:'Conexões',marketing:'Meta Ads',products:'Produtos e serviços',sales:'Vendas',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',settings:'Configurações da conta',admin:'Empresas'};
+const titles={overview:'Visão geral',inbox:'WhatsApp',connections:'Conexões',marketing:'Meta Ads',products:'Produtos e serviços',sales:'Vendas',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',settings:'Configurações da conta',admin:'Empresas',masterOverview:'Dashboard Master',masterPlans:'Planos e métricas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -133,7 +141,8 @@ async function boot(){
    $('#userChip').textContent=me.user.name.split(/\s+/).slice(0,2).map(v=>v[0]).join('').toUpperCase();
    $('#userName').textContent=me.user.name;
    $('#userRole').textContent=me.user.platformOwner?'Administrador master':me.user.role==='owner'?'Proprietário':'Equipe da empresa';
-   $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
+   // The Master menu belongs to its own workspace; keep company tools hidden in production.
+   $('#adminNav')?.classList.add('hidden');
    syncMasterSwitch();
    $('#teamNav')?.classList.toggle('hidden',!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner);
    const access=new Set(me.user.permissions||[]);
@@ -211,7 +220,7 @@ async function changeView(next,conversationId=null){
  if(next==='agent'){state.aiTab='agent';next='training';}
  else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
- if(next==='admin'&&!state.me?.user.platformOwner)return;
+ if(masterViews.has(next)&&!isPrimaryMaster())return;
  if(!viewAvailable(next))next='overview';
  const access=new Set(state.me?.user?.permissions||[]);
  if(next==='training'&&!access.has('training.manage'))next='overview';
@@ -220,6 +229,7 @@ async function changeView(next,conversationId=null){
  if(next==='instagram')next='marketing';
  if(next==='marketing'&&!access.has('marketing.read'))next='overview';
  globalThis.SocioWorkspaceUI?.invalidateRender();
+ globalThis.SocioMasterDashboard?.invalidate();
  globalThis.SocioFlowImages?.dispose();
  globalThis.SocioMetaBrowser?.dispose();
  globalThis.SocioMetaLocal?.dispose();
@@ -242,6 +252,9 @@ async function changeView(next,conversationId=null){
   if(next==='team')await team();
   if(next==='settings')await settings();
   if(next==='admin')await admin();
+  if(next==='masterOverview'||next==='masterPlans')
+   await globalThis.SocioMasterDashboard.render({root:view,api,me:state.me,navigate:changeView,
+    mode:next==='masterPlans'?'plans':'overview'});
  }catch(error){view.innerHTML=empty('!', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
 }
 
@@ -1521,6 +1534,8 @@ const sidebarIcons={
  settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1m10 10 2.1 2.1M4.9 19.1 7 17m10-10 2.1-2.1"/>',
  team:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-1c0-3.6 2.5-5 6-5s6 1.4 6 5v1z"/><path d="M17 5a3 3 0 0 1 0 6m1 4c2 .5 3 1.8 3 4v1"/>',
  admin:'<path d="M3 21V5l9-3 9 3v16M3 21h18M9 21v-5h6v5M7 9h2m6 0h2M7 13h2m6 0h2"/>',
+ masterOverview:'<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/>',
+ masterPlans:'<path d="M4 20V11m5 9V5m5 15v-7m5 7V8"/><path d="M2 21h20"/>',
  logout:'<path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M14 7l5 5-5 5M9 12h10"/>'
 };
 function initSidebarIcons(){
@@ -1538,12 +1553,13 @@ function renderCommandItems(){
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
   key!=='agent'&&key!=='channels'&&key!=='reports'&&key!=='quotes'&&key!=='sales'&&viewAvailable(key)&&
+  (isMasterView()?masterViews.has(key)||key==='settings':!masterViews.has(key))&&
   (key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&
   (key!=='reports'||(state.me?.user?.permissions||[]).includes('audit.read'))&&
   (!['sales','quotes'].includes(key)||(state.me?.user?.permissions||[]).includes('sales.read'))&&
   (key!=='training'||(state.me?.user?.permissions||[]).includes('training.manage'))&&
   (key!=='team'||ownAccountAvailable())&&
-  (key!=='admin'||state.me?.user.platformOwner)&&
+  (!masterViews.has(key)||isPrimaryMaster())&&
   (label.toLocaleLowerCase('pt-BR').includes(keyword)||key.includes(keyword)));
  const list=$('#commandList');
  list.innerHTML=names.length?names.map(([key,label])=>
@@ -1583,17 +1599,16 @@ $('#masterProductionSwitch')?.addEventListener('click',()=>action(async()=>{
  if(button.disabled)return;
  button.disabled=true;
  try{
-  if(state.view==='admin'){
-   // The home workspace belongs to the authenticated primary master only.
+  if(isMasterView()){
+   // Return to the original tenant of the authenticated platform owner.
    const homeTenantId=state.me.user.homeTenantId;
-   if(state.me.tenant.id!==homeTenantId)
+   if(state.me.tenant.id!==homeTenantId){
     await api('/api/admin/switch','POST',{tenantId:homeTenantId});
-   state.view='overview';
-   await boot();
-   toast('Painel de produção aberto.');
-  }else{
-   await changeView('admin');
-  }
+    state.view='overview';
+    await boot();
+   }else await changeView('overview');
+   toast('Seu painel de produção está aberto.');
+  }else await changeView('masterOverview');
  }finally{button.disabled=false;syncMasterSwitch();}
 }));
 
