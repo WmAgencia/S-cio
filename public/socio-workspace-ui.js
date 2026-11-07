@@ -54,6 +54,31 @@
     !/[?&](?:access_token|appsecret_proof|token)=/i.test(u.search)?u.href:null;
   }catch{return null;}
  };
+ const trustedVideoEmbed=value=>{
+  try{
+   const u=new URL(value);
+   if(u.protocol!=='https:'||u.hostname!=='www.facebook.com'||
+    u.pathname!=='/plugins/video.php'||u.href.length>2200)return null;
+   const source=new URL(u.searchParams.get('href')||'');
+   const p=source.pathname;
+   const validHost=['www.facebook.com','facebook.com','m.facebook.com'].includes(source.hostname);
+   const validVideo=/^\/\d{4,30}\/videos\/\d{4,30}\/?$/.test(p)||
+    (p==='/watch/'&&/^\d{4,30}$/.test(source.searchParams.get('v')||''));
+   return validHost&&source.protocol==='https:'&&validVideo&&!source.username&&!source.password?u.href:null;
+  }catch{return null;}
+ };
+ const createInlineFacebookVideo=(url,title)=>{
+  const trusted=trustedVideoEmbed(url);
+  if(!trusted)return null;
+  const frame=document.createElement('iframe');
+  frame.className='px-facebook-video-frame';
+  frame.title=title||'Vídeo da campanha na Meta';
+  frame.src=trusted;frame.loading='lazy';frame.allowFullscreen=true;
+  frame.referrerPolicy='strict-origin-when-cross-origin';
+  frame.setAttribute('allow','autoplay; clipboard-write; encrypted-media; picture-in-picture');
+  frame.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-presentation');
+  return frame;
+ };
  const watchUrl=value=>{
   try{
    const url=new URL(value);
@@ -285,6 +310,10 @@
    const placeholder=root.querySelector('[data-campaign-preview]');
    cached(api,'/api/marketing/tools/ad-media?adId='+encodeURIComponent(featuredAd.id),25000).then(result=>{
     if(!placeholder?.isConnected||!result.ok)return;
+    // A public Facebook Page video uses the official inline player; its own
+    // thumbnail stays crisp, and playback occurs here without leaving Sócio.
+    const frame=createInlineFacebookVideo(result.data?.videoEmbedUrl,'Vídeo da campanha em destaque');
+    if(frame){placeholder.replaceChildren(frame);return;}
     const src=mediaUrl(result.data?.posterUrl||result.data?.thumbnailUrl);
     if(src)placeholder.innerHTML=posterView(src,'Criativo da campanha');
     if(result.data?.quality==='thumbnail_only')placeholder?.classList.add('px-media-lowres');
@@ -355,7 +384,7 @@
       empty('Nenhum anúncio retornado pela conta.')):empty('Os anúncios estão indisponíveis até autorizar a leitura.'))+
    section('Interpretação dos resultados','As plataformas reportam atribuições, não pagamentos conciliados',
     '<div class="px-footnote">O CPA é calculado apenas quando a Meta retorna eventos Purchase. Esses eventos não são prova de pedido pago. Sem evento válido, o painel mostra “—”, em vez de inventar resultados.</div>')+
-   (connected&&selected?'<details class="px-advanced"><summary>Ferramentas avançadas e gerenciamento de anúncios</summary><div id="pxAdvancedMeta"></div></details>':'')+
+   ''+
    '</div>';
   snapshots.set('marketing',root.innerHTML);
   if(data?.bestAd?.id){
@@ -378,7 +407,7 @@
      else holder.insertAdjacentHTML('afterbegin',posterView(poster,'Miniatura do anúncio'));
     }
     if(media.quality==='thumbnail_only')holder.classList.add('px-media-lowres');
-    if(!mediaUrl(media.videoUrl)&&!trustedMetaPreview(media.previewUrl)&&!watchUrl(media.watchUrl)){
+    if(!mediaUrl(media.videoUrl)&&!trustedVideoEmbed(media.videoEmbedUrl)&&!trustedMetaPreview(media.previewUrl)){
      if(button){button.textContent='Sem vídeo disponível';button.disabled=true;}
     }
     return media;
@@ -399,6 +428,10 @@
      if(poster)el.poster=poster;
      el.src=video;holder.replaceChildren(el);
      void el.play().catch(()=>{/* Native player still exposes its play control. */});
+    }else if(trustedVideoEmbed(result.videoEmbedUrl)){
+     const frame=createInlineFacebookVideo(result.videoEmbedUrl,'Reproduzir anúncio '+adName);
+     if(frame)holder.replaceChildren(frame);
+     else{button.textContent='Não foi possível carregar o player';button.disabled=true;}
     }else if(trustedMetaPreview(result.previewUrl)){
      const frame=document.createElement('iframe');
      frame.className='px-meta-preview-frame';
@@ -410,25 +443,13 @@
      frame.setAttribute('allow','autoplay; encrypted-media; picture-in-picture');
      holder.replaceChildren(frame);
     }else{
-     const external=watchUrl(result.watchUrl);
-     if(external){
-      const link=document.createElement('a');
-      link.href=external;link.target='_blank';link.rel='noopener noreferrer';
-      link.className='px-media-external';link.textContent='▶ Abrir vídeo na Meta';
-      holder.append(link);button.remove();
-     }else{
-      button.textContent='Vídeo não disponibilizado';button.disabled=true;
-     }
+     button.textContent='Vídeo não disponibilizado pela Meta';button.disabled=true;
     }
    });
   }
   root.querySelector('[data-px-connect]')?.addEventListener('click',()=>navigate('connections'));
   root.querySelectorAll('[data-px-period]').forEach(b=>b.addEventListener('click',()=>marketing({root,api,me,navigate,period:b.dataset.pxPeriod})));
-  const advanced=root.querySelector('#pxAdvancedMeta'),details=advanced?.closest('details');
-  if(advanced&&details)details.addEventListener('toggle',()=>{
-   if(!details.open||advanced.dataset.loaded)return;advanced.dataset.loaded='1';
-   if(globalThis.SocioMetaOfficial)globalThis.SocioMetaOfficial.render({root:advanced,api,canManage:can(me,'marketing.manage')});
-  });
+
  }
  const connectBtn=(label,attr,enabled=true)=>'<button type="button" class="btn '+(enabled?'primary':'soft')+'" '+attr+' '+(!enabled?'disabled':'')+'>'+esc(label)+'</button>';
  async function connections({root,api,me,navigate}){
