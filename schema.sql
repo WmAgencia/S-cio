@@ -1000,6 +1000,7 @@ CREATE TABLE IF NOT EXISTS socio_billing_accounts (
  provider text NOT NULL DEFAULT 'stripe' CHECK(provider='stripe'),
  stripe_customer_id text UNIQUE,
  stripe_subscription_id text UNIQUE,
+ stripe_mode text NOT NULL DEFAULT 'test' CHECK(stripe_mode IN ('test','live')),
  stripe_checkout_session_id text UNIQUE,
  subscription_status text NOT NULL DEFAULT 'not_started'
   CHECK(subscription_status IN ('not_started','checkout_pending','trialing','active','past_due','unpaid','paused','canceled','incomplete','incomplete_expired')),
