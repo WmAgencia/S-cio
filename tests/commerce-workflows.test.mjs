@@ -79,13 +79,16 @@ test('quote send fails closed with outbound disabled and never attempts delivery
  assert.equal(delivered,false);
 });
 
-test('navigation separates sales, estimates and business reports',()=>{
+test('navigation consolidates estimates and reports in the main workspace',()=>{
  const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
  const js=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
  const sales=readFileSync(new URL('../public/sales.js',import.meta.url),'utf8');
  assert.match(html,/data-view="sales"/);
- assert.match(html,/data-view="quotes"/);
- assert.match(html,/data-view="reports"/);
+ assert.match(html,/data-view="connections"/);
+ assert.doesNotMatch(html,/data-view="quotes"/);
+ assert.doesNotMatch(html,/data-view="reports"/);
+ assert.match(js,/if\(next==='quotes'\)next='sales'/);
+ assert.match(js,/if\(next==='reports'\)next='overview'/);
  assert.match(html,/id="commerceAlerts"/);
  assert.match(js,/changeView\('inbox',item.conversation_id\)/);
  assert.match(sales,/data-lead-chat/);
