@@ -19,14 +19,27 @@ export const META_TOOL_CATALOG=Object.freeze([
  {id:'pixels',label:'Pixels da conta',readOnly:true},
  {id:'conversions',label:'Conversões personalizadas',readOnly:true},
  {id:'reports',label:'Relatórios por campanha, conjunto ou anúncio',readOnly:true},
- {id:'diagnosis',label:'Diagnóstico de eficiência por campanha',readOnly:true}
+ {id:'diagnosis',label:'Diagnóstico de eficiência por campanha',readOnly:true},
+ {id:'activity',label:'Histórico de alterações na Meta',readOnly:true},
+ {id:'labels',label:'Etiquetas de anúncios',readOnly:true},
+ {id:'rules',label:'Regras automáticas existentes',readOnly:true},
+ {id:'delivery',label:'Status e problemas de entrega',readOnly:true},
+ {id:'video_report',label:'Retenção e reprodução de vídeos',readOnly:true},
+ {id:'conversion_report',label:'Ações e valores atribuídos pela Meta',readOnly:true},
+ {id:'budget_report',label:'Orçamentos de campanhas',readOnly:true},
+ {id:'creative_report',label:'Desempenho por anúncio e criativo',readOnly:true}
 ]);
 const PATHS=Object.freeze({
  creatives:['adcreatives','id,name,thumbnail_url,object_story_spec,effective_object_story_id'],
  videos:['advideos','id,title,description,created_time,length,thumbnail_url'],
  audiences:['customaudiences','id,name,subtype,approximate_count_lower_bound,approximate_count_upper_bound'],
  pixels:['adspixels','id,name,last_fired_time'],
- conversions:['customconversions','id,name,custom_event_type,rule']
+ conversions:['customconversions','id,name,custom_event_type,rule'],
+ activity:['activities','event_time,event_type,translated_event_type,object_id,object_name'],
+ labels:['adlabels','id,name'],
+ rules:['adrules_library','id,name,status'],
+ delivery:['ads','id,name,campaign_id,adset_id,status,effective_status,issues_info'],
+ budget_report:['campaigns','id,name,status,effective_status,daily_budget,lifetime_budget,budget_remaining,spend_cap']
 });
 export function validateMetaReport(input={}){
  const period=META_REPORT_PERIODS.includes(input.period)?input.period:'last_7d',
@@ -61,7 +74,7 @@ async function context(pool,a,options={}){
  return {account,token:value.token,env:options.env||process.env,request:options.request||fetch};
 }
 async function graph(c,edge,params={}){
- if(!/^[a-z][a-z_]{2,25}$/.test(edge)||!['insights','ads','adcreatives','advideos','customaudiences','adspixels','customconversions'].includes(edge))
+ if(!/^[a-z][a-z_]{2,25}$/.test(edge)||!['insights','ads','campaigns','activities','adlabels','adrules_library','adcreatives','advideos','customaudiences','adspixels','customconversions'].includes(edge))
   throw fail(422,'Ferramenta Meta inválida.');
  const cfg=officialConfig(c.env),url=new URL('https://graph.facebook.com/'+cfg.version+'/'+c.account.id+'/'+edge);
  for(const [key,value] of Object.entries(params))url.searchParams.set(key,typeof value==='object'?JSON.stringify(value):String(value));
@@ -80,15 +93,20 @@ export async function readAdvancedMetaTool(pool,a,kind,input={},options={}){
  if(!META_TOOL_CATALOG.some(t=>t.id===kind))throw fail(422,'Ferramenta não disponível.');
  const c=await context(pool,a,options);
  if(kind==='account')return {account:c.account,tools:META_TOOL_CATALOG,readOnly:true};
+ // Pagination applies to every listing/report, not only asset libraries.
+ let after=null;
+ if(input.after!==undefined&&input.after!==null&&input.after!==''){
+  if(typeof input.after!=='string'||!/^[A-Za-z0-9=+\/_-]{1,512}$/.test(input.after))
+   throw fail(422,'Cursor inválido.');
+  after=input.after;
+ }
  if(PATHS[kind]){
   const [edge,fields]=PATHS[kind];
   const params={fields,limit:100};
-  if(input.after){
-   if(typeof input.after!=='string'||!/^[A-Za-z0-9=+\/_-]{1,512}$/.test(input.after))throw fail(422,'Cursor inválido.');
-   params.after=input.after;
-  }
+  if(after)params.after=after;
   const result=await graph(c,edge,params);
-  return {kind,accountId:c.account.id,items:Array.isArray(result.data)?result.data:[],
+  if(!Array.isArray(result.data))throw fail(503,'A Meta não retornou uma lista válida.');
+  return {kind,accountId:c.account.id,items:result.data,
    after:result.paging?.cursors?.after||null,hasMore:Boolean(result.paging?.next),
    readOnly:true};
  }
@@ -97,7 +115,18 @@ export async function readAdvancedMetaTool(pool,a,kind,input={},options={}){
   level:kind==='diagnosis'?'campaign':report.level,date_preset:report.period,limit:100};
  if(report.breakdown!=='none'&&kind==='reports')params.breakdowns=report.breakdown;
  if(report.daily&&kind==='reports')params.time_increment='1';
- const result=await graph(c,'insights',params),rows=Array.isArray(result.data)?result.data:[];
+ if(kind==='video_report'){
+  params.level='ad';
+  params.fields+=',video_play_actions,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p95_watched_actions,video_p100_watched_actions';
+ }
+ if(kind==='conversion_report'){
+  params.fields+=',action_values,cost_per_action_type,purchase_roas';
+ }
+ if(kind==='creative_report')params.level='ad';
+ if(after)params.after=after;
+ const result=await graph(c,'insights',params);
+ if(!Array.isArray(result.data))throw fail(503,'A Meta não retornou um relatório válido.');
+ const rows=result.data;
  const summary=summarizeMetaInsights(rows,{currency:c.account.currency,period:report.period,level:params.level});
  let diagnosis=null;
  if(kind==='diagnosis'){
