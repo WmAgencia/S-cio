@@ -444,7 +444,7 @@ async function channels(){
  const [data,waConfig,linked]=await Promise.all([
   api('/api/channels'),api('/api/waakg/config'),api('/api/waakg/channels')
  ]);
- const canManage=state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role);
+ const canManage=state.me.user.platformOwner||(state.me.user.permissions||[]).includes('training.manage');
  const connected=linked.filter(c=>c.status==='connected').length;
  const pending=linked.length-connected;
  const legacy=data.filter(c=>!linked.some(x=>x.id===c.id));
@@ -1290,7 +1290,7 @@ async function team(){
       '<button type="button" class="btn sm soft" data-team-toggle="'+e(member.id)+'" data-team-active="'+(!member.active)+'">'+
       (member.active?'Desativar':'Reativar')+'</button>'+
       '<select aria-label="Alterar permissão de '+e(member.name)+'" data-team-select="'+e(member.id)+'">'+
-      [['viewer','Somente leitura'],['manager','Gestor'],['admin','Administrador'],['agent','Atendente (legado)']].map(([key,label])=>'<option value="'+key+'" '+(member.role===key?'selected':'')+'>'+label+'</option>').join('')+'</select>':'<span class="form-note">—</span>')+
+      [['viewer','Somente leitura'],['manager','Gestor'],...(mayPromote?[['admin','Administrador']]:[]),...(member.role==='admin'?[['admin','Administrador']]:[]),['agent','Atendente (legado)']].filter(([key],idx,arr)=>arr.findIndex(([role])=>role===key)===idx).map(([key,label])=>'<option value="'+key+'" '+(member.role===key?'selected':'')+'>'+label+'</option>').join('')+'</select>':'<span class="form-note">—</span>')+
     '</div></td></tr>';
   }).join('')+'</tbody></table></div></section>':'';
  const invite=mayInvite?'<section class="card card-pad" id="teamInvitePanel" hidden><div class="section-title">Adicionar usuário</div>'+
