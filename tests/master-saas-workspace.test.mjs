@@ -61,3 +61,32 @@ test('team page remains focused on user management, without audit panels',()=>{
  assert.match(team,/Usuários da empresa/);
  assert.doesNotMatch(team,/Auditoria da empresa|Isolamento de dados/);
 });
+
+test('Master dashboard renders live counts and charts from authorized API results',async()=>{
+ const globalThis={};
+ vm.runInNewContext(master,{globalThis,Date,Intl,Number,Math,URL});
+ const root={innerHTML:'',querySelectorAll:()=>[]};
+ const items=[
+  {id:'a',name:'Consecom',plan:'essencial',status:'active',created_at:'2026-11-01',members:2},
+  {id:'b',name:'Empresa B',plan:'equipe',status:'trial',created_at:'2026-11-03',members:1},
+  {id:'c',name:'Empresa C',plan:'voz',status:'paused',created_at:'2026-11-04',members:1}
+ ];
+ const calls=[];
+ const api=async path=>{calls.push(path);return path==='/api/admin/tenants'?items:
+  {summary:{trialCalendarElapsed:0,trialEndingWithin3Days:1},
+   tenants:[{id:'b',name:'Empresa B',plan:'equipe',accountStatus:'trial',needsAttention:true,
+    pendingQuotes:2,openOpportunities:1}],partial:false};};
+ const me={user:{platformOwner:true}};
+ await globalThis.SocioMasterDashboard.render({root,api,me,navigate:()=>{}});
+ assert.deepEqual(calls,['/api/admin/tenants','/api/admin/monitor']);
+ assert.match(root.innerHTML,/Visão geral do SaaS/);
+ assert.match(root.innerHTML,/Crescimento dos cadastros/);
+ assert.match(root.innerHTML,/Distribuição dos planos/);
+ assert.match(root.innerHTML,/Empresa B/);
+ assert.match(root.innerHTML,/Status ativo não significa cliente pagante/);
+ assert.doesNotMatch(root.innerHTML,/R\$ 0,00/);
+ await globalThis.SocioMasterDashboard.render({root,api,me,navigate:()=>{},mode:'plans'});
+ assert.match(root.innerHTML,/Planos e utilização/);
+ assert.match(root.innerHTML,/Faturamento mensal recorrente/);
+ await assert.rejects(globalThis.SocioMasterDashboard.render({root,api,me:{user:{platformOwner:false}},navigate:()=>{}}));
+});
