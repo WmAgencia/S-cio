@@ -34,6 +34,7 @@ import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs
 import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
 import {processNextWaakgScan} from './waakg-history.mjs';
 import {startAutoTraining,autoTrainingStatus,cancelAutoTraining,processNextAutoTraining} from './training-auto.mjs';
+import {getSocioInterview,startSocioInterview,advanceSocioInterview,resetSocioInterview,transcribeSocioTraining} from './socio-training-interview.mjs';
 import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
@@ -257,10 +258,10 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
-  res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
+  res.writeHead(200,{'Content-Type':(file.endsWith('.js')||file.endsWith('.mjs'))?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
   return res.end(content);
  }
  if(pathname==='/webhooks/whatsapp'&&method==='GET'){
@@ -1338,6 +1339,47 @@ async function handle(req,res){
   if(!validText(data.name,80)||!validText(data.tone,300)||!validText(data.instructions,6000)||typeof data.enabled!=='boolean')throw fail(422,'Configuração inválida.');
   const r=await query('UPDATE agents SET name=$2,tone=$3,instructions=$4,enabled=$5,updated_at=now() WHERE tenant_id=$1 RETURNING name,tone,instructions,knowledge_md,enabled',[a.active_tenant_id,data.name.trim(),data.tone.trim(),data.instructions.trim(),data.enabled]);
   await audit(a,'agent.updated',{enabled:data.enabled});return json(res,200,r.rows[0]);
+ }
+ // Prospector guided interview: per-company private draft, approval stays in /versions/:id/approve.
+ if(method==='GET'&&pathname==='/api/training/interview'){
+  requirePermission(a,'training.manage');
+  return json(res,200,{interview:await getSocioInterview(pool,a.active_tenant_id)});
+ }
+ if(method==='POST'&&pathname==='/api/training/interview/start'){
+  needRole(a,['owner','admin']);
+  if(!limiter(simulationAttempts,'interview-start:'+a.active_tenant_id,60000,12))
+   throw fail(429,'Muitas solicitações de treinamento.');
+  const {data}=await body(req,1600);
+  const interview=await startSocioInterview(pool,a.active_tenant_id,data.mode);
+  await audit(a,'training.interview.started',{mode:data.mode});
+  return json(res,200,{interview});
+ }
+ if(method==='POST'&&pathname==='/api/training/interview/turn'){
+  needRole(a,['owner','admin']);
+  if(!limiter(simulationAttempts,'interview-turn:'+a.active_tenant_id,60000,45))
+   throw fail(429,'Aguarde antes de responder novamente.');
+  const {data}=await body(req,2200);
+  const interview=await advanceSocioInterview(pool,a.active_tenant_id,data.text);
+  await audit(a,'training.interview.answered',{step:interview.step,completed:interview.completed});
+  return json(res,200,{interview});
+ }
+ if(method==='POST'&&pathname==='/api/training/interview/reset'){
+  needRole(a,['owner','admin']);
+  const result=await resetSocioInterview(pool,a.active_tenant_id);
+  await audit(a,'training.interview.reset');
+  return json(res,200,result);
+ }
+ if(method==='POST'&&pathname==='/api/training/interview/audio'){
+  needRole(a,['owner','admin']);sameOrigin(req);
+  if(!limiter(simulationAttempts,'interview-audio:'+a.active_tenant_id,60000,12))
+   throw fail(429,'Limite temporário de gravações atingido.');
+  const mime=String(req.headers['content-type']||'').split(';')[0].toLowerCase();
+  if(!['audio/webm','audio/ogg','audio/mp4','audio/mpeg','audio/wav'].includes(mime))
+   throw fail(422,'Formato de áudio não suportado.');
+  if(Number(req.headers['content-length']||0)>3*1024*1024)throw fail(413,'O áudio deve ter até 3 MB.');
+  let length=0;const chunks=[];
+  for await(const chunk of req){length+=chunk.length;if(length>3*1024*1024)throw fail(413,'O áudio deve ter até 3 MB.');chunks.push(chunk);}
+  return json(res,200,await transcribeSocioTraining(Buffer.concat(chunks),mime));
  }
  if(method==='GET'&&pathname==='/api/training/auto'){
   requirePermission(a,'training.manage');
