@@ -69,7 +69,16 @@ export function formatFriendlyMetaReport({campaigns,report,period='last_30d'}={}
   ' Há '+formatInt(purchaseTotal)+' eventos de compra atribuídos, que não comprovam pagamento.':
   '';
  const message=intro+activity+highlight+caution+coverage+'\n'+suggestion;
- const speechText=(intro+activity+highlight+' '+suggestion).slice(0,650);
+ // Keep the recommended next step audible. Long reports are displayed in
+ // full as text, but speech is short enough to generate quickly.
+ const speechOptions=[
+  [intro,activity,highlight,suggestion].join(' '),
+  [intro,activity,suggestion].join(' '),
+  [intro,highlight,suggestion].join(' '),
+  [intro,suggestion].join(' ')
+ ];
+ const speechText=speechOptions.find(t=>t.length<=420)||
+  [intro,suggestion].join(' ').slice(0,420);
  return {status:'completed',executed:false,readOnly:true,message,speechText,
   data:{source:'meta_ads',period,listedCampaigns:existing.length,activeCampaigns:active.length,
    campaignsPartial:Boolean(campaigns.hasMore),insightsPartial:Boolean(report.hasMore),

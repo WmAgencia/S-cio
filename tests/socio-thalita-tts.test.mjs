@@ -21,7 +21,7 @@ test('Thalita TTS uses bounded server argv, returns transient audio and cleans u
    assert.equal(args[args.indexOf('--voice')+1],SOCIO_TRAINING_VOICE);
    assert.equal(args[args.indexOf('--text')+1],'Olá! Como posso ajudar?');
    assert.ok(args.includes('--rate=+4%'));
-   assert.equal(opt.timeout,24000);
+   assert.equal(opt.timeout,12000);
   },
   getStat:async()=>({size:650}),
   read:async()=>Buffer.alloc(650,1),

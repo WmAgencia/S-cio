@@ -124,7 +124,9 @@ test('noise-gated VAD stops all input tracks and removes document listeners',asy
 });
 test('front-end revokes pending STT and response after the audio session is ended',()=>{
  const ui=readFileSync(new URL('../public/socio-thalita-ui.js',import.meta.url),'utf8');
- assert.match(ui,/voiceEpoch\+\+;queryEpoch\+\+/);
+ assert.match(ui,/voiceEpoch\+\+;cancelPendingAnswer\(\)/);
+ assert.match(ui,/activeQueryAbort\.abort\(\)/);
+ assert.match(ui,/responseDisplayTimer=setTimeout\(show,1800\)/);
  assert.match(ui,/transcriptionAbort\.abort\(\)/);
  assert.match(ui,/session=null;voiceRequested=false/);
  assert.match(ui,/body:blob,signal:controller\.signal/);

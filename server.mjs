@@ -35,7 +35,7 @@ import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSess
 import {processNextWaakgScan} from './waakg-history.mjs';
 import {startAutoTraining,autoTrainingStatus,cancelAutoTraining,processNextAutoTraining} from './training-auto.mjs';
 import {getSocioInterview,startSocioInterview,advanceSocioInterview,resetSocioInterview,transcribeSocioTraining} from './socio-training-interview.mjs';
-import {synthesizeSocioTrainingVoice,SOCIO_TRAINING_VOICE} from './socio-training-tts.mjs';
+import {synthesizeCachedThalitaVoice,prewarmThalitaAcknowledgements,SOCIO_TRAINING_VOICE} from './socio-training-tts.mjs';
 import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
@@ -867,7 +867,7 @@ async function handle(req,res){
   assertApiFeature(a.features,'/api/agent');
   if(!limiter(simulationAttempts,'thalita-tts:'+a.active_tenant_id,60000,14))throw fail(429,'Limite temporário de voz.');
   const {data}=await body(req,1200);
-  const audio=await synthesizeSocioTrainingVoice(data.text);
+  const audio=await synthesizeCachedThalitaVoice(data.text);
   res.writeHead(200,{'Content-Type':audio.mime,'Cache-Control':'private, no-store',
    'Content-Length':String(audio.bytes.length),'X-TTS-Voice':audio.voice});
   return res.end(audio.bytes);
@@ -1494,7 +1494,7 @@ async function handle(req,res){
   if(!current||current.mode!=='voice'||current.phase!=='active')
    throw fail(409,'Inicie uma entrevista por voz antes de gerar uma fala.');
   const {data}=await body(req,2000);
-  const audio=await synthesizeSocioTrainingVoice(data.text);
+  const audio=await synthesizeCachedThalitaVoice(data.text);
   res.writeHead(200,{'Content-Type':audio.mime,'Cache-Control':'private, no-store',
    'Content-Length':String(audio.bytes.length),'X-TTS-Voice':SOCIO_TRAINING_VOICE});
   return res.end(audio.bytes);
@@ -2095,7 +2095,15 @@ async function main(){
   if(!res.headersSent)json(res,e.status||500,{error:safeDetail(e)});
   else res.end();
  }));
- server.listen(PORT,'0.0.0.0',()=>console.log('Socio listening on '+PORT));
+ server.listen(PORT,'0.0.0.0',()=>{
+  console.log('Socio listening on '+PORT);
+  // Warm only generic public voice acknowledgements, never tenant/customer data.
+  // Fire-and-forget after listening; readiness is not blocked by external TTS.
+  if(process.env.NODE_ENV!=='test'){
+   const warming=setTimeout(()=>{void prewarmThalitaAcknowledgements().catch(()=>{});},1500);
+   warming.unref();
+  }
+ });
  process.on('SIGTERM',()=>server.close(()=>Promise.allSettled([metaBrowser.close(),flowImages.close()]).then(()=>pool.end()).then(()=>process.exit(0))));
 }
 main().catch(e=>{console.error('startup failed',e.message);process.exit(1);});
