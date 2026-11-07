@@ -25,7 +25,8 @@
  function closeVoice(){
   voiceEpoch++;queryEpoch++;
   if(transcriptionAbort){transcriptionAbort.abort();transcriptionAbort=null;}
-  session?.stop();session=null;voiceRequested=false;finishVoice();
+  const activeSession=session;session=null;voiceRequested=false;
+  activeSession?.stop();finishVoice();
   if(playbackContext){Promise.resolve(playbackContext.close()).catch(()=>{});playbackContext=null;}
   const btn=get('[data-thalita-voice]');if(btn)btn.textContent='◉ Conversar por voz';
   const label=get('#thalitaVoiceState');if(label)label.textContent='Voz desligada';
@@ -65,7 +66,7 @@
  const meaningfulVoiceText=text=>{
   const normalized=String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[!?.,]/g,'').trim();
   // STT hallucinations produced repeatedly by silence/ambient noise.
-  return normalized.length>=3&&!/^(e ai|oi|ola|hum|aham|ta|ok|obrigado|e|ai|sim|nao)$/.test(normalized);
+  return normalized.length>=3&&!/^(?:e ai\s*)+$|^(?:oi|ola|hum|aham|ta|ok|obrigado|e|ai|sim|nao)$/.test(normalized);
  };
  function setStatus(message){
   const label=get('#thalitaVoiceState');if(label)label.textContent=String(message);
