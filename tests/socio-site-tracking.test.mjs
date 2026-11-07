@@ -18,6 +18,7 @@ test('CAPI event must have consent, verified UUID and origin; anonymous website 
  const r=makeCapiEvent(event,{now});
  assert.equal(r.event_name,'Lead');assert.equal(r.action_source,'website');
  assert.equal(r.event_id,eventId);assert.equal(r.user_data.fbp,event.fbp);
+ assert.equal(r.event_source_url,'https://example.com/form');
  assert(!('value' in r));
  for(const data of [{...event,event_name:'Purchase'},{...event,consent:false},
   {...event,event_id:'fake'},{...event,event_source_url:'http://example.com'},
