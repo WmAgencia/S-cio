@@ -10,6 +10,41 @@
   try{return new Intl.NumberFormat('pt-BR',{style:'currency',currency}).format(amount);}catch{return amount.toFixed(2)+' '+currency;}
  };
  const optional=async(api,path)=>{try{return {data:await api(path),ok:true};}catch(error){return {data:null,ok:false,reason:String(error?.message||'Dados indisponíveis').slice(0,120)};}};
+ // Small per-company GET cache removes the blank transition on repeat visits.
+ // In-flight calls are shared; values expire quickly and manual refresh clears them.
+ const getCache=new Map();const snapshots=new Map();let selectedTenant=null;
+ const forTenant=me=>{const id=me?.tenant?.id||null;
+  if(selectedTenant!==id){getCache.clear();snapshots.clear();selectedTenant=id;}
+ };
+ const cached=async(api,path,ttl=25000)=>{
+  const existing=getCache.get(path),now=Date.now();
+  if(existing?.result&&now-existing.at<ttl)return existing.result;
+  if(existing?.pending)return existing.pending;
+  const pending=optional(api,path).then(result=>{
+   getCache.set(path,{result,at:Date.now()});return result;
+  },error=>{getCache.delete(path);throw error;});
+  getCache.set(path,{pending,at:now});return pending;
+ };
+ const setPreview=(root,kind)=>{
+  const html=snapshots.get(kind);
+  if(html){root.innerHTML=html;return;}
+  // Render real section chrome immediately, not a full-page loading message.
+  root.innerHTML='<div class="px-workspace px-initial-view"><div class="px-page-heading"><div><h1>'+
+   ({overview:'Visão geral',marketing:'Meta Ads',connections:'Conexões'}[kind]||'Sócio')+
+   '</h1></div></div><div class="px-initial-grid"><div></div><div></div><div></div></div></div>';
+ };
+ const mediaUrl=(value)=>{
+  if(typeof value!=='string'||value.length>2600)return null;
+  try{
+   const u=new URL(value);
+   return u.protocol==='https:'&&!u.username&&!u.password&&
+    /(^|\.)(fbcdn\.net|fbsbx\.com|cdninstagram\.com)$/.test(u.hostname.toLowerCase())?u.href:null;
+  }catch{return null;}
+ };
+ const posterFromAd=ad=>mediaUrl(ad?.creative?.thumbnail_url||ad?.creative?.object_story_spec?.video_data?.image_url);
+ const posterView=(image,label)=>image?
+  '<img class="px-feature-poster" loading="lazy" src="'+esc(image)+'" alt="'+esc(label||'Miniatura do criativo')+'">':
+  '<div class="px-feature-no-media" role="note">Miniatura não disponível</div>';
  const permissions=me=>new Set(me?.user?.permissions||[]);
  const can=(me,permission)=>me?.user?.platformOwner||permissions(me).has(permission);
  const selectedCurrency=(status)=>status?.selectedAccount?.currency||null;
@@ -41,18 +76,20 @@
   return '<div class="px-table-scroll"><table class="px-table"><thead><tr><th>Campanha</th><th>Situação</th><th>Gasto</th><th>Cliques</th><th>CPC</th><th>Impressões</th></tr></thead><tbody>'+
    items.slice(0,40).map(c=>{
     const m=insightById.get(String(c.id))||{},spend=Number(m.spend)||0,clicks=Number(m.clicks)||0;
-    return '<tr><td><strong>'+esc(c.name||c.id)+'</strong><small>'+esc(c.objective||c.id)+'</small></td>'+
+    const picture=posterFromAd(c.topAd||null);
+   return '<tr><td><div class="px-ad-name-cell">'+(picture?posterView(picture,'Miniatura de '+String(c.name||'')):'')+
+    '<span><strong>'+esc(c.name||c.id)+'</strong><small>'+esc(c.objective||c.id)+'</small></span></div></td>'+
      '<td><span class="px-status '+((c.effective_status||c.status)==='ACTIVE'?'on':'off')+'">'+esc(c.effective_status||c.status||'—')+'</span></td>'+
      '<td>'+money(spend,currency)+'</td><td>'+number(clicks)+'</td><td>'+(clicks?money(spend/clicks,currency):'—')+'</td><td>'+number(m.impressions||0)+'</td></tr>';
    }).join('')+'</tbody></table></div>';
  }
  async function loadMeta(api,period='today',includeAdLevel=false){
   const [status,campaigns,ads,insights,adInsights]=await Promise.all([
-   optional(api,'/api/marketing/official/status'),
-   optional(api,'/api/marketing/tools/campaigns'),
-   optional(api,'/api/marketing/tools/ads'),
-   optional(api,'/api/marketing/tools/insights?period='+encodeURIComponent(period)),
-   includeAdLevel?optional(api,'/api/marketing/advanced/reports?period='+encodeURIComponent(period)+'&level=ad'):Promise.resolve({ok:false,data:null})
+   cached(api,'/api/marketing/official/status',25000),
+   cached(api,'/api/marketing/tools/campaigns',20000),
+   cached(api,'/api/marketing/tools/ads',20000),
+   cached(api,'/api/marketing/tools/insights?period='+encodeURIComponent(period),16000),
+   includeAdLevel?cached(api,'/api/marketing/advanced/reports?period='+encodeURIComponent(period)+'&level=ad',16000):Promise.resolve({ok:false,data:null})
   ]);
   const currency=selectedCurrency(status.data);
   const list=campaigns.data?.items||[], adList=ads.data?.items||[],daily=insights.data?.items||[];
@@ -67,14 +104,29 @@
   const withMetrics=adItems.map(x=>({id:String(x.ad_id||''),name:String(x.ad_name||'Anúncio'),
    clicks:Number(x.clicks)||0,impressions:Number(x.impressions)||0,spend:Number(x.spend)||0,
    purchases:purchase(x),ctr:Number(x.ctr)||0})).filter(x=>x.id&&x.impressions>0);
-  const purchaseAds=withMetrics.filter(x=>x.purchases>0&&x.spend>=0);
+  const adById=new Map(adList.map(ad=>[String(ad.id),ad]));
+  for(const item of withMetrics){
+   const original=adById.get(item.id);
+   item.thumbnailUrl=posterFromAd(original);
+   item.active=original?(original.effective_status||original.status)==='ACTIVE':false;
+  }
+  const eligible=withMetrics.some(x=>x.active)?withMetrics.filter(x=>x.active):withMetrics;
+  const purchaseAds=eligible.filter(x=>x.purchases>0&&x.spend>=0);
   let bestAd=null,adRankingMethod=null;
   if(purchaseAds.length){
    bestAd=[...purchaseAds].sort((a,b)=>(a.spend/a.purchases)-(b.spend/b.purchases)||b.purchases-a.purchases)[0];
    adRankingMethod='Menor custo por evento Purchase atribuído';
   }else if(withMetrics.length){
-   bestAd=[...withMetrics].sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions)[0];
+   bestAd=[...eligible].sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions)[0];
    adRankingMethod='Maior número de cliques (sem compras atribuídas)';
+  }
+  if(!bestAd&&adList.length){
+   const running=adList.find(ad=>(ad.effective_status||ad.status)==='ACTIVE');
+   const fallback=running||adList[0];
+   bestAd={id:String(fallback.id),name:String(fallback.name||'Anúncio'),
+    clicks:null,impressions:null,spend:null,ctr:null,purchases:null,
+    thumbnailUrl:posterFromAd(fallback),active:Boolean(running)};
+   adRankingMethod=running?'Anúncio ativo · sem métricas por anúncio':'Anúncio da conta · sem métricas por anúncio';
   }
   return {status,campaigns,ads,insights,adInsights,adItems,bestAd,adRankingMethod,currency,list,adList,daily,clicks,spend,purchases,
    activeCampaigns:list.filter(x=>(x.effective_status||x.status)==='ACTIVE').length,
