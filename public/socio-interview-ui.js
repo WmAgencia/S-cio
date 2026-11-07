@@ -107,11 +107,11 @@
  const getDraft=()=>versions.find(x=>x.status==='draft')||versions.find(x=>x.id===state?.interview?.draftVersionId)||versions.find(x=>x.status==='approved')||null;
  const trainingCards=markdown=>{
   const text=String(markdown||'');
-  const parts=text.split(/(?=^#{1,3}\\s+[^\\n]+)/m).filter(Boolean);
+  const parts=text.split(/(?=^#{1,3}\s+[^\n]+)/m).filter(Boolean);
   return parts.map((raw,index)=>{
-   const lines=raw.trim().split('\\n');
-   const title=String(lines[0]||'').replace(/^#{1,3}\\s+/,'').trim()||'Orientações gerais';
-   const summary=lines.slice(1).join(' ').replace(/[*_`>#-]/g,' ').replace(/\\s+/g,' ').trim().slice(0,170);
+   const lines=raw.trim().split('\n');
+   const title=String(lines[0]||'').replace(/^#{1,3}\s+/,'').trim()||'Orientações gerais';
+   const summary=lines.slice(1).join(' ').replace(/[*_`>#-]/g,' ').replace(/\s+/g,' ').trim().slice(0,170);
    return {index,raw,title,summary};
   });
  };
@@ -200,7 +200,7 @@
   const saveCard=async(index,newText,remove=false)=>{
    const current=getDraft(),cards=trainingCards(current?.markdown),card=cards[index];
    if(!current||!canEdit()||!card)throw Error('Orientação indisponível.');
-   if(remove)cards.splice(index,1);else cards[index].raw=String(newText||'').trim()+'\\n\\n';
+   if(remove)cards.splice(index,1);else cards[index].raw=String(newText||'').trim()+'\n\n';
    const markdown=cards.map(item=>item.raw).join('').trim();
    if(markdown.length<20||markdown.length>22000)throw Error('O manual precisa conservar pelo menos 20 caracteres de orientações.');
    let draftId=current.id;
