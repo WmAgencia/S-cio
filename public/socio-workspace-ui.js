@@ -36,7 +36,7 @@
    items.slice(0,40).map(c=>{
     const m=insightById.get(String(c.id))||{},spend=Number(m.spend)||0,clicks=Number(m.clicks)||0;
     return '<tr><td><strong>'+esc(c.name||c.id)+'</strong><small>'+esc(c.objective||c.id)+'</small></td>'+
-     '<td><span class="px-status '+(/ACTIVE/.test(c.effective_status||c.status)?'on':'off')+'">'+esc(c.effective_status||c.status||'—')+'</span></td>'+
+     '<td><span class="px-status '+((c.effective_status||c.status)==='ACTIVE'?'on':'off')+'">'+esc(c.effective_status||c.status||'—')+'</span></td>'+
      '<td>'+money(spend,currency)+'</td><td>'+number(clicks)+'</td><td>'+(clicks?money(spend/clicks,currency):'—')+'</td><td>'+number(m.impressions||0)+'</td></tr>';
    }).join('')+'</tbody></table></div>';
  }
@@ -71,8 +71,8 @@
    adRankingMethod='Maior número de cliques (sem compras atribuídas)';
   }
   return {status,campaigns,ads,insights,adInsights,adItems,bestAd,adRankingMethod,currency,list,adList,daily,clicks,spend,purchases,
-   activeCampaigns:list.filter(x=>/ACTIVE/i.test(x.effective_status||x.status)).length,
-   activeAds:adList.filter(x=>/ACTIVE/i.test(x.effective_status||x.status)).length,
+   activeCampaigns:list.filter(x=>(x.effective_status||x.status)==='ACTIVE').length,
+   activeAds:adList.filter(x=>(x.effective_status||x.status)==='ACTIVE').length,
    best:daily.filter(x=>Number(x.clicks)>0).sort((a,b)=>Number(b.clicks)-Number(a.clicks))[0]||null};
  }
  async function overview({root,api,me,navigate}){
@@ -186,7 +186,7 @@
    section('Anúncios e criativos','Anúncios vinculados à conta de anúncios selecionada',
     data?.ads.ok?(ads.length?'<div class="px-ads-list">'+ads.slice(0,20).map(ad=>
       '<div><div><strong>'+esc(ad.name||ad.id)+'</strong><small>'+esc(ad.id)+'</small></div>'+
-      '<span class="px-status '+(/ACTIVE/i.test(ad.effective_status||ad.status)?'on':'off')+'">'+esc(ad.effective_status||ad.status||'—')+'</span></div>').join('')+'</div>':
+      '<span class="px-status '+((ad.effective_status||ad.status)==='ACTIVE'?'on':'off')+'">'+esc(ad.effective_status||ad.status||'—')+'</span></div>').join('')+'</div>':
       empty('Nenhum anúncio retornado pela conta.')):empty('Os anúncios estão indisponíveis até autorizar a leitura.'))+
    section('Interpretação dos resultados','As plataformas reportam atribuições, não pagamentos conciliados',
     '<div class="px-footnote">O CPA é calculado apenas quando a Meta retorna eventos Purchase. Esses eventos não são prova de pedido pago. Sem evento válido, o painel mostra “—”, em vez de inventar resultados.</div>')+
