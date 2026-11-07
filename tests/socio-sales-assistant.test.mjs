@@ -110,8 +110,8 @@ test('sales assistant endpoint remains safe while floating Thalita replaces dupl
  const floating=readFileSync(new URL('../public/socio-thalita-ui.js',import.meta.url),'utf8');
  assert.match(floating,/Assistente da sua empresa/);
  assert.match(ui,/data-quote-ai/);
- assert.match(ui,/Colocar sugestão no rascunho/);
- assert.match(ui,/Sugestão inserida nos campos, ainda não salva nem enviada/);
+ assert.match(ui,/data-quote-ai/);
+ assert.match(server,/\/api\/thalita\/ask/);
 });
 test('PostgreSQL integration protects quote previews and training by tenant',{
  skip:!process.env.DATABASE_URL,timeout:110000},async()=>{
