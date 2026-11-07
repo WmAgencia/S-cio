@@ -1083,3 +1083,27 @@ CREATE TABLE IF NOT EXISTS socio_tracking_events (
  UNIQUE(site_id,event_name,event_id)
 );
 CREATE INDEX IF NOT EXISTS socio_tracking_events_recent_idx ON socio_tracking_events(tenant_id,received_at DESC);
+
+-- Observed Meta wallet, never inferred from campaign spend or invoice balance.
+CREATE TABLE IF NOT EXISTS meta_billing_observations (
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ account_id text NOT NULL CHECK(account_id ~ '^act_[0-9]{4,30}$'),
+ currency text NOT NULL CHECK(currency='BRL'),
+ available_funds_minor bigint NOT NULL CHECK(available_funds_minor>=0),
+ observed_at timestamptz NOT NULL, valid_until timestamptz NOT NULL,
+ daily_spend_minor bigint, minimum_minor bigint NOT NULL DEFAULT 3000 CHECK(minimum_minor>=0),
+ monitor_enabled boolean NOT NULL DEFAULT true,
+ last_attempt_at timestamptz NOT NULL DEFAULT now(), last_error text,
+ PRIMARY KEY(tenant_id,user_id,account_id)
+);
+CREATE TABLE IF NOT EXISTS meta_billing_alerts (
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ account_id text NOT NULL,
+ level text NOT NULL CHECK(level IN ('low','critical')),
+ amount_minor bigint NOT NULL,
+ observed_at timestamptz NOT NULL,
+ resolved_at timestamptz,
+ PRIMARY KEY(tenant_id,user_id,account_id)
+);
