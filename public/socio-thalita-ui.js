@@ -4,7 +4,8 @@
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let instance=null,api=null,me=null,csrf=null,busy=false,session=null,speaking=false,
   playbackContext=null,playbackSource=null,abort=null,finalize=null,turnRunId=null,voiceRequested=false,
-  voiceEpoch=0,transcriptionAbort=null,queryEpoch=0,startingVoice=false;
+  voiceEpoch=0,transcriptionAbort=null,queryEpoch=0,startingVoice=false,
+  activeQueryAbort=null,responseDisplayTimer=null,recentHistory=[];
  const get=sel=>instance?.querySelector(sel);
  // Audio output is unlocked by the explicit microphone click using a shared
  // Web Audio context. A new Audio().play() after asynchronous STT/LLM/TTS often
@@ -22,8 +23,15 @@
   if(playbackSource){try{playbackSource.onended=null;playbackSource.stop();playbackSource.disconnect();}catch{}playbackSource=null;}
   speaking=false;finalize?.();finalize=null;
  }
+ function cancelPendingAnswer(){
+  queryEpoch++;
+  if(activeQueryAbort){activeQueryAbort.abort();activeQueryAbort=null;}
+  if(responseDisplayTimer){clearTimeout(responseDisplayTimer);responseDisplayTimer=null;}
+  busy=false;
+  const send=get('[data-thalita-send]');if(send)send.disabled=false;
+ }
  function closeVoice(){
-  voiceEpoch++;queryEpoch++;startingVoice=false;
+  voiceEpoch++;cancelPendingAnswer();startingVoice=false;
   if(transcriptionAbort){transcriptionAbort.abort();transcriptionAbort=null;}
   const activeSession=session;session=null;voiceRequested=false;
   activeSession?.stop();finishVoice();
@@ -79,34 +87,55 @@
   el.append(name,content);feed.append(el);feed.scrollTop=feed.scrollHeight;
  }
  async function run(text,{voiceToken=null}={}){
-  const message=String(text||'').trim();if(!message||busy)return;
+  const message=String(text||'').trim();
+  if(!message||busy)return;
   if(voiceToken!==null&&(!voiceRequested||voiceEpoch!==voiceToken))return;
   const queryId=++queryEpoch;
-  const isActive=()=>queryId===queryEpoch&&instance&&
+  const controller=new AbortController();activeQueryAbort=controller;
+  const isActive=()=>!controller.signal.aborted&&queryId===queryEpoch&&instance&&
    (voiceToken===null||(voiceRequested&&voiceToken===voiceEpoch));
   const input=get('#thalitaInput');if(input)input.value='';
-  busy=true;get('[data-thalita-send]').disabled=true;
-  add('user',message);setStatus('Consultando seus dados…');
-  // A short spoken acknowledgement makes the tool lookup sound natural,
-  // without manufacturing metrics or putting a long report into the TTS.
+  busy=true;const send=get('[data-thalita-send]');if(send)send.disabled=true;
+  add('user',message);setStatus('Consultando os dados da sua empresa…');
+  let introduction=null;
   if(session&&voiceRequested){
-   const mentionMeta=/meta\s*(ads|edge|eds?)|campanh|facebook\s*ads/i.test(message);
-   void say(mentionMeta?'Perfeito, vou conferir suas campanhas e os resultados.':
+   const meta=/meta\s*(ads|edge|eds?)|campanh|facebook\s*ads/i.test(message);
+   introduction=say(meta?'Perfeito, vou conferir suas campanhas e os resultados.':
     'Certo, vou consultar os dados e já te explico.').catch(()=>{});
   }
   try{
-   const result=await api('/api/thalita/ask','POST',{message,runId:turnRunId});
+   const result=await api('/api/thalita/ask','POST',{
+    message,runId:turnRunId,history:recentHistory.slice(-6)
+   },{},{signal:controller.signal});
    if(!isActive())return;
    turnRunId=result.runId&&result.status==='ready'?result.runId:null;
-   const answer=result.message||'Consulta concluída.';
+   const answer=String(result.message||'Consulta concluída.');
+   const remember=()=>{
+    recentHistory.push({role:'user',text:message.slice(0,350)},{role:'assistant',text:answer.slice(0,350)});
+    if(recentHistory.length>10)recentHistory=recentHistory.slice(-10);
+   };
    if(session&&voiceRequested){
+    // A cached acknowledgement can speak while the API is working.
+    // Never wait on a stalled Edge TTS invocation to deliver business results.
+    if(introduction)await Promise.race([
+     introduction,new Promise(resolve=>setTimeout(resolve,1350))
+    ]);
+    if(!isActive())return;
     let shown=false;
-    const show=()=>{if(!shown&&isActive()){shown=true;add('assistant',answer);}};
-    await say(result.speechText||answer,{onPlaybackStart:show});
-    show(); // If TTS is unavailable, the answer still remains readable.
-   }else add('assistant',answer);
-   const holder=get('#thalitaConfirm');holder.replaceChildren();
-   if(result.status==='approval_required'&&result.confirmation){
+    const show=()=>{
+     if(shown||!isActive())return;
+     shown=true;
+     if(responseDisplayTimer){clearTimeout(responseDisplayTimer);responseDisplayTimer=null;}
+     add('assistant',answer);remember();
+    };
+    responseDisplayTimer=setTimeout(show,1800);
+    const spoken=String(result.speechText||answer).replace(/\s+/g,' ').trim();
+    const concise=spoken.length>420?spoken.slice(0,420).replace(/\s+\S*$/,'')+'.':spoken;
+    void say(concise,{onPlaybackStart:show}).then(show,show);
+   }else{add('assistant',answer);remember();}
+   const holder=get('#thalitaConfirm');
+   if(holder)holder.replaceChildren();
+   if(result.status==='approval_required'&&result.confirmation&&holder){
     const explanation=document.createElement('p');explanation.textContent=result.confirmation.label;
     const yes=document.createElement('button');yes.type='button';yes.className='btn primary';
     yes.textContent='Confirmar alteração';
@@ -114,20 +143,22 @@
     yes.addEventListener('click',async()=>{
      if(!window.confirm('Confirmar esta alteração no sistema da sua empresa?'))return;
      yes.disabled=true;no.disabled=true;
-     try{const r=await api('/api/thalita/confirm','POST',{id:result.confirmation.id,confirm:true});
-      holder.replaceChildren();add('assistant',r.message||'Alteração confirmada.');}
-     catch(e){add('assistant','Não foi possível concluir: '+e.message);holder.replaceChildren();}
+     try{const response=await api('/api/thalita/confirm','POST',{id:result.confirmation.id,confirm:true});
+      holder.replaceChildren();add('assistant',response.message||'Alteração confirmada.');}
+     catch(error){add('assistant','Não foi possível concluir: '+error.message);holder.replaceChildren();}
     });
     no.addEventListener('click',()=>{holder.replaceChildren();add('assistant','Alteração cancelada.');});
     holder.append(explanation,yes,no);
    }
-
-  }catch(e){if(isActive())add('assistant','Não foi possível concluir: '+e.message);}
-  finally{
-   busy=false;const btn=get('[data-thalita-send]');if(btn)btn.disabled=false;
-   // Preserve an audio failure message instead of immediately overwriting it.
-   if(!speaking&&!get('#thalitaVoiceState')?.textContent?.startsWith('Não foi possível ouvir'))
-    setStatus(session?'Microfone ativo. Pode falar.':'Digite ou ligue a voz da Thalita.');
+  }catch(error){
+   if(isActive())add('assistant','Não foi possível concluir: '+error.message);
+  }finally{
+   if(activeQueryAbort===controller)activeQueryAbort=null;
+   if(queryId===queryEpoch){
+    busy=false;const button=get('[data-thalita-send]');if(button)button.disabled=false;
+    if(!speaking&&!get('#thalitaVoiceState')?.textContent?.startsWith('Não foi possível ouvir'))
+     setStatus(session?'Microfone ativo. Pode falar.':'Digite ou ligue a voz da Thalita.');
+   }
   }
  }
  async function startVoice(){
@@ -145,7 +176,7 @@
    if(startingEpoch!==voiceEpoch)return;
    const newSession=createSocioVoiceSession({
     canInterrupt:()=>session===newSession&&speaking,
-    onInterrupt:()=>{if(session!==newSession)return;finishVoice();setStatus('Interrompido. Estou ouvindo.');},
+    onInterrupt:()=>{if(session!==newSession)return;cancelPendingAnswer();finishVoice();setStatus('Interrompido. Estou ouvindo.');},
     onError:message=>{if(session===newSession)setStatus(message);},
     onState:next=>{
      if(session!==newSession)return;
@@ -188,7 +219,7 @@
    }
   }finally{if(startingEpoch===voiceEpoch)startingVoice=false;}
  }
- function unmount(){closeVoice();instance?.remove();instance=null;api=null;me=null;csrf=null;turnRunId=null;}
+ function unmount(){closeVoice();instance?.remove();instance=null;api=null;me=null;csrf=null;turnRunId=null;recentHistory=[];}
  function mount({client,auth,csrfToken}){
   if(!auth?.user||auth.tenant?.features?.ai===false){unmount();return;}
   if(instance){
