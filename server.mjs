@@ -44,6 +44,7 @@ import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
 import {getTenantBusinessMonitor,getMasterSaasMonitor} from './socio-business-monitor.mjs';
 import {readSubscriptionStatus,createSubscriptionCheckout,createBillingPortal,processSubscriptionWebhook} from './socio-subscriptions.mjs';
+import {startGoogleAdsOAuth,finishGoogleAdsOAuth,googleAdsStatus,listGoogleAdsAccounts,selectGoogleAdsAccount,disconnectGoogleAds} from './socio-google-ads.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {createQuote,issueQuote,cancelQuote,publicQuote,approveQuote,declineQuote,listSales,createTestCheckout,processStripeTestEvent} from './sales-commerce.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
@@ -295,6 +296,15 @@ async function handle(req,res){
    console.warn('[instagram-oauth]',String(error?.status||'PROVIDER_ERROR').slice(0,20));
    res.writeHead(303,{'Location':'/?instagram=failed','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
   }
+  return res.end();
+ }
+ if(method==='GET'&&pathname==='/api/google-ads/oauth/callback'){
+  const params=new URL(req.url,'http://local').searchParams;
+  let result='failed';
+  if(params.get('error'))result='cancelled';
+  else try{await finishGoogleAdsOAuth(pool,params.get('state'),params.get('code'));result='connected';}
+  catch(error){console.warn('[google-ads-oauth]',String(error?.status||'OAUTH_FAILED').slice(0,20));}
+  res.writeHead(303,{Location:'/?google_ads='+result,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
   return res.end();
  }
  // Retired Google Ads Scripts receiver is intentionally closed.
@@ -998,6 +1008,18 @@ async function handle(req,res){
   return json(res,201,r.rows[0]);
  }
 
+ if(method==='GET'&&pathname==='/api/google-ads/status')
+  return json(res,200,await googleAdsStatus(pool,a));
+ if(method==='POST'&&pathname==='/api/google-ads/connect')
+  return json(res,200,await startGoogleAdsOAuth(pool,a));
+ if(method==='GET'&&pathname==='/api/google-ads/accounts')
+  return json(res,200,await listGoogleAdsAccounts(pool,a));
+ if(method==='POST'&&pathname==='/api/google-ads/accounts/select'){
+  const {data}=await body(req,1500);
+  return json(res,200,await selectGoogleAdsAccount(pool,a,data.accountId));
+ }
+ if(method==='POST'&&pathname==='/api/google-ads/disconnect')
+  return json(res,200,await disconnectGoogleAds(pool,a));
  if(method==='GET'&&pathname==='/api/billing/status'){
   return json(res,200,await readSubscriptionStatus(pool,a));
  }
