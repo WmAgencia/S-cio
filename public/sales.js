@@ -100,7 +100,6 @@
    (sales.paymentTestAvailable?'<p class="form-note">Stripe em modo de teste: habilitado. Isso não aceita pagamentos reais.</p>':
     '<p class="form-note">Pagamento: somente fluxos de aprovação. O checkout Stripe de teste permanece desativado até receber credenciais de sandbox.</p>')+
   '</div>';
-  attachSalesAssistant(view,api);
   const $=s=>view.querySelector(s), findAll=s=>[...view.querySelectorAll(s)];
   $('#goToCatalog')?.addEventListener('click',()=>navigate?.('products'));
   $('#quoteOwnerAlerts')?.addEventListener('change',async ev=>{
@@ -266,7 +265,6 @@
     '<span class="sale-state">'+e(orderStatus[o.status]||o.status)+'</span>'+
     '<button type="button" class="btn soft" data-lead-chat="'+e(o.conversation_id)+'">Conversar</button></div>').join('')+'</div>':
     '<p class="form-note">Nenhum pedido aprovado ainda.</p>')+'</section></div>';
-  attachSalesAssistant(view,api);
   const row=(selected={})=>{
    const p=products.find(p=>p.id===selected.productId);
    const variants=(p?.variants||[]).filter(v=>v.active);
