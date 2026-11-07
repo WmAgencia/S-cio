@@ -48,7 +48,7 @@ async function availablePages(c){
 }
 export async function readAdsTool(pool,a,kind,input={},options={}){
  const c=await context(pool,a,options),id=c.account.id;
- const fields={campaigns:'id,name,status,effective_status,objective,daily_budget,lifetime_budget',adsets:'id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,targeting',ads:'id,name,campaign_id,adset_id,status,effective_status,creative{id,name,thumbnail_url,video_id}',images:'hash,name,url,width,height',pages:'id,name'};
+ const fields={campaigns:'id,name,status,effective_status,objective,daily_budget,lifetime_budget',adsets:'id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,targeting',ads:'id,name,campaign_id,adset_id,status,effective_status,creative{id,name,image_url,thumbnail_url,video_id,object_story_spec}',images:'hash,name,url,width,height',pages:'id,name'};
  if(kind==='finance'){
   const data=await graph(c,'/'+id,{fields:'id,name,currency,amount_spent,spend_cap,account_status,business{id}'});
   const billing=new URL('https://adsmanager.facebook.com/billing_hub/payment_settings/');
@@ -283,7 +283,7 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
  if(!numeric(adId))throw fail(422,'Selecione um anúncio válido.');
  const c=await context(pool,a,options);
  const ad=await graph(c,'/'+adId,{
-  fields:'id,name,account_id,campaign_id,creative{id,thumbnail_url,video_id,object_story_spec}'
+  fields:'id,name,account_id,campaign_id,creative{id,image_url,thumbnail_url,video_id,object_story_spec,asset_feed_spec}'
  });
  const account=String(c.account.id||'').replace(/^act_/,'');
  if(String(ad?.account_id)!==account||String(ad?.id)!==adId)
@@ -298,21 +298,35 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
    return /(^|\.)(fbcdn\.net|fbsbx\.com|cdninstagram\.com)$/.test(host)?url.href:null;
   }catch{return null;}
  };
- const videoId=String(creative.video_id||creative.object_story_spec?.video_data?.video_id||'');
- let thumbnailUrl=safeMedia(creative.thumbnail_url||creative.object_story_spec?.video_data?.image_url),videoUrl=null;
+ const videoId=String(creative.video_id||creative.object_story_spec?.video_data?.video_id||
+  creative.asset_feed_spec?.videos?.[0]?.video_id||'');
+ // Meta creative.thumbnail_url can be a 64px image. Use image_url
+ // (original creative resolution) or the video image when available.
+ const imageUrl=safeMedia(creative.image_url||
+  creative.object_story_spec?.video_data?.image_url||
+  creative.object_story_spec?.link_data?.picture||
+  creative.asset_feed_spec?.images?.[0]?.url);
+ let thumbnailUrl=safeMedia(creative.thumbnail_url),videoUrl=null;
+ let posterUrl=imageUrl;
  let status=videoId&&numeric(videoId)?'video_unavailable':'image';
  if(numeric(videoId)){
   try{
    const video=await graph(c,'/'+videoId,{fields:'id,source,picture'});
    if(String(video.id)===videoId){
     videoUrl=safeMedia(video.source);
+    posterUrl=posterUrl||safeMedia(video.picture);
     thumbnailUrl=thumbnailUrl||safeMedia(video.picture);
     if(videoUrl)status='video_ready';
    }
   }catch{/* Some placements do not expose a stream even with ads_read. */}
  }
  return {readOnly:true,adId,accountId:c.account.id,campaignId:String(ad.campaign_id||''),
-  name:String(ad.name||'').slice(0,200),thumbnailUrl,videoUrl,status,
-  note:videoUrl?'Prévia autorizada da Meta. A reprodução só inicia após clicar.':
-   'A Meta não disponibilizou um arquivo reproduzível para este criativo; exiba a miniatura quando disponível.'};
+  name:String(ad.name||'').slice(0,200),thumbnailUrl,
+  posterUrl:posterUrl||thumbnailUrl,videoUrl,videoId:numeric(videoId)?videoId:null,
+  watchUrl:numeric(videoId)?'https://www.facebook.com/watch/?v='+videoId:null,
+  quality:posterUrl?'original_or_video':'thumbnail_only',
+  status,
+  note:videoUrl?'Vídeo retornado pela Meta. Reprodução mediante clique.':
+   numeric(videoId)?'A Meta não forneceu MP4 reproduzível nesta conexão. Abra o vídeo na Meta pelo botão de visualização.':
+   'Este criativo não disponibilizou vídeo reproduzível; exiba a melhor imagem fornecida.'};
 }
