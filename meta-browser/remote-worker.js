@@ -18,7 +18,7 @@ const SITE = 'adsmanager.facebook.com';
 const TARGET = 'https://adsmanager.facebook.com/';
 mkdirSync(process.env.API_ANYTHING_HOME, { recursive: true });
 if (!aa.loadSite(SITE)) aa.saveSite({ name: SITE, baseUrl: TARGET, loginCookies: ['c_user', 'xs'], operations: [] });
-let context; let page; let expiresAt = 0; let billingIntent=null;
+let context; let page; let expiresAt = 0; let billingIntent=null; let billingInteractiveUntil=0;
 const plans = new Map();
 function activePage() {
   if ((!page || page.isClosed()) && context) page = context.pages().filter(p => !p.isClosed()).at(-1);
@@ -68,6 +68,8 @@ async function command(method, data = {}) {
     if(!/^act_[0-9]{4,30}$/.test(data.accountId||'')||!data.accountName||data.currency!=='BRL')
       throw new Error('BILLING_ACCOUNT_INVALID');
     if(method==='billing_prepare')topupAmount(data.amountMinor);
+    if(data.background===true&&context&&billingInteractiveUntil>Date.now())return {state:'busy',accountId:data.accountId};
+    if(data.background!==true)billingInteractiveUntil=Date.now()+10*60000;
     if(method==='billing_read'&&billingIntent&&billingIntent.expires>Date.now())return {state:'busy',accountId:data.accountId};
     billingIntent=null;
     await command('open');
