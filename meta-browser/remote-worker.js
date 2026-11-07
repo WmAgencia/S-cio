@@ -27,7 +27,7 @@ function activePage() {
 }
 async function closeRemote() {
   if (context) await context.close().catch(() => {});
-  context = null; page = null;
+  context = null; page = null; billingIntent=null; billingInteractiveUntil=0;
 }
 async function saveBrowserSession() {
   if (!context) throw new Error('BROWSER_NOT_OPEN');
