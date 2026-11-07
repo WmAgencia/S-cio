@@ -62,7 +62,7 @@ test('navigation consolidates reports and quotes while keeping server endpoints 
  assert.match(app,/SocioWorkspaceUI\.overview/);
  assert.match(app,/SocioWorkspaceUI\.marketing/);
  assert.match(server,/pathname==='\/api\/reports'/);
- assert.match(load('public/sales.js'),/function attachSalesAssistant/);
+ assert.doesNotMatch(load('public/sales.js'),/function attachSalesAssistant/);
  assert.doesNotMatch(load('public/sales.js'),/^\s*attachSalesAssistant\(view,api\);/m);
 });
 
