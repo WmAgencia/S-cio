@@ -1,6 +1,7 @@
 // A deterministic command interpreter. It never executes Meta POST or WhatsApp sends.
 // Reuses the same reviewed plan API to prevent a second, unrestricted agent executor.
 import {prepareAdsPlan} from './meta-ads-tools.mjs';
+import {readMetaFinanceWithObservation} from './meta-billing-observations.mjs';
 import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
 
 const normalize=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -10,6 +11,12 @@ export function parseMetaCommand(text){
  if(raw.length<5||raw.length>1000)throw invalid('Descreva sua solicitação em até mil caracteres.');
  const period=/\b(hoje|dia atual)\b/.test(s)?'today':/\b(ontem)\b/.test(s)?'yesterday':
   /\b(30 dias|mes|mensal)\b/.test(s)?'last_30d':'last_7d';
+ if(/\b(gerar|gere|geracao|criar|crie|preparar|prepare|recarregar|carregar)\b/.test(s)&&/\b(pix|recarga|saldo)\b/.test(s))
+  return {intent:'needs_details',kind:'assisted_topup',missing:['Valor em reais e revisão na página oficial da Meta'],
+   note:'Abra Adicionar saldo por Pix no dashboard. A conta e o saldo serão conferidos antes da revisão.',willSpend:false};
+ if(/\b(saldo|verba restante|verba esta acabando|verba acabando)\b/.test(s)&&
+   !/\b(alterar|mudar|definir|aumentar|reduzir)\b/.test(s))
+  return {intent:'read',kind:'finance',input:{},label:'Consultar saldo observado e validade do aviso de verba',willSpend:false};
  // Specialized read intents take priority over the generic report matcher.
  // Never reinterpret a request to modify a rule or budget as a read operation.
  if(!/\b(criar|crie|ativar|ative|pausar|pause|alterar|altere|excluir|exclua|aumentar|reduzir|mudar)\b/.test(s)){
@@ -70,7 +77,7 @@ export function parseMetaCommand(text){
 export async function previewMetaCommand(pool,actor,text,opts={}){
  const command=parseMetaCommand(text);
  if(command.intent==='read'){
-  return {command,preview:false,readOnly:true,data:await readAdvancedMetaTool(pool,actor,command.kind,command.input,opts)};
+  return {command,preview:false,readOnly:true,data:command.kind==='finance'?await readMetaFinanceWithObservation(pool,actor,opts):await readAdvancedMetaTool(pool,actor,command.kind,command.input,opts)};
  }
  if(command.intent==='plan'&&command.missing.length===0){
   const plan=await prepareAdsPlan(pool,actor,command.kind,command.input,opts);
