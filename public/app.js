@@ -8,6 +8,17 @@ const featureKeys=Object.keys(featureLabels);
 const featuresEnabled=()=>state.me?.tenant?.features||{};
 const featureAvailable=key=>featuresEnabled()[key]!==false;
 const ownAccountAvailable=()=>!!state.me?.user?.platformOwner||(state.me?.user?.permissions||[]).includes('account.manage');
+const isPrimaryMaster=()=>!!(state.me?.user?.platformOwner&&state.me?.user?.homeTenantId);
+function syncMasterSwitch(){
+ const button=$('#masterProductionSwitch'),label=$('#masterSwitchLabel');
+ if(!button||!label)return;
+ const visible=isPrimaryMaster();button.classList.toggle('hidden',!visible);
+ if(!visible)return;
+ const production=state.view==='admin';
+ label.textContent=production?'Ir para meu painel de produção':'Ir para o painel Master';
+ button.title=label.textContent;button.setAttribute('aria-label',label.textContent);
+}
+
 const viewAvailable=key=>!featureView[key]||featureAvailable(featureView[key])||key==='team'&&ownAccountAvailable();
 const titles={overview:'Visão geral',inbox:'WhatsApp',connections:'Conexões',marketing:'Meta Ads',products:'Produtos e serviços',sales:'Vendas',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',settings:'Configurações da conta',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -123,6 +134,7 @@ async function boot(){
    $('#userName').textContent=me.user.name;
    $('#userRole').textContent=me.user.platformOwner?'Administrador master':me.user.role==='owner'?'Proprietário':'Equipe da empresa';
    $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
+   syncMasterSwitch();
    $('#teamNav')?.classList.toggle('hidden',!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner);
    const access=new Set(me.user.permissions||[]);
    document.querySelector('.nav-item[data-view="connections"]')?.classList.toggle('hidden',
@@ -212,7 +224,8 @@ async function changeView(next,conversationId=null){
  globalThis.SocioMetaBrowser?.dispose();
  globalThis.SocioMetaLocal?.dispose();
  state.view=next;
- $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
+ syncMasterSwitch();
+ $('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
  $('#topTitle').textContent=titles[next]||'Sócio';
  setLoading();
  try{
@@ -1539,7 +1552,7 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  key!=='agent'&&key!=='channels'&&key!=='reports'&&key!=='quotes'&&viewAvailable(key)&&
+  key!=='agent'&&key!=='channels'&&key!=='reports'&&key!=='quotes'&&key!=='sales'&&viewAvailable(key)&&
   (key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&
   (key!=='reports'||(state.me?.user?.permissions||[]).includes('audit.read'))&&
   (!['sales','quotes'].includes(key)||(state.me?.user?.permissions||[]).includes('sales.read'))&&
@@ -1579,6 +1592,25 @@ document.addEventListener('keydown',event=>{
  if(event.key==='Escape'&&!$('#commandOverlay').classList.contains('hidden'))closeCommand();
 });
 initSidebarIcons();
+$('#masterProductionSwitch')?.addEventListener('click',()=>action(async()=>{
+ if(!isPrimaryMaster())return;
+ const button=$('#masterProductionSwitch');
+ if(button.disabled)return;
+ button.disabled=true;
+ try{
+  if(state.view==='admin'){
+   // The home workspace belongs to the authenticated primary master only.
+   const homeTenantId=state.me.user.homeTenantId;
+   if(state.me.tenant.id!==homeTenantId)
+    await api('/api/admin/switch','POST',{tenantId:homeTenantId});
+   state.view='overview';
+   await boot();
+   toast('Painel de produção aberto.');
+  }else{
+   await changeView('admin');
+  }
+ }finally{button.disabled=false;syncMasterSwitch();}
+}));
 
 const loginPassword=$('#loginPassword'),togglePassword=$('#togglePassword'),capsWarning=$('#capsWarning');
 togglePassword.addEventListener('click',()=>{
