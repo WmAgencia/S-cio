@@ -372,3 +372,41 @@ body .socio-catalog-clean #newProduct:hover,body .px-campaign-picker .btn.primar
  .px-ad-controls{width:100%;flex-direction:row;justify-content:flex-end;align-items:center;flex-wrap:wrap;margin-left:0}
  .px-adset-table td{white-space:normal}
 }
+
+
+/* Meta ad thumbnails: fill the media card and keep controls over the image.
+   The old .px-media-lowres style artificially shrank 64px previews, causing
+   a tiny off-center picture next to a blank frame. */
+.px-featured-item.px-featured-video>.px-feature-media{position:relative;display:block!important}
+.px-featured-item.px-featured-video>.px-feature-media .px-feature-poster,
+.px-featured-item.px-featured-video>.px-feature-media.px-media-lowres .px-feature-poster{
+ position:absolute!important;inset:0!important;width:100%!important;height:100%!important;
+ max-width:100%!important;max-height:100%!important;object-fit:cover!important;
+ object-position:center!important;border:0!important;border-radius:0!important;
+}
+.px-featured-item.px-featured-video>.px-feature-media .px-feature-no-media{
+ position:absolute!important;inset:0!important;display:grid!important;place-items:center!important;
+ padding:18px!important;min-height:0!important;max-height:none!important;box-sizing:border-box!important;
+}
+.px-featured-item.px-featured-video>.px-feature-media.px-has-poster .px-feature-no-media{display:none!important}
+.px-featured-item.px-featured-video>.px-feature-media.px-media-lowres::after{display:none!important}
+.px-featured-item.px-featured-video>.px-feature-media .px-media-play{z-index:2;top:50%;left:50%}
+.px-featured-item.px-featured-video>.px-feature-media video,
+.px-featured-item.px-featured-video>.px-feature-media iframe{
+ position:absolute;inset:0;width:100%;height:100%;max-height:none;object-fit:contain;
+ background:#21192e;border:0;border-radius:11px;
+}
+.px-ad-creative-row .px-ad-creative-media{position:relative;display:block;flex-shrink:0}
+.px-ad-creative-row .px-ad-creative-media .px-feature-poster{
+ display:block;width:100%!important;height:100%!important;object-fit:cover!important;
+ object-position:center;background:#f0eafb;border-radius:8px;
+}
+.px-ad-creative-row .px-ad-creative-media.px-has-poster .px-feature-no-media{display:none!important}
+.px-ad-creative-row .px-ad-creative-media .px-feature-no-media{
+ width:100%;height:100%;min-height:0;padding:6px;font-size:10px;
+ text-align:center;box-sizing:border-box;
+}
+@media(max-width:600px){
+ .px-ad-creative-row .px-ad-creative-media{flex-basis:88px;height:75px}
+ .px-featured-item.px-featured-video>.px-feature-media{min-height:190px}
+}
