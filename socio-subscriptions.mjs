@@ -80,13 +80,15 @@ export async function createSubscriptionCheckout(pool,actor,{env=process.env,fet
  ]);
  const t=tenants[0],old=accounts[0],email=owners[0]?.email;
  if(!t||!VALID_PLANS.has(t.plan)||!cfg.plans[t.plan]||!email)throw fault(503,'Plano ou cadastro de cobrança incompleto.');
- if(['active','trialing','past_due','unpaid'].includes(old?.subscription_status))
+ if(old?.stripe_subscription_id||['active','trialing','past_due','unpaid'].includes(old?.subscription_status))
   throw fault(409,'Assinatura existente: utilize o portal de cobrança em vez de contratar outra.');
  if(old?.subscription_status==='checkout_pending')
   throw fault(409,'Existe uma sessão Checkout pendente; conclua ou solicite atendimento para renovar a sessão.');
  const base=new URL(env.SOCIO_PUBLIC_URL).origin;
  const trialEnd=new Date(t.created_at).getTime()+7*86400000;
  const secondsLeft=Math.floor((trialEnd-new Date(now))/1000);
+ if(secondsLeft>0&&secondsLeft<48*3600)
+  throw fault(409,'Seu teste gratuito ainda está em andamento. O Checkout com fim exato do teste será liberado após essa janela; não haverá cobrança antecipada.');
  const params={
   mode:'subscription','line_items[0][price]':env[PLAN_KEYS[t.plan]],
   'line_items[0][quantity]':'1',
