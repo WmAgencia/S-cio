@@ -32,7 +32,7 @@ function parseMoney(text){
  return Number.isFinite(n)&&n>=0&&n<1000000?Math.round(n*100):null;
 }
 export async function askThalita(pool,a,body={},opts={}){
- requirePermission(a,'inbox.read');
+ if(!parseTenantFeatures(a.features).ai)throw fail(403,'IA não habilitada para esta empresa.');
  const message=safeMessage(body.message);
  if(!message)throw fail(422,'Escreva uma pergunta de até 1.400 caracteres.');
  const lower=normalize(message);

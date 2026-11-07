@@ -133,3 +133,15 @@ test('dashboard ad spend and assistant tools degrade gracefully without invented
  assert.match(server,/pathname==='\/api\/thalita\/ask'/);
  assert.match(server,/pathname==='\/api\/thalita\/confirm'/);
 });
+
+test('Thalita uses the AI module, not WhatsApp permission; feature disabled stays locked',async()=>{
+ const a={role:'owner',user_id:'user',active_tenant_id:'tenant',token_hash:'session',
+  features:{ai:false,whatsapp:false,catalog:true,quotes:false,meta_ads:false,team:false}};
+ const db={query:async()=>{throw Error('No queries permitted before feature gate');}};
+ await assert.rejects(askThalita(db,a,{message:'Olá, Thalita!'}),{status:403});
+ const js=load('public/socio-thalita-ui.js'),server=load('server.mjs');
+ assert.match(js,/auth\.tenant\?\.features\?\.ai===false/);
+ assert.match(server,/pathname==='\/api\/thalita\/ask'[\s\S]{0,120}assertApiFeature\(a\.features,'\/api\/agent'\)/);
+ assert.match(server,/pathname==='\/api\/thalita\/tts'[\s\S]{0,120}assertApiFeature\(a\.features,'\/api\/agent'\)/);
+ assert.doesNotMatch(server,/pathname==='\/api\/thalita\/ask'\)\{\s*requirePermission\(a,'inbox\.read'/);
+});
