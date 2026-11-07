@@ -12,7 +12,8 @@
  const optional=async(api,path)=>{try{return {data:await api(path),ok:true};}catch(error){return {data:null,ok:false,reason:String(error?.message||'Dados indisponíveis').slice(0,120)};}};
  // Small per-company GET cache removes the blank transition on repeat visits.
  // In-flight calls are shared; values expire quickly and manual refresh clears them.
- const getCache=new Map();const snapshots=new Map();let selectedTenant=null;
+ const getCache=new Map();const snapshots=new Map();let selectedTenant=null,renderSerial=0;
+ const invalidateRender=()=>{renderSerial++;};
  const forTenant=me=>{const id=[me?.tenant?.id||'',me?.user?.id||'',me?.user?.role||''].join(':');
   if(selectedTenant!==id){getCache.clear();snapshots.clear();selectedTenant=id;}
  };
@@ -135,6 +136,7 @@
    best:daily.filter(x=>Number(x.clicks)>0).sort((a,b)=>Number(b.clicks)-Number(a.clicks))[0]||null};
  }
  async function overview({root,api,me,navigate,activityRange='1m'}){
+  const renderId=++renderSerial;
   const range=['7d','1m','90d'].includes(activityRange)?activityRange:'1m';
   forTenant(me);
   if(!root.querySelector('.px-overview'))setPreview(root,'overview');
@@ -149,6 +151,7 @@
    ads?cached(api,'/api/google-ads/campaigns?period=today',60000):Promise.resolve({ok:false}),
   ];
   const [dashboard,activity,exec,wa,monitor,meta,google]=await Promise.all(calls);
+  if(renderId!==renderSerial)return;
   const d=dashboard.data||{},ex=exec.data||{},m=ex.counts||{},realWa=Array.isArray(wa.data)?wa.data.filter(c=>c.status==='connected').length:0;
   const metaReady=meta?.insights.ok===true,googleReady=google.ok===true;
   const googleMicros=googleReady?Number(google.data?.summary?.costMicros||0)/1e6:null;
@@ -247,10 +250,12 @@
   root.querySelector('[data-px-marketing]')?.addEventListener('click',()=>navigate('marketing'));
  }
  async function marketing({root,api,me,navigate,period='last_7d'}){
+  const renderId=++renderSerial;
   forTenant(me);
   if(!root.querySelector('.px-marketing'))setPreview(root,'marketing');
   if(!can(me,'marketing.read')){root.textContent='Você não tem acesso às campanhas desta empresa.';return;}
   let data=null;try{data=await loadMeta(api,period,true);}catch{}
+  if(renderId!==renderSerial)return;
   const connected=data?.status.data?.connected===true,selected=!!data?.status.data?.selectedAccount;
   const campaigns=data?.list||[],ads=data?.adList||[],hasData=data?.insights.ok===true,currency=data?.currency;
   const decoratedCampaigns=campaigns.map(c=>{
@@ -324,6 +329,7 @@
  }
  const connectBtn=(label,attr,enabled=true)=>'<button type="button" class="btn '+(enabled?'primary':'soft')+'" '+attr+' '+(!enabled?'disabled':'')+'>'+esc(label)+'</button>';
  async function connections({root,api,me,navigate}){
+  const renderId=++renderSerial;
   forTenant(me);
   if(!root.querySelector('.px-connections'))setPreview(root,'connections');
   const [whatsapp,meta,google]=await Promise.all([
@@ -331,6 +337,7 @@
    can(me,'marketing.read')?cached(api,'/api/marketing/official/status',20000):Promise.resolve({ok:false,data:null}),
    can(me,'marketing.read')?cached(api,'/api/google-ads/status',20000):Promise.resolve({ok:false,data:null}),
   ]);
+  if(renderId!==renderSerial)return;
   const manageWa=can(me,'channels.manage'),manageAds=can(me,'marketing.manage');
   const waList=Array.isArray(whatsapp.data)?whatsapp.data:[],connectedWa=waList.filter(w=>w.status==='connected');
   const metaConnected=meta.data?.connected===true,googleConnected=google.data?.connected===true;
@@ -403,5 +410,5 @@
    });
   }
  }
- globalThis.SocioWorkspaceUI={overview,marketing,connections,clearCache};
+ globalThis.SocioWorkspaceUI={overview,marketing,connections,clearCache,invalidateRender};
 })();
