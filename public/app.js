@@ -1024,7 +1024,9 @@ async function agent(){
  mountAiGuideTabs();
 }
 async function reports(){
- const report=await api('/api/reports');
+ const [report,monitor]=await Promise.all([
+  api('/api/reports'),api('/api/reports/monitor').catch(()=>null)
+ ]);
  const t=report.totals||{};
  const cards=[
   ['Mensagens recebidas',t.inbound_messages,'WhatsApp · últimos 30 dias'],
@@ -1036,10 +1038,25 @@ async function reports(){
  ];
  const days=Array.isArray(report.dailyMessages)?report.dailyMessages:[];
  const max=Math.max(1,...days.map(d=>Number(d.messages||0)));
+ const ops=monitor?.activity||null;
+ const showNumber=value=>value===null||value===undefined?'Indisponível':Number(value).toLocaleString('pt-BR');
+ const monitorSection=ops?
+  '<section class="card card-pad"><h2>Monitoramento da operação</h2>'+
+   '<p class="form-note">Últimos 30 dias. Só mensagens com ID do provedor são respostas confirmadas; canal cadastrado não comprova conexão ativa no gateway.</p>'+
+   '<div class="report-note-grid"><div><small>Conversas aguardando resposta</small><strong>'+e(showNumber(ops.awaitingBusinessReply30d))+'</strong></div>'+
+   '<div><small>Respostas confirmadas</small><strong>'+e(showNumber(ops.confirmedBusinessMessages30d))+'</strong></div>'+
+   '<div><small>Orçamentos pendentes</small><strong>'+e(showNumber(ops.pendingQuotes))+'</strong></div>'+
+   '<div><small>Oportunidades abertas</small><strong>'+e(showNumber(ops.openOpportunities))+'</strong></div></div>'+
+   '<h3>Pontos de atenção</h3>'+
+   (monitor.alerts.length?monitor.alerts.map(a=>'<p class="form-note">• '+e(a.message)+' ('+e(a.count)+')</p>').join(''):
+    '<p class="form-note">Nenhum alerta encontrado nos registros disponíveis.</p>')+
+   '<p class="form-note">Vendas reais e receita confirmada: indisponíveis. Pagamentos de teste não são faturamento.</p></section>':
+  '<section class="card card-pad"><h2>Monitoramento</h2><p class="form-note">Consulta operacional indisponível; os demais relatórios continuam acessíveis.</p></section>';
  view.innerHTML='<section class="socio-reports">'+
   heading('INTELIGÊNCIA OPERACIONAL','Relatórios','Indicadores reais dos últimos 30 dias, sem confundir oportunidade, orçamento e pagamento.')+
   '<div class="report-kpi-grid">'+cards.map(([name,count,sub])=>
    '<article class="card report-kpi"><small>'+e(name)+'</small><strong>'+e(count??0)+'</strong><p>'+e(sub)+'</p></article>').join('')+'</div>'+
+  monitorSection+
   '<div class="report-sections"><section class="card card-pad"><h2>Atividade de mensagens</h2>'+
    '<p class="form-note">Volume diário de mensagens recebidas nos últimos 14 dias.</p>'+
    (days.length?'<div class="report-bars" role="img" aria-label="Mensagens recebidas por dia">'+days.map(d=>{
@@ -1194,18 +1211,40 @@ function wireFeatureDependencies(form,prefix='feature-'){
  });
 }
 async function admin(){
- const tenants=await api('/api/admin/tenants');
+ const [tenants,monitor]=await Promise.all([
+  api('/api/admin/tenants'),api('/api/admin/monitor').catch(()=>null)
+ ]);
+ const monitorById=new Map((monitor?.tenants||[]).map(t=>[t.id,t]));
+ const trialLabel=t=>{
+  if(t.status!=='trial')return '—';
+  const entry=monitorById.get(t.id);
+  if(!entry)return 'Não avaliado';
+  return entry.trial.elapsed?'Janela encerrada (sem bloqueio)':entry.trial.daysRemaining+' dia(s) restantes';
+ };
+ const summary=monitor?.summary;
+ const monitoring=summary?
+  '<section class="card card-pad"><h2>Visão comercial do SaaS</h2>'+
+   '<div class="report-note-grid"><div><small>Empresas cadastradas</small><strong>'+e(summary.total)+'</strong></div>'+
+   '<div><small>Em teste cadastral</small><strong>'+e(summary.trialAccounts)+'</strong></div>'+
+   '<div><small>Janela de teste encerrada</small><strong>'+e(summary.trialCalendarElapsed)+'</strong></div>'+
+   '<div><small>Teste terminando em até 3 dias</small><strong>'+e(summary.trialEndingWithin3Days)+'</strong></div></div>'+
+   '<p class="form-note">Clientes pagantes e receita recorrente: indisponíveis. Conta ativa não comprova pagamento. O período de 7 dias é apenas informativo, sem cobrança ou suspensão automática.</p>'+
+   (monitor.partial?'<p class="form-note">Listagem parcial: até 100 empresas recentes.</p>':'')+
+   '</section>':
+  '<section class="card card-pad"><h2>Monitoramento comercial</h2><p class="form-note">Resumo indisponível temporariamente.</p></section>';
+
  const rows=tenants.map(t=>
   '<tr><td><strong>'+e(t.name)+'</strong><div class="table-detail">'+
    e(t.cnpj||t.slug)+' · '+e(t.members)+' usuário(s)</div></td>'+
-   '<td>'+badge(t.plan)+'</td><td>'+badge(t.status,t.status==='active'?'green':'gray')+'</td>'+
+   '<td>'+badge(t.plan)+'</td><td>'+badge(t.status,t.status==='active'?'green':'gray')+'</td><td>'+e(trialLabel(t))+'</td>'+
    '<td><button type="button" class="btn sm soft" data-feature-edit="'+e(t.id)+'">Funcionalidades</button> '+
    '<button class="btn sm ghost" data-switch="'+e(t.id)+'">'+
    (t.id===state.me.tenant.id?'Atual':'Acessar')+'</button></td></tr>').join('');
  view.innerHTML=heading('CONTROLE CONSECOM','Empresas.','Gerencie clientes e espaços independentes.',
   '<button type="button" class="btn primary" id="newCompany">+ Nova empresa</button>')+
+ monitoring+
  '<section class="card card-pad socio-list-panel"><div class="socio-clean-head"><h2>Empresas cadastradas</h2><small>'+tenants.length+' ambientes</small></div>'+
- '<div class="table-wrap"><table class="data-table"><thead><tr><th>Empresa</th><th>Plano</th><th>Situação</th><th>Acesso</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
+ '<div class="table-wrap"><table class="data-table"><thead><tr><th>Empresa</th><th>Plano</th><th>Situação</th><th>Teste 7 dias</th><th>Acesso</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
  '<div class="socio-popup-backdrop hidden" id="companyModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="companyHeading">'+
   '<div class="socio-popup-header"><div><small>ADMINISTRAÇÃO MASTER</small><h2 id="companyHeading">Nova empresa</h2>'+
   '<p>Consulte o CNPJ para preencher os dados públicos automaticamente.</p></div>'+
