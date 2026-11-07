@@ -10,6 +10,20 @@ export function parseMetaCommand(text){
  if(raw.length<5||raw.length>1000)throw invalid('Descreva sua solicitação em até mil caracteres.');
  const period=/\b(hoje|dia atual)\b/.test(s)?'today':/\b(ontem)\b/.test(s)?'yesterday':
   /\b(30 dias|mes|mensal)\b/.test(s)?'last_30d':'last_7d';
+ // Specialized read intents take priority over the generic report matcher.
+ // Never reinterpret a request to modify a rule or budget as a read operation.
+ if(!/\b(criar|crie|ativar|ative|pausar|pause|alterar|altere|excluir|exclua|aumentar|reduzir|mudar)\b/.test(s)){
+  const kind=/\b(historico|alteracoes|atividades)\b/.test(s)?'activity':
+   /\b(etiqueta|etiquetas|rotulos)\b/.test(s)?'labels':
+   /\b(regras automaticas|regras da conta)\b/.test(s)?'rules':
+   /\b(rejeicoes|rejeitados|problemas de entrega|problemas de veiculacao)\b/.test(s)?'delivery':
+   /\b(retencao|thruplay|reproducao|quartis)\b/.test(s)?'video_report':
+   /\b(conversoes|roas|valor de conversao)\b/.test(s)?'conversion_report':
+   /\b(orcamentos|verbas das campanhas)\b/.test(s)?'budget_report':
+   /\b(desempenho dos criativos|comparar criativos)\b/.test(s)?'creative_report':null;
+  if(kind)return {intent:'read',kind,input:{period,level:'campaign',breakdown:'none'},
+   label:'Consultar dados oficiais da conta Meta selecionada',willSpend:false};
+ }
  if(/\b(relatorio|resultado|metricas|desempenho|gasto|analise|quanto gast)/.test(s)&&
   !/\b(orcamento|alterar|mudar|definir|aumentar|reduzir)\b/.test(s)){
   return {intent:'read',kind:'reports',input:{period,level:/\banuncio/.test(s)?'ad':/\bconjunto/.test(s)?'adset':'campaign',breakdown:'none'},
