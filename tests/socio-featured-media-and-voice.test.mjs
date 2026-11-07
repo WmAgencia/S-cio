@@ -74,5 +74,5 @@ test('Meta dashboard includes campaign thumbnail, ad video controls, swift navig
  assert.match(voice,/source\.start\(\)/);
  assert.match(voice,/Sou a Thalita/);
  assert.match(vad,/const assistantSpeaking=canInterrupt\(\)/);
- assert.match(vad,/now-bargeStarted>=560/);
+ assert.match(vad,/now-bargeStarted>=750/);
 });
