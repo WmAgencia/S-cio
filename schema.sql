@@ -1018,3 +1018,27 @@ CREATE TABLE IF NOT EXISTS socio_billing_webhook_events (
  received_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS socio_billing_events_recent_idx ON socio_billing_webhook_events(received_at DESC);
+
+
+-- Official Google Ads OAuth: callback state is one-use, session-bound and encrypted.
+-- Read-only account discovery does not authorize any campaign mutation.
+CREATE TABLE IF NOT EXISTS socio_google_ads_states (
+ state_hash text PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ session_hash text NOT NULL REFERENCES sessions(token_hash) ON DELETE CASCADE,
+ verifier_ciphertext text NOT NULL,
+ expires_at timestamptz NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS socio_google_states_expiry_idx ON socio_google_ads_states(expires_at);
+CREATE TABLE IF NOT EXISTS socio_google_ads_grants (
+ tenant_id uuid PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id),
+ token_ciphertext text NOT NULL,
+ selected_customer_id text,
+ connected_at timestamptz NOT NULL DEFAULT now(),
+ checked_at timestamptz,
+ checked_account_count integer,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
