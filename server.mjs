@@ -544,7 +544,7 @@ async function handle(req,res){
  if(method==='GET'&&pathname==='/api/marketing/tools/ad-media'){
   const params=new URL(req.url,'http://local').searchParams;
   const adId=params.get('adId'),posterOnly=params.get('posterOnly')==='1';
-  if(!limiter(simulationAttempts,'ad-preview:'+a.user_id,60000,posterOnly?120:36))
+  if(!limiter(simulationAttempts,(posterOnly?'ad-poster:':'ad-preview:')+a.user_id,60000,posterOnly?120:36))
    throw fail(429,'Muitas consultas de criativos. Tente novamente.');
   return json(res,200,await readSelectedAdMedia(pool,a,adId,{posterOnly}));
  }
