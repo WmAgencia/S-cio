@@ -48,7 +48,7 @@ async function availablePages(c){
 }
 export async function readAdsTool(pool,a,kind,input={},options={}){
  const c=await context(pool,a,options),id=c.account.id;
- const fields={campaigns:'id,name,status,effective_status,objective,daily_budget,lifetime_budget',adsets:'id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,targeting',ads:'id,name,campaign_id,adset_id,status,effective_status,creative{id,name,thumbnail_url}',images:'hash,name,url,width,height',pages:'id,name'};
+ const fields={campaigns:'id,name,status,effective_status,objective,daily_budget,lifetime_budget',adsets:'id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,targeting',ads:'id,name,campaign_id,adset_id,status,effective_status,creative{id,name,thumbnail_url,video_id}',images:'hash,name,url,width,height',pages:'id,name'};
  if(kind==='finance'){
   const data=await graph(c,'/'+id,{fields:'id,name,currency,amount_spent,spend_cap,account_status,business{id}'});
   const billing=new URL('https://adsmanager.facebook.com/billing_hub/payment_settings/');
@@ -272,3 +272,47 @@ export async function inspectOfficialCampaign(pool,a,campaignId,options={}){
   readOnly:true,period:'last_7d',warning:'Dados da Meta; cliques não comprovam leads ou vendas no WhatsApp.'};
 }
 export async function adsToolHistory(pool,a){permit(a);const r=await pool.query('SELECT id,account_id,kind,summary,status,result,created_at FROM meta_ads_plans WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 30',[a.active_tenant_id]);return {items:r.rows};}
+
+
+/**
+ * Verified creative preview of one selected-account ad. Meta signs CDN media
+ * URLs, so the browser only receives a short-lived source the user can play
+ * manually. No bearer token, ad mutation or arbitrary Graph path is exposed.
+ */
+export async function readSelectedAdMedia(pool,a,adId,options={}){
+ if(!numeric(adId))throw fail(422,'Selecione um anúncio válido.');
+ const c=await context(pool,a,options);
+ const ad=await graph(c,'/'+adId,{
+  fields:'id,name,account_id,campaign_id,creative{id,thumbnail_url,video_id,object_story_spec}'
+ });
+ const account=String(c.account.id||'').replace(/^act_/,'');
+ if(String(ad?.account_id)!==account||String(ad?.id)!==adId)
+  throw fail(403,'Este anúncio não pertence à conta selecionada.');
+ const creative=ad.creative||{};
+ const safeMedia=(value)=>{
+  if(typeof value!=='string'||value.length>2600)return null;
+  try{
+   const url=new URL(value);
+   if(url.protocol!=='https:'||url.username||url.password)return null;
+   const host=url.hostname.toLowerCase();
+   return /(^|\.)(fbcdn\.net|fbsbx\.com|cdninstagram\.com)$/.test(host)?url.href:null;
+  }catch{return null;}
+ };
+ const videoId=String(creative.video_id||creative.object_story_spec?.video_data?.video_id||'');
+ let thumbnailUrl=safeMedia(creative.thumbnail_url||creative.object_story_spec?.video_data?.image_url),videoUrl=null;
+ let status=videoId&&numeric(videoId)?'video_unavailable':'image';
+ if(numeric(videoId)){
+  try{
+   const video=await graph(c,'/'+videoId,{fields:'id,source,picture'});
+   if(String(video.id)===videoId){
+    videoUrl=safeMedia(video.source);
+    thumbnailUrl=thumbnailUrl||safeMedia(video.picture);
+    if(videoUrl)status='video_ready';
+   }
+  }catch{/* Some placements do not expose a stream even with ads_read. */}
+ }
+ return {readOnly:true,adId,accountId:c.account.id,campaignId:String(ad.campaign_id||''),
+  name:String(ad.name||'').slice(0,200),thumbnailUrl,videoUrl,status,
+  note:videoUrl?'Prévia autorizada da Meta. A reprodução só inicia após clicar.':
+   'A Meta não disponibilizou um arquivo reproduzível para este criativo; exiba a miniatura quando disponível.'};
+}
