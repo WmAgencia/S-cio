@@ -25,7 +25,7 @@ export async function saveMetaBillingObservation(pool,a,result){
    if(Number.isFinite(spend)&&spend>0)daily=Math.round(spend*100/7);
   }
  }catch{/* Absolute balance threshold remains available without spend insights. */}
- await pool.query("INSERT INTO meta_billing_observations(tenant_id,user_id,account_id,currency,available_funds_minor,observed_at,valid_until,daily_spend_minor) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(tenant_id,user_id,account_id) DO UPDATE SET available_funds_minor=$5,observed_at=$6,valid_until=$7,daily_spend_minor=$8,last_attempt_at=now(),last_error=NULL",
+ await pool.query("INSERT INTO meta_billing_observations(tenant_id,user_id,account_id,currency,available_funds_minor,observed_at,valid_until,daily_spend_minor) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(tenant_id,user_id,account_id) DO UPDATE SET available_funds_minor=$5,observed_at=$6,valid_until=$7,daily_spend_minor=$8,last_attempt_at=now(),last_error=NULL,monitor_enabled=true",
   [a.active_tenant_id,a.user_id,o.accountId,o.currency,o.availableFundsMinor,o.observedAt,o.validUntil,daily]);
  const alert=assessMetaFunds(o,{dailySpendMinor:daily});
  if(alert.state==='low'||alert.state==='critical'){
@@ -59,7 +59,7 @@ export async function monitorMetaBilling(pool,browserService){
     await pool.query('UPDATE meta_billing_observations SET monitor_enabled=false WHERE tenant_id=$1 AND user_id=$2 AND account_id=$3',[row.tenant_id,row.user_id,row.account_id]);
     continue;
    }
-   const result=await browserService.billing(pool,a,'read');
+   const result=await browserService.billing(pool,a,'read',{background:true});
    if(result.observation)await saveMetaBillingObservation(pool,a,result);
    else await pool.query('UPDATE meta_billing_observations SET last_attempt_at=now(),last_error=$4 WHERE tenant_id=$1 AND user_id=$2 AND account_id=$3',
     [row.tenant_id,row.user_id,row.account_id,result.state==='busy'?'busy':'needs_login']);
