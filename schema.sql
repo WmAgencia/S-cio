@@ -1042,3 +1042,32 @@ CREATE TABLE IF NOT EXISTS socio_google_ads_grants (
  checked_account_count integer,
  updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+
+-- Website telemetry is opt-in, domain-scoped and signed server-to-server.
+-- No Purchase from a website SDK: it must come from a verified payment integration.
+CREATE TABLE IF NOT EXISTS socio_tracking_sites (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ owner_user_id uuid NOT NULL REFERENCES users(id),
+ site_origin text NOT NULL,
+ pixel_id text NOT NULL,
+ signing_ciphertext text NOT NULL,
+ enabled boolean NOT NULL DEFAULT false,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(tenant_id,site_origin)
+);
+CREATE TABLE IF NOT EXISTS socio_tracking_events (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ site_id uuid NOT NULL REFERENCES socio_tracking_sites(id) ON DELETE CASCADE,
+ event_id uuid NOT NULL,
+ event_name text NOT NULL,
+ event_time timestamptz NOT NULL,
+ status text NOT NULL CHECK(status IN ('received','sent','uncertain')),
+ error_code text,
+ received_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(site_id,event_name,event_id)
+);
+CREATE INDEX IF NOT EXISTS socio_tracking_events_recent_idx ON socio_tracking_events(tenant_id,received_at DESC);
