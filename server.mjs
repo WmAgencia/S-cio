@@ -1,4 +1,4 @@
-import {readAdsTool,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
+import {readAdsTool,readSelectedAdMedia,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {previewMetaCommand} from './meta-ads-commands.mjs';
 import {SOCIO_AD_SKILLS} from './socio-ad-skills.mjs';
@@ -165,7 +165,7 @@ async function handle(req,res){
  res.setHeader('X-Content-Type-Options','nosniff');
  res.setHeader('Referrer-Policy','no-referrer');
  res.setHeader('X-Frame-Options','DENY');
- res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob: https://*.fbcdn.net https://*.fbsbx.com; style-src 'self'; script-src 'self'; connect-src 'self'; media-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+ res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob: https://*.fbcdn.net https://*.fbsbx.com https://*.cdninstagram.com; style-src 'self'; script-src 'self'; connect-src 'self'; media-src 'self' blob: https://*.fbcdn.net https://*.fbsbx.com https://*.cdninstagram.com; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
  if(method==='GET'&&pathname==='/health'){
   // Railway only considers the app ready when the tenant database is usable.
   // A static 200 here used to hide Postgres outages from the healthcheck.
@@ -535,6 +535,12 @@ async function handle(req,res){
   return json(res,200,await readAdvancedMetaTool(pool,a,advancedRoute[1],
    {period:qs.get('period'),level:qs.get('level'),breakdown:qs.get('breakdown'),
     daily:qs.get('daily'),after:qs.get('after')}));
+ }
+ if(method==='GET'&&pathname==='/api/marketing/tools/ad-media'){
+  const adId=new URL(req.url,'http://local').searchParams.get('adId');
+  if(!limiter(simulationAttempts,'ad-preview:'+a.user_id,60000,36))
+   throw fail(429,'Muitas consultas de criativos. Tente novamente.');
+  return json(res,200,await readSelectedAdMedia(pool,a,adId));
  }
  const adsRead=pathname.match(/^\/api\/marketing\/tools\/(campaigns|adsets|ads|images|pages|insights|finance|cities)$/);
  if(adsRead&&method==='GET'){

@@ -204,6 +204,7 @@ async function changeView(next,conversationId=null){
  if(next==='connections'&&!access.has('marketing.read')&&!access.has('channels.manage'))next='overview';
  if(next==='instagram')next='marketing';
  if(next==='marketing'&&!access.has('marketing.read'))next='overview';
+ globalThis.SocioWorkspaceUI?.invalidateRender();
  globalThis.SocioFlowImages?.dispose();
  globalThis.SocioMetaBrowser?.dispose();
  globalThis.SocioMetaLocal?.dispose();
@@ -1610,5 +1611,5 @@ $$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{
  if(b.dataset.view==='training')state.aiTab='training';
  changeView(b.dataset.view);
 }));
-$('#logoutBtn').addEventListener('click',async()=>{globalThis.SocioThalitaUI?.unmount();clearInterval(commerceAlertTimer);$('#commerceAlerts').replaceChildren();try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
+$('#logoutBtn').addEventListener('click',async()=>{globalThis.SocioWorkspaceUI?.clearCache();globalThis.SocioThalitaUI?.unmount();clearInterval(commerceAlertTimer);$('#commerceAlerts').replaceChildren();try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
 boot();

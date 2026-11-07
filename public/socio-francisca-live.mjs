@@ -68,14 +68,15 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
  function poll(){
   if(!active||finishing||document.hidden)return;
   const rms=level(),now=Date.now();
-  if(processing){
-   // Keep measuring the microphone while the assistant is speaking.
-   // A sustained new user utterance interrupts playback and starts recording
-   // without disconnecting the underlying microphone stream.
-   const userSpeech=canInterrupt()&&rms>Math.max(.018,ambient*2.5);
+  // During assistant audio (including the initial greeting), do not transcribe
+  // its speaker echo as a user turn. Only a sustained much-louder utterance
+  // can interrupt; the microphone itself stays connected throughout.
+  const assistantSpeaking=canInterrupt();
+  if(processing||assistantSpeaking){
+   const userSpeech=assistantSpeaking&&rms>Math.max(.048,ambient*4.8);
    if(userSpeech){
     if(!bargeStarted)bargeStarted=now;
-    if(now-bargeStarted>=140){
+    if(now-bargeStarted>=560){
      bargeStarted=0;
      try{onInterrupt();}catch(error){onError(error?.message||'Falha ao interromper');}
      processing=false;

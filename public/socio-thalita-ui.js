@@ -3,37 +3,61 @@
 (()=>{
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let instance=null,api=null,me=null,csrf=null,busy=false,session=null,speaking=false,
-  audio=null,voiceUrl=null,abort=null,finalize=null,turnRunId=null,voiceRequested=false;
+  playbackContext=null,playbackSource=null,abort=null,finalize=null,turnRunId=null,voiceRequested=false;
  const get=sel=>instance?.querySelector(sel);
+ // Audio output is unlocked by the explicit microphone click using a shared
+ // Web Audio context. A new Audio().play() after asynchronous STT/LLM/TTS often
+ // fails browser autoplay rules even though microphone permission succeeded.
+ function unlockPlayback(){
+  const Native=window.AudioContext||window.webkitAudioContext;
+  if(!Native)throw Error('Este navegador não oferece reprodução de áudio.');
+  if(!playbackContext||playbackContext.state==='closed')playbackContext=new Native();
+  // Must be called synchronously from the user's button click.
+  const ready=playbackContext.resume();
+  Promise.resolve(ready).catch(()=>setStatus('Toque novamente em Conversar por voz para permitir áudio.'));
+ }
  function finishVoice(){
   if(abort){abort.abort();abort=null;}
-  if(audio){try{audio.pause();audio.removeAttribute('src');audio.load();}catch{}audio=null;}
-  if(voiceUrl){URL.revokeObjectURL(voiceUrl);voiceUrl=null;}
+  if(playbackSource){try{playbackSource.onended=null;playbackSource.stop();playbackSource.disconnect();}catch{}playbackSource=null;}
   speaking=false;finalize?.();finalize=null;
  }
  function closeVoice(){
-  session?.stop();session=null;finishVoice();
+  session?.stop();session=null;voiceRequested=false;finishVoice();
+  if(playbackContext){Promise.resolve(playbackContext.close()).catch(()=>{});playbackContext=null;}
   const btn=get('[data-thalita-voice]');if(btn)btn.textContent='◉ Conversar por voz';
   const label=get('#thalitaVoiceState');if(label)label.textContent='Voz desligada';
  }
  async function say(text){
   if(!session||!voiceRequested||!text?.trim())return;
-  finishVoice();speaking=true;setStatus('Thalita está falando; pode interromper.');
+  finishVoice();speaking=true;setStatus('Preparando voz Thalita…');
   const controller=new AbortController();abort=controller;
+  let failed=false;
   try{
+   if(!playbackContext||playbackContext.state==='closed')throw Error('Saída de áudio não iniciada. Encerre e ative a voz novamente.');
+   if(playbackContext.state!=='running')await playbackContext.resume();
    const resp=await fetch('/api/thalita/tts',{method:'POST',credentials:'same-origin',
     headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
     body:JSON.stringify({text:String(text).slice(0,650)}),signal:controller.signal});
    if(!resp.ok){const j=await resp.json().catch(()=>({}));throw Error(j.error||'TTS indisponível');}
-   const blob=await resp.blob();if(controller.signal.aborted)return;
-   voiceUrl=URL.createObjectURL(blob);audio=new Audio(voiceUrl);
+   const bytes=await resp.arrayBuffer();if(controller.signal.aborted)return;
+   const buffer=await playbackContext.decodeAudioData(bytes);if(controller.signal.aborted)return;
+   const source=playbackContext.createBufferSource();playbackSource=source;
+   source.buffer=buffer;source.connect(playbackContext.destination);
    await new Promise((resolve,reject)=>{
-    let done=false;const settle=()=>{if(done)return;done=true;finalize=null;resolve();};
-    finalize=settle;audio.onended=settle;audio.onerror=()=>{settle();reject(Error('Não foi possível reproduzir o áudio.'));};
-    audio.play().catch(e=>{settle();reject(e);});
+    let done=false;
+    const settle=()=>{if(done)return;done=true;finalize=null;resolve();};
+    finalize=settle;source.onended=settle;
+    try{source.start();setStatus('Thalita falando · pode interromper.');}
+    catch(error){settle();reject(error);}
    });
-  }catch(e){if(!controller.signal.aborted)setStatus('Áudio indisponível; você pode continuar pelo chat.');}
-  finally{if(abort===controller)finishVoice();}
+  }catch(error){
+   if(!controller.signal.aborted){
+    failed=true;
+    setStatus('Não foi possível ouvir a Thalita: '+String(error.message||'falha').slice(0,150));
+   }
+  }finally{
+   if(abort===controller){finishVoice();if(!failed)setStatus(session?'Microfone ativo. Pode falar.':'Voz desligada');}
+  }
  }
  function setStatus(message){
   const label=get('#thalitaVoiceState');if(label)label.textContent=String(message);
@@ -73,11 +97,14 @@
   }catch(e){add('assistant','Não foi possível concluir: '+e.message);}
   finally{
    busy=false;const btn=get('[data-thalita-send]');if(btn)btn.disabled=false;
-   if(!speaking)setStatus(session?'Microfone ativo. Pode falar.':'Digite ou ligue a voz da Thalita.');
+   // Preserve an audio failure message instead of immediately overwriting it.
+   if(!speaking&&!get('#thalitaVoiceState')?.textContent?.startsWith('Não foi possível ouvir'))
+    setStatus(session?'Microfone ativo. Pode falar.':'Digite ou ligue a voz da Thalita.');
   }
  }
  async function startVoice(){
   if(session){closeVoice();return;}
+  try{unlockPlayback();}catch(error){setStatus(error.message);return;}
   if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){
    setStatus('Microfone indisponível neste navegador. Use o chat.');return;
   }
@@ -100,6 +127,7 @@
    await session.start();voiceRequested=true;
    const btn=get('[data-thalita-voice]');if(btn)btn.textContent='■ Encerrar conversa por voz';
    setStatus('Thalita conectada. Pode falar ou digitar.');
+   void say('Oi! Sou a Thalita. Estou ouvindo. Pode falar comigo.');
   }catch(e){closeVoice();setStatus('Não foi possível usar o microfone: '+e.message);}
  }
  function unmount(){closeVoice();instance?.remove();instance=null;api=null;me=null;csrf=null;turnRunId=null;}
