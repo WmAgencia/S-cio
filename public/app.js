@@ -1085,6 +1085,8 @@ async function reports(){
     '<p>Transações sandbox, sem receita real.</p></div></div>'+
    '<p class="form-note">Para medir receita real será necessário conectar e conciliar um meio de pagamento autorizado.</p>'+
   '</section></div></section>';
+ if(window.SocioIntegrationsUI)
+  window.SocioIntegrationsUI.render({root:view,api}).catch(error=>console.warn('[integrations-panel]',String(error?.message||'unavailable').slice(0,100)));
  const billFeedback=view.querySelector('[data-billing-feedback]');
  for(const [action,endpoint,field] of [
   ['checkout','/api/billing/checkout','checkoutUrl'],
