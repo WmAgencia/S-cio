@@ -35,6 +35,7 @@ import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSess
 import {processNextWaakgScan} from './waakg-history.mjs';
 import {startAutoTraining,autoTrainingStatus,cancelAutoTraining,processNextAutoTraining} from './training-auto.mjs';
 import {getSocioInterview,startSocioInterview,advanceSocioInterview,resetSocioInterview,transcribeSocioTraining} from './socio-training-interview.mjs';
+import {synthesizeSocioTrainingVoice,SOCIO_TRAINING_VOICE} from './socio-training-tts.mjs';
 import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
@@ -162,7 +163,7 @@ async function handle(req,res){
  res.setHeader('X-Content-Type-Options','nosniff');
  res.setHeader('Referrer-Policy','no-referrer');
  res.setHeader('X-Frame-Options','DENY');
- res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob: https://*.fbcdn.net https://*.fbsbx.com; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+ res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob: https://*.fbcdn.net https://*.fbsbx.com; style-src 'self'; script-src 'self'; connect-src 'self'; media-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
  if(method==='GET'&&pathname==='/health'){
   // Railway only considers the app ready when the tenant database is usable.
   // A static 200 here used to hide Postgres outages from the healthcheck.
@@ -1380,6 +1381,21 @@ async function handle(req,res){
   let length=0;const chunks=[];
   for await(const chunk of req){length+=chunk.length;if(length>3*1024*1024)throw fail(413,'O áudio deve ter até 3 MB.');chunks.push(chunk);}
   return json(res,200,await transcribeSocioTraining(Buffer.concat(chunks),mime));
+ }
+ // Thalita replaces the browser's unpredictable system voice for the guided interview.
+ // Access is authenticated, tenant-scoped, CSRF guarded, rate limited; no audio is stored.
+ if(method==='POST'&&pathname==='/api/training/interview/tts'){
+  needRole(a,['owner','admin']);
+  if(!limiter(simulationAttempts,'interview-tts:'+a.active_tenant_id,60000,20))
+   throw fail(429,'Muitas solicitações de voz. Aguarde um instante.');
+  const current=await getSocioInterview(pool,a.active_tenant_id);
+  if(!current||current.mode!=='voice'||current.phase!=='active')
+   throw fail(409,'Inicie uma entrevista por voz antes de gerar uma fala.');
+  const {data}=await body(req,2000);
+  const audio=await synthesizeSocioTrainingVoice(data.text);
+  res.writeHead(200,{'Content-Type':audio.mime,'Cache-Control':'private, no-store',
+   'Content-Length':String(audio.bytes.length),'X-TTS-Voice':SOCIO_TRAINING_VOICE});
+  return res.end(audio.bytes);
  }
  if(method==='GET'&&pathname==='/api/training/auto'){
   requirePermission(a,'training.manage');
