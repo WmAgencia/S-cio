@@ -694,6 +694,42 @@ const readVariantRows=(root,basePrice)=>[...root.querySelectorAll('[data-variant
 });
 async function products(selected=null){
  const [list,storage]=await Promise.all([api('/api/products'),api('/api/products/storage')]);
+ const canReadCampaigns=(state.me?.user?.permissions||[]).includes('marketing.read')&&featureAvailable('meta_ads');
+ const showDetails=selected==='new'||Boolean(selected);
+ const [metaChoices,googleChoices]=canReadCampaigns&&showDetails?await Promise.all([
+  api('/api/marketing/tools/campaigns').then(d=>d.items||[]).catch(()=>[]),
+  api('/api/google-ads/campaigns').then(d=>d.campaigns||[]).catch(()=>[])
+ ]):[[],[]];
+ const campaignOptions={
+  meta_ads:metaChoices.map(x=>({id:String(x.id),name:String(x.name||x.id),status:String(x.effective_status||x.status||'') })),
+  google_ads:googleChoices.map(x=>({id:String(x.id),name:String(x.name||x.id),status:String(x.status||'') }))
+ };
+ const campaignSelect=(scope)=>'<div class="px-campaign-picker">'+
+  '<label>Plataforma<select data-campaign-provider aria-label="Plataforma de anúncios"'+(scope==='create'?' name="newCampaignProvider"':' name="provider"')+'>'+
+   '<option value="meta_ads">Meta Ads</option><option value="google_ads">Google Ads</option></select></label>'+
+  '<label>Campanha cadastrada<select data-campaign-target aria-label="Campanha existente"'+(scope==='create'?' name="newCampaignId"':' name="campaignId"')+'>'+
+   '<option value="">Selecione uma campanha na sua conta</option></select></label>'+
+  '<small>Selecione pelo nome. Campanhas ativas ou pausadas aparecem quando retornadas pela conta autorizada; resultados dependem do rastreamento.</small>'+
+  '</div>';
+ const fillCampaignOptions=(form)=>{
+  const provider=form?.querySelector('[data-campaign-provider]'),picker=form?.querySelector('[data-campaign-target]');
+  if(!provider||!picker)return;
+  const old=picker.value;picker.replaceChildren(new Option('Nenhuma campanha selecionada',''));
+  for(const x of campaignOptions[provider.value]||[]){
+   const label=x.name+(x.status?' · '+x.status:'');
+   const option=new Option(label,x.id);option.dataset.label=x.name;picker.add(option);
+  }
+  if((campaignOptions[provider.value]||[]).some(x=>x.id===old))picker.value=old;
+  picker.disabled=picker.options.length===1;
+ };
+ const campaignPayload=(form)=>{
+  const provider=form?.querySelector('[data-campaign-provider]')?.value;
+  const picker=form?.querySelector('[data-campaign-target]');
+  if(!picker?.value)return null;
+  const selected=(campaignOptions[provider]||[]).find(x=>x.id===picker.value);
+  if(!selected)throw Error('Selecione uma campanha autorizada na lista.');
+  return {provider,campaignId:selected.id,label:selected.name};
+ };
  if(selected&&selected!=='new'&&!list.some(p=>p.id===selected))selected=null;
  state.catalogProductId=selected&&selected!=='new'?selected:null;
  const current=list.find(p=>p.id===selected);
@@ -728,13 +764,13 @@ async function products(selected=null){
    '<div class="row-actions"><button class="btn soft" id="addVariant" type="button">+ Adicionar variação</button><button class="btn primary" type="submit">Salvar variações</button></div></form></section>'+
   '<section class="card card-pad section-gap"><div class="section-title">Campanhas associadas</div>'+
    '<p class="form-note">Associação manual de referência. A conexão e os resultados da conta de anúncios ainda não foram verificados.</p>'+
-   (current.campaigns.some(c=>c.provider==='meta_ads')?'<div class="catalog-campaign-list">'+current.campaigns.filter(c=>c.provider==='meta_ads').map(c=>
-     '<div><strong>Meta Ads</strong> · '+e(c.label||c.campaign_id)+
+   (current.campaigns.length?'<div class="catalog-campaign-list">'+current.campaigns.map(c=>
+     '<div><strong>'+e(c.provider==='google_ads'?'Google Ads':'Meta Ads')+'</strong> · '+e(c.label||c.campaign_id)+
      '<span class="form-note"> '+e(c.campaign_id)+' · Não verificada</span>'+
      '<button class="btn sm ghost" data-delete-campaign="'+e(c.id)+'">Remover</button></div>').join('')+'</div>':'')+
-   '<form id="catalogCampaignForm" class="form-stack"><input type="hidden" name="provider" value="meta_ads"><p class="form-note">Plataforma: Meta Ads</p>'+
-   '<label>ID da campanha<input name="campaignId" maxlength="150" required placeholder="Identificador na plataforma"></label>'+
-   '<label>Nome interno<input name="label" maxlength="120" placeholder="Ex.: Campanha Black Friday"></label>'+
+   '<form id="catalogCampaignForm" class="form-stack">'+campaignSelect('edit')+
+
+
    '<button class="btn soft" type="submit">Associar campanha →</button></form></section>':'';
  const modalOpen=selected==='new'||Boolean(current);
  view.innerHTML=heading('CATÁLOGO','Produtos e serviços.','Catálogo, preços e disponibilidade da empresa.',
@@ -755,8 +791,8 @@ async function products(selected=null){
     '<button type="button" class="socio-popup-close" id="closeProductModal" aria-label="Fechar cadastro">×</button></div>'+
     '<form class="form-stack" id="productForm">'+
      '<label>Nome ou título do produto<input name="name" required maxlength="120" placeholder="Ex.: Kit profissional" value="'+e(current?.name||'')+'"></label>'+
-     '<div class="catalog-pair"><label>Preço (R$)<input name="price" required type="number" min="0" step="0.01" value="'+e(current?(current.price_cents/100).toFixed(2):'')+'"></label>'+
-     '<label>Preço anterior (opcional)<input name="compareAtPrice" type="number" min="0" step="0.01" value="'+e(current?.compare_at_price_cents!=null?(current.compare_at_price_cents/100).toFixed(2):'')+'"></label></div>'+
+     '<div class="catalog-pair"><label>Preço (R$)<input name="price" required type="text" inputmode="decimal" placeholder="Ex.: 129,90" maxlength="18" value="'+e(current?(current.price_cents/100).toFixed(2).replace('.',','):'')+'"></label>'+
+     '<label>Preço anterior (opcional)<input name="compareAtPrice" type="text" inputmode="decimal" maxlength="18" value="'+e(current?.compare_at_price_cents!=null?(current.compare_at_price_cents/100).toFixed(2).replace('.',','):'')+'"></label></div>'+
      '<div class="catalog-pair"><label>Código / SKU<input name="sku" maxlength="50" placeholder="Opcional" value="'+e(current?.sku||'')+'"></label>'+
      '<label>Estoque disponível<input name="stock" type="number" min="0" step="1" placeholder="Sem controle" value="'+e(current?.stock_quantity??'')+'"></label></div>'+
      '<label>Descrição do produto<textarea name="description" maxlength="1200" placeholder="Características, benefícios e condições...">'+e(current?.description||'')+'</textarea></label>'+
@@ -764,12 +800,16 @@ async function products(selected=null){
        '<option value="false"'+(current?.active===false?' selected':'')+'>Indisponível</option></select></label>'+
      (!current?'<label>Fotos do produto (JPG, PNG, WebP; até 8)<input type="file" name="newPhotos" accept="image/jpeg,image/png,image/webp" multiple '+(!storage.configured?'disabled':'')+'></label>'+
      '<div class="socio-clean-section"><h3>Variações</h3><div id="newVariantRows"></div>'+
-      '<button class="btn soft" id="addNewVariant" type="button">+ Adicionar variação</button></div>':'')+
+      '<button class="btn soft" id="addNewVariant" type="button">+ Adicionar variação</button></div>'+
+     '<div class="socio-clean-section"><h3>Associar campanha (opcional)</h3>'+campaignSelect('create')+'</div>':'')+
      '<div class="form-actions"><button class="btn primary" type="submit">'+(current?'Salvar alterações':'Cadastrar produto')+'</button>'+
       (current?'<button class="btn ghost" type="button" id="clearProduct">Novo produto</button>':'')+'</div>'+
     '</form>'+
-    (current?detail:'')+
-   '</section></div>';
+    (current?detail+'<div class="px-danger-zone"><button type="button" class="btn ghost" id="deleteProduct">Excluir produto permanentemente</button></div>':'')+
+   '</section></div>'+
+   '<datalist id="catalogColorSuggestions">'+catalogColors.map(x=>'<option value="'+e(x)+'"></option>').join('')+'</datalist>'+
+   '<datalist id="catalogSizeSuggestions">'+catalogSizes.map(x=>'<option value="'+e(x)+'"></option>').join('')+'</datalist>'+
+   '<datalist id="catalogGenericSuggestions"></datalist>';
  $('#newProduct')?.addEventListener('click',()=>products('new'));
  $('#closeProductModal')?.addEventListener('click',()=>products(null));
  $('#productModal')?.addEventListener('click',ev=>{if(ev.target===$('#productModal'))products(null)});
