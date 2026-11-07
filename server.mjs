@@ -1043,8 +1043,10 @@ async function handle(req,res){
   return json(res,200,await startGoogleAdsOAuth(pool,a));
  if(method==='GET'&&pathname==='/api/google-ads/accounts')
   return json(res,200,await listGoogleAdsAccounts(pool,a));
- if(method==='GET'&&pathname==='/api/google-ads/campaigns')
-  return json(res,200,await readGoogleAdsCampaigns(pool,a));
+ if(method==='GET'&&pathname==='/api/google-ads/campaigns'){
+  const period=new URL(req.url,'http://local').searchParams.get('period');
+  return json(res,200,await readGoogleAdsCampaigns(pool,a,{period:period==='today'?'today':'last_30d'}));
+ }
  if(method==='POST'&&pathname==='/api/google-ads/accounts/select'){
   const {data}=await body(req,1500);
   return json(res,200,await selectGoogleAdsAccount(pool,a,data.accountId));
