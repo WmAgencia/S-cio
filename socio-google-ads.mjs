@@ -142,7 +142,7 @@ export async function disconnectGoogleAds(pool,a){
  * and directly authorized customer. GET-only at our API, GAQL query is fixed
  * and read-only. Never fetch manager-child accounts or issue mutate requests.
  */
-export async function readGoogleAdsCampaigns(pool,a,{env=process.env,request=fetch}={}){
+export async function readGoogleAdsCampaigns(pool,a,{env=process.env,request=fetch,period='last_30d'}={}){
  const {token,grant}=await readToken(pool,a,{env,request});
  const customerId=grant.selected_customer_id;
  if(!validId(customerId))throw fail(409,'Selecione uma conta Google Ads autorizada.');
@@ -151,7 +151,7 @@ export async function readGoogleAdsCampaigns(pool,a,{env=process.env,request=fet
   'campaign.advertising_channel_type, metrics.impressions, metrics.clicks,',
   'metrics.ctr, metrics.average_cpc, metrics.cost_micros, metrics.conversions',
   'FROM campaign',
-  "WHERE segments.date DURING LAST_30_DAYS AND campaign.status != 'REMOVED'",
+  "WHERE segments.date DURING "+(period==='today'?'TODAY':'LAST_30_DAYS')+" AND campaign.status != 'REMOVED'",
   'ORDER BY metrics.cost_micros DESC LIMIT 100'
  ].join(' ');
  let response;
@@ -187,7 +187,7 @@ export async function readGoogleAdsCampaigns(pool,a,{env=process.env,request=fet
   }
  }
  const sum=key=>rows.reduce((total,r)=>total+BigInt(r[key]),0n).toString();
- return {accountId:customerId,period:'LAST_30_DAYS',readOnly:true,liveQuerySucceeded:true,
+ return {accountId:customerId,period:period==='today'?'TODAY':'LAST_30_DAYS',readOnly:true,liveQuerySucceeded:true,
   currencyCode:null,limits:{campaigns:100},summary:{campaigns:rows.length,
    impressions:sum('impressions'),clicks:sum('clicks'),costMicros:sum('costMicros')},
   campaigns:rows,
