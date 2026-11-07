@@ -90,7 +90,8 @@ export async function readAdsTool(pool,a,kind,input={},options={}){
   }catch(error){
    // Some ad-read tokens cannot inspect the funding source. Keep the rest of
    // the finance card operational without claiming an unreadable balance.
-   data=await graph(c,'/'+id,{fields:core});
+   try{data=await graph(c,'/'+id,{fields:core});}
+   catch{data=await graph(c,'/'+id,{fields:'id,name,currency,amount_spent,spend_cap,account_status,business{id}'});}
   }
   const finance=normalizeMetaAccountFinance(data);
   const billing=new URL('https://adsmanager.facebook.com/billing_hub/payment_settings/');
