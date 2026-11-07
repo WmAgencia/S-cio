@@ -1285,11 +1285,8 @@ async function team(){
  const ownAccountOnly=!featureAvailable('team')||state.me?.tenant?.status==='paused';
  const mayView=!ownAccountOnly&&permissions.has('team.read'),mayInvite=!ownAccountOnly&&permissions.has('team.invite'),
   mayManage=permissions.has('team.manage'),mayPromote=permissions.has('team.promote');
- const [people,auditData,integrity]=await Promise.all([
-  mayView?api('/api/team'):Promise.resolve([]),
-  !ownAccountOnly&&permissions.has('audit.read')?api('/api/ops/audit?limit=35'):Promise.resolve({events:[]}),
-  !ownAccountOnly&&permissions.has('audit.read')?api('/api/ops/tenant-integrity'):Promise.resolve(null)
- ]);
+ const teamResponse=mayView?await api('/api/team'):[];
+ const people=Array.isArray(teamResponse)?teamResponse:[];
  const roleLabel=role=>({owner:'Proprietário',admin:'Administrador',manager:'Gestor',viewer:'Somente leitura',agent:'Atendente'}[role]||role);
  const members=mayView?'<section class="card card-pad"><div class="section-title">Usuários da empresa</div>'+
   '<p class="form-note">Acesso inativo encerra todas as sessões existentes e bloqueia novos logins. Proprietários não podem ser desativados nesta tela.</p>'+
@@ -1315,22 +1312,10 @@ async function team(){
   '<label>Senha inicial (mínimo 12 caracteres)<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>'+
   '<button type="submit" class="btn primary">Cadastrar colaborador</button>'+
   '<p class="form-note">Informe a senha inicial por um canal seguro; o colaborador poderá trocá-la em Minha conta.</p></form></section>':'';
- const log=!ownAccountOnly&&permissions.has('audit.read')?
-  '<section class="card card-pad"><div class="section-title">Auditoria da empresa</div>'+
-  '<p class="form-note">Histórico de alterações de acesso, treinamento, catálogo e atendimento, sem mostrar segredos ou senhas.</p>'+
-  (auditData.events.length?'<div class="socio-audit-list">'+auditData.events.map(item=>
-   '<div class="socio-audit-line"><strong>'+e(item.action)+'</strong><span>'+e(item.actor||'Sistema')+
-   ' · '+e(date(item.created_at))+'</span></div>').join('')+'</div>':
-   '<p class="form-note">Nenhum evento registrado.</p>')+'</section>':'';
- const integrityBlock=integrity?'<section class="card card-pad socio-integrity-panel">'+
-  '<h2>Isolamento de dados</h2><p class="form-note">Diagnóstico somente de leitura. Verifica vínculos entre registros da sua empresa; não valida retroativamente todas as restrições do banco.</p>'+
-  '<strong>'+e(integrity.preflightClean?'Nenhuma divergência encontrada neste diagnóstico':
-    'Foram encontradas divergências que exigem revisão administrativa')+'</strong>'+
-  '<p class="form-note">'+e(integrity.totalMismatches||0)+' relacionamento(s) divergente(s) na verificação.</p></section>':'';
  view.innerHTML=heading('ADMINISTRAÇÃO','Usuários da empresa.',
   'Gerencie quem pode acessar o sistema e quais recursos cada pessoa pode utilizar.')+
  (mayInvite?'<div class="socio-user-header"><button type="button" class="btn primary" id="teamInviteToggle">+ Adicionar usuário</button></div>':'')+
- (mayView?'<div class="socio-team-grid">'+members+invite+'</div>':'')+integrityBlock+log;
+ (mayView?'<div class="socio-team-grid">'+members+invite+'</div>':'');
  $('#teamInviteToggle')?.addEventListener('click',()=>{const panel=$('#teamInvitePanel');if(panel){panel.hidden=!panel.hidden;if(!panel.hidden)panel.querySelector('input')?.focus();}});
  $('#teamForm')?.addEventListener('submit',async ev=>{
   ev.preventDefault();const form=ev.currentTarget;
