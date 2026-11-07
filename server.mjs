@@ -550,7 +550,7 @@ async function handle(req,res){
  const adsRead=pathname.match(/^\/api\/marketing\/tools\/(campaigns|adsets|ads|images|pages|insights|finance|cities)$/);
  if(adsRead&&method==='GET'){
   const qs=new URL(req.url,'http://local').searchParams;
-  return json(res,200,await readAdsTool(pool,a,adsRead[1],{query:qs.get('q'),period:qs.get('period'),after:qs.get('after')}));
+  return json(res,200,await readAdsTool(pool,a,adsRead[1],{query:qs.get('q'),period:qs.get('period'),after:qs.get('after'),campaignId:qs.get('campaignId'),adsetId:qs.get('adsetId')}));
  }
  if(pathname==='/api/marketing/tools/history'&&method==='GET')return json(res,200,await adsToolHistory(pool,a));
  if(pathname==='/api/marketing/tools/image'&&method==='POST'){

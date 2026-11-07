@@ -69,7 +69,17 @@ export async function readAdsTool(pool,a,kind,input={},options={}){
  const edge={images:'adimages',pages:'promote_pages'}[kind]||kind;
  const params={fields:fields[kind],limit:100};
  if(input.after){if(typeof input.after!=='string'||input.after.length>2000)throw fail(422,'Página inválida.');params.after=input.after;}
- const result=await graph(c,'/'+id+'/'+edge,params);
+ // Scoped drill-down: never trust a supplied parent ID without confirming it
+ // belongs to the currently selected ad account. Preserve Graph pagination.
+ let parentId=id;
+ if(input.campaignId!==undefined&&input.campaignId!==null){
+  if(kind!=='adsets'||!numeric(input.campaignId)||input.adsetId)throw fail(422,'Campanha inválida para esta consulta.');
+  await owned(c,input.campaignId,'campaign');parentId=String(input.campaignId);
+ }else if(input.adsetId!==undefined&&input.adsetId!==null){
+  if(kind!=='ads'||!numeric(input.adsetId))throw fail(422,'Conjunto inválido para esta consulta.');
+  await owned(c,input.adsetId,'adset');parentId=String(input.adsetId);
+ }
+ const result=await graph(c,'/'+parentId+'/'+edge,params);
  return {...listing(result),after:result.paging?.cursors?.after||null};
 }
 export async function uploadAdImage(pool,a,base64,options={}){

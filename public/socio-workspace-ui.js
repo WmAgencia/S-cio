@@ -48,6 +48,20 @@
   },error=>{getCache.delete(path);throw error;});
   getCache.set(path,{pending,at:now});return pending;
  };
+ const scopedMetaItems=async(api,basePath)=>{
+  const items=[],seen=new Set();let after=null;
+  for(let page=0;page<12;page++){
+   const path=basePath+(after?'&after='+encodeURIComponent(after):'');
+   const response=await cached(api,path,20000);
+   if(!response.ok)return {ok:false,reason:response.reason||'Consulta à Meta indisponível.',items:[]};
+   const data=response.data||{};
+   if(Array.isArray(data.items))items.push(...data.items);
+   if(!data.hasMore)return {ok:true,items,limited:false};
+   if(!data.after||seen.has(data.after))return {ok:true,items,limited:true};
+   seen.add(data.after);after=data.after;
+  }
+  return {ok:true,items,limited:true};
+ };
  const setPreview=(root,kind)=>{
   const html=snapshots.get(kind);
   if(html){root.innerHTML=html;return;}
@@ -180,6 +194,39 @@
      '<td>'+money(spend,currency)+'</td><td>'+number(clicks)+'</td><td>'+(clicks?money(spend/clicks,currency):'—')+'</td><td>'+number(m.impressions||0)+'</td>'+
      (manage?'<td>'+actionButtons('campaign',c,true)+'</td>':'')+'</tr>';
    }).join('')+'</tbody></table></div>';
+ }
+ function adsetRows(items,currency,manage=false,hasCampaignBudget=false){
+  return '<div class="px-table-scroll"><table class="px-table px-campaign-table px-adset-table"><thead><tr>'+
+   '<th>Conjunto de anúncios</th><th>Situação</th><th>Orçamento</th>'+(manage?'<th>Ações</th>':'')+
+   '</tr></thead><tbody>'+items.map(set=>{
+    const daily=Number(set.daily_budget||0),lifetime=Number(set.lifetime_budget||0);
+    const budget=daily>0?formattedDaily(daily,currency):lifetime>0?'Orçamento total · '+money(lifetime/100,currency):
+     hasCampaignBudget?'Definido na campanha':'Não informado';
+    const status=set.effective_status||set.status||'—';
+    return '<tr><td><button type="button" class="px-campaign-open" data-px-open-adset="'+esc(set.id)+
+     '" aria-label="Ver anúncios do conjunto '+esc(set.name||set.id)+'">'+esc(set.name||set.id)+
+     '</button><small class="px-adset-subtitle">Ver anúncios deste conjunto</small></td>'+
+     '<td><span class="px-status '+(status==='ACTIVE'?'on':'off')+'">'+esc(status)+'</span></td>'+
+     '<td><span class="px-budget-value">'+esc(budget)+'</span></td>'+
+     (manage?'<td>'+actionButtons('adset',set,true)+'</td>':'')+'</tr>';
+   }).join('')+'</tbody></table></div>';
+ }
+ function adCards(items,manage=false){
+  return '<div class="px-ads-list">'+items.slice(0,500).map(ad=>{
+   const status=ad.effective_status||ad.status||'—';
+   const configured=String(ad.status||'').toUpperCase();
+   const inherited= configured==='ACTIVE'&&status!=='ACTIVE'?
+    '<small class="px-ad-inherited-status">Este anúncio está ativo, mas o conjunto ou a campanha pode estar pausado.</small>':'';
+   return '<div class="px-ad-creative-row">'+
+    '<div class="px-ad-creative-media" data-px-ad-media="'+esc(ad.id)+'">'+
+     (posterFromAd(ad)?posterView(posterFromAd(ad),'Miniatura do anúncio '+(ad.name||ad.id)):
+      '<div class="px-feature-no-media">Criativo</div>')+
+    '</div><div class="px-ad-creative-info"><strong>'+esc(ad.name||ad.id)+'</strong>'+
+     '<small>ID '+esc(ad.id)+'</small>'+inherited+
+     '<button type="button" class="px-quick-action" data-px-ad-play="'+esc(ad.id)+'">▶ Ver criativo</button></div>'+
+     '<div class="px-ad-controls"><span class="px-status '+(status==='ACTIVE'?'on':'off')+'">'+esc(status)+'</span>'+
+     actionButtons('ad',ad,manage)+'</div></div>';
+  }).join('')+'</div>';
  }
  async function loadMeta(api,period='today',includeAdLevel=false){
   const [status,campaigns,ads,adsets,insights,adInsights]=await Promise.all([
@@ -372,7 +419,7 @@
   root.querySelector('[data-px-connections]')?.addEventListener('click',()=>navigate('connections'));
   root.querySelector('[data-px-marketing]')?.addEventListener('click',()=>navigate('marketing'));
  }
- async function marketing({root,api,me,navigate,period='last_7d',campaignId=null}){
+ async function marketing({root,api,me,navigate,period='last_7d',campaignId=null,adsetId=null}){
   const renderId=++renderSerial;
   forTenant(me);
   if(!root.querySelector('.px-marketing'))setPreview(root,'marketing');
@@ -387,8 +434,22 @@
   });
   const bestThumbnail=mediaUrl(data?.bestAd?.thumbnailUrl);
   const selectedCampaign=campaignId?decoratedCampaigns.find(c=>String(c.id)===String(campaignId)):null;
-  if(campaignId&&!selectedCampaign)campaignId=null;
-  const visibleAds=selectedCampaign?ads.filter(ad=>String(ad.campaign_id||'')===String(selectedCampaign.id)):ads;
+  if(campaignId&&!selectedCampaign){campaignId=null;adsetId=null;}
+  // Fetch the specific parent edge rather than assuming the first 100 account
+  // records contain every ad set or ad. Parent ownership is checked server-side.
+  const adsetResult=selectedCampaign?await scopedMetaItems(api,
+   '/api/marketing/tools/adsets?campaignId='+encodeURIComponent(selectedCampaign.id)):null;
+  if(renderId!==renderSerial)return;
+  const accountAdsets=(data?.adsetList||[]).filter(set=>String(set.campaign_id||'')===String(campaignId));
+  const campaignAdsets=adsetResult?.ok?adsetResult.items:accountAdsets;
+  const selectedAdset=selectedCampaign&&adsetId?campaignAdsets.find(set=>String(set.id)===String(adsetId)):null;
+  if(adsetId&&!selectedAdset)adsetId=null;
+  const adsResult=selectedAdset?await scopedMetaItems(api,
+   '/api/marketing/tools/ads?adsetId='+encodeURIComponent(selectedAdset.id)):null;
+  if(renderId!==renderSerial)return;
+  const accountSetAds=ads.filter(ad=>String(ad.adset_id||'')===String(adsetId));
+  const visibleAds=selectedAdset?(adsResult?.ok?adsResult.items:accountSetAds):selectedCampaign?[]:ads;
+  const manage=can(me,'marketing.manage');
 
   const insightsMap=new Map((data?.daily||[]).map(x=>[String(x.campaign_id),x]));
   const btn='<button type="button" class="btn soft" data-px-connect>Gerenciar conexões</button>';
@@ -408,11 +469,27 @@
     kpi('Campanhas ativas',data?.campaigns.ok?number(data.activeCampaigns):'—','Situação atual da Meta','▤','green')+
     kpi('Anúncios ativos',data?.ads.ok?number(data.activeAds):'—','Situação atual dos anúncios','◉','blue')+
    '</div>'+
-   section('Suas campanhas','Ativas, pausadas e rascunhos retornados pela Meta',
-    selectedCampaign?'<div class="px-campaign-detail-heading"><button type="button" class="px-campaign-back" data-px-campaign-back>← Voltar às campanhas</button><strong>'+esc(selectedCampaign.name||selectedCampaign.id)+'</strong><small>'+visibleAds.length+' anúncio(s) nesta campanha</small></div>':
-    data?.campaigns.ok?(decoratedCampaigns.length?advertRows(decoratedCampaigns,insightsMap,currency,can(me,'marketing.manage'),data.adsetList||[]):empty('A conta não retornou campanhas.')):
+   section(selectedAdset?'Anúncios do conjunto':selectedCampaign?'Conjuntos de anúncios':'Suas campanhas',
+    selectedAdset?'Anúncios e criativos do conjunto selecionado':
+     selectedCampaign?'Conjuntos vinculados à campanha selecionada':'Ativas, pausadas e rascunhos retornados pela Meta',
+    selectedCampaign?'<div class="px-campaign-detail-heading">'+
+      (selectedAdset?
+       '<button type="button" class="px-campaign-back" data-px-adset-back>← Voltar aos conjuntos</button>':
+       '<button type="button" class="px-campaign-back" data-px-campaign-back>← Voltar às campanhas</button>')+
+      '<div class="px-campaign-crumbs"><strong>'+esc(selectedCampaign.name||selectedCampaign.id)+'</strong>'+
+       (selectedAdset?'<span aria-hidden="true">›</span><strong>'+esc(selectedAdset.name||selectedAdset.id)+'</strong>':'')+
+      '</div><small>'+(selectedAdset?visibleAds.length+' anúncio(s) no conjunto':campaignAdsets.length+' conjunto(s) nesta campanha')+'</small></div>'+
+      (selectedAdset?
+       (adsResult&&!adsResult.ok?'<p class="px-muted">Consulta específica indisponível; exibindo anúncios carregados da conta.</p>':'')+
+       (adsResult?.limited?'<p class="px-muted">A Meta retornou mais anúncios do que o limite desta consulta.</p>':'')+
+       (visibleAds.length?adCards(visibleAds,manage):empty('Nenhum anúncio encontrado neste conjunto.')):
+       (adsetResult&&!adsetResult.ok?'<p class="px-muted">Consulta específica indisponível; exibindo conjuntos carregados da conta.</p>':'')+
+       (adsetResult?.limited?'<p class="px-muted">A Meta retornou mais conjuntos do que o limite desta consulta.</p>':'')+
+       (campaignAdsets.length?adsetRows(campaignAdsets,currency,manage,Number(selectedCampaign.daily_budget||0)>0):
+        empty('Nenhum conjunto de anúncios encontrado nesta campanha.'))):
+    data?.campaigns.ok?(decoratedCampaigns.length?advertRows(decoratedCampaigns,insightsMap,currency,manage,data.adsetList||[]):empty('A conta não retornou campanhas.')):
       empty(data?.campaigns.reason||'Conecte uma conta para listar campanhas.'))+
-   section('Anúncio em destaque','Comparação de resultados na mesma conta e período',
+   (!selectedCampaign?section('Anúncio em destaque','Comparação de resultados na mesma conta e período',
     data?.bestAd?'<div class="px-featured-item px-featured-video">'+
       '<div class="px-feature-media" data-featured-media>'+posterView(bestThumbnail,'Miniatura do anúncio '+data.bestAd.name)+
        playButton('Ver vídeo do anúncio '+data.bestAd.name)+'</div>'+
@@ -423,16 +500,10 @@
        '<span>CTR <b>'+(data.bestAd.ctr===null?'—':esc(data.bestAd.ctr.toLocaleString('pt-BR',{maximumFractionDigits:2}))+'%')+'</b></span>'+
        '<span>Compras atribuídas <b>'+(data.bestAd.purchases===null?'—':number(data.bestAd.purchases))+'</b></span></div>'+
       '<p class="px-muted">Reproduza o vídeo pelo botão Play quando a Meta disponibilizar a mídia. Eventos atribuídos não comprovam venda paga.</p></div></div>':
-    empty(data?.adInsights.ok?'Sem anúncios com métricas suficientes no período.':'Relatório por anúncio indisponível nesta conta.'))+
-   section(selectedCampaign?'Anúncios da campanha':'Anúncios e criativos',selectedCampaign?'Anúncios vinculados a '+selectedCampaign.name:'Anúncios vinculados à conta de anúncios selecionada',
-    data?.ads.ok?(visibleAds.length?'<div class="px-ads-list">'+visibleAds.slice(0,100).map(ad=>
-      '<div class="px-ad-creative-row">'+
-      '<div class="px-ad-creative-media" data-px-ad-media="'+esc(ad.id)+'">'+
-        (posterFromAd(ad)?posterView(posterFromAd(ad),'Miniatura do anúncio '+(ad.name||ad.id)):'<div class="px-feature-no-media">Criativo</div>')+
-      '</div><div class="px-ad-creative-info"><strong>'+esc(ad.name||ad.id)+'</strong><small>ID '+esc(ad.id)+'</small>'+
-      '<button type="button" class="px-quick-action" data-px-ad-play="'+esc(ad.id)+'">▶ Ver criativo</button></div>'+
-      '<span class="px-status '+((ad.effective_status||ad.status)==='ACTIVE'?'on':'off')+'">'+esc(ad.effective_status||ad.status||'—')+'</span></div>').join('')+'</div>':
-      empty('Nenhum anúncio retornado pela conta.')):empty('Os anúncios estão indisponíveis até autorizar a leitura.'))+
+    empty(data?.adInsights.ok?'Sem anúncios com métricas suficientes no período.':'Relatório por anúncio indisponível nesta conta.')):'')+
+   (!selectedCampaign?section('Anúncios e criativos','Anúncios vinculados à conta de anúncios selecionada',
+    data?.ads.ok?(ads.length?adCards(ads,false):empty('Nenhum anúncio retornado pela conta.')):
+     empty('Os anúncios estão indisponíveis até autorizar a leitura.')):'')+
    section('Interpretação dos resultados','As plataformas reportam atribuições, não pagamentos conciliados',
     '<div class="px-footnote">O CPA é calculado apenas quando a Meta retorna eventos Purchase. Esses eventos não são prova de pedido pago. Sem evento válido, o painel mostra “—”, em vez de inventar resultados.</div>')+
    '<dialog id="pxCampaignDialog" class="px-campaign-dialog" aria-labelledby="pxActionTitle">'+
@@ -447,7 +518,7 @@
       '<button type="button" class="btn primary" data-px-action-confirm hidden>Confirmar na Meta</button></div></div></dialog>'+
    '</div>';
   snapshots.set('marketing',root.innerHTML);
-  if(data?.bestAd?.id){
+  if(!selectedCampaign&&data?.bestAd?.id){
    const holder=root.querySelector('[data-featured-media]');
    const adName=String(data.bestAd.name||'Anúncio');
    let media=null;
@@ -542,8 +613,12 @@
     }
    }catch(error){button.textContent=String(error.message||'Criativo indisponível').slice(0,65);button.disabled=false;}
   }));
-  root.querySelectorAll('[data-px-open-campaign]').forEach(button=>button.addEventListener('click',()=>marketing({root,api,me,navigate,period,campaignId:button.dataset.pxOpenCampaign})));
+  root.querySelectorAll('[data-px-open-campaign]').forEach(button=>button.addEventListener('click',()=>
+   marketing({root,api,me,navigate,period,campaignId:button.dataset.pxOpenCampaign})));
+  root.querySelectorAll('[data-px-open-adset]').forEach(button=>button.addEventListener('click',()=>
+   marketing({root,api,me,navigate,period,campaignId,adsetId:button.dataset.pxOpenAdset})));
   root.querySelector('[data-px-campaign-back]')?.addEventListener('click',()=>marketing({root,api,me,navigate,period}));
+  root.querySelector('[data-px-adset-back]')?.addEventListener('click',()=>marketing({root,api,me,navigate,period,campaignId}));
   // Manual campaign actions reuse the server's 15-minute plan, second
   // confirmation and tenant/selected-account validation. No action is made
   // directly by clicking a row or editing an input.
@@ -555,7 +630,8 @@
   const review=modal?.querySelector('[data-px-action-review]');
   const confirm=modal?.querySelector('[data-px-action-confirm]');
   const allItems=[...decoratedCampaigns.map(item=>({...item,kind:'campaign'})),
-   ...(data?.adsetList||[]).map(item=>({...item,kind:'adset'}))];
+   ...(selectedCampaign?campaignAdsets:(data?.adsetList||[])).map(item=>({...item,kind:'adset'})),
+   ...visibleAds.map(item=>({...item,kind:'ad'}))];
   let edit=null,draftId=null,submitting=false;
   const closeModal=()=>{
    if(submitting)return;
@@ -586,8 +662,9 @@
     if(confirm)confirm.hidden=true;
     if(review)review.hidden=false;
     if(budgetField)budgetField.hidden=edit.kind!=='budget';
-    const kindLabel=kind==='campaign'?'Campanha':'Conjunto de anúncios';
-    if(title)title.textContent=edit.kind==='budget'?'Editar orçamento diário':edit.next==='PAUSED'?'Pausar campanha':'Ativar campanha';
+    const kindLabel=kind==='campaign'?'Campanha':kind==='adset'?'Conjunto de anúncios':'Anúncio';
+    if(title)title.textContent=edit.kind==='budget'?'Editar orçamento diário':
+     (edit.next==='PAUSED'?'Pausar ':'Ativar ')+kindLabel.toLowerCase();
     if(details)details.textContent=kindLabel+': '+String(item.name||item.id)+
      (edit.kind==='status'?(edit.next==='ACTIVE'?' · Pode iniciar gastos de publicidade.':' · Vai interromper a veiculação.'):' · Orçamento atual '+formattedDaily(item.daily_budget,currency));
     if(budgetInput&&edit.kind==='budget')budgetInput.value=(Number(item.daily_budget)/100).toFixed(2).replace('.',',');
@@ -609,7 +686,9 @@
     draftId=plan.id;
     const change=edit.kind==='budget'?
      'De '+formattedDaily(edit.item.daily_budget,currency)+' para '+formattedDaily(input.dailyBudgetCents,currency)+'.':
-     edit.next==='ACTIVE'?'Ativar a veiculação. A Meta poderá gastar conforme os orçamentos configurados.':'Pausar a veiculação desta campanha.';
+     edit.next==='ACTIVE'?'Ativar '+(edit.entity==='ad'?'este anúncio':edit.entity==='adset'?'este conjunto':'esta campanha')+
+      '. A Meta poderá gastar conforme os orçamentos configurados.':
+      'Pausar '+(edit.entity==='ad'?'este anúncio':edit.entity==='adset'?'este conjunto':'esta campanha')+'.';
     if(preview){preview.textContent=change+' Confirme somente se está correto.';preview.hidden=false;}
     if(feedback)feedback.textContent='Prévia pronta. Nada foi alterado ainda.';
     review.hidden=true;confirm.hidden=false;confirm.focus();
@@ -627,7 +706,7 @@
     getCache.clear();snapshots.delete('marketing');snapshots.delete('overview');
     draftId=null;submitting=false;
     modal.close();
-    await marketing({root,api,me,navigate,period,campaignId});
+    await marketing({root,api,me,navigate,period,campaignId,adsetId});
    }catch(error){
     if(feedback)feedback.textContent=String(error.message||'Não foi possível concluir. Confira antes de repetir.');
     draftId=null;
@@ -636,7 +715,7 @@
    }
   });
   startLiveRefresh(root,'marketing',renderId,
-   ()=>marketing({root,api,me,navigate,period,campaignId}),
+   ()=>marketing({root,api,me,navigate,period,campaignId,adsetId}),
    async()=>{
     const current=await loadMeta(api,period,true).catch(()=>null);
     if(renderId!==renderSerial||!root.querySelector('.px-marketing')||!current)return;
@@ -661,7 +740,7 @@
     displayLiveTime(root);
    });
   root.querySelector('[data-px-connect]')?.addEventListener('click',()=>navigate('connections'));
-  root.querySelectorAll('[data-px-period]').forEach(b=>b.addEventListener('click',()=>marketing({root,api,me,navigate,period:b.dataset.pxPeriod})));
+  root.querySelectorAll('[data-px-period]').forEach(b=>b.addEventListener('click',()=>marketing({root,api,me,navigate,period:b.dataset.pxPeriod,campaignId,adsetId})));
 
  }
  const connectBtn=(label,attr,enabled=true)=>'<button type="button" class="btn '+(enabled?'primary':'soft')+'" '+attr+' '+(!enabled?'disabled':'')+'>'+esc(label)+'</button>';
