@@ -631,7 +631,7 @@ async function handle(req,res){
  // Wallet observations and Pix preparation use a server-resolved account only.
  if(pathname==='/api/marketing/billing/status'&&method==='GET')
   return json(res,200,await metaBillingStatus(pool,a));
- const billingRoute=pathname.match(/^\/api\/marketing\/billing\/(refresh|prepare)$/);
+ const billingRoute=pathname.match(/^\/api\/marketing\/billing\/(refresh|prepare|pix)$/);
  if(billingRoute&&method==='POST'){
   requirePermission(a,'marketing.manage');
   if(!limiter(simulationAttempts,'meta-billing:'+a.user_id+':'+a.active_tenant_id,60000,6))
@@ -639,7 +639,7 @@ async function handle(req,res){
   const {data}=await body(req,2000);
   if(billingRoute[1]==='prepare'&&data.confirmed!==true)
    throw fail(422,'Confira o valor antes de preparar a recarga.');
-  const result=await metaBrowser.billing(pool,a,billingRoute[1]==='refresh'?'read':'prepare',{amountMinor:data.amountMinor});
+  const result=await metaBrowser.billing(pool,a,billingRoute[1]==='refresh'?'read':billingRoute[1]==='pix'?'pix':'prepare',{amountMinor:data.amountMinor});
   const saved=result.observation?await saveMetaBillingObservation(pool,a,result):null;
   await audit(a,'marketing.billing.'+billingRoute[1],{accountId:result.accountId,state:result.state});
   return json(res,200,{...result,...saved,paymentInitiated:false});
