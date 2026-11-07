@@ -352,3 +352,23 @@ body .socio-catalog-clean #newProduct:hover,body .px-campaign-picker .btn.primar
 .px-ad-creative-info .px-quick-action{align-self:flex-start}
 .px-ad-creative-row>.px-status{margin-left:auto}
 @media(max-width:600px){.px-ad-creative-row{align-items:flex-start!important}.px-ad-creative-info{min-width:0;flex-basis:55%}}
+
+/* Meta hierarchy: campaign > ad set > ad with scoped editing and navigation. */
+.px-campaign-detail-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:3px 0 16px}
+.px-campaign-crumbs{display:flex;align-items:center;gap:8px;min-width:0;flex:1;flex-wrap:wrap}
+.px-campaign-crumbs strong{font-size:13px;line-height:1.5;color:#352151;overflow-wrap:anywhere}
+.px-campaign-crumbs span{font-size:17px;color:#9981bf}
+.px-campaign-detail-heading>small{font-size:11px;color:#846e9c}
+.px-adset-table .px-adset-subtitle{display:block;margin-top:5px;color:#8a799d;font-size:11px}
+.px-adset-table td{vertical-align:middle}
+.px-adset-table .px-quick-actions{display:flex;gap:6px;flex-wrap:wrap}
+.px-adset-table .px-campaign-open{text-align:left;max-width:100%}
+.px-ad-controls{display:flex;align-items:flex-end;flex-direction:column;justify-content:center;gap:8px;margin-left:auto}
+.px-ad-controls .px-quick-actions{display:flex;gap:7px}
+.px-ad-inherited-status{display:block;color:#896b9d;line-height:1.4;font-size:10px;max-width:300px}
+@media(max-width:720px){
+ .px-campaign-detail-heading{align-items:flex-start;flex-direction:column}
+ .px-campaign-crumbs{width:100%}
+ .px-ad-controls{width:100%;flex-direction:row;justify-content:flex-end;align-items:center;flex-wrap:wrap;margin-left:0}
+ .px-adset-table td{white-space:normal}
+}
