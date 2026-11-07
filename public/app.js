@@ -159,7 +159,7 @@ async function boot(){
      try{
       const result=await api('/api/marketing/oauth/'+provider+'/test','POST',{});
       if(state.view==='connections'){
-       await marketing();
+       await globalThis.SocioWorkspaceUI?.connections({root:view,api,me:state.me,navigate:changeView});
        const target=view.querySelector('[data-marketing-result="'+provider+'"]');
        if(target){
         target.textContent=result.message;
@@ -704,7 +704,7 @@ async function products(selected=null){
   meta_ads:metaChoices.map(x=>({id:String(x.id),name:String(x.name||x.id),status:String(x.effective_status||x.status||'') })),
   google_ads:googleChoices.map(x=>({id:String(x.id),name:String(x.name||x.id),status:String(x.status||'') }))
  };
- const campaignSelect=(scope)=>'<div class="px-campaign-picker">'+
+ const campaignSelect=(scope)=>!featureAvailable('meta_ads')?'':'<div class="px-campaign-picker">'+
   '<label>Plataforma<select data-campaign-provider aria-label="Plataforma de anúncios"'+(scope==='create'?' name="newCampaignProvider"':' name="provider"')+'>'+
    '<option value="meta_ads">Meta Ads</option><option value="google_ads">Google Ads</option></select></label>'+
   '<label>Campanha cadastrada<select data-campaign-target aria-label="Campanha existente"'+(scope==='create'?' name="newCampaignId"':' name="campaignId"')+'>'+
@@ -713,7 +713,7 @@ async function products(selected=null){
   '</div>';
  const fillCampaignOptions=(form)=>{
   const provider=form?.querySelector('[data-campaign-provider]'),picker=form?.querySelector('[data-campaign-target]');
-  if(!provider||!picker)return;
+  if(!provider||!picker||typeof picker.replaceChildren!=='function'||typeof picker.add!=='function')return;
   const old=picker.value;picker.replaceChildren(new Option('Nenhuma campanha selecionada',''));
   for(const x of campaignOptions[provider.value]||[]){
    const label=x.name+(x.status?' · '+x.status:'');
