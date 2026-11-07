@@ -821,6 +821,21 @@ async function products(selected=null){
  $('#newVariantRows')?.addEventListener('click',ev=>{
   const btn=ev.target.closest('[data-remove-variant]');if(btn)btn.closest('[data-variant-row]').remove();
  });
+ const modal=$('#productModal');
+ modal?.addEventListener('change',ev=>{
+  const type=ev.target.closest('[data-variant-type]');if(!type)return;
+  const value=type.closest('[data-variant-row]')?.querySelector('[data-variant-value]');
+  if(!value)return;
+  value.setAttribute('list',type.value==='Cor'?'catalogColorSuggestions':
+   type.value==='Tamanho'?'catalogSizeSuggestions':'catalogGenericSuggestions');
+  value.placeholder=type.value==='Cor'?'Ex.: Preto':type.value==='Tamanho'?'Ex.: 40':
+   type.value==='Modelo'?'Ex.: Premium':'Descreva a variação';
+ });
+ for(const form of [$('#productForm'),$('#catalogCampaignForm')]){
+  if(!form)continue;
+  fillCampaignOptions(form);
+  form.querySelector('[data-campaign-provider]')?.addEventListener('change',()=>fillCampaignOptions(form));
+ }
  if(modalOpen)$('#productForm')?.elements?.name?.focus();
  const applyCatalogFilters=()=>{
   const needle=String(state.catalogSearch||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -844,27 +859,39 @@ async function products(selected=null){
  $('#productForm').addEventListener('submit',async ev=>{
   ev.preventDefault();const form=ev.currentTarget,d=formValues(form);
   await action(async()=>{
+   // Validate EVERYTHING before creating the product. API saves variants and
+   // campaign links atomically with the product, with rollback on error.
    const data={name:d.name,description:d.description,sku:d.sku,
     priceCents:centsFromInput(d.price),compareAtPriceCents:d.compareAtPrice?centsFromInput(d.compareAtPrice):null,
     stockQuantity:stockFromInput(d.stock),active:d.active==='true'};
-   const result=await api(current?'/api/products/'+current.id:'/api/products',current?'PATCH':'POST',data);
-   const productId=current?.id||result.id;
+   let photos=[];
    if(!current){
-    const variants=[...form.querySelectorAll('#newVariantRows [data-variant-row]')].map(row=>{
-     const get=selector=>row.querySelector(selector)?.value||'';
-     return {name:get('[data-variant-name]'),sku:get('[data-variant-sku]'),
-      priceCents:centsFromInput(get('[data-variant-price]')),
-      stockQuantity:stockFromInput(get('[data-variant-stock]')),active:true};
-    });
-    if(variants.length)await api('/api/products/'+productId+'/variants','PUT',{variants});
-    const photos=[...(form.elements.newPhotos?.files||[])];
+    data.variants=readVariantRows(form.querySelector('#newVariantRows'),d.price);
+    const campaign=campaignPayload(form);
+    data.campaigns=campaign?[campaign]:[];
+    photos=[...(form.elements.newPhotos?.files||[])];
     if(photos.length>8)throw Error('Máximo de oito fotos por produto.');
-    for(const file of photos){
+    if(photos.some(file=>file.size>12000000||!['image/jpeg','image/png','image/webp'].includes(file.type)))
+     throw Error('Use até 8 imagens JPG, PNG ou WebP, cada uma com até 12 MB.');
+   }
+   const submit=form.querySelector('[type="submit"]');
+   if(submit)submit.disabled=true;
+   let result;
+   try{result=await api(current?'/api/products/'+current.id:'/api/products',current?'PATCH':'POST',data);}
+   finally{if(submit)submit.disabled=false;}
+   const productId=current?.id||result.id;let uploaded=0;
+   for(const file of photos){
+    try{
      const contentBase64=await compressCatalogImage(file);
      await api('/api/products/'+productId+'/media','POST',{contentBase64,alt:d.name});
+     uploaded++;
+    }catch(error){
+     toast('Produto e variações salvos. '+uploaded+' foto(s) enviadas; falha na próxima foto: '+errMsg(error),true);
+     await products(productId);return;
     }
    }
-   toast('Catálogo atualizado.');await products(productId);
+   toast(current?'Produto atualizado com sucesso.':'Produto cadastrado com variações e campanhas.');
+   await products(productId);
   });
  });
  if(!current)return;
@@ -893,24 +920,26 @@ async function products(selected=null){
  $('#catalogVariantForm').addEventListener('submit',async ev=>{
   ev.preventDefault();
   await action(async()=>{
-   const rows=[...$('#catalogVariantRows').querySelectorAll('[data-variant-row]')];
-   const variants=rows.map(row=>{
-    const get=selector=>row.querySelector(selector)?.value||'';
-    return {name:get('[data-variant-name]'),sku:get('[data-variant-sku]'),
-     priceCents:centsFromInput(get('[data-variant-price]')),
-     stockQuantity:stockFromInput(get('[data-variant-stock]')),active:true};
-   });
+   const variants=readVariantRows($('#catalogVariantRows'),String(current.price_cents/100));
    await api('/api/products/'+current.id+'/variants','PUT',{variants});
    toast('Variações atualizadas.');await products(current.id);
   });
  });
  $('#catalogCampaignForm').addEventListener('submit',async ev=>{
-  ev.preventDefault();const d=formValues(ev.currentTarget);
+  ev.preventDefault();
   await action(async()=>{
-   await api('/api/products/'+current.id+'/campaigns','POST',d);
-   toast('Campanha associada como referência manual.');await products(current.id);
+   const campaign=campaignPayload(ev.currentTarget);
+   if(!campaign)throw Error('Escolha uma campanha na lista vinculada à sua conta.');
+   await api('/api/products/'+current.id+'/campaigns','POST',campaign);
+   toast('Campanha associada ao produto.');await products(current.id);
   });
  });
+ $('#deleteProduct')?.addEventListener('click',()=>action(async()=>{
+  if(!window.confirm('Excluir definitivamente “'+current.name+'” e todas as suas variações, fotos e vínculos de anúncios? Esta ação não pode ser desfeita.'))return;
+  const result=await api('/api/products/'+current.id,'DELETE',{confirm:true});
+  toast(result.photoCleanupPending?'Produto excluído. Algumas imagens precisam de limpeza no armazenamento.':'Produto excluído permanentemente.');
+  await products(null);
+ }));
  view.querySelectorAll('[data-delete-campaign]').forEach(btn=>btn.addEventListener('click',()=>action(async()=>{
   await api('/api/products/'+current.id+'/campaigns/'+btn.dataset.deleteCampaign,'DELETE',{});
   toast('Associação removida.');await products(current.id);
