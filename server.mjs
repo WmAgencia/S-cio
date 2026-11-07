@@ -432,6 +432,11 @@ async function handle(req,res){
   tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status,
    features:parseTenantFeatures(a.features),quoteAlertWhatsApp:a.quote_alert_whatsapp===true},
   csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
+ // The viewer role is enforced server-side: never permit writes through any authenticated API.
+ // Explicitly preserve account logout and personal password management.
+ if(a.role==='viewer'&&!a.platform_owner&&!['GET','HEAD','OPTIONS'].includes(method)&&
+  !['/api/logout','/api/me/password','/api/me/phone'].includes(pathname))
+  throw fail(403,'Este perfil tem acesso somente de leitura.');
  // Feature restrictions are server-side. Hidden navigation never constitutes authorization.
  assertApiFeature(a.features,pathname);
 
@@ -1728,6 +1733,8 @@ async function handle(req,res){
    if(!target.rowCount)throw fail(404,'Colaborador não encontrado nesta empresa.');
    if(target.rows[0].role==='owner'||target.rows[0].platform_owner)
     throw fail(403,'Não é possível alterar um proprietário por esta operação.');
+   if(target.rows[0].role==='admin'&&a.role!=='owner'&&!a.platform_owner)
+    throw fail(403,'Somente o proprietário pode modificar o perfil de um administrador.');
    const nextRole=change.changeRole?change.role:target.rows[0].role;
    const nextActive=change.changeActive?change.active:target.rows[0].active;
    const updated=await c.query(
@@ -1743,7 +1750,7 @@ async function handle(req,res){
   }catch(error){await c.query('ROLLBACK').catch(()=>{});throw error;}finally{c.release();}
  }
  if(method==='POST'&&pathname==='/api/team'){
-  needRole(a,['owner','admin']);const {data}=await body(req);
+  requirePermission(a,'team.invite');const {data}=await body(req);
   if(data.role==='admin')requirePermission(a,'team.promote');
   if(!emailOk(data.email)||!validText(data.name,100)||!allowedNewMemberRole(a,data.role))throw fail(422,'Dados de usuário ou permissão inválidos.');
   if(typeof data.password!=='string'||data.password.length<12||data.password.length>128)
