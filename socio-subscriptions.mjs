@@ -50,7 +50,7 @@ export async function readSubscriptionStatus(pool,actor,{env=process.env,now=new
  if(!actor.active_tenant_id)throw fault(403,'Empresa não selecionada.');
  const [tenant,billing]=await Promise.all([
   pool.query('SELECT id,plan,status,created_at FROM tenants WHERE id=$1',[actor.active_tenant_id]),
-  pool.query('SELECT subscription_status,period_end,paid_invoices_count,paid_amount_cents,last_paid_at FROM socio_billing_accounts WHERE tenant_id=$1',[actor.active_tenant_id])
+  pool.query('SELECT subscription_status,stripe_mode,period_end,paid_invoices_count,paid_amount_cents,last_paid_at FROM socio_billing_accounts WHERE tenant_id=$1',[actor.active_tenant_id])
  ]);
  if(!tenant.rows[0])throw fault(404,'Empresa não encontrada.');
  const t=tenant.rows[0],cfg=billingConfiguration(env),end=new Date(new Date(t.created_at).getTime()+7*86400000);
@@ -61,8 +61,10 @@ export async function readSubscriptionStatus(pool,actor,{env=process.env,now=new
    automaticallySuspended:false},
   subscription:{status:billingRow?.subscription_status||'not_started',
    periodEnd:billingRow?.period_end||null,
+   paymentEnvironment:billingRow?.stripe_mode||null,
    paidInvoices:billingRow?.paid_invoices_count||0,
-   verifiedAmountCents:String(billingRow?.paid_amount_cents||'0'),
+   verifiedAmountCents:billingRow?.stripe_mode==='live'?String(billingRow.paid_amount_cents||'0'):null,
+   testAmountCents:billingRow?.stripe_mode==='test'?String(billingRow.paid_amount_cents||'0'):null,
    lastPaidAt:billingRow?.last_paid_at||null},
   checkout:{available:cfg.enabled&&Boolean(cfg.plans[t.plan]),environment:cfg.mode,
    priceConfigured:!!cfg.plans[t.plan],blockers:cfg.blockers},
@@ -109,10 +111,10 @@ export async function createSubscriptionCheckout(pool,actor,{env=process.env,fet
   throw fault(503,'Checkout Stripe inválido.');
  // Do not replace an active subscription if another request won the race.
  const upd=await pool.query(
-  "INSERT INTO socio_billing_accounts(tenant_id,stripe_checkout_session_id,subscription_status) VALUES($1,$2,'checkout_pending') "+
+  "INSERT INTO socio_billing_accounts(tenant_id,stripe_checkout_session_id,stripe_mode,subscription_status) VALUES($1,$2,$3,'checkout_pending') "+
   "ON CONFLICT(tenant_id) DO UPDATE SET stripe_checkout_session_id=EXCLUDED.stripe_checkout_session_id,"+
-  "subscription_status='checkout_pending',updated_at=now() WHERE socio_billing_accounts.subscription_status NOT IN "+
-  "('active','trialing','past_due','unpaid') RETURNING tenant_id",[tenant,session.id]);
+  "subscription_status='checkout_pending',updated_at=now() WHERE socio_billing_accounts.stripe_mode=$3 AND socio_billing_accounts.subscription_status NOT IN "+
+  "('active','trialing','past_due','unpaid') RETURNING tenant_id",[tenant,session.id,cfg.mode]);
  if(!upd.rowCount)throw fault(409,'O estado da assinatura mudou; confira no painel de cobrança.');
  return {checkoutUrl:session.url,environment:cfg.mode,plan:t.plan,trialDaysRemaining:Math.max(0,Math.ceil(secondsLeft/86400)),
   note:'O cliente deve aceitar os valores, prazos e método de pagamento no Checkout Stripe. Não houve cobrança nesta chamada.'};
@@ -162,9 +164,10 @@ export async function processSubscriptionWebhook(pool,raw,signature,{env=process
    tenantId=lookup.rows[0]?.tenant_id;
   }
   if(!/^[0-9a-f-]{36}$/i.test(String(tenantId||'')))throw fault(400,'Assinatura sem tenant autorizado.');
-  const account=await c.query('SELECT stripe_customer_id,stripe_subscription_id,subscription_status,last_subscription_event_created,last_paid_invoice_id FROM socio_billing_accounts WHERE tenant_id=$1 FOR UPDATE',[tenantId]);
+  const account=await c.query('SELECT stripe_customer_id,stripe_subscription_id,stripe_mode,subscription_status,last_subscription_event_created,last_paid_invoice_id FROM socio_billing_accounts WHERE tenant_id=$1 FOR UPDATE',[tenantId]);
   const previous=account.rows[0];
   if(!previous)throw fault(409,'Assinatura sem registro prévio de Checkout no Sócio.');
+  if(previous.stripe_mode!==cfg.mode)throw fault(409,'Ambiente Stripe não coincide com o cadastro da empresa.');
   if(isCheckout&&previous.stripe_checkout_session_id!==obj.id)
    throw fault(409,'Checkout recebido não corresponde ao emitido para esta empresa.');
   if(event.type==='invoice.paid'&&previous.stripe_subscription_id!==sub)
