@@ -19,6 +19,7 @@ function syncMasterSwitch(){
  document.body?.classList?.toggle('socio-is-master',master);
  $('#productionNav')?.classList.toggle('hidden',master);
  $('#masterNav')?.classList.toggle('hidden',!master);
+ document.querySelector('.sidebar-bottom [data-view="settings"]')?.classList.toggle('hidden',master);
  if(!visible)return;
  label.textContent=master?'Voltar ao meu painel de produção':'Ir para o painel Master';
  button.title=label.textContent;button.setAttribute('aria-label',label.textContent);
@@ -1602,7 +1603,7 @@ function renderCommandItems(){
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
   key!=='agent'&&key!=='channels'&&key!=='reports'&&key!=='quotes'&&key!=='sales'&&viewAvailable(key)&&
-  (isMasterView()?masterViews.has(key)||key==='settings':!masterViews.has(key))&&
+  (isMasterView()?masterViews.has(key):!masterViews.has(key))&&
   (key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&
   (key!=='reports'||(state.me?.user?.permissions||[]).includes('audit.read'))&&
   (!['sales','quotes'].includes(key)||(state.me?.user?.permissions||[]).includes('sales.read'))&&
