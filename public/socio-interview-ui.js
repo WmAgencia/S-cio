@@ -4,7 +4,7 @@
  const escape=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const node=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=String(txt);return e;};
  let root=null,host=null,api=null,toast=null,csrf='',user=null,state=null,versions=[],busy=false,recorder=null,stream=null,recordChunks=[],recordTimer=null,transcriptText='',speaking=false,liveVoice=null,voiceState='off',finishSpeech=null,speechAbort=null,speechPlayer=null,speechUrl=null;
- const canEdit=()=>user?.platformOwner||['owner','admin'].includes(user?.role);
+ const canEdit=()=>user?.platformOwner||(user?.permissions||[]).includes('training.manage');
  // Thalita is rendered by our own authenticated Edge TTS route, not by a browser-dependent voice.
  // Explicit playback cancellation allows users to interrupt her mid-sentence.
  const cancelSpeech=()=>{
