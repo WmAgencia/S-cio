@@ -2,7 +2,7 @@
  let dispose=()=>{};
  async function render({root,api,me}){
   dispose();let stopped=false,timer,busy=false;
-  dispose=()=>{stopped=true;clearTimeout(timer);};
+  dispose=()=>{stopped=true;clearTimeout(timer);globalThis.SocioFlowOwner?.dispose();};
   const status=await api('/api/flow/status');if(stopped)return;
   const savedKey='socio-flow-job:'+me.tenant.id;
   root.innerHTML='<section class="card card-pad flow-image-card"><span class="eyebrow">CRIAÇÃO DE IMAGENS</span>'+
@@ -13,7 +13,8 @@
    '<div class="flow-image-actions"><button type="submit" class="btn primary" id="flowGenerate">Gerar imagem</button>'+
    '<button type="button" class="btn soft" id="flowRefresh">Verificar conexão</button></div></form>'+
    '<p class="form-note">Os pedidos usam a conta compartilhada do proprietário e respeitam a cota do Google.</p>'+
-   '<p id="flowProgress" role="status" aria-live="polite"></p><div id="flowResult"></div></section>';
+   '<p id="flowProgress" role="status" aria-live="polite"></p><div id="flowResult"></div></section>'+
+   (me.user.platformOwner?'<div id="flowOwnerConnection"></div>':'');
   const $=id=>root.querySelector('#'+id);
   let ready=status.ready;
   const sync=()=>{$('flowGenerate').disabled=!ready||busy;$('flowPrompt').disabled=busy;};
@@ -53,6 +54,7 @@
    }catch(error){if(!stopped){busy=false;sync();$('flowProgress').textContent=error.message;}}
   });
   resume();
+  if(me.user.platformOwner)await globalThis.SocioFlowOwner.render({root:root.querySelector('#flowOwnerConnection'),api});
  }
  globalThis.SocioFlowImages={render,dispose:()=>dispose()};
 })();

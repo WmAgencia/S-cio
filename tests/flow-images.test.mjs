@@ -40,6 +40,7 @@ test('real isolated worker boots and refuses generation before capture',async t=
    if(value===undefined)delete process.env[name];else process.env[name]=value;
   }rmSync(dir,{recursive:true,force:true});});
  const ready=await runtime.request('/readyz');assert.equal(ready.status,503);assert.equal((await ready.json()).ready,false);
+ const browser=await runtime.browser('status');assert.equal(browser.session_present,false);assert.equal(browser.remote_browser_open,false);
  const result=await runtime.request('/v1/images',{method:'POST',body:{prompt:'test'}});
  assert.equal(result.status,503);
 });

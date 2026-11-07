@@ -17,3 +17,5 @@ O arquivo de aprovação `flow-binding.json` contém `site: flow.google.com`, `o
 Depois da captura, conferir status, criar uma imagem pelo Sócio, verificar conteúdo baixável e comparar o resultado ao prompt. Um status ready significa apenas especificação aprovada instalada, não consulta da cota ou validação da sessão em tempo real.
 
 Testes: `npm test`; `tests/flow-images.test.mjs` cobre escopo de tenant, rejeição de modelo extra, reescrita de URLs e boot real do worker recusando pedidos antes da captura. Os testes não geram imagens no Google.
+
+Conexão do administrador: Inteligência Artificial → Criar imagens → Conectar minha conta Google. As rotas /api/flow/browser/* exigem platform_owner, sessão e CSRF; responsáveis de empresas clientes não podem ver a tela nem enviar teclas. Chromium usa contexto efêmero, com estado Google salvo somente por saveSession criptografado, sem perfil em texto simples. Conectar a conta não valida a geração.
