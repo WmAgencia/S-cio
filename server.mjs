@@ -46,6 +46,7 @@ import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
 import {getTenantBusinessMonitor,getMasterSaasMonitor} from './socio-business-monitor.mjs';
 import {getExecutiveMetrics} from './socio-executive-metrics.mjs';
+import {askThalita,confirmThalita} from './socio-thalita-assistant.mjs';
 import {readSubscriptionStatus,createSubscriptionCheckout,createBillingPortal,processSubscriptionWebhook} from './socio-subscriptions.mjs';
 import {startGoogleAdsOAuth,finishGoogleAdsOAuth,googleAdsStatus,listGoogleAdsAccounts,selectGoogleAdsAccount,disconnectGoogleAds,readGoogleAdsCampaigns} from './socio-google-ads.mjs';
 import {createTrackingSite,listTrackingSites,enableTrackingSite,receiveSignedSiteEvent} from './socio-site-tracking.mjs';
@@ -260,7 +261,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/socio-workspace-ui.js','/socio-thalita-ui.js','/socio-executive.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':(file.endsWith('.js')||file.endsWith('.mjs'))?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -837,6 +838,42 @@ async function handle(req,res){
    GROUP BY b.bucket ORDER BY b.bucket ASC`;
   const results=await query(sql,[a.active_tenant_id,parseTenantFeatures(a.features).whatsapp]);
   return json(res,200,{range:requested,granularity:range.unit,points:results.rows});
+ }
+ // Floating Thalita: read tools for the active company; all writes need one-use approval.
+ if(method==='POST'&&pathname==='/api/thalita/ask'){
+  requirePermission(a,'inbox.read');
+  if(!limiter(simulationAttempts,'thalita-chat:'+a.user_id,60000,16))throw fail(429,'Aguarde antes de consultar novamente.');
+  const {data}=await body(req,2400);
+  const result=await askThalita(pool,a,{message:data.message,runId:data.runId});
+  await audit(a,'thalita.chat',{status:result.status,readOnly:result.readOnly===true,executed:result.executed===true});
+  return json(res,200,result);
+ }
+ if(method==='POST'&&pathname==='/api/thalita/confirm'){
+  needRole(a,['owner','admin']);
+  if(!limiter(simulationAttempts,'thalita-confirm:'+a.user_id,60000,6))throw fail(429,'Aguarde antes de executar novamente.');
+  const {data}=await body(req,1200);
+  const result=await confirmThalita(pool,a,data);
+  await audit(a,'thalita.approved_action',result.audit||{});
+  return json(res,200,result);
+ }
+ if(method==='POST'&&pathname==='/api/thalita/tts'){
+  requirePermission(a,'inbox.read');
+  if(!limiter(simulationAttempts,'thalita-tts:'+a.active_tenant_id,60000,14))throw fail(429,'Limite temporário de voz.');
+  const {data}=await body(req,1200);
+  const audio=await synthesizeSocioTrainingVoice(data.text);
+  res.writeHead(200,{'Content-Type':audio.mime,'Cache-Control':'private, no-store',
+   'Content-Length':String(audio.bytes.length),'X-TTS-Voice':audio.voice});
+  return res.end(audio.bytes);
+ }
+ if(method==='POST'&&pathname==='/api/thalita/transcribe'){
+  requirePermission(a,'inbox.read');sameOrigin(req);
+  if(!limiter(simulationAttempts,'thalita-transcribe:'+a.active_tenant_id,60000,12))throw fail(429,'Limite de áudio atingido.');
+  const mime=String(req.headers['content-type']||'').split(';')[0].toLowerCase();
+  if(!['audio/webm','audio/ogg','audio/mp4','audio/mpeg','audio/wav'].includes(mime))throw fail(422,'Formato de áudio inválido.');
+  if(Number(req.headers['content-length']||0)>3*1024*1024)throw fail(413,'Máximo de 3 MB por áudio.');
+  let total=0;const chunks=[];
+  for await(const chunk of req){total+=chunk.length;if(total>3*1024*1024)throw fail(413,'Máximo de 3 MB por áudio.');chunks.push(chunk);}
+  return json(res,200,await transcribeSocioTraining(Buffer.concat(chunks),mime));
  }
  if(method==='GET'&&pathname==='/api/dashboard/executive'){
   return json(res,200,await getExecutiveMetrics(pool,a));
