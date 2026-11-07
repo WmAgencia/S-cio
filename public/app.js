@@ -138,7 +138,8 @@ async function boot(){
      ((section==='sales'||section==='quotes')&&!access.has('sales.read'))||
      (section==='marketing'&&!access.has('marketing.read')));
    }
-   $('#teamNav')?.classList.toggle('hidden',!ownAccountAvailable());
+   $('#teamNav')?.classList.toggle('hidden',!featureAvailable('team')||!access.has('team.read'));
+   document.querySelector('.nav-item[data-view="settings"]')?.classList.remove('hidden');
    const accountNav=$('#teamNav'),accountLabel='Equipe';
    if(accountNav?.lastChild?.nodeType===3)accountNav.lastChild.textContent=' '+accountLabel;
    if(accountNav){accountNav.title=accountLabel;accountNav.setAttribute('aria-label',accountLabel);}
@@ -1289,7 +1290,7 @@ async function team(){
       '<button type="button" class="btn sm soft" data-team-toggle="'+e(member.id)+'" data-team-active="'+(!member.active)+'">'+
       (member.active?'Desativar':'Reativar')+'</button>'+
       '<select aria-label="Alterar permissão de '+e(member.name)+'" data-team-select="'+e(member.id)+'">'+
-      [['viewer','Somente leitura'],['manager','Gestor'],['admin','Administrador']].map(([key,label])=>'<option value="'+key+'" '+(member.role===key?'selected':'')+'>'+label+'</option>').join('')+'</select>':'<span class="form-note">—</span>')+
+      [['viewer','Somente leitura'],['manager','Gestor'],['admin','Administrador'],['agent','Atendente (legado)']].map(([key,label])=>'<option value="'+key+'" '+(member.role===key?'selected':'')+'>'+label+'</option>').join('')+'</select>':'<span class="form-note">—</span>')+
     '</div></td></tr>';
   }).join('')+'</tbody></table></div></section>':'';
  const invite=mayInvite?'<section class="card card-pad" id="teamInvitePanel" hidden><div class="section-title">Adicionar usuário</div>'+
