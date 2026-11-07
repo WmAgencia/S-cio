@@ -365,3 +365,11 @@ body .wa-inbox .wa-chat-avatar{background:#e8dfff!important;color:#5e35d3!import
 body .wa-inbox .wa-mode-btn.active{background:#eee8ff!important;border-color:#d9c8ff!important;color:#5129c3!important}
 body .wa-inbox .wa-bubble{max-width:min(85%,520px)!important}
 @media(max-width:760px){body .wa-inbox{border-radius:12px!important}body .wa-inbox-side-head{padding:16px!important}}
+
+/* Master owner-only workspace toggle, separate from ordinary employee navigation. */
+#masterProductionSwitch{display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:1px solid #dcd0ff;background:#f4efff;color:#5938a6;border-radius:11px;font-weight:750;margin:0 0 8px}
+#masterProductionSwitch:hover:not(:disabled){background:#e9dfff;border-color:#bfa9ff}
+#masterProductionSwitch:focus-visible{outline:2px solid #8154d5;outline-offset:3px}
+#masterProductionSwitch.hidden{display:none!important}
+#masterProductionSwitch .nav-symbol{font-size:17px;color:#7542d2}
+#masterProductionSwitch:disabled{opacity:.65;cursor:wait}
