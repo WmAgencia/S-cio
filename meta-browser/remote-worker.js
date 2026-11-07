@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { mkdirSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import {allowRemoteResource,isMetaURL} from './network-policy.js';
+import {parseObservedMetaBalance,topupAmount} from '../meta-billing-state.mjs';
 const require = createRequire(import.meta.url);
 const dist = dirname(require.resolve('api-anything'));
 const internal = name => import(pathToFileURL(join(dist, `${name}.js`)).href);
@@ -63,6 +64,44 @@ async function command(method, data = {}) {
     expiresAt = Date.now() + 20 * 60000;
     return { open: true, width: 1280, height: 800, expires_in: 1200 };
   }
+  if(method==='billing_read'||method==='billing_prepare'){
+    if(!/^act_[0-9]{4,30}$/.test(data.accountId||'')||!data.accountName||data.currency!=='BRL')
+      throw new Error('BILLING_ACCOUNT_INVALID');
+    if(method==='billing_prepare')topupAmount(data.amountMinor);
+    await command('open');
+    const target=new URL('https://adsmanager.facebook.com/billing_hub/payment_settings/');
+    target.searchParams.set('asset_id',data.accountId.slice(4));
+    target.searchParams.set('payment_account_id_from_jsmodule',data.accountId.slice(4));
+    target.searchParams.set('placement','ads_manager');
+    try{
+      await activePage().goto(target.href,{waitUntil:'domcontentloaded',timeout:45000});
+      await page.getByRole('heading',{name:'Fundos disponíveis',exact:true}).waitFor({timeout:15000});
+      if(await page.getByRole('heading',{name:data.accountName,exact:true,level:1}).count()!==1)
+        throw new Error('BILLING_ACCOUNT_MISMATCH');
+    }catch(error){
+      if(error.message==='BILLING_ACCOUNT_MISMATCH')throw error;
+      return {state:'needs_login',accountId:data.accountId,
+        message:'Conclua o login e as verificações da Meta no navegador de faturamento.'};
+    }
+    const observation=parseObservedMetaBalance({url:page.url(),body:await page.locator('body').innerText(),
+      accountId:data.accountId,accountName:data.accountName,currency:data.currency});
+    if(method==='billing_read')return {state:'observed',observation};
+    await page.getByRole('button',{name:'Adicionar saldo',exact:true}).click();
+    const dialog=page.getByRole('dialog');
+    await dialog.waitFor({timeout:15000});
+    try{
+      await dialog.getByRole('button',{name:'Outra',exact:true}).click();
+      await dialog.getByLabel('Valor',{exact:true}).fill((data.amountMinor/100).toFixed(2).replace('.',','));
+      await dialog.getByRole('button',{name:/^PIX/}).click();
+    }catch{
+      return {state:'complete_in_meta',observation,amountMinor:data.amountMinor,
+        message:'Confira o valor e selecione Pix na tela oficial. O formato da Meta pode ter mudado.'};
+    }
+    // NEVER click Avançar/Pagar or claim that a Pix was generated.
+    // The person reviews taxes/beneficiary and advances in Meta's own UI.
+    return {state:'review_in_meta',observation,amountMinor:data.amountMinor,
+      message:'Confira valor total, impostos e Pix na tela oficial da Meta antes de avançar.'};
+  }
   if (method === 'screen') {
     activePage();
     // Login popups may choose another viewport; input coordinates always use 1280 x 800.
@@ -104,7 +143,7 @@ process.on('message', message => {
   sequence = sequence.then(async () => {
     try { process.send?.({ id: message.id, ok: true, result: await command(message.method, message.data) }); }
     catch (error) {
-      const known = ['LOGIN_NOT_FINISHED', 'BROWSER_NOT_OPEN', 'CLOSE_BROWSER_FIRST', 'PLAN_EXPIRED', 'TOO_MANY_PLANS', 'BROWSER_NAVIGATION_FAILED'];
+      const known = ['LOGIN_NOT_FINISHED', 'BROWSER_NOT_OPEN', 'CLOSE_BROWSER_FIRST', 'PLAN_EXPIRED', 'TOO_MANY_PLANS', 'BROWSER_NAVIGATION_FAILED','BILLING_ACCOUNT_INVALID','BILLING_ACCOUNT_MISMATCH'];
       process.send?.({ id: message.id, ok: false, code: known.includes(error.message) ? error.message : 'BROWSER_OPERATION_FAILED' });
     }
   });
