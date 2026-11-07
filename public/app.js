@@ -1383,30 +1383,25 @@ async function admin(){
   if(!entry)return 'Não avaliado';
   return entry.trial.elapsed?'Janela encerrada (sem bloqueio)':entry.trial.daysRemaining+' dia(s) restantes';
  };
- const summary=monitor?.summary;
- const monitoring=summary?
-  '<section class="card card-pad"><h2>Visão comercial do SaaS</h2>'+
-   '<div class="report-note-grid"><div><small>Empresas cadastradas</small><strong>'+e(summary.total)+'</strong></div>'+
-   '<div><small>Em teste cadastral</small><strong>'+e(summary.trialAccounts)+'</strong></div>'+
-   '<div><small>Janela de teste encerrada</small><strong>'+e(summary.trialCalendarElapsed)+'</strong></div>'+
-   '<div><small>Teste terminando em até 3 dias</small><strong>'+e(summary.trialEndingWithin3Days)+'</strong></div></div>'+
-   '<p class="form-note">Clientes pagantes e receita recorrente: indisponíveis. Conta ativa não comprova pagamento. O período de 7 dias é apenas informativo, sem cobrança ou suspensão automática.</p>'+
-   (monitor.partial?'<p class="form-note">Listagem parcial: até 100 empresas recentes.</p>':'')+
-   '</section>':
-  '<section class="card card-pad"><h2>Monitoramento comercial</h2><p class="form-note">Resumo indisponível temporariamente.</p></section>';
-
  const rows=tenants.map(t=>
-  '<tr><td><strong>'+e(t.name)+'</strong><div class="table-detail">'+
+  '<tr data-company-row data-company-name="'+e((t.name||'').toLowerCase()+' '+(t.slug||'').toLowerCase())+'" data-company-plan="'+e(t.plan)+'" data-company-status="'+e(t.status)+'">'+
+   '<td><strong>'+e(t.name)+'</strong><div class="table-detail">'+
    e(t.cnpj||t.slug)+' · '+e(t.members)+' usuário(s)</div></td>'+
-   '<td>'+badge(t.plan)+'</td><td>'+badge(t.status,t.status==='active'?'green':'gray')+'</td><td>'+e(trialLabel(t))+'</td>'+
-   '<td><button type="button" class="btn sm soft" data-feature-edit="'+e(t.id)+'">Funcionalidades</button> '+
-   '<button class="btn sm ghost" data-switch="'+e(t.id)+'">'+
-   (t.id===state.me.tenant.id?'Atual':'Acessar')+'</button></td></tr>').join('');
- view.innerHTML=heading('CONTROLE CONSECOM','Empresas.','Gerencie clientes e espaços independentes.',
+   '<td>'+badge(({essencial:'Essencial',equipe:'Equipe',voz:'Voz'})[t.plan]||t.plan)+'</td>'+
+   '<td>'+badge(({active:'Ativa',trial:'Em teste',paused:'Pausada'})[t.status]||t.status,t.status==='active'?'green':'gray')+'</td><td>'+e(trialLabel(t))+'</td>'+
+   '<td><div class="master-company-edit"><button type="button" class="btn sm soft" data-company-edit="'+e(t.id)+'">Editar</button> '+
+   '<button type="button" class="btn sm soft" data-feature-edit="'+e(t.id)+'">Funcionalidades</button> '+
+   '<button type="button" class="btn sm ghost" data-switch="'+e(t.id)+'">'+
+   (t.id===state.me.tenant.id?'Abrir meu ambiente':'Abrir produção')+'</button></div></td></tr>').join('');
+ view.innerHTML=heading('PAINEL MASTER','Empresas.','Consulte clientes, edite planos cadastrais e gerencie os módulos de cada ambiente.',
   '<button type="button" class="btn primary" id="newCompany">+ Nova empresa</button>')+
- monitoring+
  '<section class="card card-pad socio-list-panel"><div class="socio-clean-head"><h2>Empresas cadastradas</h2><small>'+tenants.length+' ambientes</small></div>'+
- '<div class="table-wrap"><table class="data-table"><thead><tr><th>Empresa</th><th>Plano</th><th>Situação</th><th>Teste 7 dias</th><th>Acesso</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
+ '<div class="master-company-filters" aria-label="Filtrar empresas">'+
+ '<input id="masterCompanySearch" type="search" placeholder="Buscar por nome ou identificador..." aria-label="Buscar empresas">'+
+ '<select id="masterCompanyStatus" aria-label="Filtrar por situação"><option value="">Todas as situações</option><option value="active">Ativas</option><option value="trial">Em teste</option><option value="paused">Pausadas</option></select>'+
+ '<select id="masterCompanyPlan" aria-label="Filtrar por plano"><option value="">Todos os planos</option><option value="essencial">Essencial</option><option value="equipe">Equipe</option><option value="voz">Voz</option></select></div>'+
+ '<div class="table-wrap"><table class="data-table"><thead><tr><th>Empresa</th><th>Plano</th><th>Situação</th><th>Teste 7 dias</th><th>Ações</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+ '<div class="master-company-summary" id="masterCompanyShown">'+tenants.length+' empresas exibidas</div></section>'+
  '<div class="socio-popup-backdrop hidden" id="companyModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="companyHeading">'+
   '<div class="socio-popup-header"><div><small>ADMINISTRAÇÃO MASTER</small><h2 id="companyHeading">Nova empresa</h2>'+
   '<p>Consulte o CNPJ para preencher os dados públicos automaticamente.</p></div>'+
@@ -1440,7 +1435,61 @@ async function admin(){
   '<form id="featuresForm" class="form-stack">'+
   '<div id="featuresChoices"></div>'+
   '<button type="submit" class="btn primary socio-full-btn">Salvar funcionalidades</button>'+
-  '</form></section></div>';
+  '</form></section></div>'+
+ '<div class="socio-popup-backdrop hidden" id="companyEditModal"><section class="socio-popup-surface socio-company-popup" role="dialog" aria-modal="true" aria-labelledby="companyEditHeading">'+
+ '<div class="socio-popup-header"><div><small>ADMINISTRAÇÃO MASTER</small><h2 id="companyEditHeading">Editar empresa</h2><p>Atualize somente o cadastro da empresa e seu plano. A cobrança permanece independente.</p></div>'+
+ '<button type="button" class="socio-popup-close" id="companyEditClose" aria-label="Fechar edição">×</button></div>'+
+ '<form id="companyEditForm" class="form-stack">'+
+ '<label>Nome da empresa<input name="name" required maxlength="120"></label>'+
+ '<label>Plano cadastral<select name="plan" required><option value="essencial">Essencial</option><option value="equipe">Equipe</option><option value="voz">Voz</option></select></label>'+
+ '<p class="master-company-edit-note">Alterar o plano cadastral não gera cobrança, não modifica uma assinatura Stripe e não suspende a empresa.</p>'+
+ '<button type="submit" class="btn primary socio-full-btn">Salvar alterações</button></form></section></div>';
+ // Filtering is local to the authorized tenant list; no cross-tenant writes.
+ const applyCompanyFilters=()=>{
+  const keyword=($('#masterCompanySearch')?.value||'').trim().toLocaleLowerCase('pt-BR');
+  const status=$('#masterCompanyStatus')?.value||'',plan=$('#masterCompanyPlan')?.value||'';
+  let visible=0;
+  view.querySelectorAll('[data-company-row]').forEach(row=>{
+   const matches=(!keyword||row.dataset.companyName.includes(keyword))&&
+    (!status||row.dataset.companyStatus===status)&&(!plan||row.dataset.companyPlan===plan);
+   row.hidden=!matches;if(matches)visible++;
+  });
+  const count=$('#masterCompanyShown');if(count)count.textContent=visible+' de '+tenants.length+' empresas';
+ };
+ ['masterCompanySearch','masterCompanyStatus','masterCompanyPlan'].forEach(id=>
+  document.getElementById(id)?.addEventListener(id==='masterCompanySearch'?'input':'change',applyCompanyFilters));
+ try{
+  const saved=sessionStorage.getItem('socio:master-plan-filter');
+  if(saved&&['essencial','equipe','voz'].includes(saved))$('#masterCompanyPlan').value=saved;
+  sessionStorage.removeItem('socio:master-plan-filter');
+ }catch{}
+ applyCompanyFilters();
+ const editModal=$('#companyEditModal'),editForm=$('#companyEditForm');let editingCompany=null;
+ const closeCompanyEdit=()=>{editModal.classList.add('hidden');editingCompany=null;};
+ $('#companyEditClose')?.addEventListener('click',closeCompanyEdit);
+ editModal?.addEventListener('click',ev=>{if(ev.target===editModal)closeCompanyEdit();});
+ view.querySelectorAll('[data-company-edit]').forEach(button=>button.addEventListener('click',()=>{
+  const tenant=tenants.find(t=>t.id===button.dataset.companyEdit);
+  if(!tenant)return;
+  editingCompany=tenant.id;
+  $('#companyEditHeading').textContent='Editar · '+tenant.name;
+  editForm.elements.name.value=tenant.name;
+  editForm.elements.plan.value=tenant.plan;
+  editModal.classList.remove('hidden');editForm.elements.name.focus();
+ }));
+ editForm?.addEventListener('submit',async event=>{
+  event.preventDefault();if(!editingCompany)return;
+  const values=formValues(editForm);
+  const original=tenants.find(t=>t.id===editingCompany);
+  if(!original)return;
+  if((values.plan!==original.plan)&&!confirm('Alterar o plano cadastral desta empresa para '+values.plan+'? Isso não efetua cobranças.'))return;
+  const submit=editForm.querySelector('[type="submit"]');submit.disabled=true;
+  try{
+   await api('/api/admin/tenants/'+editingCompany,'PATCH',{name:values.name,plan:values.plan});
+   toast('Cadastro e plano atualizados.');closeCompanyEdit();await admin();
+  }catch(error){toast(errMsg(error),true);}
+  finally{submit.disabled=false;}
+ });
  const modal=$('#companyModal'),form=$('#tenantForm');
  wireFeatureDependencies(form);
  let publicProfile=null;
