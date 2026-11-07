@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { mkdirSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import {allowRemoteResource,isMetaURL} from './network-policy.js';
-import {parseObservedMetaBalance,topupAmount} from '../meta-billing-state.mjs';
+import {parseObservedMetaBalance,topupAmount,verifyMetaPixCode} from '../meta-billing-state.mjs';
 const require = createRequire(import.meta.url);
 const dist = dirname(require.resolve('api-anything'));
 const internal = name => import(pathToFileURL(join(dist, `${name}.js`)).href);
@@ -18,7 +18,7 @@ const SITE = 'adsmanager.facebook.com';
 const TARGET = 'https://adsmanager.facebook.com/';
 mkdirSync(process.env.API_ANYTHING_HOME, { recursive: true });
 if (!aa.loadSite(SITE)) aa.saveSite({ name: SITE, baseUrl: TARGET, loginCookies: ['c_user', 'xs'], operations: [] });
-let context; let page; let expiresAt = 0;
+let context; let page; let expiresAt = 0; let billingIntent=null;
 const plans = new Map();
 function activePage() {
   if ((!page || page.isClosed()) && context) page = context.pages().filter(p => !p.isClosed()).at(-1);
@@ -68,6 +68,7 @@ async function command(method, data = {}) {
     if(!/^act_[0-9]{4,30}$/.test(data.accountId||'')||!data.accountName||data.currency!=='BRL')
       throw new Error('BILLING_ACCOUNT_INVALID');
     if(method==='billing_prepare')topupAmount(data.amountMinor);
+    billingIntent=null;
     await command('open');
     const target=new URL('https://adsmanager.facebook.com/billing_hub/payment_settings/');
     target.searchParams.set('asset_id',data.accountId.slice(4));
@@ -86,6 +87,7 @@ async function command(method, data = {}) {
     const observation=parseObservedMetaBalance({url:page.url(),body:await page.locator('body').innerText(),
       accountId:data.accountId,accountName:data.accountName,currency:data.currency});
     if(method==='billing_read')return {state:'observed',observation};
+    billingIntent={accountId:data.accountId,accountName:data.accountName,amountMinor:data.amountMinor,expires:Date.now()+10*60000};
     await page.getByRole('button',{name:'Adicionar saldo',exact:true}).click();
     const dialog=page.getByRole('dialog');
     await dialog.waitFor({timeout:15000});
@@ -101,6 +103,26 @@ async function command(method, data = {}) {
     // The person reviews taxes/beneficiary and advances in Meta's own UI.
     return {state:'review_in_meta',observation,amountMinor:data.amountMinor,
       message:'Confira valor total, impostos e Pix na tela oficial da Meta antes de avançar.'};
+  }
+  if(method==='billing_pix_read'){
+    const intent=billingIntent;
+    if(!intent||intent.expires<Date.now()||intent.accountId!==data.accountId)
+      return {state:'not_ready',message:'Prepare a recarga novamente. A leitura assistida expirou.'};
+    activePage();
+    const current=new URL(page.url());
+    if(!['adsmanager.facebook.com','business.facebook.com'].includes(current.hostname)||
+      current.searchParams.get('asset_id')!==intent.accountId.slice(4)||
+      await page.getByRole('heading',{name:intent.accountName,exact:true,level:1}).count()!==1)
+      throw new Error('BILLING_ACCOUNT_MISMATCH');
+    const inputs=await page.locator('textarea,input:not([type="password"])').evaluateAll(
+      nodes=>nodes.map(node=>String(node.value||'')).filter(value=>value.startsWith('000201')).slice(0,5));
+    const visible=(await page.locator('body').innerText()).split(/\r?\n/).map(s=>s.trim())
+      .filter(value=>value.startsWith('000201')).slice(0,5);
+    const codes=[...new Set([...inputs,...visible])];
+    const valid=[];
+    for(const candidate of codes){try{valid.push(verifyMetaPixCode(candidate,intent.amountMinor));}catch{}}
+    if(valid.length!==1)return {state:'not_ready',message:'O código Pix ainda não está visível ou o total difere do solicitado. Confira a tela da Meta.'};
+    return {state:'pix_available',...valid[0],accountId:intent.accountId};
   }
   if (method === 'screen') {
     activePage();
