@@ -45,6 +45,7 @@ import {reconcileConfirmedOutbox} from './socio-outbound.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
 import {getTenantBusinessMonitor,getMasterSaasMonitor} from './socio-business-monitor.mjs';
+import {getExecutiveMetrics} from './socio-executive-metrics.mjs';
 import {readSubscriptionStatus,createSubscriptionCheckout,createBillingPortal,processSubscriptionWebhook} from './socio-subscriptions.mjs';
 import {startGoogleAdsOAuth,finishGoogleAdsOAuth,googleAdsStatus,listGoogleAdsAccounts,selectGoogleAdsAccount,disconnectGoogleAds,readGoogleAdsCampaigns} from './socio-google-ads.mjs';
 import {createTrackingSite,listTrackingSites,enableTrackingSite,receiveSignedSiteEvent} from './socio-site-tracking.mjs';
@@ -837,6 +838,9 @@ async function handle(req,res){
   const results=await query(sql,[a.active_tenant_id,parseTenantFeatures(a.features).whatsapp]);
   return json(res,200,{range:requested,granularity:range.unit,points:results.rows});
  }
+ if(method==='GET'&&pathname==='/api/dashboard/executive'){
+  return json(res,200,await getExecutiveMetrics(pool,a));
+ }
  if(method==='GET'&&pathname==='/api/dashboard'){
   const [ch,prod,imp,conv,msg,today]=await Promise.all([
    query('SELECT count(*)::int AS n FROM channels WHERE tenant_id=$1',[a.active_tenant_id]),
@@ -1283,6 +1287,35 @@ async function handle(req,res){
   if(!result.rowCount)throw fail(404,'Produto não encontrado.');
   await audit(a,'product.updated',{productId:prodMatch[1]});
   return json(res,200,result.rows[0]);
+ }
+
+ // Product deletion removes its variants, campaign links and media rows via existing
+ // tenant-constrained cascading foreign keys. Payment/order snapshots stay intact.
+ if(prodMatch&&method==='DELETE'){
+  needRole(a,['owner','admin']);
+  if(!limiter(simulationAttempts,'catalog-delete:'+a.active_tenant_id,60000,10))
+   throw fail(429,'Muitas exclusões; aguarde.');
+  const {data}=await body(req,1000);
+  if(data.confirm!==true)throw fail(422,'Confirme a exclusão permanente do produto.');
+  const client=await pool.connect();let objects=[],removed=null;
+  try{
+   await client.query('BEGIN');
+   const check=await client.query('SELECT id,name FROM products WHERE tenant_id=$1 AND id=$2 FOR UPDATE',
+    [a.active_tenant_id,prodMatch[1]]);
+   if(!check.rowCount)throw fail(404,'Produto não encontrado nesta empresa.');
+   removed=check.rows[0];
+   const media=await client.query('SELECT object_key FROM product_media WHERE tenant_id=$1 AND product_id=$2',
+    [a.active_tenant_id,prodMatch[1]]);
+   objects=media.rows.map(x=>x.object_key);
+   await client.query('DELETE FROM products WHERE tenant_id=$1 AND id=$2',[a.active_tenant_id,prodMatch[1]]);
+   await client.query('COMMIT');
+  }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}
+  finally{client.release();}
+  const cleanup=await Promise.allSettled(objects.map(objectKey=>deletePrivateImage(objectKey)));
+  const failed=cleanup.filter(x=>x.status==='rejected').length;
+  await audit(a,'product.deleted',{productId:prodMatch[1],photoCleanupFailures:failed});
+  return json(res,200,{deleted:true,id:prodMatch[1],name:removed.name,
+   photoCleanupPending:failed>0,photosPending:failed});
  }
  // Tenant-owner operational checks: never return credentials or assert that a
  // configured integration has passed a real end-to-end test.
