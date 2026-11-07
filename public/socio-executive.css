@@ -439,3 +439,19 @@ body .socio-catalog-clean #newProduct:hover,body .px-campaign-picker .btn.primar
 .px-budget-billing-link:hover{background:#eee5ff;color:#50309b}
 .px-budget-billing-link:focus-visible{outline:2px solid #7242dc;outline-offset:2px}
 .px-budget-limit{display:block;margin-top:7px;color:#78688c;font-size:10px}
+
+.socio-billing-dialog{width:min(1100px,94vw);max-height:92dvh;border:1px solid #e2d6f1;border-radius:18px;padding:20px;color:#39294d;background:#fff;overflow:auto;box-sizing:border-box;box-shadow:0 20px 80px #2e184455}
+.socio-billing-dialog::backdrop{background:#24182e99;backdrop-filter:blur(4px)}
+.socio-billing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.socio-billing-head h2{margin:0;font-size:22px}.socio-billing-head p{font-size:12px;color:#82718f}
+.socio-billing-head button{border:0;background:#f3edf9;padding:5px 12px;border-radius:8px;font-size:24px;cursor:pointer}
+.socio-billing-dialog label{display:grid;gap:7px;font-size:13px;font-weight:700}
+.socio-billing-dialog input,.socio-billing-dialog textarea{padding:10px;border:1px solid #dbcee9;border-radius:9px;font:inherit;width:100%;box-sizing:border-box}
+.socio-billing-dialog input{max-width:250px}.socio-billing-dialog textarea{font-size:12px;overflow-wrap:anywhere}
+.socio-billing-actions,.px-budget-billing-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:9px 0}
+.socio-billing-dialog [data-screen]{display:block;width:100%;height:auto;border:1px solid #e4daef;border-radius:9px}
+.socio-billing-dialog [data-status]{padding:10px;background:#f7f2fc;border-radius:9px;font-size:13px}
+.socio-billing-dialog section[hidden]{display:none!important}
+.px-budget-warning{font-size:11px;font-weight:750;color:#9b5016;background:#fff3df;border-radius:7px;padding:7px;margin:7px 0 0}
+.px-budget-billing-actions .px-budget-billing-link{cursor:pointer;margin-top:0}
+@media(max-width:600px){.socio-billing-dialog{padding:14px;width:97vw}.socio-billing-head h2{font-size:18px}}
