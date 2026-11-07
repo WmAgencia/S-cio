@@ -89,12 +89,12 @@ export function createMetaBrowser({env=process.env,runtime}={}){
    requirePermission(a,'marketing.manage');
    assertApiFeature(a.features,'/api/marketing/tools');
    if(a.tenant_status==='paused')throw fail(403,'Empresa pausada.');
-   if(!['read','prepare'].includes(kind))throw fail(422,'Operação inválida.');
+   if(!['read','prepare','pix'].includes(kind))throw fail(422,'Operação inválida.');
    if(kind==='prepare')topupAmount(data.amountMinor);
    const account=await resolveSelectedOfficialAccount(pool,a);
    if(account.currency!=='BRL')throw fail(422,'A recarga assistida está disponível para contas BRL.');
    const id=await profile(pool,a,true);
-   const result=await engine().call(id,kind==='read'?'billing_read':'billing_prepare',{
+   const result=await engine().call(id,kind==='read'?'billing_read':kind==='pix'?'billing_pix_read':'billing_prepare',{
     accountId:account.id,accountName:account.name,currency:account.currency,
     ...(kind==='prepare'?{amountMinor:data.amountMinor}:{})});
    return {...result,accountId:account.id};
