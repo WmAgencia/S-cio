@@ -124,6 +124,9 @@ async function boot(){
    $('#adminNav').classList.toggle('hidden',!me.user.platformOwner);
    $('#teamNav')?.classList.toggle('hidden',!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner);
    const access=new Set(me.user.permissions||[]);
+   document.querySelector('.nav-item[data-view="connections"]')?.classList.toggle('hidden',
+    !access.has('marketing.read')&&!access.has('channels.manage'));
+
    for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['quotes','sales.read'],['reports','audit.read'],['marketing','marketing.read']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
