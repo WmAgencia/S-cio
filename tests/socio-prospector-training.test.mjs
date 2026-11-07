@@ -108,13 +108,13 @@ test('UI has Prospector palette, opt-in voice/text training, CSRF and review-bef
  assert.match(style,/prefers-reduced-motion/);
  assert.match(ui,/data-ps-start="voice"/);
  assert.match(ui,/data-ps-start="text"/);
- assert.match(ui,//api/training/versions//);
+ assert.ok(ui.includes('/api/training/versions/'));
  assert.match(ui,/X-CSRF-Token/);
  assert.match(ui,/Aprender também com o histórico do WhatsApp/);
  assert.match(ui,/window\.confirm/);
- assert.match(server,//api/training/interview/audio/);
+ assert.ok(server.includes('/api/training/interview/audio'));
  assert.match(server,/needRole\(a,\['owner','admin'\]\)/);
  assert.match(schema,/socio_training_interviews/);
  assert.match(main,/SocioInterviewUI\.mount/);
- assert.match(main,/api\('/api/training/auto'/);
+ assert.ok(main.includes("api('/api/training/auto'"));
 });
