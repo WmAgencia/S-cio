@@ -1024,8 +1024,9 @@ async function agent(){
  mountAiGuideTabs();
 }
 async function reports(){
- const [report,monitor]=await Promise.all([
-  api('/api/reports'),api('/api/reports/monitor').catch(()=>null)
+ const [report,monitor,billing]=await Promise.all([
+  api('/api/reports'),api('/api/reports/monitor').catch(()=>null),
+  api('/api/billing/status').catch(()=>null)
  ]);
  const t=report.totals||{};
  const cards=[
@@ -1052,11 +1053,23 @@ async function reports(){
     '<p class="form-note">Nenhum alerta encontrado nos registros disponíveis.</p>')+
    '<p class="form-note">Vendas reais e receita confirmada: indisponíveis. Pagamentos de teste não são faturamento.</p></section>':
   '<section class="card card-pad"><h2>Monitoramento</h2><p class="form-note">Consulta operacional indisponível; os demais relatórios continuam acessíveis.</p></section>';
+ const billingSection=billing?
+  '<section class="card card-pad"><h2>Assinatura do Sócio</h2>'+
+   '<p class="form-note">Plano '+e(billing.plan)+' · Estado registrado da assinatura: '+e(billing.subscription.status)+
+    '. O teste cadastral termina em '+e(new Date(billing.trial.endsAt).toLocaleDateString('pt-BR'))+'.</p>'+
+   '<p class="form-note">Clientes pagantes e receita recorrente não são inferidos por status da conta. Nenhum bloqueio automático por fim do teste.</p>'+
+   (billing.checkout.available?
+     '<button class="btn soft" type="button" data-billing-checkout>Contratar no Stripe (revisar preço no Checkout)</button> '+
+     '<button class="btn soft" type="button" data-billing-portal>Gerenciar assinatura</button>':
+     '<p class="form-note">Assinatura ainda não liberada: a administração precisa definir preços e configurar a integração financeira.</p>')+
+   '<p class="form-note" data-billing-feedback role="status"></p></section>':
+  '<section class="card card-pad"><h2>Assinatura do Sócio</h2><p class="form-note">Estado de assinatura indisponível nesta sessão.</p></section>';
  view.innerHTML='<section class="socio-reports">'+
   heading('INTELIGÊNCIA OPERACIONAL','Relatórios','Indicadores reais dos últimos 30 dias, sem confundir oportunidade, orçamento e pagamento.')+
   '<div class="report-kpi-grid">'+cards.map(([name,count,sub])=>
    '<article class="card report-kpi"><small>'+e(name)+'</small><strong>'+e(count??0)+'</strong><p>'+e(sub)+'</p></article>').join('')+'</div>'+
   monitorSection+
+  billingSection+
   '<div class="report-sections"><section class="card card-pad"><h2>Atividade de mensagens</h2>'+
    '<p class="form-note">Volume diário de mensagens recebidas nos últimos 14 dias.</p>'+
    (days.length?'<div class="report-bars" role="img" aria-label="Mensagens recebidas por dia">'+days.map(d=>{
@@ -1072,6 +1085,27 @@ async function reports(){
     '<p>Transações sandbox, sem receita real.</p></div></div>'+
    '<p class="form-note">Para medir receita real será necessário conectar e conciliar um meio de pagamento autorizado.</p>'+
   '</section></div></section>';
+ if(window.SocioIntegrationsUI)
+  window.SocioIntegrationsUI.render({root:view,api}).catch(error=>console.warn('[integrations-panel]',String(error?.message||'unavailable').slice(0,100)));
+ const billFeedback=view.querySelector('[data-billing-feedback]');
+ for(const [action,endpoint,field] of [
+  ['checkout','/api/billing/checkout','checkoutUrl'],
+  ['portal','/api/billing/portal','portalUrl']
+ ]){
+  const btn=view.querySelector('[data-billing-'+action+']');
+  btn?.addEventListener('click',async()=>{
+   btn.disabled=true;
+   if(billFeedback)billFeedback.textContent='Consultando a integração segura…';
+   try{
+    const answer=await api(endpoint,'POST',{});
+    const url=new URL(answer[field]);
+    if(url.protocol!=='https:'||!['checkout.stripe.com','billing.stripe.com'].includes(url.hostname))
+     throw new Error('Destino de pagamento não confiável.');
+    window.location.assign(url.toString());
+   }catch(error){if(billFeedback)billFeedback.textContent=error.message;}
+   finally{btn.disabled=false;}
+  });
+ }
  view.querySelectorAll('.report-bar-track i[data-width]').forEach(bar=>{
   bar.style.width=String(Math.min(100,Math.max(2,Number(bar.dataset.width)||2)))+'%';
  });

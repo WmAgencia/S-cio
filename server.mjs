@@ -43,6 +43,10 @@ import {reconcileConfirmedOutbox} from './socio-outbound.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
 import {getTenantBusinessMonitor,getMasterSaasMonitor} from './socio-business-monitor.mjs';
+import {readSubscriptionStatus,createSubscriptionCheckout,createBillingPortal,processSubscriptionWebhook} from './socio-subscriptions.mjs';
+import {startGoogleAdsOAuth,finishGoogleAdsOAuth,googleAdsStatus,listGoogleAdsAccounts,selectGoogleAdsAccount,disconnectGoogleAds} from './socio-google-ads.mjs';
+import {createTrackingSite,listTrackingSites,enableTrackingSite,receiveSignedSiteEvent} from './socio-site-tracking.mjs';
+import {integrationReadiness} from './socio-integrations-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {createQuote,issueQuote,cancelQuote,publicQuote,approveQuote,declineQuote,listSales,createTestCheckout,processStripeTestEvent} from './sales-commerce.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
@@ -253,7 +257,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -296,10 +300,31 @@ async function handle(req,res){
   }
   return res.end();
  }
+ if(method==='GET'&&pathname==='/api/google-ads/oauth/callback'){
+  const params=new URL(req.url,'http://local').searchParams;
+  let result='failed';
+  if(params.get('error'))result='cancelled';
+  else try{await finishGoogleAdsOAuth(pool,params.get('state'),params.get('code'));result='connected';}
+  catch(error){console.warn('[google-ads-oauth]',String(error?.status||'OAUTH_FAILED').slice(0,20));}
+  res.writeHead(303,{Location:'/?google_ads='+result,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
+  return res.end();
+ }
  // Retired Google Ads Scripts receiver is intentionally closed.
  if(/^\/webhooks\/google-ads\/[0-9a-f-]{36}$/i.test(pathname))
   throw fail(410,'O conector Google Ads foi desativado.');
  // Stripe server-to-server webhook validates its raw signature before using JSON.
+ if(pathname==='/webhooks/site-events'&&method==='POST'){
+  const {raw}=await body(req,10000);
+  if(!limiter(authAttempts,'site-events:'+clientIp(req),60000,120))
+   throw fail(429,'Limite de eventos temporariamente atingido.');
+  return json(res,200,await receiveSignedSiteEvent(pool,raw,req.headers));
+ }
+ if(pathname==='/webhooks/stripe-saas'&&method==='POST'){
+  const {raw}=await body(req,200000);
+  if(!limiter(authAttempts,'stripe-billing:'+clientIp(req),60000,250))
+   throw fail(429,'Limite de eventos do Stripe atingido.');
+  return json(res,200,await processSubscriptionWebhook(pool,raw,req.headers['stripe-signature']));
+ }
  if(pathname==='/webhooks/stripe-test'&&method==='POST'){
   const {raw}=await body(req,160000);
   const result=await processStripeTestEvent(pool,raw,req.headers['stripe-signature']);
@@ -991,6 +1016,46 @@ async function handle(req,res){
   return json(res,201,r.rows[0]);
  }
 
+ if(method==='GET'&&pathname==='/api/integrations/readiness')
+  return json(res,200,await integrationReadiness(pool,a));
+ if(method==='GET'&&pathname==='/api/tracking/sites')
+  return json(res,200,await listTrackingSites(pool,a));
+ if(method==='POST'&&pathname==='/api/tracking/sites'){
+  if(!limiter(simulationAttempts,'tracking-sites:'+a.active_tenant_id,3600000,10))
+   throw fail(429,'Aguarde antes de cadastrar outro site.');
+  const {data}=await body(req,1400);
+  return json(res,201,await createTrackingSite(pool,a,{origin:data.origin,pixelId:data.pixelId}));
+ }
+ const siteFlag=pathname.match(/^\/api\/tracking\/sites\/([a-f0-9-]{36})\/enabled$/i);
+ if(siteFlag&&method==='PUT'){
+  const {data}=await body(req,1500);
+  return json(res,200,await enableTrackingSite(pool,a,siteFlag[1],data.enabled));
+ }
+ if(method==='GET'&&pathname==='/api/google-ads/status')
+  return json(res,200,await googleAdsStatus(pool,a));
+ if(method==='POST'&&pathname==='/api/google-ads/connect')
+  return json(res,200,await startGoogleAdsOAuth(pool,a));
+ if(method==='GET'&&pathname==='/api/google-ads/accounts')
+  return json(res,200,await listGoogleAdsAccounts(pool,a));
+ if(method==='POST'&&pathname==='/api/google-ads/accounts/select'){
+  const {data}=await body(req,1500);
+  return json(res,200,await selectGoogleAdsAccount(pool,a,data.accountId));
+ }
+ if(method==='POST'&&pathname==='/api/google-ads/disconnect')
+  return json(res,200,await disconnectGoogleAds(pool,a));
+ if(method==='GET'&&pathname==='/api/billing/status'){
+  return json(res,200,await readSubscriptionStatus(pool,a));
+ }
+ if(method==='POST'&&pathname==='/api/billing/checkout'){
+  if(!limiter(simulationAttempts,'billing-checkout:'+a.active_tenant_id,3600000,8))
+   throw fail(429,'Aguarde antes de abrir um novo Checkout.');
+  return json(res,200,await createSubscriptionCheckout(pool,a));
+ }
+ if(method==='POST'&&pathname==='/api/billing/portal'){
+  if(!limiter(simulationAttempts,'billing-portal:'+a.active_tenant_id,60000,6))
+   throw fail(429,'Aguarde antes de abrir o portal de cobrança.');
+  return json(res,200,await createBillingPortal(pool,a));
+ }
  if(method==='GET'&&pathname==='/api/reports/monitor'){
   requirePermission(a,'audit.read');
   return json(res,200,await getTenantBusinessMonitor(pool,a));
