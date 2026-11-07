@@ -66,6 +66,9 @@ export function makeCapiEvent(data,{now=Date.now()}={}){
  let source;try{source=new URL(data.event_source_url)}catch{throw fail(422,'URL de origem inválida.');}
  if(source.protocol!=='https:'||source.username||source.password||source.href.length>1600)
   throw fail(422,'Evento exige endereço HTTPS do próprio site.');
+ // Remove URL query and hash, which may contain email, phone or tracking identifiers.
+ // Consent parameters are never forwarded as URL text to Meta.
+ source.search='';source.hash='';
  if(data.email!==undefined||data.phone!==undefined||data.em!==undefined||data.ph!==undefined)
   throw fail(422,'Não envie dados pessoais brutos pela API de telemetria.');
  const user={};
