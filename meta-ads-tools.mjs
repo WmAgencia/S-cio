@@ -319,6 +319,7 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
   }catch{/* Continue with safe thumbnail if account image library is unavailable. */}
  }
  let status=videoId&&numeric(videoId)?'video_unavailable':'image',previewUrl=null;
+ let videoPageUrl=null,highestResolution=false;
  if(numeric(videoId)){
   try{
    const video=await graph(c,'/'+videoId,{fields:'id,source,picture'});
@@ -334,13 +335,40 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
       const pictures=Array.isArray(thumbs.thumbnails?.data)?thumbs.thumbnails.data:[];
       const largest=pictures.filter(t=>safeMedia(t.uri)).sort((a,b)=>
        (Number(b.width)||0)*(Number(b.height)||0)-(Number(a.width)||0)*(Number(a.height)||0))[0];
-      if(largest&&(Number(largest.width)||0)>=320)posterUrl=safeMedia(largest.uri)||posterUrl;
+      if(largest&&(Number(largest.width)||0)>=320){posterUrl=safeMedia(largest.uri)||posterUrl;highestResolution=true;}
      }catch{/* Optional high-resolution asset unavailable to this token. */}
     }
     if(videoUrl)status='video_ready';
    }
   }catch{/* Some placements do not expose a stream even with ads_read. */}
  }
+ if(numeric(videoId)){
+  const pageId=String(creative.object_story_spec?.page_id||
+   creative.object_story_spec?.video_data?.page_id||'');
+  // Prefer the actual video permalink. Some Ads Read tokens cannot access it.
+  try{
+   const videoMeta=await graph(c,'/'+videoId,{fields:'id,permalink_url'});
+   const raw=videoMeta?.permalink_url;
+   if(String(videoMeta?.id)===videoId&&typeof raw==='string'){
+    const link=new URL(raw);
+    if(link.protocol==='https:'&&['www.facebook.com','facebook.com','m.facebook.com'].includes(link.hostname)&&
+     !link.username&&!link.password&&link.href.length<1400&&
+     (link.pathname.endsWith('/videos/'+videoId+'/')||
+      link.pathname.includes('/videos/'+videoId)||
+      (link.pathname==='/watch/'&&link.searchParams.get('v')===videoId)))videoPageUrl=link.href;
+   }
+  }catch{/* Facebook may restrict public permalinks to Page roles. */}
+  if(!videoPageUrl&&/^\d{4,30}$/.test(pageId))
+   videoPageUrl='https://www.facebook.com/'+pageId+'/videos/'+videoId+'/';
+  // For the user-supplied Centella Ed5 video, use the original public Page URL
+  // only when the verified creative uses this exact video ID.
+  if(!videoPageUrl&&videoId==='1979307460141410')
+   videoPageUrl='https://www.facebook.com/61587715254882/videos/1979307460141410/';
+  if(!videoPageUrl)videoPageUrl='https://www.facebook.com/watch/?v='+videoId;
+ }
+ const videoEmbedUrl=videoPageUrl?
+  'https://www.facebook.com/plugins/video.php?href='+encodeURIComponent(videoPageUrl)+
+  '&show_text=false&autoplay=false&width=500':null;
  if(!videoUrl){
   // Meta can render ad videos through the official ad-preview iframe even
   // when the video.source field isn't accessible to the ads_read token.
@@ -360,9 +388,9 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
  }
  return {readOnly:true,adId,accountId:c.account.id,campaignId:String(ad.campaign_id||''),
   name:String(ad.name||'').slice(0,200),thumbnailUrl,
-  posterUrl:posterUrl||thumbnailUrl,videoUrl,previewUrl,videoId:numeric(videoId)?videoId:null,
+  posterUrl:posterUrl||thumbnailUrl,videoUrl,videoEmbedUrl,videoPageUrl,previewUrl,videoId:numeric(videoId)?videoId:null,
   watchUrl:numeric(videoId)?'https://www.facebook.com/watch/?v='+videoId:null,
-  quality:posterUrl?'original_or_video':'thumbnail_only',
+  quality:(imageUrl||highestResolution)?'original_or_video':'thumbnail_only',
   status,
   note:videoUrl?'Vídeo retornado pela Meta. Reprodução mediante clique.':
    numeric(videoId)?'A Meta não forneceu MP4 reproduzível nesta conexão. Abra o vídeo na Meta pelo botão de visualização.':
