@@ -320,3 +320,9 @@ body .flow-image-card textarea{background:#fff!important;color:#312342!important
 #commandOverlay .command-item-arrow{margin-left:auto!important;font-size:12px!important}
 #commandOverlay .command-empty,#commandOverlay .command-tip{padding:13px 18px!important;color:#756985!important;font-size:12px!important}
 @media(max-width:600px){#commandOverlay.command-overlay{padding-top:44px!important}#commandOverlay .command-box{max-height:80dvh!important}}
+
+/* Simple team management and correctly hidden invite form */
+#teamInvitePanel[hidden]{display:none!important}
+.socio-user-header{display:flex;justify-content:flex-end;margin:0 0 16px}
+.socio-team-controls select{border:1px solid #ddd2f0;border-radius:9px;background:#fff;color:#44315e;padding:8px;font-size:12px;max-width:185px}
+.sidebar-bottom>.nav-item[data-view="settings"]{width:100%;display:flex;align-items:center;gap:10px;margin-bottom:8px}
