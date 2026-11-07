@@ -97,6 +97,7 @@ export function createMetaBrowser({env=process.env,runtime}={}){
    const result=await engine().call(id,kind==='read'?'billing_read':kind==='pix'?'billing_pix_read':'billing_prepare',{
     accountId:account.id,accountName:account.name,currency:account.currency,
     ...(kind==='prepare'?{amountMinor:data.amountMinor}:{})});
+   if(kind==='read'&&result.observation)await engine().stop(id);
    return {...result,accountId:account.id};
   },
   async close(){if(activeRuntime)await activeRuntime.close();},
