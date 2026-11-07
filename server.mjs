@@ -19,6 +19,7 @@ import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
 import {scanQuoteRequests,listQuoteRequests,updateQuoteRequest,setQuoteAlerts,processNextOwnerQuoteAlert,saveQuoteDraft,sendQuoteDraft} from './quote-requests.mjs';
 import {scanSalesIntents,listSaleIntents,updateSaleIntent} from './sales-intents.mjs';
+import {askSalesAssistant} from './socio-sales-assistant.mjs';
 import {validateTenantFeatures,parseTenantFeatures,filterPermissions,assertApiFeature} from './tenant-features.mjs';
 import {startPipeboardOAuth,finishPipeboardOAuth,listPipeboardOAuth,revokePipeboardOAuth,oauthClientMetadata,testPipeboardConnection} from './marketing-oauth.mjs';
 import {instagramHostedReady,beginInstagramHosted,instagramHostedStatus,disconnectInstagramHosted} from './instagram-hosted.mjs';
@@ -994,6 +995,17 @@ async function handle(req,res){
   ]);
   return json(res,200,{periodDays:30,totals:totals.rows[0],
    dailyMessages:daily.rows,note:'Intenção de compra, pedido aprovado e pagamento são eventos distintos. Pagamento de teste não é receita real.'});
+ }
+ if(method==='POST'&&pathname==='/api/sales/assistant/chat'){
+  requirePermission(a,'sales.read');
+  assertApiFeature(a.features,'/api/agent');
+  if(!limiter(simulationAttempts,'sales-assistant:'+a.user_id,60000,12))
+   throw fail(429,'Aguarde antes de fazer outra pergunta comercial.');
+  const {data}=await body(req,2500);
+  const result=await askSalesAssistant(pool,a,{message:data.message,requestId:data.requestId??null});
+  await audit(a,'sales.assistant.read',{requestId:result.requestId||null,
+   previewReady:result.preview?.readyToReview===true});
+  return json(res,200,result);
  }
  if(method==='GET'&&pathname==='/api/sales/intents'){
   requirePermission(a,'sales.read');

@@ -11,6 +11,7 @@ import {speakToAdSkill} from './socio-ad-skills.mjs';
 import {selectExpertSkill} from './socio-expert-skills.mjs';
 import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
 import {formatMetaTrafficDiagnosis} from './meta-traffic-diagnostics.mjs';
+import {askSalesAssistant} from './socio-sales-assistant.mjs';
 import {readWhatsAppFunnel,formatWhatsAppFunnel} from './whatsapp-funnel.mjs';
 
 const fail=(status,message)=>Object.assign(new Error(message),{status});
@@ -129,6 +130,10 @@ export async function speakToSocioSkill(pool,a,request={},opts={}){
   return {runId:null,status:'completed',readOnly:true,executed:false,
    skillId:'meta.optimization',period,data:answer.diagnosis,
    message:formatMetaTrafficDiagnosis(answer.diagnosis)};
+ }
+ if(expert.id==='commerce.assistant'){
+  const result=await (opts.askSalesAssistant||askSalesAssistant)(pool,a,{message:raw});
+  return {...result,platform:'commerce'};
  }
  if(expert.id==='whatsapp.sales'){
   const funnel=await (opts.readWhatsAppFunnel||readWhatsAppFunnel)(pool,a);
