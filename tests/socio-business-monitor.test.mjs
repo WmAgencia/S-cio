@@ -106,8 +106,9 @@ test('API and dashboard render are read-only; master trial and revenue are expli
  const ui=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
  assert.match(server,/\/api\/reports\/monitor/);assert.match(server,/getTenantBusinessMonitor\(pool,a\)/);
  assert.match(server,/\/api\/admin\/monitor/);assert.match(server,/getMasterSaasMonitor\(pool,a\)/);
- assert.match(ui,/monitor\.summary|monitor\?\.summary/);
- assert.match(ui,/Conta ativa não comprova pagamento/);
+ const master=readFileSync(new URL('../public/socio-master-dashboard.js',import.meta.url),'utf8');
+ assert.match(master,/monitor\?\.summary/);
+ assert.match(master,/Status ativo não significa cliente pagante/);
  assert.match(ui,/Teste 7 dias/);
  assert.match(ui,/Conversas aguardando resposta/);
 });

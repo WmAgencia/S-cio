@@ -1857,6 +1857,23 @@ async function handle(req,res){
   const r=await query("SELECT t.id,t.name,t.slug,t.plan,t.status,t.cnpj,t.legal_name,t.trade_name,t.features,t.quote_alert_whatsapp,t.created_at,(SELECT count(*)::int FROM users u WHERE u.tenant_id=t.id) AS members FROM tenants t ORDER BY t.created_at DESC");
   return json(res,200,r.rows);
  }
+ const editMasterTenant=pathname.match(/^\/api\/admin\/tenants\/([a-f0-9-]{36})$/i);
+ if(editMasterTenant&&method==='PATCH'){
+  needPlatform(a);
+  const {data}=await body(req,2500);
+  if(!data||typeof data!=='object'||Object.keys(data).some(key=>!['name','plan'].includes(key))||
+     !validText(data.name,120)||!['essencial','equipe','voz'].includes(data.plan))
+   throw fail(422,'Informe um nome válido e um plano cadastral permitido.');
+  const target=await query('SELECT id,name,plan FROM tenants WHERE id=$1',[editMasterTenant[1]]);
+  if(!target.rowCount)throw fail(404,'Empresa não encontrada.');
+  const name=data.name.trim(),plan=data.plan;
+  const result=await query('UPDATE tenants SET name=$2,plan=$3 WHERE id=$1 RETURNING id,name,plan,status',
+   [editMasterTenant[1],name,plan]);
+  await audit(a,'platform.tenant_profile_updated',{
+   targetTenantId:editMasterTenant[1],before:{name:target.rows[0].name,plan:target.rows[0].plan},
+   after:{name,plan},billingChanged:false});
+  return json(res,200,{...result.rows[0],billingChanged:false});
+ }
  const tenantFeaturesRoute=pathname.match(/^\/api\/admin\/tenants\/([a-f0-9-]{36})\/features$/i);
  if(tenantFeaturesRoute&&method==='PUT'){
   needPlatform(a);
