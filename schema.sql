@@ -991,3 +991,30 @@ CREATE TABLE IF NOT EXISTS socio_owner_media_receipts (
 );
 CREATE INDEX IF NOT EXISTS socio_owner_media_receipts_recent_idx
  ON socio_owner_media_receipts(tenant_id,channel_id,created_at DESC);
+
+
+-- Opt-in SaaS billing. Isolated from sales_orders (customer purchases / Stripe test).
+-- A subscription status NEVER directly changes tenants.status: no automatic suspension.
+CREATE TABLE IF NOT EXISTS socio_billing_accounts (
+ tenant_id uuid PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+ provider text NOT NULL DEFAULT 'stripe' CHECK(provider='stripe'),
+ stripe_customer_id text UNIQUE,
+ stripe_subscription_id text UNIQUE,
+ stripe_checkout_session_id text UNIQUE,
+ subscription_status text NOT NULL DEFAULT 'not_started'
+  CHECK(subscription_status IN ('not_started','checkout_pending','trialing','active','past_due','unpaid','paused','canceled','incomplete','incomplete_expired')),
+ period_end timestamptz,
+ paid_invoices_count integer NOT NULL DEFAULT 0,
+ paid_amount_cents bigint NOT NULL DEFAULT 0,
+ last_paid_invoice_id text,
+ last_paid_at timestamptz,
+ last_subscription_event_created bigint NOT NULL DEFAULT 0,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS socio_billing_webhook_events (
+ event_id text PRIMARY KEY,
+ event_type text NOT NULL,
+ tenant_id uuid REFERENCES tenants(id) ON DELETE SET NULL,
+ received_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS socio_billing_events_recent_idx ON socio_billing_webhook_events(received_at DESC);
