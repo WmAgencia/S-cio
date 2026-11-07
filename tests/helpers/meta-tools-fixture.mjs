@@ -35,7 +35,7 @@ export async function metaToolsScenario(pool){
   if(path==='/998877/adsets')return response({data:[{id:'121212',name:'Conjunto de teste',effective_status:'ACTIVE'}]});
   if(path==='/998877/ads')return response({data:[{id:'343434',name:'Anúncio de teste',effective_status:'ACTIVE'}]});
   if(path==='/998877/insights')return response({data:[{campaign_id:'998877',spend:'12.27',clicks:'488',impressions:'3098'}]});
-  if(path==='/998877')return response({id:'998877',account_id:'123456',name:'Existing'});
+  if(path==='/998877')return response({id:'998877',account_id:'123456',name:'Existing',daily_budget:'3000',status:'ACTIVE'});
   if(path==='/998866')return response({id:'998866',account_id:'123456',name:'Anúncio rejeitado',status:'PAUSED',effective_status:'WITH_ISSUES'});
   if(path==='/887766')return response({id:'887766',account_id:'999999',name:'Other tenant account'});
   if(path.endsWith('/campaigns'))return response({data:[{id:'998877',name:'Existing',status:'PAUSED'}]});
