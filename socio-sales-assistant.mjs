@@ -3,6 +3,7 @@
 import {requirePermission} from './team-permissions.mjs';
 import {assertApiFeature} from './tenant-features.mjs';
 import {proposedQuantity} from './sales-intents.mjs';
+import {getTenantBusinessMonitor,formatBusinessMonitor} from './socio-business-monitor.mjs';
 
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -69,6 +70,16 @@ export async function askSalesAssistant(pool,actor,{message,requestId=null}={}){
  if(typeof message!=='string'||message.length>1000||!message.trim())
   throw fail(422,'Descreva sua dúvida comercial em até 1.000 caracteres.');
  if(requestId!==null&&!uuid.test(requestId))throw fail(422,'Identificador de orçamento inválido.');
+ const normalizedQuery=norm(message);
+ const wantsReport=/\b(relatorio|relatorios|resumo|indicadores|monitoramento|desempenho)\b/.test(normalizedQuery)&&
+  /\b(vendas|negocio|empresa|comercial|clientes|pedidos|atendimento|operacao)\b/.test(normalizedQuery);
+ if(wantsReport&&!requestId){
+  const monitoring=await getTenantBusinessMonitor(pool,actor);
+  return {status:'completed',readOnly:true,executed:false,skillId:'commerce.assistant',
+   data:monitoring,message:formatBusinessMonitor(monitoring),
+   limits:'Relatório só de leitura. Não alterei cobranças, mensagens nem campanhas.'};
+ }
+
  const tenant=actor.active_tenant_id;
  const [catalog,requests,intents,training]=await Promise.all([
   readCatalog(pool,tenant),
