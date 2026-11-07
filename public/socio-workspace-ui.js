@@ -469,9 +469,25 @@
     kpi('Campanhas ativas',data?.campaigns.ok?number(data.activeCampaigns):'—','Situação atual da Meta','▤','green')+
     kpi('Anúncios ativos',data?.ads.ok?number(data.activeAds):'—','Situação atual dos anúncios','◉','blue')+
    '</div>'+
-   section('Suas campanhas','Ativas, pausadas e rascunhos retornados pela Meta',
-    selectedCampaign?'<div class="px-campaign-detail-heading"><button type="button" class="px-campaign-back" data-px-campaign-back>← Voltar às campanhas</button><strong>'+esc(selectedCampaign.name||selectedCampaign.id)+'</strong><small>'+visibleAds.length+' anúncio(s) nesta campanha</small></div>':
-    data?.campaigns.ok?(decoratedCampaigns.length?advertRows(decoratedCampaigns,insightsMap,currency,can(me,'marketing.manage'),data.adsetList||[]):empty('A conta não retornou campanhas.')):
+   section(selectedAdset?'Anúncios do conjunto':selectedCampaign?'Conjuntos de anúncios':'Suas campanhas',
+    selectedAdset?'Anúncios e criativos do conjunto selecionado':
+     selectedCampaign?'Conjuntos vinculados à campanha selecionada':'Ativas, pausadas e rascunhos retornados pela Meta',
+    selectedCampaign?'<div class="px-campaign-detail-heading">'+
+      (selectedAdset?
+       '<button type="button" class="px-campaign-back" data-px-adset-back>← Voltar aos conjuntos</button>':
+       '<button type="button" class="px-campaign-back" data-px-campaign-back>← Voltar às campanhas</button>')+
+      '<div class="px-campaign-crumbs"><strong>'+esc(selectedCampaign.name||selectedCampaign.id)+'</strong>'+
+       (selectedAdset?'<span aria-hidden="true">›</span><strong>'+esc(selectedAdset.name||selectedAdset.id)+'</strong>':'')+
+      '</div><small>'+(selectedAdset?visibleAds.length+' anúncio(s) no conjunto':campaignAdsets.length+' conjunto(s) nesta campanha')+'</small></div>'+
+      (selectedAdset?
+       (adsResult&&!adsResult.ok?'<p class="px-muted">Consulta específica indisponível; exibindo anúncios carregados da conta.</p>':'')+
+       (adsResult?.limited?'<p class="px-muted">A Meta retornou mais anúncios do que o limite desta consulta.</p>':'')+
+       (visibleAds.length?adCards(visibleAds,manage):empty('Nenhum anúncio encontrado neste conjunto.')):
+       (adsetResult&&!adsetResult.ok?'<p class="px-muted">Consulta específica indisponível; exibindo conjuntos carregados da conta.</p>':'')+
+       (adsetResult?.limited?'<p class="px-muted">A Meta retornou mais conjuntos do que o limite desta consulta.</p>':'')+
+       (campaignAdsets.length?adsetRows(campaignAdsets,currency,manage,Number(selectedCampaign.daily_budget||0)>0):
+        empty('Nenhum conjunto de anúncios encontrado nesta campanha.'))):
+    data?.campaigns.ok?(decoratedCampaigns.length?advertRows(decoratedCampaigns,insightsMap,currency,manage,data.adsetList||[]):empty('A conta não retornou campanhas.')):
       empty(data?.campaigns.reason||'Conecte uma conta para listar campanhas.'))+
    section('Anúncio em destaque','Comparação de resultados na mesma conta e período',
     data?.bestAd?'<div class="px-featured-item px-featured-video">'+
@@ -485,15 +501,9 @@
        '<span>Compras atribuídas <b>'+(data.bestAd.purchases===null?'—':number(data.bestAd.purchases))+'</b></span></div>'+
       '<p class="px-muted">Reproduza o vídeo pelo botão Play quando a Meta disponibilizar a mídia. Eventos atribuídos não comprovam venda paga.</p></div></div>':
     empty(data?.adInsights.ok?'Sem anúncios com métricas suficientes no período.':'Relatório por anúncio indisponível nesta conta.'))+
-   section(selectedCampaign?'Anúncios da campanha':'Anúncios e criativos',selectedCampaign?'Anúncios vinculados a '+selectedCampaign.name:'Anúncios vinculados à conta de anúncios selecionada',
-    data?.ads.ok?(visibleAds.length?'<div class="px-ads-list">'+visibleAds.slice(0,100).map(ad=>
-      '<div class="px-ad-creative-row">'+
-      '<div class="px-ad-creative-media" data-px-ad-media="'+esc(ad.id)+'">'+
-        (posterFromAd(ad)?posterView(posterFromAd(ad),'Miniatura do anúncio '+(ad.name||ad.id)):'<div class="px-feature-no-media">Criativo</div>')+
-      '</div><div class="px-ad-creative-info"><strong>'+esc(ad.name||ad.id)+'</strong><small>ID '+esc(ad.id)+'</small>'+
-      '<button type="button" class="px-quick-action" data-px-ad-play="'+esc(ad.id)+'">▶ Ver criativo</button></div>'+
-      '<span class="px-status '+((ad.effective_status||ad.status)==='ACTIVE'?'on':'off')+'">'+esc(ad.effective_status||ad.status||'—')+'</span></div>').join('')+'</div>':
-      empty('Nenhum anúncio retornado pela conta.')):empty('Os anúncios estão indisponíveis até autorizar a leitura.'))+
+   (!selectedCampaign?section('Anúncios e criativos','Anúncios vinculados à conta de anúncios selecionada',
+    data?.ads.ok?(ads.length?adCards(ads,false):empty('Nenhum anúncio retornado pela conta.')):
+     empty('Os anúncios estão indisponíveis até autorizar a leitura.')):'')+
    section('Interpretação dos resultados','As plataformas reportam atribuições, não pagamentos conciliados',
     '<div class="px-footnote">O CPA é calculado apenas quando a Meta retorna eventos Purchase. Esses eventos não são prova de pedido pago. Sem evento válido, o painel mostra “—”, em vez de inventar resultados.</div>')+
    '<dialog id="pxCampaignDialog" class="px-campaign-dialog" aria-labelledby="pxActionTitle">'+
