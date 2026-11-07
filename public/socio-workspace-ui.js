@@ -338,8 +338,32 @@
   const featuredAd=featuredAds.find(ad=>(ad.effective_status||ad.status)==='ACTIVE')||featuredAds[0]||null;
   const featuredThumb=posterFromAd(featuredAd);
   const featuredIsRanked=Boolean(meta?.best);
+  // A prepaid balance is not the Meta account's "balance" (often payable),
+  // nor the daily campaign budget. Do not infer prepaid credit from spend.
+  const budgetHeaderItem=(provider,label,brand,connected,spent,currency)=>{
+   const spending=connected?money(spent,currency):'—';
+   const stateLabel=!ads?'Sem permissão':connected?'Saldo não verificado':'Conta não autorizada';
+   return '<article class="px-budget-account" data-budget-provider="'+provider+'">'+
+    '<div class="px-budget-account-main"><div class="px-budget-brand"><span class="px-brand-dot '+brand+'"></span>'+
+      '<strong>'+label+'</strong><small>'+stateLabel+'</small></div>'+
+      '<div class="px-budget-stats">'+
+       '<div class="px-budget-stat px-budget-balance"><span>Saldo disponível</span><strong>Não disponível</strong></div>'+
+       '<div class="px-budget-stat"><span>Gasto hoje</span><strong>'+spending+'</strong></div>'+
+       '<div class="px-budget-stat"><span>Duração estimada</span><strong>—</strong></div>'+
+      '</div></div>'+
+    '<div class="px-budget-meter" role="img" aria-label="Saldo pré-pago não verificado; percentual restante indisponível"></div>'+
+    '</article>';
+  };
 
   root.innerHTML='<div class="px-workspace px-overview">'+
+   '<section class="px-budget-top" aria-label="Verba disponível nas contas publicitárias">'+
+    '<div class="px-budget-top-heading"><strong>Controle de verba</strong>'+
+     '<small>Saldo pré-pago e previsão serão exibidos apenas quando confirmados pela plataforma.</small></div>'+
+    '<div class="px-budget-top-grid">'+
+     budgetHeaderItem('meta_ads','Meta Ads','meta',metaReady,meta?.spend,meta?.currency)+
+     budgetHeaderItem('google_ads','Google Ads','google',googleReady,googleMicros,googleCode)+
+    '</div>'+
+   '</section>'+
    '<div class="px-page-heading"><div><span class="px-eyebrow">CENTRAL DE INTELIGÊNCIA</span><h1>Visão geral</h1><p>Operação, atendimento e publicidade da sua empresa em um único painel.</p></div>'+
     '<button class="btn soft" data-px-reload type="button">↻ Atualizar indicadores</button></div>'+
    '<div class="px-kpi-grid">'+
