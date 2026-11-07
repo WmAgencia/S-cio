@@ -18,10 +18,13 @@ CREATE TABLE IF NOT EXISTS users (
  email text NOT NULL UNIQUE,
  name text NOT NULL,
  password_hash text NOT NULL,
- role text NOT NULL DEFAULT 'owner' CHECK (role IN ('owner','admin','agent')),
+ role text NOT NULL DEFAULT 'owner' CHECK (role IN ('owner','admin','manager','viewer','agent')),
  platform_owner boolean NOT NULL DEFAULT false,
  created_at timestamptz NOT NULL DEFAULT now()
 );
+-- Additive and idempotent: extend the legacy role check for existing Railway installations.
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('owner','admin','manager','viewer','agent'));
 -- Backward compatible with existing Railway users and passwords.
 -- Phone is an optional individual login identifier, never a business channel number.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone text;
