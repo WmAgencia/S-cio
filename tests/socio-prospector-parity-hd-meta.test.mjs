@@ -117,7 +117,7 @@ test('UI and CSS explicitly show media play control and prevent overflow',()=>{
  assert(css.includes('overflow-wrap:anywhere'));
  assert(css.includes('flex:0 0 min(34%,220px)'));
  assert(css.includes('px-media-play'));
- assert(ui.includes('const posterFromAd=ad=>['));
+ assert(ui.includes('const posterFromAd=ad=>{'));
  assert(ui.includes('ad?.creative?.thumbnail_url'));
  assert(ui.includes('const applyPoster='));
  assert(ui.includes("playButton('Ver vídeo do anúncio"));
