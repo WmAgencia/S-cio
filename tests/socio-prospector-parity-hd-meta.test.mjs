@@ -110,7 +110,7 @@ test('UI and CSS explicitly show media play control and prevent overflow',()=>{
  assert(css.includes('px-media-play'));
  assert(ui.includes('const posterFromAd=ad=>mediaUrl(ad?.creative?.image_url'));
  assert(ui.includes("playButton('Ver vídeo do anúncio"));
- assert(ui.includes('watchUrl(result.watchUrl)'));
+ assert(ui.includes('trustedVideoEmbed(result.videoEmbedUrl)'));
  assert(ui.includes('data-campaign-preview'));
  assert(ads.includes('creative{id,name,image_url'));
  assert.match(server,/socio-semantic-turn.mjs/);
