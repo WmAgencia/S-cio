@@ -20,6 +20,7 @@ const optimize=/\b(otimizar|otimize|otimizacao|melhorar|melhore|analisar|analise
 const adTerms=/\b(campanha|campanhas|anuncio|anuncios|criativo|criativos|meta ads|trafego|facebook ads|instagram ads)\b/;
 const commerce=/(?:\b(?:orcamento|orcamentos|cotacao|cotacoes|preparar proposta|propostas comerciais|pedidos de clientes|pedidos pendentes|oportunidades de venda|vendas pendentes|meus produtos|catalogo da loja|estoque da loja|qual o preco|quanto custa|meus interessados|meus pedidos)\b)/;
 const commerceExclusion=/\b(campanha|campanhas|anuncio|anuncios|conjunto|conjuntos|adset|criativo|criativos|meta ads|facebook ads|instagram ads|google ads)\b|\b(?:alterar|altere|aumentar|reduzir)\s+(?:o\s+)?orcamento\b/;
+const commerceReport=/\b(relatorio|relatorios|indicadores|resumo|monitoramento|desempenho)\b.*\b(vendas|negocio|empresa|comercial|atendimento|operacao|pedidos|clientes)\b|\b(vendas|negocio|empresa|comercial|atendimento|operacao|pedidos|clientes)\b.*\b(relatorio|relatorios|indicadores|resumo|monitoramento|desempenho)\b/;
 const whatsReport=/\b(whatsapp|zap|wa-akg)\b.*\b(relatorio|resultado|quantas? conversas?|quantos? leads?|quantas? vendas?|atribui|rastre)\b|\b(relatorio|resultado|quantas? conversas?|quantas? vendas?|atribui|rastre)\b.*\b(whatsapp|zap|wa-akg)\b/;
 
 export function listExpertSkills(){
@@ -43,7 +44,8 @@ export function selectExpertSkill(message){
    !/\b(criar|crie|campanha|anuncio|anunciar)\b/.test(text)))
   return {id:'whatsapp.sales',reason:'whatsapp_attribution_request'};
  if(tracking.test(text))return {id:'tracking.conversions',reason:'tracking_request'};
- if(commerce.test(text)&&!commerceExclusion.test(text))return {id:'commerce.assistant',reason:'explicit_commerce'};
+ if((commerce.test(text)||commerceReport.test(text))&&!commerceExclusion.test(text))
+  return {id:'commerce.assistant',reason:'explicit_commerce'};
  if(optimize.test(text)&&adTerms.test(text))return {id:'meta.optimization',reason:'meta_diagnosis'};
  // Existing Meta Ads router owns mutations and reads when request is otherwise supported.
  return {id:'meta.campaigns',reason:'meta_default'};
