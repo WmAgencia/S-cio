@@ -95,27 +95,57 @@
    '<div class="px-axis"><span>'+esc(values[0].date)+'</span><span>'+esc(values[Math.floor(values.length/2)].date)+'</span><span>'+esc(values.at(-1).date)+'</span></div>';
  };
  const section=(title,subtitle,content,aside='')=>'<section class="px-panel"><div class="px-panel-head"><div><h2>'+esc(title)+'</h2><p>'+esc(subtitle)+'</p></div>'+aside+'</div>'+content+'</section>';
- function advertRows(items,insightById,currency){
-  return '<div class="px-table-scroll"><table class="px-table"><thead><tr><th>Campanha</th><th>Situação</th><th>Gasto</th><th>Cliques</th><th>CPC</th><th>Impressões</th></tr></thead><tbody>'+
-   items.slice(0,40).map(c=>{
+ const formattedDaily=(cents,currency)=>money(Number(cents||0)/100,currency)+'/dia';
+ const actionButtons=(kind,obj,manage=true)=>{
+  if(!manage)return '';
+  const id=String(obj.id||''),status=String(obj.status||'').toUpperCase();
+  if(!/^\d{4,30}$/.test(id))return '';
+  const toggle=['ACTIVE','PAUSED'].includes(status)?
+   '<button type="button" class="px-quick-action '+(status==='ACTIVE'?'pause':'activate')+
+    '" data-px-manage-status="'+esc(id)+'" data-px-entity="'+kind+'" data-px-next="'+
+    (status==='ACTIVE'?'PAUSED':'ACTIVE')+'" aria-label="'+(status==='ACTIVE'?'Pausar':'Ativar')+
+    ' '+esc(obj.name||kind)+'">'+(status==='ACTIVE'?'Pausar':'Ativar')+'</button>':'';
+  const budget=Number(obj.daily_budget)>0&&Number(obj.lifetime_budget||0)===0?
+   '<button type="button" class="px-quick-action budget" data-px-manage-budget="'+esc(id)+
+    '" data-px-entity="'+kind+'">Editar R$/dia</button>':'';
+  return '<div class="px-quick-actions">'+toggle+budget+'</div>';
+ };
+ function advertRows(items,insightById,currency,manage=false,adsets=[]){
+  return '<div class="px-table-scroll"><table class="px-table px-campaign-table"><thead><tr>'+
+   '<th>Campanha</th><th>Situação</th><th>Orçamento</th><th>Gasto no período</th><th>Cliques</th><th>CPC</th><th>Impressões</th>'+
+   (manage?'<th>Ações</th>':'')+'</tr></thead><tbody>'+
+   items.slice(0,60).map(c=>{
     const m=insightById.get(String(c.id))||{},spend=Number(m.spend)||0,clicks=Number(m.clicks)||0;
     const picture=posterFromAd(c.topAd||null);
-   return '<tr><td><div class="px-ad-name-cell">'+(picture?posterView(picture,'Miniatura de '+String(c.name||'')):'')+
-    '<span><strong>'+esc(c.name||c.id)+'</strong><small>'+esc(c.objective||c.id)+'</small></span></div></td>'+
+    const children=adsets.filter(s=>String(s.campaign_id||'')===String(c.id));
+    const cbo=Number(c.daily_budget||0)>0, lifetime=Number(c.lifetime_budget||0)>0;
+    const childBudgets=children.filter(s=>Number(s.daily_budget||0)>0);
+    const btext=cbo?formattedDaily(c.daily_budget,currency):lifetime?'Orçamento total · '+money(Number(c.lifetime_budget)/100,currency):
+     childBudgets.length?'Por conjunto de anúncios':'Não informado';
+    const budgetDetails=!cbo&&!lifetime&&childBudgets.length?
+     '<details class="px-budget-details"><summary>Ver '+childBudgets.length+' orçamento(s) dos conjuntos</summary><div class="px-budget-list">'+
+      childBudgets.slice(0,30).map(s=>'<div class="px-budget-child"><span><strong>'+esc(s.name||s.id)+'</strong>'+
+       '<small>'+formattedDaily(s.daily_budget,currency)+'</small></span>'+actionButtons('adset',s,manage)+'</div>').join('')+
+      '</div></details>':'';
+    return '<tr><td><div class="px-ad-name-cell">'+(picture?posterView(picture,'Miniatura de '+String(c.name||'')):'')+
+     '<span><strong>'+esc(c.name||c.id)+'</strong><small>'+esc(c.objective||c.id)+'</small></span></div></td>'+
      '<td><span class="px-status '+((c.effective_status||c.status)==='ACTIVE'?'on':'off')+'">'+esc(c.effective_status||c.status||'—')+'</span></td>'+
-     '<td>'+money(spend,currency)+'</td><td>'+number(clicks)+'</td><td>'+(clicks?money(spend/clicks,currency):'—')+'</td><td>'+number(m.impressions||0)+'</td></tr>';
+     '<td><span class="px-budget-value">'+esc(btext)+'</span>'+budgetDetails+'</td>'+
+     '<td>'+money(spend,currency)+'</td><td>'+number(clicks)+'</td><td>'+(clicks?money(spend/clicks,currency):'—')+'</td><td>'+number(m.impressions||0)+'</td>'+
+     (manage?'<td>'+actionButtons('campaign',c,true)+'</td>':'')+'</tr>';
    }).join('')+'</tbody></table></div>';
  }
  async function loadMeta(api,period='today',includeAdLevel=false){
-  const [status,campaigns,ads,insights,adInsights]=await Promise.all([
+  const [status,campaigns,ads,adsets,insights,adInsights]=await Promise.all([
    cached(api,'/api/marketing/official/status',25000),
    cached(api,'/api/marketing/tools/campaigns',20000),
    cached(api,'/api/marketing/tools/ads',20000),
+   cached(api,'/api/marketing/tools/adsets',20000),
    cached(api,'/api/marketing/tools/insights?period='+encodeURIComponent(period),16000),
    includeAdLevel?cached(api,'/api/marketing/advanced/reports?period='+encodeURIComponent(period)+'&level=ad',16000):Promise.resolve({ok:false,data:null})
   ]);
   const currency=selectedCurrency(status.data);
-  const list=campaigns.data?.items||[], adList=ads.data?.items||[],daily=insights.data?.items||[];
+  const list=campaigns.data?.items||[], adList=ads.data?.items||[],adsetList=adsets.data?.items||[],daily=insights.data?.items||[];
   const total=key=>daily.reduce((sum,x)=>sum+(Number(x[key])||0),0);
   const clicks=total('clicks'),spend=total('spend');
   const purchase=record=>Array.isArray(record.actions)?record.actions.filter(x=>
@@ -151,7 +181,7 @@
     thumbnailUrl:posterFromAd(fallback),active:Boolean(running)};
    adRankingMethod=running?'Anúncio ativo · sem métricas por anúncio':'Anúncio da conta · sem métricas por anúncio';
   }
-  return {status,campaigns,ads,insights,adInsights,adItems,bestAd,adRankingMethod,currency,list,adList,daily,clicks,spend,purchases,
+  return {status,campaigns,ads,adsets,adsetList,insights,adInsights,adItems,bestAd,adRankingMethod,currency,list,adList,daily,clicks,spend,purchases,
    activeCampaigns:list.filter(x=>(x.effective_status||x.status)==='ACTIVE').length,
    activeAds:adList.filter(x=>(x.effective_status||x.status)==='ACTIVE').length,
    best:daily.filter(x=>Number(x.clicks)>0).sort((a,b)=>Number(b.clicks)-Number(a.clicks))[0]||null};
