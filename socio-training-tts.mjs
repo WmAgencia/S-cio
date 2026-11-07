@@ -22,7 +22,7 @@ export async function synthesizeSocioTrainingVoice(value,{exec=execFile,temp=mkd
   await exec('/opt/socio-tts/bin/edge-tts',[
    '--voice',SOCIO_TRAINING_VOICE,'--rate=+4%','--pitch=+0Hz','--volume=+0%',
    '--text',text,'--write-media',output,'--no-progress'
-  ],{timeout:24000,maxBuffer:120000});
+  ],{timeout:12000,maxBuffer:120000});
   const info=await getStat(output);
   if(info.size<256||info.size>3*1024*1024)throw fail(503,'TTS retornou um áudio inválido.');
   const bytes=await read(output);
@@ -34,5 +34,34 @@ export async function synthesizeSocioTrainingVoice(value,{exec=execFile,temp=mkd
   throw fail(503,'Voz Thalita temporariamente indisponível. O treinamento por texto continua funcionando.');
  }finally{
   await remove(directory,{recursive:true,force:true}).catch(()=>{});
+ }
+}
+
+/* Only public, fixed, generic acknowledgements are eligible for an in-memory
+ * audio cache. Never cache a tenant's reports, customer names, or private data.
+ * Sharing a pending synthesis avoids multiple identical Edge TTS processes. */
+export const THALITA_CANNED_PHRASES=Object.freeze([
+ 'Oi! Sou a Thalita. Estou ouvindo. Pode falar comigo.',
+ 'Perfeito, vou conferir suas campanhas e os resultados.',
+ 'Certo, vou consultar os dados e já te explico.'
+]);
+const cannedSet=new Set(THALITA_CANNED_PHRASES);
+const cannedAudio=new Map();
+export async function synthesizeCachedThalitaVoice(value,options={}){
+ const text=validateTtsText(value);
+ if(!cannedSet.has(text))return synthesizeSocioTrainingVoice(text,options);
+ const existing=cannedAudio.get(text);
+ if(existing&&existing.expires>Date.now())return existing.result||existing.pending;
+ const pending=synthesizeSocioTrainingVoice(text,options).then(result=>{
+  cannedAudio.set(text,{result,expires:Date.now()+3600_000});
+  return result;
+ },error=>{cannedAudio.delete(text);throw error;});
+ cannedAudio.set(text,{pending,expires:Date.now()+3600_000});
+ return pending;
+}
+export async function prewarmThalitaAcknowledgements(){
+ // Called after the HTTP listener is ready; no impact on health checks.
+ for(const phrase of THALITA_CANNED_PHRASES){
+  try{await synthesizeCachedThalitaVoice(phrase);}catch{/* Live requests still have clear fallbacks. */}
  }
 }
