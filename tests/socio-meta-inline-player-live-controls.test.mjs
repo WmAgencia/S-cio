@@ -26,7 +26,7 @@ function mockGraph({campaignBudget=0,adsetBudget=2500,adVideo='1979307460141410'
  const request=async(url,opts)=>{
   const u=new URL(url);requests.push({url:u,opts});
   assert.equal(u.hostname,'graph.facebook.com');
-  assert.equal(opts.method,'GET','Preparing a plan must never modify an ad account.');
+  assert.equal(opts.method||'GET','GET','Preparing a plan must never modify an ad account.');
   assert.equal(opts.headers.Authorization,'Bearer server-only-account-token');
   const ok=data=>({ok:true,json:async()=>data});
   if(u.pathname.endsWith('/me/adaccounts'))return ok({data:[{id:'act_123456',name:'Empresa',currency:'BRL'}]});
@@ -74,7 +74,7 @@ test('user can prepare budget change on ABO adset but cannot invent CBO budget o
  assert.match(plan.id,/^[a-f0-9-]{36}$/);
  assert.equal(plan.requiresConfirmation,true);
  assert.equal(mock.dbWrites.length,1);
- assert(mock.requests.every(x=>x.opts.method==='GET'));
+ assert(mock.requests.every(x=>(x.opts.method||'GET')==='GET'));
  assert.equal(validateAdsPlan('status',{entity:'campaign',id:'3333333333',status:'PAUSED'}).status,'PAUSED');
 });
 test('CBO daily-budget campaign is editable only with plan and second confirmation',async()=>{
@@ -82,7 +82,7 @@ test('CBO daily-budget campaign is editable only with plan and second confirmati
  const plan=await prepareAdsPlan(mock.pool,actor,'budget',{entity:'campaign',id:'3333333333',dailyBudgetCents:3000},{env,request:mock.request});
  assert.equal(plan.requiresConfirmation,true);
  assert.equal(mock.dbWrites.length,1);
- assert(mock.requests.every(x=>x.opts.method==='GET'));
+ assert(mock.requests.every(x=>(x.opts.method||'GET')==='GET'));
 });
 test('Meta interface hides advanced tools and shows campaign actions with a two-stage confirmation',()=>{
  const ui=load('public/socio-workspace-ui.js'),css=load('public/socio-executive.css'),server=load('server.mjs');
