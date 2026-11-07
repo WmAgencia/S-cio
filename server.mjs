@@ -252,7 +252,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/flow-images-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -406,6 +406,20 @@ async function handle(req,res){
  assertApiFeature(a.features,pathname);
 
  if(pathname==='/api/flow/status'&&method==='GET')return json(res,200,await flowImages.status(a));
+ const flowBrowser=pathname.match(/^\/api\/flow\/browser\/(status|open|screen|input|finish|close)$/);
+ if(flowBrowser){
+  const kind=flowBrowser[1],read=['status','screen'].includes(kind);
+  if(method!==(read?'GET':'POST'))throw fail(405,'Método inválido.');
+  if(a.platform_owner!==true)throw fail(403,'Somente o administrador master pode conectar a conta Google compartilhada.');
+  if(!limiter(authAttempts,'flow-browser:'+a.user_id,60000,180))throw fail(429,'Aguarde antes de tentar novamente.');
+  const data=read?{}:(await body(req,12000)).data;
+  const result=await flowImages.browser(a,kind,data);
+  if(kind==='screen'){
+   res.writeHead(200,{'Content-Type':'image/jpeg','Cache-Control':'private, no-store'});
+   return res.end(Buffer.from(result.jpeg,'base64'));
+  }
+  return json(res,200,result);
+ }
  if(pathname==='/api/flow/images'&&method==='POST'){
   if(!limiter(simulationAttempts,'flow-images:'+a.user_id,60000,12))throw fail(429,'Aguarde antes de gerar novamente.');
   const {data}=await body(req,32768);

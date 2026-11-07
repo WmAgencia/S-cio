@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {requirePermission} from './team-permissions.mjs';
 import {createFlowRuntime} from './flow-images/runtime.mjs';
+import {validateFlowInput} from './flow-images/browser-policy.mjs';
 const fail=(status,message)=>Object.assign(Error(message),{status});
 const digest=x=>createHash('sha256').update(x).digest('hex');
 export function createFlowImages({runtime=createFlowRuntime()}={}){
@@ -23,6 +24,11 @@ export function createFlowImages({runtime=createFlowRuntime()}={}){
   if(!result.rows[0])throw fail(404,'Imagem não encontrada.');
  }
  return {
+  async browser(a,kind,data={}){
+   if(a?.platform_owner!==true)throw fail(403,'Somente o administrador master pode conectar a conta Google compartilhada.');
+   if(!['status','open','screen','input','finish','close'].includes(kind))throw fail(404,'Operação não encontrada.');
+   return runtime.browser(kind,kind==='input'?validateFlowInput(data):{});
+  },
   async status(a){
    requirePermission(a,'training.manage');
    let ready=false;
