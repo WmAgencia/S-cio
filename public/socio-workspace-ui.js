@@ -26,7 +26,7 @@
    if(serial!==liveRefreshSerial||renderId!==renderSerial||document.hidden||!root.isConnected)return;
    if(!root.querySelector('.px-'+kind)){stopLiveRefresh();return;}
    if(root.querySelector('dialog[open]')||root.querySelector('[data-px-action-review]:disabled'))return;
-   const playing=!!root.querySelector('.px-feature-media video,.px-feature-media iframe');
+   const playing=!!root.querySelector('.px-feature-media video,.px-feature-media iframe,.px-ad-creative-media video,.px-ad-creative-media iframe');
    try{
     getCache.clear(); // Always ask server/Meta again, never reuse old KPI figures.
     if(playing){await updateWhilePlaying?.();return;}
