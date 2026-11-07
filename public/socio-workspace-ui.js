@@ -174,7 +174,7 @@
        '<small>'+formattedDaily(s.daily_budget,currency)+'</small></span>'+actionButtons('adset',s,manage)+'</div>').join('')+
       '</div></details>':'';
     return '<tr data-px-campaign-row="'+esc(c.id)+'"><td><div class="px-ad-name-cell">'+(picture?posterView(picture,'Miniatura de '+String(c.name||'')):'')+
-     '<span><strong>'+esc(c.name||c.id)+'</strong><small>'+esc(c.objective||c.id)+'</small></span></div></td>'+
+     '<span><button type="button" class="px-campaign-open" data-px-open-campaign="'+esc(c.id)+'" aria-label="Ver anúncios da campanha '+esc(c.name||c.id)+'">'+esc(c.name||c.id)+'</button><small>'+esc(c.objective||c.id)+'</small></span></div></td>'+
      '<td><span class="px-status '+((c.effective_status||c.status)==='ACTIVE'?'on':'off')+'">'+esc(c.effective_status||c.status||'—')+'</span></td>'+
      '<td><span class="px-budget-value">'+esc(btext)+'</span>'+budgetDetails+'</td>'+
      '<td>'+money(spend,currency)+'</td><td>'+number(clicks)+'</td><td>'+(clicks?money(spend/clicks,currency):'—')+'</td><td>'+number(m.impressions||0)+'</td>'+
@@ -372,7 +372,7 @@
   root.querySelector('[data-px-connections]')?.addEventListener('click',()=>navigate('connections'));
   root.querySelector('[data-px-marketing]')?.addEventListener('click',()=>navigate('marketing'));
  }
- async function marketing({root,api,me,navigate,period='last_7d'}){
+ async function marketing({root,api,me,navigate,period='last_7d',campaignId=null}){
   const renderId=++renderSerial;
   forTenant(me);
   if(!root.querySelector('.px-marketing'))setPreview(root,'marketing');
@@ -386,6 +386,9 @@
    return {...c,topAd:matches.find(ad=>(ad.effective_status||ad.status)==='ACTIVE')||matches[0]||null};
   });
   const bestThumbnail=mediaUrl(data?.bestAd?.thumbnailUrl);
+  const selectedCampaign=campaignId?decoratedCampaigns.find(c=>String(c.id)===String(campaignId)):null;
+  if(campaignId&&!selectedCampaign)campaignId=null;
+  const visibleAds=selectedCampaign?ads.filter(ad=>String(ad.campaign_id||'')===String(selectedCampaign.id)):ads;
 
   const insightsMap=new Map((data?.daily||[]).map(x=>[String(x.campaign_id),x]));
   const btn='<button type="button" class="btn soft" data-px-connect>Gerenciar conexões</button>';
@@ -406,6 +409,7 @@
     kpi('Anúncios ativos',data?.ads.ok?number(data.activeAds):'—','Situação atual dos anúncios','◉','blue')+
    '</div>'+
    section('Suas campanhas','Ativas, pausadas e rascunhos retornados pela Meta',
+    selectedCampaign?'<div class="px-campaign-detail-heading"><button type="button" class="px-campaign-back" data-px-campaign-back>← Voltar às campanhas</button><strong>'+esc(selectedCampaign.name||selectedCampaign.id)+'</strong><small>'+visibleAds.length+' anúncio(s) nesta campanha</small></div>':
     data?.campaigns.ok?(decoratedCampaigns.length?advertRows(decoratedCampaigns,insightsMap,currency,can(me,'marketing.manage'),data.adsetList||[]):empty('A conta não retornou campanhas.')):
       empty(data?.campaigns.reason||'Conecte uma conta para listar campanhas.'))+
    section('Anúncio em destaque','Comparação de resultados na mesma conta e período',
@@ -420,8 +424,8 @@
        '<span>Compras atribuídas <b>'+(data.bestAd.purchases===null?'—':number(data.bestAd.purchases))+'</b></span></div>'+
       '<p class="px-muted">Reproduza o vídeo pelo botão Play quando a Meta disponibilizar a mídia. Eventos atribuídos não comprovam venda paga.</p></div></div>':
     empty(data?.adInsights.ok?'Sem anúncios com métricas suficientes no período.':'Relatório por anúncio indisponível nesta conta.'))+
-   section('Anúncios e criativos','Anúncios vinculados à conta de anúncios selecionada',
-    data?.ads.ok?(ads.length?'<div class="px-ads-list">'+ads.slice(0,20).map(ad=>
+   section(selectedCampaign?'Anúncios da campanha':'Anúncios e criativos',selectedCampaign?'Anúncios vinculados a '+selectedCampaign.name:'Anúncios vinculados à conta de anúncios selecionada',
+    data?.ads.ok?(visibleAds.length?'<div class="px-ads-list">'+visibleAds.slice(0,100).map(ad=>
       '<div><div><strong>'+esc(ad.name||ad.id)+'</strong><small>'+esc(ad.id)+'</small></div>'+
       '<span class="px-status '+((ad.effective_status||ad.status)==='ACTIVE'?'on':'off')+'">'+esc(ad.effective_status||ad.status||'—')+'</span></div>').join('')+'</div>':
       empty('Nenhum anúncio retornado pela conta.')):empty('Os anúncios estão indisponíveis até autorizar a leitura.'))+
@@ -499,6 +503,8 @@
     }
    });
   }
+  root.querySelectorAll('[data-px-open-campaign]').forEach(button=>button.addEventListener('click',()=>marketing({root,api,me,navigate,period,campaignId:button.dataset.pxOpenCampaign})));
+  root.querySelector('[data-px-campaign-back]')?.addEventListener('click',()=>marketing({root,api,me,navigate,period}));
   // Manual campaign actions reuse the server's 15-minute plan, second
   // confirmation and tenant/selected-account validation. No action is made
   // directly by clicking a row or editing an input.
@@ -582,7 +588,7 @@
     getCache.clear();snapshots.delete('marketing');snapshots.delete('overview');
     draftId=null;submitting=false;
     modal.close();
-    await marketing({root,api,me,navigate,period});
+    await marketing({root,api,me,navigate,period,campaignId});
    }catch(error){
     if(feedback)feedback.textContent=String(error.message||'Não foi possível concluir. Confira antes de repetir.');
     draftId=null;
@@ -591,7 +597,7 @@
    }
   });
   startLiveRefresh(root,'marketing',renderId,
-   ()=>marketing({root,api,me,navigate,period}),
+   ()=>marketing({root,api,me,navigate,period,campaignId}),
    async()=>{
     const current=await loadMeta(api,period,true).catch(()=>null);
     if(renderId!==renderSerial||!root.querySelector('.px-marketing')||!current)return;
