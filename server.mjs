@@ -535,8 +535,11 @@ async function handle(req,res){
  }
  if(pathname==='/api/marketing/advanced/catalog'&&method==='GET')
   return json(res,200,{tools:META_TOOL_CATALOG});
- const advancedRoute=pathname.match(/^\/api\/marketing\/advanced\/(account|creatives|videos|audiences|pixels|conversions|reports|diagnosis)$/);
+ const advancedRoute=pathname.match(/^\/api\/marketing\/advanced\/(account|creatives|videos|audiences|pixels|conversions|reports|diagnosis|activity|labels|rules|delivery|video_report|conversion_report|budget_report|creative_report)$/);
  if(advancedRoute&&method==='GET'){
+  requirePermission(a,'marketing.read');
+  if(!limiter(simulationAttempts,'meta-advanced:'+a.user_id+':'+a.active_tenant_id,60000,90))
+   throw fail(429,'Muitas consultas Meta. Aguarde antes de consultar novamente.');
   const qs=new URL(req.url,'http://local').searchParams;
   return json(res,200,await readAdvancedMetaTool(pool,a,advancedRoute[1],
    {period:qs.get('period'),level:qs.get('level'),breakdown:qs.get('breakdown'),
