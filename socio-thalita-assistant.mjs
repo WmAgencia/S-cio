@@ -27,7 +27,7 @@ function makeDraft(a,action,label){
  return {status:'approval_required',executed:false,message:'Revise antes de executar: '+label,
   confirmation:{id,label,expiresInSeconds:480},readOnly:false};
 }
-const moneyBR=cent=>Number(cent||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const moneyBR=cent=>(Number(cent||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const safeName=name=>String(name||'').replace(/[\r\n<>]/g,' ').slice(0,110);
 function exactProduct(rows,name){
  const matches=rows.filter(x=>normalize(x.name)===normalize(name));
