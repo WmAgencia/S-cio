@@ -225,7 +225,7 @@ async function changeView(next,conversationId=null){
  globalThis.SocioMetaLocal?.dispose();
  state.view=next;
  syncMasterSwitch();
- $$('.nav-item[data-view]').forEachb=>b.classList.toggle('selected',b.dataset.view===next));
+ $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
  $('#topTitle').textContent=titles[next]||'Sócio';
  setLoading();
  try{
@@ -1347,7 +1347,7 @@ async function team(){
    toast(active?'Acesso reativado.':'Acesso desativado e sessões encerradas.');await team();
   });
  }));
- $$('[data-team-select]').forEachselect=>select.addEventListener('change',async()=>{
+ $$('[data-team-select]').forEach(select=>select.addEventListener('change',async()=>{
   const nextRole=select.value;
   if(!confirm('Alterar a permissão para '+roleLabel(nextRole)+'?')){await team();return;}
   await action(async()=>{await api('/api/team/'+select.dataset.teamSelect,'PATCH',{role:nextRole});toast('Permissão atualizada.');await team();});
