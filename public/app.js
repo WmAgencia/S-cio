@@ -9,7 +9,7 @@ const featuresEnabled=()=>state.me?.tenant?.features||{};
 const featureAvailable=key=>featuresEnabled()[key]!==false;
 const ownAccountAvailable=()=>!!state.me?.user?.platformOwner||(state.me?.user?.permissions||[]).includes('account.manage');
 const viewAvailable=key=>!featureView[key]||featureAvailable(featureView[key])||key==='team'&&ownAccountAvailable();
-const titles={overview:'Visão geral',inbox:'WhatsApp',connections:'Conexões',marketing:'Meta Ads',products:'Produtos e serviços',sales:'Vendas',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
+const titles={overview:'Visão geral',inbox:'WhatsApp',connections:'Conexões',marketing:'Meta Ads',products:'Produtos e serviços',sales:'Vendas',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',settings:'Configurações da conta',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -139,9 +139,10 @@ async function boot(){
      (section==='marketing'&&!access.has('marketing.read')));
    }
    $('#teamNav')?.classList.toggle('hidden',!ownAccountAvailable());
-   const accountNav=$('#teamNav'),accountLabel=featureAvailable('team')&&access.has('team.read')?'Equipe':'Minha conta';
+   const accountNav=$('#teamNav'),accountLabel='Equipe';
    if(accountNav?.lastChild?.nodeType===3)accountNav.lastChild.textContent=' '+accountLabel;
    if(accountNav){accountNav.title=accountLabel;accountNav.setAttribute('aria-label',accountLabel);}
+   document.querySelector('.nav-item[data-view="settings"]')?.classList.toggle('hidden',!ownAccountAvailable());
    const marketingStatus=typeof location==='object'?new URL(location.href).searchParams.get('marketing'):null;
    const marketingProvider=typeof location==='object'?new URL(location.href).searchParams.get('provider'):null;
    const googleOAuth=typeof location==='object'?new URL(location.href).searchParams.get('google_ads'):null;
@@ -225,6 +226,8 @@ async function changeView(next,conversationId=null){
   if(next==='inbox'){await inbox();if(conversationId)await openThread(conversationId);}
   if(next==='marketing')await marketing();
   if(next==='team')await team();
+  if(next==='settings')await settings();
+  if(next==='settings')await settings();
   if(next==='admin')await admin();
  }catch(error){view.innerHTML=empty('!', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
 }
@@ -1237,6 +1240,33 @@ async function openThread(convId){
  if(!activeInbox)return;
  return activeInbox.open(convId);
 }
+async function settings(){
+ view.innerHTML=heading('CONTA','Configurações da conta.','Atualize seus dados de acesso e a segurança do seu perfil.')+
+ '<section class="card card-pad" style="margin-bottom:18px"><div class="section-title">Minha conta</div>'+
+ '<div class="socio-my-account"><form id="myPhoneForm" class="form-stack">'+
+ '<label>Meu celular para login<input name="phone" type="tel" maxlength="32" autocomplete="tel" value="'+e(state.me?.user?.phone||'')+'" placeholder="(15) 99999-9999"></label>'+
+ '<label>Senha atual<input name="currentPassword" type="password" required autocomplete="current-password"></label>'+
+ '<button class="btn soft" type="submit">Salvar celular</button></form>'+
+ '<form id="passwordChangeForm" class="form-stack">'+
+ '<label>Senha atual<input name="currentPassword" type="password" required autocomplete="current-password"></label>'+
+ '<label>Nova senha (mínimo 12 caracteres)<input name="newPassword" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>'+
+ '<button type="submit" class="btn primary">Alterar senha e encerrar outras sessões</button></form></div></section>';
+ $('#myPhoneForm')?.addEventListener('submit',async ev=>{
+  ev.preventDefault();const form=ev.currentTarget;
+  await action(async()=>{
+   const result=await api('/api/me/phone','POST',formValues(form));
+   state.me.user.phone=result.phone;toast('Dados de acesso atualizados.');await settings();
+  });
+ });
+ $('#passwordChangeForm')?.addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const form=ev.currentTarget;
+  await action(async()=>{
+   await api('/api/me/password','POST',formValues(form));
+   toast('Senha alterada. As outras sessões foram encerradas.');await settings();
+  });
+ });
+}
 async function team(){
  const permissions=new Set(state.me?.user?.permissions||[]);
  const ownAccountOnly=!featureAvailable('team')||state.me?.tenant?.status==='paused';
@@ -1247,8 +1277,8 @@ async function team(){
   !ownAccountOnly&&permissions.has('audit.read')?api('/api/ops/audit?limit=35'):Promise.resolve({events:[]}),
   !ownAccountOnly&&permissions.has('audit.read')?api('/api/ops/tenant-integrity'):Promise.resolve(null)
  ]);
- const roleLabel=role=>role==='owner'?'Proprietário':role==='admin'?'Administrador':'Atendente';
- const members=mayView?'<section class="card card-pad"><div class="section-title">Pessoas da empresa</div>'+
+ const roleLabel=role=>({owner:'Proprietário',admin:'Administrador',manager:'Gestor',viewer:'Somente leitura',agent:'Atendente'}[role]||role);
+ const members=mayView?'<section class="card card-pad"><div class="section-title">Usuários da empresa</div>'+
   '<p class="form-note">Acesso inativo encerra todas as sessões existentes e bloqueia novos logins. Proprietários não podem ser desativados nesta tela.</p>'+
   '<div class="table-wrap"><table class="data-table"><thead><tr><th>Colaborador</th><th>Permissão</th><th>Status</th><th>Ação</th></tr></thead><tbody>'+
   people.map(member=>{
@@ -1259,15 +1289,15 @@ async function team(){
     '<td><div class="socio-team-controls">'+(mayManage&&!protectedUser?
       '<button type="button" class="btn sm soft" data-team-toggle="'+e(member.id)+'" data-team-active="'+(!member.active)+'">'+
       (member.active?'Desativar':'Reativar')+'</button>'+
-      '<button type="button" class="btn sm ghost" data-team-role="'+e(member.id)+'" data-team-next-role="'+(member.role==='admin'?'agent':'admin')+'">'+
-      (member.role==='admin'?'Tornar atendente':'Tornar administrador')+'</button>':'<span class="form-note">—</span>')+
+      '<select aria-label="Alterar permissão de '+e(member.name)+'" data-team-select="'+e(member.id)+'">'+
+      [['viewer','Somente leitura'],['manager','Gestor'],['admin','Administrador']].map(([key,label])=>'<option value="'+key+'" '+(member.role===key?'selected':'')+'>'+label+'</option>').join('')+'</select>':'<span class="form-note">—</span>')+
     '</div></td></tr>';
   }).join('')+'</tbody></table></div></section>':'';
- const invite=mayInvite?'<section class="card card-pad"><div class="section-title">Novo colaborador</div>'+
+ const invite=mayInvite?'<section class="card card-pad" id="teamInvitePanel" hidden><div class="section-title">Adicionar usuário</div>'+
   '<form class="form-stack" id="teamForm"><label>Nome<input name="name" required maxlength="100"></label>'+
   '<label>E-mail<input name="email" type="email" required></label>'+
   '<label>Celular para login (opcional)<input name="phone" type="tel" maxlength="32" placeholder="(15) 99999-9999"></label>'+
-  '<label>Permissão<select name="role"><option value="agent">Atendente</option>'+
+  '<label>Permissão<select name="role"><option value="viewer">Somente leitura</option><option value="manager">Gestor</option>'+
   (mayPromote?'<option value="admin">Administrador da empresa</option>':'')+'</select></label>'+
   '<label>Senha inicial (mínimo 12 caracteres)<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>'+
   '<button type="submit" class="btn primary">Cadastrar colaborador</button>'+
@@ -1284,33 +1314,11 @@ async function team(){
   '<strong>'+e(integrity.preflightClean?'Nenhuma divergência encontrada neste diagnóstico':
     'Foram encontradas divergências que exigem revisão administrativa')+'</strong>'+
   '<p class="form-note">'+e(integrity.totalMismatches||0)+' relacionamento(s) divergente(s) na verificação.</p></section>':'';
- view.innerHTML=heading('ADMINISTRAÇÃO','Equipe e acessos.',
-  'Gerencie as permissões e a segurança da sua conta. Cada colaborador atua apenas na empresa autorizada.')+
- '<section class="card card-pad" style="margin-bottom:18px"><div class="section-title">Minha conta</div>'+
- '<div class="socio-my-account"><form id="myPhoneForm" class="form-stack">'+
- '<label>Meu celular para login<input name="phone" type="tel" maxlength="32" autocomplete="tel" value="'+e(state.me?.user?.phone||'')+'" placeholder="(15) 99999-9999"></label>'+
- '<label>Senha atual<input name="currentPassword" type="password" required autocomplete="current-password"></label>'+
- '<button class="btn soft" type="submit">Salvar celular</button></form>'+
- '<form id="passwordChangeForm" class="form-stack">'+
- '<label>Senha atual<input name="currentPassword" type="password" required autocomplete="current-password"></label>'+
- '<label>Nova senha (mínimo 12 caracteres)<input name="newPassword" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>'+
- '<button type="submit" class="btn primary">Alterar senha e encerrar outras sessões</button></form></div></section>'+
+ view.innerHTML=heading('ADMINISTRAÇÃO','Usuários da empresa.',
+  'Gerencie quem pode acessar o sistema e quais recursos cada pessoa pode utilizar.')+
+ (mayInvite?'<div class="socio-user-header"><button type="button" class="btn primary" id="teamInviteToggle">+ Adicionar usuário</button></div>':'')+
  (mayView?'<div class="socio-team-grid">'+members+invite+'</div>':'')+integrityBlock+log;
- $('#myPhoneForm')?.addEventListener('submit',async ev=>{
-  ev.preventDefault();const form=ev.currentTarget;
-  await action(async()=>{
-   const result=await api('/api/me/phone','POST',formValues(form));
-   state.me.user.phone=result.phone;toast('Dados de acesso atualizados.');await team();
-  });
- });
- $('#passwordChangeForm')?.addEventListener('submit',async ev=>{
-  ev.preventDefault();
-  const form=ev.currentTarget;
-  await action(async()=>{
-   await api('/api/me/password','POST',formValues(form));
-   toast('Senha alterada. As outras sessões foram encerradas.');await team();
-  });
- });
+ $('#teamInviteToggle')?.addEventListener('click',()=>{const panel=$('#teamInvitePanel');if(panel){panel.hidden=!panel.hidden;if(!panel.hidden)panel.querySelector('input')?.focus();}});
  $('#teamForm')?.addEventListener('submit',async ev=>{
   ev.preventDefault();const form=ev.currentTarget;
   await action(async()=>{
@@ -1326,13 +1334,10 @@ async function team(){
    toast(active?'Acesso reativado.':'Acesso desativado e sessões encerradas.');await team();
   });
  }));
- $$('[data-team-role]').forEach(btn=>btn.addEventListener('click',async()=>{
-  const nextRole=btn.dataset.teamNextRole;
-  if(!confirm('Alterar a permissão deste colaborador para '+roleLabel(nextRole)+'?'))return;
-  await action(async()=>{
-   await api('/api/team/'+btn.dataset.teamRole,'PATCH',{role:nextRole});
-   toast('Permissão atualizada.');await team();
-  });
+ $('[data-team-select]').forEach(select=>select.addEventListener('change',async()=>{
+  const nextRole=select.value;
+  if(!confirm('Alterar a permissão para '+roleLabel(nextRole)+'?')){await team();return;}
+  await action(async()=>{await api('/api/team/'+select.dataset.teamSelect,'PATCH',{role:nextRole});toast('Permissão atualizada.');await team();});
  }));
 }
 function featureChecks(flags={},prefix='feature-'){
@@ -1515,6 +1520,7 @@ const sidebarIcons={
  products:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 10h18M10 3v18"/>',
  training:'<path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8m8.6 8.6 2.8 2.8M2 12h4m12 0h4M4.9 19.1l2.8-2.8m8.6-8.6 2.8-2.8"/><circle cx="12" cy="12" r="3.4"/>',
  agent:'<path d="m12 2 2.7 7.3L22 12l-7.3 2.7L12 22l-2.7-7.3L2 12l7.3-2.7z"/>',
+ settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1m10 10 2.1 2.1M4.9 19.1 7 17m10-10 2.1-2.1"/>',
  team:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-1c0-3.6 2.5-5 6-5s6 1.4 6 5v1z"/><path d="M17 5a3 3 0 0 1 0 6m1 4c2 .5 3 1.8 3 4v1"/>',
  admin:'<path d="M3 21V5l9-3 9 3v16M3 21h18M9 21v-5h6v5M7 9h2m6 0h2M7 13h2m6 0h2"/>',
  logout:'<path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M14 7l5 5-5 5M9 12h10"/>'
