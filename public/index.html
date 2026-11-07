@@ -15,6 +15,7 @@
  <link rel="stylesheet" href="/meta-browser.css">
  <link rel="stylesheet" href="/prospector-socio.css">
  <link rel="stylesheet" href="/socio-executive.css">
+ <link rel="stylesheet" href="/socio-master.css">
  <script src="/meta-browser-ui.js" defer></script>
  <script src="/meta-local-ui.js" defer></script>
  <script src="/meta-official-ui.js" defer></script>
@@ -33,6 +34,7 @@
  <script src="/socio-interview-ui.js" defer></script>
  <script src="/socio-workspace-ui.js" defer></script>
  <script src="/socio-thalita-ui.js" defer></script>
+ <script src="/socio-master-dashboard.js" defer></script>
  <script src="/app.js" defer></script>
  <script src="/ads-media-ui.js" defer></script>
 </head>
@@ -81,7 +83,7 @@
   <div class="sidebar-logo"><div class="brand-mark">s<span>.</span></div><div><strong>Sócio</strong><small>por Consecom</small></div></div>
   <div class="workspace-box"><span class="workspace-circle" id="workspaceInitial">C</span><div class="workspace-label"><small>SEU ESPAÇO</small><strong id="workspaceName">Empresa</strong></div><span class="workspace-chevron">⌄</span></div>
   <div class="sidebar-label">MENU PRINCIPAL</div>
-  <nav class="nav" aria-label="Menu principal">
+  <nav class="nav" id="productionNav" aria-label="Menu do painel de produção">
    <button data-view="overview" class="nav-item selected"><span class="nav-symbol">◈</span> Visão geral</button>
    <button data-view="inbox" class="nav-item"><span class="nav-symbol">▤</span> WhatsApp</button>
    <button data-view="connections" class="nav-item"><span class="nav-symbol">⌁</span> Conexões</button>
@@ -93,6 +95,12 @@
    <div class="sidebar-label inner">ADMINISTRAÇÃO</div>
    <button data-view="team" class="nav-item" id="teamNav"><span class="nav-symbol">♙</span> Equipe</button>
    <button data-view="admin" class="nav-item hidden" id="adminNav"><span class="nav-symbol">▧</span> Empresas</button>
+  </nav>
+  <nav class="nav master-side-nav hidden" id="masterNav" aria-label="Menu do painel Master">
+   <div class="sidebar-label inner master-nav-title">ADMINISTRAÇÃO DO SAAS</div>
+   <button data-view="masterOverview" class="nav-item selected"><span class="nav-symbol">▤</span> Dashboard</button>
+   <button data-view="admin" class="nav-item"><span class="nav-symbol">▧</span> Empresas</button>
+   <button data-view="masterPlans" class="nav-item"><span class="nav-symbol">▥</span> Planos e métricas</button>
   </nav>
   <div class="sidebar-bottom">
    <button id="masterProductionSwitch" type="button" class="nav-item hidden" aria-label="Alternar painel Master e produção"><span class="nav-symbol" aria-hidden="true">⇄</span> <span id="masterSwitchLabel">Painel Master</span></button>
