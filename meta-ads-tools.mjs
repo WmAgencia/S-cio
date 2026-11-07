@@ -22,7 +22,7 @@ async function context(pool,a,options={},write=false){
  return {account,token:secret.token,options};
 }
 async function graph(c,path,params={},method='GET'){
- if(!/^\/(act_\d+|\d+|search)(\/(campaigns|adsets|ads|adcreatives|adimages|adspixels|insights|promote_pages))?$/.test(path))throw fail(422,'Operação Meta inválida.');
+ if(!/^\/(act_\d+|\d+|search)(\/(campaigns|adsets|ads|adcreatives|adimages|adspixels|insights|promote_pages|previews))?$/.test(path))throw fail(422,'Operação Meta inválida.');
  const cfg=officialConfig(c.options.env||process.env),url=new URL('https://graph.facebook.com/'+cfg.version+path);
  const body=new URLSearchParams();
  for(const [k,v] of Object.entries(params))body.set(k,typeof v==='object'?JSON.stringify(v):String(v));
@@ -318,7 +318,7 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
    posterUrl=safeMedia(original?.url)||null;
   }catch{/* Continue with safe thumbnail if account image library is unavailable. */}
  }
- let status=videoId&&numeric(videoId)?'video_unavailable':'image';
+ let status=videoId&&numeric(videoId)?'video_unavailable':'image',previewUrl=null;
  if(numeric(videoId)){
   try{
    const video=await graph(c,'/'+videoId,{fields:'id,source,picture'});
@@ -341,9 +341,26 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
    }
   }catch{/* Some placements do not expose a stream even with ads_read. */}
  }
+ if(!videoUrl){
+  // Meta can render ad videos through the official ad-preview iframe even
+  // when the video.source field isn't accessible to the ads_read token.
+  // Never insert HTML from Meta. Only extract a validated Facebook iframe URL.
+  try{
+   const preview=await graph(c,'/'+adId+'/previews',{ad_format:'MOBILE_FEED_STANDARD'});
+   const html=String(preview?.data?.[0]?.body||'').slice(0,6500);
+   const raw=html.match(/<iframe[^>]+\bsrc=["']([^"']+)["']/i)?.[1];
+   if(raw){
+    const parsed=new URL(raw.replace(/&amp;/g,'&'));
+    if(parsed.protocol==='https:'&&parsed.hostname==='www.facebook.com'&&
+      parsed.pathname==='/ads/api/preview_iframe.php'&&parsed.href.length<=3300&&
+      !/[?&](?:access_token|appsecret_proof|token)=/i.test(parsed.search))
+     previewUrl=parsed.href;
+   }
+  }catch{/* Some placements do not have a supported official feed preview. */}
+ }
  return {readOnly:true,adId,accountId:c.account.id,campaignId:String(ad.campaign_id||''),
   name:String(ad.name||'').slice(0,200),thumbnailUrl,
-  posterUrl:posterUrl||thumbnailUrl,videoUrl,videoId:numeric(videoId)?videoId:null,
+  posterUrl:posterUrl||thumbnailUrl,videoUrl,previewUrl,videoId:numeric(videoId)?videoId:null,
   watchUrl:numeric(videoId)?'https://www.facebook.com/watch/?v='+videoId:null,
   quality:posterUrl?'original_or_video':'thumbnail_only',
   status,
