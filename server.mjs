@@ -428,7 +428,8 @@ async function handle(req,res){
  }
  if(method==='GET'&&pathname==='/api/me')return json(res,200,{
   user:{id:a.user_id,name:a.name,email:a.email,phone:a.phone,role:a.role,
-   platformOwner:a.platform_owner,permissions:filterPermissions(permissionsFor(a.role,a.platform_owner),a.features)},
+   platformOwner:a.platform_owner,homeTenantId:(a.platform_owner&&a.role==='owner')?a.tenant_id:null,
+   permissions:filterPermissions(permissionsFor(a.role,a.platform_owner),a.features)},
   tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status,
    features:parseTenantFeatures(a.features),quoteAlertWhatsApp:a.quote_alert_whatsapp===true},
   csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
