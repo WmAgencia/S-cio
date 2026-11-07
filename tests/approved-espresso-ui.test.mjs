@@ -3,18 +3,20 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const load=p=>readFileSync(new URL('../public/'+p,import.meta.url),'utf8');
 
-test('approved espresso palette has orange glow, green status and is loaded last',()=>{
- const html=load('index.html'),css=load('ember-theme.css');
- assert.match(html,/meta name="theme-color" content="#120b07"/);
+test('Prospector visual is now the final layer, with legacy dashboard components retained',()=>{
+ const html=load('index.html'),legacy=load('ember-theme.css'),css=load('prospector-socio.css');
+ assert.match(html,/meta name="theme-color" content="#f7f6ff"/);
  assert.ok(html.indexOf('/ember-theme.css')>html.indexOf('/cloud-theme.css'));
- for(const value of ['--bg:#100907','--orange:#ff791c','--green:#58d08a',
-  '.ember-kpi-grid','.ember-primary-grid','.ember-secondary-grid','.ember-qr-card',
-  '.ember-ai-card','.ember-recent-card','.ember-status.green']){
-  assert.ok(css.includes(value),'missing approved visual token / component: '+value);
- }
- assert.match(css,/\.sidebar\{width:218px/);
- assert.match(css,/@media\(max-width:630px\)/);
+ assert.ok(html.indexOf('/prospector-socio.css')>html.indexOf('/meta-browser.css'));
+ assert.match(css,/--bg:#f7f6ff/);
+ assert.match(css,/--purple:#6738f7/);
+ assert.match(css,/\.ps-interview-welcome/);
+ assert.match(css,/\.ps-mode-grid/);
+ assert.match(css,/@media\(max-width:780px\)/);
  assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
+ for(const value of ['.ember-kpi-grid','.ember-primary-grid','.ember-secondary-grid',
+  '.ember-qr-card','.ember-ai-card','.ember-recent-card','.ember-status.green'])
+  assert.ok(legacy.includes(value),'business layout was removed: '+value);
 });
 
 test('approved layout uses real tenant counts, three live chart filters and no fake QR',()=>{
