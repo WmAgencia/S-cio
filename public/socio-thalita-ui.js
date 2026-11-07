@@ -5,7 +5,7 @@
  let instance=null,api=null,me=null,csrf=null,busy=false,session=null,speaking=false,
   playbackContext=null,playbackSource=null,abort=null,finalize=null,turnRunId=null,voiceRequested=false,
   voiceEpoch=0,transcriptionAbort=null,queryEpoch=0,startingVoice=false,
-  activeQueryAbort=null,responseDisplayTimer=null,recentHistory=[];
+  activeQueryAbort=null,responseDisplayTimer=null,recentHistory=[],semanticFlow=null,lastShortVoice=null;
  const get=sel=>instance?.querySelector(sel);
  // Audio output is unlocked by the explicit microphone click using a shared
  // Web Audio context. A new Audio().play() after asynchronous STT/LLM/TTS often
@@ -31,6 +31,7 @@
   const send=get('[data-thalita-send]');if(send)send.disabled=false;
  }
  function closeVoice(){
+  semanticFlow?.reset();semanticFlow=null;lastShortVoice=null;
   voiceEpoch++;cancelPendingAnswer();startingVoice=false;
   if(transcriptionAbort){transcriptionAbort.abort();transcriptionAbort=null;}
   const activeSession=session;session=null;voiceRequested=false;
@@ -74,7 +75,8 @@
  const meaningfulVoiceText=text=>{
   const normalized=String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[!?.,]/g,'').trim();
   // STT hallucinations produced repeatedly by silence/ambient noise.
-  return normalized.length>=3&&!/^(?:e ai\s*)+$|^(?:oi|ola|hum|aham|ta|ok|obrigado|e|ai|sim|nao)$/.test(normalized);
+  return normalized.length>=3&&
+   !/^(?:e ai\s*)+$|^(?:oi|ola|hum|aham|ta|ok|obrigado|e|ai|sim|nao|com voce|vem com voce)$/.test(normalized);
  };
  function setStatus(message){
   const label=get('#thalitaVoiceState');if(label)label.textContent=String(message);
@@ -172,7 +174,10 @@
    startingVoice=false;setStatus('Microfone indisponível neste navegador. Use o chat.');return;
   }
   try{
-   const {createSocioVoiceSession}=await import('/socio-francisca-live.mjs');
+   const [{createSocioVoiceSession},{newSemanticTurnBuffer}]=await Promise.all([
+    import('/socio-francisca-live.mjs'),import('/socio-semantic-turn.mjs')
+   ]);
+   semanticFlow=newSemanticTurnBuffer({maxWaitMs:16000,maxParts:3,maxChars:950});
    if(startingEpoch!==voiceEpoch)return;
    const newSession=createSocioVoiceSession({
     canInterrupt:()=>session===newSession&&speaking,
@@ -200,7 +205,16 @@
       if(controller.signal.aborted||epoch!==voiceEpoch||!voiceRequested||session!==newSession)return;
       if(!resp.ok)throw Error(data.error||'Transcrição indisponível');
       if(!meaningfulVoiceText(data.text)){setStatus('Não identifiquei uma solicitação clara. Pode continuar falando.');return;}
-      await run(data.text,{voiceToken:epoch});
+      const spoken=String(data.text).trim();
+      const compact=spoken.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[!?.\s]+/g,' ').trim();
+      // Ambient hallucinations often recur within a few seconds.
+      if(compact.length<24&&lastShortVoice?.text===compact&&Date.now()-lastShortVoice.at<10000){
+       setStatus('Estou ouvindo. Pode continuar.');return;
+      }
+      if(compact.length<24)lastShortVoice={text:compact,at:Date.now()};
+      const assessed=semanticFlow?.take(spoken)||{hold:false,text:spoken};
+      if(assessed.hold){setStatus('Pode continuar falando. Vou esperar você terminar.');return;}
+      await run(assessed.text,{voiceToken:epoch});
      }catch(error){
       if(!controller.signal.aborted&&epoch===voiceEpoch&&voiceRequested&&session===newSession)throw error;
      }finally{if(transcriptionAbort===controller)transcriptionAbort=null;}

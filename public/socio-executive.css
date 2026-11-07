@@ -197,3 +197,77 @@ body .socio-catalog-clean #newProduct:hover,body .px-campaign-picker .btn.primar
 @media(max-width:840px){.px-featured-item{grid-template-columns:minmax(95px,38%) minmax(0,1fr);gap:12px}.px-featured-video .px-feature-media{min-height:180px}.px-feature-stats{gap:8px}}
 @media(max-width:550px){.px-featured-item{grid-template-columns:1fr}.px-feature-media{max-width:100%;aspect-ratio:16/9;min-height:170px}.px-featured-video .px-feature-media{aspect-ratio:16/9;min-height:200px}.px-feature-video{max-height:270px}.px-feature-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.px-initial-grid{grid-template-columns:1fr}.px-initial-grid>div{min-height:65px}}
 @media(prefers-reduced-motion:reduce){.px-initial-view{animation:none}}
+
+/* Media cards v2: never let a thumbnail, video or long campaign title define
+   the width of a grid track. This also fixes the overview overlap shown on
+   7 Nov: media was occupying the adjacent metrics column. */
+.px-workspace,.px-workspace>.px-panel,.px-workspace>.px-dual,.px-dual>.px-panel{min-width:0;max-width:100%;box-sizing:border-box}
+.px-overview .px-dual{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr)}
+.px-panel{overflow:hidden}
+.px-featured-item,.px-featured-item.px-featured-video{
+ display:flex;flex-direction:row;flex-wrap:nowrap;align-items:flex-start;
+ gap:14px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;
+}
+.px-featured-item>.px-feature-media{
+ position:relative;box-sizing:border-box;display:flex;align-items:center;justify-content:center;
+ flex:0 0 min(34%,220px);min-width:0;width:min(34%,220px);max-width:220px;
+ height:190px;max-height:190px;min-height:0;aspect-ratio:auto;overflow:hidden;
+ background:#f0ecf7;border:1px solid #e4dced;border-radius:13px;
+}
+.px-featured-video>.px-feature-media,
+.px-featured-item.px-featured-video>.px-feature-media{
+ flex-basis:min(37%,250px);width:min(37%,250px);max-width:250px;
+ height:294px;max-height:294px;min-height:0;aspect-ratio:auto;
+}
+.px-feature-media .px-feature-poster{
+ display:block;width:100%;height:100%;max-width:100%;max-height:100%;
+ object-fit:contain;object-position:center;background:#f1edf8;
+}
+.px-feature-media.px-media-lowres .px-feature-poster{
+ width:auto;height:auto;max-width:100%;max-height:120px;object-fit:contain;
+}
+.px-feature-media.px-media-lowres:after{
+ content:'Prévia reduzida fornecida pela Meta';display:block;position:absolute;
+ inset:auto 4px 4px 4px;text-align:center;color:#776987;font-size:9px;
+ padding:4px;background:#f8f6fbe8;border-radius:5px;pointer-events:none;
+}
+.px-featured-item>.px-feature-details{
+ flex:1 1 0;min-width:0;width:0;max-width:100%;overflow-wrap:anywhere;
+ display:flex;flex-direction:column;gap:12px;padding:0;
+}
+.px-feature-details>strong{display:block;min-width:0;max-width:100%;
+ font-size:clamp(12px,1.2vw,16px);line-height:1.4;white-space:normal;
+ word-break:normal;overflow-wrap:anywhere;hyphens:auto;margin:0}
+.px-feature-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:100%}
+.px-feature-stats>span{min-width:0;overflow-wrap:anywhere}
+.px-feature-stats b{font-size:clamp(12px,1.2vw,15px)}
+.px-feature-video{display:block;width:100%;height:100%;max-height:100%;max-width:100%;background:#1d1725;
+ object-fit:contain;border-radius:12px}
+.px-media-play{position:absolute;z-index:2;left:50%;top:50%;transform:translate(-50%,-50%);
+ border:1px solid #fffaf0;background:#28194fe8;color:#fff;box-shadow:0 7px 30px #0005;
+ border-radius:99px;padding:11px 14px;min-height:44px;font-weight:780;font-size:12px;cursor:pointer;
+ display:flex;align-items:center;gap:8px;white-space:nowrap;max-width:calc(100% - 10px)}
+.px-media-play>span{display:grid;place-items:center;border-radius:50%;background:#fff;color:#422c72;width:22px;height:22px;font-size:10px}
+.px-media-play:hover:not(:disabled),.px-media-play:focus-visible{background:#6e42dc;color:white;outline-offset:3px}
+.px-media-play:disabled{opacity:.85;cursor:default;font-size:10px;white-space:normal}
+.px-media-external{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+ border-radius:9px;padding:10px;background:#fff;color:#5330ba;font-weight:700;
+ white-space:nowrap;max-width:calc(100% - 16px);font-size:11px}
+.px-media-external:hover,.px-media-external:focus-visible{background:#e7ddff;color:#3c208f}
+@media(max-width:1100px){
+ .px-overview .px-dual{grid-template-columns:minmax(0,1fr)}
+ .px-featured-item>.px-feature-media{flex-basis:min(37%,195px);width:min(37%,195px);height:190px}
+}
+@media(max-width:600px){
+ .px-featured-item,.px-featured-item.px-featured-video{flex-direction:column}
+ .px-featured-item>.px-feature-media,
+ .px-featured-item.px-featured-video>.px-feature-media{flex:none;width:100%;max-width:100%;
+  height:230px;max-height:230px}
+ .px-featured-item>.px-feature-details{flex:auto;width:100%;max-width:100%}
+ .px-feature-details>strong{font-size:15px}
+}
+
+/* Official Meta ad preview is displayed only after the user's Play click. */
+.px-meta-preview-frame{display:block;width:100%;height:100%;min-height:240px;border:0;border-radius:12px;background:#fff;max-width:100%}
+.px-featured-item.px-featured-video .px-feature-media:has(.px-meta-preview-frame){max-width:320px;flex-basis:min(40%,320px);width:min(40%,320px);height:330px;max-height:330px}
+@media(max-width:600px){.px-featured-item.px-featured-video .px-feature-media:has(.px-meta-preview-frame){max-width:100%;flex-basis:auto;width:100%;height:345px;max-height:345px}}

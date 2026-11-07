@@ -22,7 +22,7 @@ async function context(pool,a,options={},write=false){
  return {account,token:secret.token,options};
 }
 async function graph(c,path,params={},method='GET'){
- if(!/^\/(act_\d+|\d+|search)(\/(campaigns|adsets|ads|adcreatives|adimages|adspixels|insights|promote_pages))?$/.test(path))throw fail(422,'Operação Meta inválida.');
+ if(!/^\/(act_\d+|\d+|search)(\/(campaigns|adsets|ads|adcreatives|adimages|adspixels|insights|promote_pages|previews))?$/.test(path))throw fail(422,'Operação Meta inválida.');
  const cfg=officialConfig(c.options.env||process.env),url=new URL('https://graph.facebook.com/'+cfg.version+path);
  const body=new URLSearchParams();
  for(const [k,v] of Object.entries(params))body.set(k,typeof v==='object'?JSON.stringify(v):String(v));
@@ -48,7 +48,7 @@ async function availablePages(c){
 }
 export async function readAdsTool(pool,a,kind,input={},options={}){
  const c=await context(pool,a,options),id=c.account.id;
- const fields={campaigns:'id,name,status,effective_status,objective,daily_budget,lifetime_budget',adsets:'id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,targeting',ads:'id,name,campaign_id,adset_id,status,effective_status,creative{id,name,thumbnail_url,video_id}',images:'hash,name,url,width,height',pages:'id,name'};
+ const fields={campaigns:'id,name,status,effective_status,objective,daily_budget,lifetime_budget',adsets:'id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,targeting',ads:'id,name,campaign_id,adset_id,status,effective_status,creative{id,name,image_url,thumbnail_url,video_id,object_story_spec}',images:'hash,name,url,width,height',pages:'id,name'};
  if(kind==='finance'){
   const data=await graph(c,'/'+id,{fields:'id,name,currency,amount_spent,spend_cap,account_status,business{id}'});
   const billing=new URL('https://adsmanager.facebook.com/billing_hub/payment_settings/');
@@ -283,7 +283,7 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
  if(!numeric(adId))throw fail(422,'Selecione um anúncio válido.');
  const c=await context(pool,a,options);
  const ad=await graph(c,'/'+adId,{
-  fields:'id,name,account_id,campaign_id,creative{id,thumbnail_url,video_id,object_story_spec}'
+  fields:'id,name,account_id,campaign_id,creative{id,image_url,image_hash,thumbnail_url,video_id,object_story_spec,asset_feed_spec}'
  });
  const account=String(c.account.id||'').replace(/^act_/,'');
  if(String(ad?.account_id)!==account||String(ad?.id)!==adId)
@@ -298,21 +298,73 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
    return /(^|\.)(fbcdn\.net|fbsbx\.com|cdninstagram\.com)$/.test(host)?url.href:null;
   }catch{return null;}
  };
- const videoId=String(creative.video_id||creative.object_story_spec?.video_data?.video_id||'');
- let thumbnailUrl=safeMedia(creative.thumbnail_url||creative.object_story_spec?.video_data?.image_url),videoUrl=null;
- let status=videoId&&numeric(videoId)?'video_unavailable':'image';
+ const videoId=String(creative.video_id||creative.object_story_spec?.video_data?.video_id||
+  creative.asset_feed_spec?.videos?.[0]?.video_id||'');
+ // Meta creative.thumbnail_url can be a 64px image. Use image_url
+ // (original creative resolution) or the video image when available.
+ const imageUrl=safeMedia(creative.image_url||
+  creative.object_story_spec?.video_data?.image_url||
+  creative.object_story_spec?.link_data?.picture||
+  creative.asset_feed_spec?.images?.[0]?.url);
+ let thumbnailUrl=safeMedia(creative.thumbnail_url),videoUrl=null;
+ let posterUrl=imageUrl;
+ const imageHash=String(creative.image_hash||'');
+ if(!posterUrl&&/^[0-9a-fA-F]{32}$/.test(imageHash)){
+  try{
+   const images=await graph(c,'/'+c.account.id+'/adimages',{
+    fields:'hash,url,width,height',hashes:[imageHash],limit:1
+   });
+   const original=(images.data||[]).find(item=>item.hash?.toLowerCase()===imageHash.toLowerCase());
+   posterUrl=safeMedia(original?.url)||null;
+  }catch{/* Continue with safe thumbnail if account image library is unavailable. */}
+ }
+ let status=videoId&&numeric(videoId)?'video_unavailable':'image',previewUrl=null;
  if(numeric(videoId)){
   try{
    const video=await graph(c,'/'+videoId,{fields:'id,source,picture'});
    if(String(video.id)===videoId){
     videoUrl=safeMedia(video.source);
+    posterUrl=posterUrl||safeMedia(video.picture);
     thumbnailUrl=thumbnailUrl||safeMedia(video.picture);
+    // Separate optional lookup: a thumbnails permission failure must not
+    // discard an otherwise playable video stream.
+    if(!imageUrl){
+     try{
+      const thumbs=await graph(c,'/'+videoId,{fields:'thumbnails{uri,width,height,is_preferred}'});
+      const pictures=Array.isArray(thumbs.thumbnails?.data)?thumbs.thumbnails.data:[];
+      const largest=pictures.filter(t=>safeMedia(t.uri)).sort((a,b)=>
+       (Number(b.width)||0)*(Number(b.height)||0)-(Number(a.width)||0)*(Number(a.height)||0))[0];
+      if(largest&&(Number(largest.width)||0)>=320)posterUrl=safeMedia(largest.uri)||posterUrl;
+     }catch{/* Optional high-resolution asset unavailable to this token. */}
+    }
     if(videoUrl)status='video_ready';
    }
   }catch{/* Some placements do not expose a stream even with ads_read. */}
  }
+ if(!videoUrl){
+  // Meta can render ad videos through the official ad-preview iframe even
+  // when the video.source field isn't accessible to the ads_read token.
+  // Never insert HTML from Meta. Only extract a validated Facebook iframe URL.
+  try{
+   const preview=await graph(c,'/'+adId+'/previews',{ad_format:'MOBILE_FEED_STANDARD'});
+   const html=String(preview?.data?.[0]?.body||'').slice(0,6500);
+   const raw=html.match(/<iframe[^>]+\bsrc=["']([^"']+)["']/i)?.[1];
+   if(raw){
+    const parsed=new URL(raw.replace(/&amp;/g,'&'));
+    if(parsed.protocol==='https:'&&parsed.hostname==='www.facebook.com'&&
+      parsed.pathname==='/ads/api/preview_iframe.php'&&parsed.href.length<=3300&&
+      !/[?&](?:access_token|appsecret_proof|token)=/i.test(parsed.search))
+     previewUrl=parsed.href;
+   }
+  }catch{/* Some placements do not have a supported official feed preview. */}
+ }
  return {readOnly:true,adId,accountId:c.account.id,campaignId:String(ad.campaign_id||''),
-  name:String(ad.name||'').slice(0,200),thumbnailUrl,videoUrl,status,
-  note:videoUrl?'Prévia autorizada da Meta. A reprodução só inicia após clicar.':
-   'A Meta não disponibilizou um arquivo reproduzível para este criativo; exiba a miniatura quando disponível.'};
+  name:String(ad.name||'').slice(0,200),thumbnailUrl,
+  posterUrl:posterUrl||thumbnailUrl,videoUrl,previewUrl,videoId:numeric(videoId)?videoId:null,
+  watchUrl:numeric(videoId)?'https://www.facebook.com/watch/?v='+videoId:null,
+  quality:posterUrl?'original_or_video':'thumbnail_only',
+  status,
+  note:videoUrl?'Vídeo retornado pela Meta. Reprodução mediante clique.':
+   numeric(videoId)?'A Meta não forneceu MP4 reproduzível nesta conexão. Abra o vídeo na Meta pelo botão de visualização.':
+   'Este criativo não disponibilizou vídeo reproduzível; exiba a melhor imagem fornecida.'};
 }
