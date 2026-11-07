@@ -351,6 +351,7 @@
    '<div class="px-page-heading"><div><span class="px-eyebrow">MÍDIA PAGA · META ADS</span><h1>Campanhas e desempenho</h1>'+
     '<p>Seus anúncios, resultados e custo de mídia — sem configurar contas nesta página.</p></div>'+btn+'</div>'+
    (!connected||!selected?'<div class="px-notice"><strong>'+(!connected?'Conecte a Meta para visualizar as campanhas.':'Selecione a conta de anúncios em Conexões.')+'</strong><p>A autorização é feita em Conexões, por login oficial do Facebook.</p></div>':'')+
+   '<p class="px-live-indicator" aria-live="off"><span class="px-live-dot"></span>Atualização automática a cada 30 segundos · dados retornados pela Meta</p>'+
    '<div class="px-marketing-filters" role="group" aria-label="Período dos anúncios">'+
      [['today','Hoje'],['last_7d','7 dias'],['last_30d','30 dias']].map(([v,l])=>
        '<button type="button" class="'+(period===v?'selected':'')+'" data-px-period="'+v+'" aria-pressed="'+(period===v)+'">'+l+'</button>').join('')+'</div>'+
@@ -363,7 +364,7 @@
     kpi('Anúncios ativos',data?.ads.ok?number(data.activeAds):'—','Situação atual dos anúncios','◉','blue')+
    '</div>'+
    section('Suas campanhas','Ativas, pausadas e rascunhos retornados pela Meta',
-    data?.campaigns.ok?(decoratedCampaigns.length?advertRows(decoratedCampaigns,insightsMap,currency):empty('A conta não retornou campanhas.')):
+    data?.campaigns.ok?(decoratedCampaigns.length?advertRows(decoratedCampaigns,insightsMap,currency,can(me,'marketing.manage'),data.adsetList||[]):empty('A conta não retornou campanhas.')):
       empty(data?.campaigns.reason||'Conecte uma conta para listar campanhas.'))+
    section('Anúncio em destaque','Comparação de resultados na mesma conta e período',
     data?.bestAd?'<div class="px-featured-item px-featured-video">'+
@@ -384,7 +385,16 @@
       empty('Nenhum anúncio retornado pela conta.')):empty('Os anúncios estão indisponíveis até autorizar a leitura.'))+
    section('Interpretação dos resultados','As plataformas reportam atribuições, não pagamentos conciliados',
     '<div class="px-footnote">O CPA é calculado apenas quando a Meta retorna eventos Purchase. Esses eventos não são prova de pedido pago. Sem evento válido, o painel mostra “—”, em vez de inventar resultados.</div>')+
-   ''+
+   '<dialog id="pxCampaignDialog" class="px-campaign-dialog" aria-labelledby="pxActionTitle">'+
+    '<div class="px-action-dialog-content"><div class="px-action-heading"><h2 id="pxActionTitle">Alterar campanha</h2><button type="button" class="px-dialog-close" data-px-action-close aria-label="Fechar">×</button></div>'+
+    '<p id="pxActionDetails" class="px-dialog-help"></p>'+
+    '<label id="pxDailyBudgetField" hidden>Orçamento diário ('+esc(currency||'moeda da conta')+')'+
+      '<input id="pxNewDailyBudget" type="text" inputmode="decimal" placeholder="Ex.: 25,00" autocomplete="off" maxlength="12"></label>'+
+    '<p id="pxActionPreview" class="px-preview-text" hidden></p>'+
+    '<p id="pxActionFeedback" role="status" class="px-dialog-feedback" aria-live="polite"></p>'+
+    '<div class="px-action-dialog-buttons"><button type="button" class="btn soft" data-px-action-close>Cancelar</button>'+
+      '<button type="button" class="btn primary" data-px-action-review>Revisar alteração</button>'+
+      '<button type="button" class="btn primary" data-px-action-confirm hidden>Confirmar na Meta</button></div></div></dialog>'+
    '</div>';
   snapshots.set('marketing',root.innerHTML);
   if(data?.bestAd?.id){
@@ -447,6 +457,97 @@
     }
    });
   }
+  // Manual campaign actions reuse the server's 15-minute plan, second
+  // confirmation and tenant/selected-account validation. No action is made
+  // directly by clicking a row or editing an input.
+  const modal=root.querySelector('#pxCampaignDialog');
+  const feedback=modal?.querySelector('#pxActionFeedback'),preview=modal?.querySelector('#pxActionPreview');
+  const title=modal?.querySelector('#pxActionTitle'),details=modal?.querySelector('#pxActionDetails');
+  const budgetField=modal?.querySelector('#pxDailyBudgetField');
+  const budgetInput=modal?.querySelector('#pxNewDailyBudget');
+  const review=modal?.querySelector('[data-px-action-review]');
+  const confirm=modal?.querySelector('[data-px-action-confirm]');
+  const allItems=[...decoratedCampaigns.map(item=>({...item,kind:'campaign'})),
+   ...(data?.adsetList||[]).map(item=>({...item,kind:'adset'}))];
+  let edit=null,draftId=null,submitting=false;
+  const closeModal=()=>{
+   if(submitting)return;
+   draftId=null;edit=null;
+   if(modal?.open)modal.close();
+  };
+  modal?.querySelectorAll('[data-px-action-close]').forEach(button=>button.addEventListener('click',closeModal));
+  modal?.addEventListener('cancel',event=>{if(submitting)event.preventDefault();else{draftId=null;edit=null;}});
+  const setDialogBusy=busy=>{
+   submitting=busy;if(review)review.disabled=busy;if(confirm)confirm.disabled=busy;
+  };
+  const parseDailyBudget=value=>{
+   const match=String(value||'').trim().replace(/^R\\$\\s*/,'').match(/^(\\d{1,6})(?:[,.](\\d{1,2}))?$/);
+   if(!match)throw Error('Digite um orçamento diário válido. Exemplo: 25,00.');
+   const cents=Number(match[1])*100+Number((match[2]||'').padEnd(2,'0')||'0');
+   if(cents<100||cents>10000000)throw Error('Orçamento permitido neste painel: de 1,00 a 100.000,00.');
+   return cents;
+  };
+  root.querySelectorAll('[data-px-manage-status],[data-px-manage-budget]').forEach(button=>{
+   button.addEventListener('click',()=>{
+    const kind=button.dataset.pxEntity,id=button.dataset.pxManageStatus||button.dataset.pxManageBudget;
+    const item=allItems.find(x=>x.kind===kind&&String(x.id)===String(id));
+    if(!item||!can(me,'marketing.manage'))return;
+    edit={kind:button.hasAttribute('data-px-manage-budget')?'budget':'status',entity:kind,item,
+     next:button.dataset.pxNext||null};
+    draftId=null;if(preview){preview.hidden=true;preview.textContent='';}
+    if(feedback)feedback.textContent='';
+    if(confirm)confirm.hidden=true;
+    if(review)review.hidden=false;
+    if(budgetField)budgetField.hidden=edit.kind!=='budget';
+    const kindLabel=kind==='campaign'?'Campanha':'Conjunto de anúncios';
+    if(title)title.textContent=edit.kind==='budget'?'Editar orçamento diário':edit.next==='PAUSED'?'Pausar campanha':'Ativar campanha';
+    if(details)details.textContent=kindLabel+': '+String(item.name||item.id)+
+     (edit.kind==='status'?(edit.next==='ACTIVE'?' · Pode iniciar gastos de publicidade.':' · Vai interromper a veiculação.'):' · Orçamento atual '+formattedDaily(item.daily_budget,currency));
+    if(budgetInput&&edit.kind==='budget')budgetInput.value=(Number(item.daily_budget)/100).toFixed(2).replace('.',',');
+    if(modal&&!modal.open)modal.showModal();
+    if(edit.kind==='budget')budgetInput?.focus();else review?.focus();
+   });
+  });
+  review?.addEventListener('click',async()=>{
+   if(!edit||submitting)return;
+   setDialogBusy(true);if(feedback)feedback.textContent='Conferindo a alteração com a Meta…';
+   try{
+    const input={entity:edit.entity,id:String(edit.item.id)};
+    if(edit.kind==='budget'){
+     input.dailyBudgetCents=parseDailyBudget(budgetInput.value);
+     if(input.dailyBudgetCents===Number(edit.item.daily_budget))throw Error('Esse já é o orçamento atual.');
+    }else input.status=edit.next;
+    const plan=await api('/api/marketing/tools/plan','POST',{kind:edit.kind,input});
+    if(!plan?.id||!plan.requiresConfirmation)throw Error('O Sócio não recebeu uma prévia segura da Meta.');
+    draftId=plan.id;
+    const change=edit.kind==='budget'?
+     'De '+formattedDaily(edit.item.daily_budget,currency)+' para '+formattedDaily(input.dailyBudgetCents,currency)+'.':
+     edit.next==='ACTIVE'?'Ativar a veiculação. A Meta poderá gastar conforme os orçamentos configurados.':'Pausar a veiculação desta campanha.';
+    if(preview){preview.textContent=change+' Confirme somente se está correto.';preview.hidden=false;}
+    if(feedback)feedback.textContent='Prévia pronta. Nada foi alterado ainda.';
+    review.hidden=true;confirm.hidden=false;confirm.focus();
+   }catch(error){draftId=null;if(feedback)feedback.textContent=String(error.message||'Não foi possível gerar a prévia.');}
+   finally{setDialogBusy(false);}
+  });
+  confirm?.addEventListener('click',async()=>{
+   if(!draftId||!edit||submitting)return;
+   setDialogBusy(true);if(feedback)feedback.textContent='Confirmando a alteração na Meta…';
+   try{
+    const result=await api('/api/marketing/tools/execute','POST',{planId:draftId,confirmed:true});
+    if(result?.status!=='succeeded')throw Error(result?.error||'A Meta não confirmou a alteração. Verifique o Gerenciador antes de tentar novamente.');
+    if(feedback)feedback.textContent='Alteração confirmada pela Meta. Atualizando indicadores…';
+    // The new status/budget is fetched from the Meta API, not guessed in UI.
+    getCache.clear();snapshots.delete('marketing');snapshots.delete('overview');
+    draftId=null;submitting=false;
+    modal.close();
+    await marketing({root,api,me,navigate,period});
+   }catch(error){
+    if(feedback)feedback.textContent=String(error.message||'Não foi possível concluir. Confira antes de repetir.');
+    draftId=null;
+    confirm.hidden=true;review.hidden=false;
+    setDialogBusy(false);
+   }
+  });
   root.querySelector('[data-px-connect]')?.addEventListener('click',()=>navigate('connections'));
   root.querySelectorAll('[data-px-period]').forEach(b=>b.addEventListener('click',()=>marketing({root,api,me,navigate,period:b.dataset.pxPeriod})));
 
