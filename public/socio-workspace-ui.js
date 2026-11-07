@@ -481,7 +481,7 @@
    submitting=busy;if(review)review.disabled=busy;if(confirm)confirm.disabled=busy;
   };
   const parseDailyBudget=value=>{
-   const match=String(value||'').trim().replace(/^R\\$\\s*/,'').match(/^(\\d{1,6})(?:[,.](\\d{1,2}))?$/);
+   const match=String(value||'').trim().replace(/^R\$\s*/,'').match(/^(\d{1,6})(?:[,.](\d{1,2}))?$/);
    if(!match)throw Error('Digite um orçamento diário válido. Exemplo: 25,00.');
    const cents=Number(match[1])*100+Number((match[2]||'').padEnd(2,'0')||'0');
    if(cents<100||cents>10000000)throw Error('Orçamento permitido neste painel: de 1,00 a 100.000,00.');
