@@ -121,7 +121,7 @@ export async function askSalesAssistant(pool,actor,{message,requestId=null}={}){
  }
  const lines=['Resumo comercial da sua empresa: '+quotes.length+' pedido(s) de orçamento pendente(s), '+
    sales.length+' oportunidade(s) de compra aberta(s) e '+catalog.length+' produto(s) ativo(s).'];
- if(wantsQuotes||!wantsOpportunities){
+ if(wantsQuotes||!wantsOpportunities||/\b(pedidos|clientes)\b/.test(trimMessage)){
   lines.push(quotes.length?'Solicitações recentes:\n'+quotes.slice(0,5).map(q=>'• '+safe(q.customer_name||'Cliente')+
    ' — '+safe(q.summary)+' (ID '+q.id+')').join('\n'):
    'Nenhuma solicitação de orçamento pendente foi encontrada.');
