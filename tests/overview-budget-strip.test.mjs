@@ -16,7 +16,7 @@ test('ad funds summary is the first section of the company overview',()=>{
  assert(body.indexOf("px-budget-top")<body.indexOf("px-page-heading"));
  assert(body.includes("budgetHeaderItem('meta_ads'"));
  assert(body.includes("budgetHeaderItem('google_ads'"));
- assert(body.includes("px-budget-meter"));
+ assert(screen.includes("px-budget-meter"));
 });
 test('no unverified balance or exhaustion date is presented as financial fact',()=>{
  const beginning=ui.indexOf("  // A prepaid balance is not the Meta account's");
