@@ -626,10 +626,10 @@ async function showWaQr(channelId){
 const catalogPrice=cents=>brl(Number(cents||0));
 // Accept the Brazilian decimal separator without modifying a saved price twice.
 const centsFromInput=text=>{
- const raw=String(text??'').trim().replace(/^R\\$\\s*/i,'').replace(/\\s/g,'');
+ const raw=String(text??'').trim().replace(/^R\$\s*/i,'').replace(/\s/g,'');
  let normalized;
- if(/^\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,2})?$/.test(raw))normalized=raw.replace(/\\./g,'').replace(',','.');
- else if(/^\\d{1,7}(?:[.,]\\d{1,2})?$/.test(raw))normalized=raw.replace(',','.');
+ if(/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(raw))normalized=raw.replace(/\./g,'').replace(',','.');
+ else if(/^\d{1,7}(?:[.,]\d{1,2})?$/.test(raw))normalized=raw.replace(',','.');
  else throw Error('Preço inválido. Use, por exemplo, 129,90.');
  const n=Number(normalized);
  if(!Number.isFinite(n)||n<0||Math.round(n*100)>=100000000)throw Error('Valor fora do limite permitido.');
@@ -667,7 +667,7 @@ const catalogTypes=['Cor','Tamanho','Modelo','Outro'];
 const catalogColors=['Amarelo','Azul','Azul-marinho','Bege','Branco','Cinza','Dourado','Laranja','Marrom','Prata','Preto','Rosa','Roxo','Verde','Vermelho','Vinho'];
 const catalogSizes=['PP','P','M','G','GG','XG','XXG','Único','34','36','38','40','42','44','46','48','50','52'];
 const variantParts=name=>{
- const raw=String(name||'').trim(),m=/^(Cor|Tamanho|Modelo|Outro)\\s*[·:-]\\s*(.+)$/i.exec(raw);
+ const raw=String(name||'').trim(),m=/^(Cor|Tamanho|Modelo|Outro)\s*[·:-]\s*(.+)$/i.exec(raw);
  if(!m)return {kind:'Outro',value:raw};
  return {kind:catalogTypes.find(x=>x.toLowerCase()===m[1].toLowerCase())||'Outro',value:m[2]};
 };
