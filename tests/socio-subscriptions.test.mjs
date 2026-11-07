@@ -92,7 +92,7 @@ test('verified checkout event requires server-issued session and does not activa
   if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK'){if(sql==='ROLLBACK')rolled=true;return {rowCount:0};}
   if(sql.startsWith('INSERT INTO socio_billing_webhook_events'))return {rowCount:1};
   if(sql.startsWith('SELECT stripe_customer_id'))return {rows:[{stripe_checkout_session_id:'cs_test_abcdefgh123',
-   stripe_customer_id:null,stripe_subscription_id:null,last_subscription_event_created:0}]};
+   stripe_customer_id:null,stripe_subscription_id:null,stripe_mode:'test',last_subscription_event_created:0}]};
   if(sql.startsWith('INSERT INTO socio_billing_accounts')){accepted=true;return {rowCount:1};}
   if(sql.startsWith('UPDATE socio_billing_webhook_events'))return {rowCount:1};
   throw Error('unexpected write '+sql);
