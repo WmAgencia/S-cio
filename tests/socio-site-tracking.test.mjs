@@ -84,9 +84,8 @@ test('signed incoming event is scoped to site domain, saved once and not deliver
 });
 test('site listing and enable do not cross tenants or turn on collection without platform opt-in',async()=>{
  const pool={query:async(sql,args)=>{
-  assert.equal(args[0],tenant);
-  if(sql.startsWith('SELECT'))return {rows:[{id:siteId,site_origin:'https://example.com',enabled:false}]};
-  if(sql.startsWith('UPDATE'))return {rows:[{id:siteId,enabled:args[2]}]};
+  if(sql.startsWith('SELECT')){assert.equal(args[0],tenant);return {rows:[{id:siteId,site_origin:'https://example.com',enabled:false}]};}
+  if(sql.startsWith('UPDATE')){assert.equal(args[0],siteId);assert.equal(args[1],tenant);return {rows:[{id:siteId,enabled:args[2]}]};}
   throw Error('Unexpected query');
  }};
  const list=await listTrackingSites(pool,actor,{env});
