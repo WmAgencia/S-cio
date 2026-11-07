@@ -19,7 +19,7 @@ const tracking=/\b(capi|conversions api|api de conversoes|rastrear (?:compra|ven
 const optimize=/\b(otimizar|otimize|otimizacao|melhorar|melhore|analisar|analise|diagnostico|rejeitado|rejeitados|reprovado|reprovados|bloqueado|bloqueados|sem entrega|nao entrega|baixo desempenho|resultado ruim)\b/;
 const adTerms=/\b(campanha|campanhas|anuncio|anuncios|criativo|criativos|meta ads|trafego|facebook ads|instagram ads)\b/;
 const commerce=/(?:\b(?:orcamento|orcamentos|cotacao|cotacoes|preparar proposta|propostas comerciais|pedidos de clientes|pedidos pendentes|oportunidades de venda|vendas pendentes|meus produtos|catalogo da loja|estoque da loja|qual o preco|quanto custa|meus interessados|meus pedidos)\b)/;
-const commerceExclusion=/\b(campanha|campanhas|anuncio|anuncios|criativo|criativos|meta ads|facebook ads|instagram ads|google ads)\b/;
+const commerceExclusion=/\b(campanha|campanhas|anuncio|anuncios|conjunto|conjuntos|adset|criativo|criativos|meta ads|facebook ads|instagram ads|google ads)\b|\b(?:alterar|altere|aumentar|reduzir)\s+(?:o\s+)?orcamento\b/;
 const whatsReport=/\b(whatsapp|zap|wa-akg)\b.*\b(relatorio|resultado|quantas? conversas?|quantos? leads?|quantas? vendas?|atribui|rastre)\b|\b(relatorio|resultado|quantas? conversas?|quantas? vendas?|atribui|rastre)\b.*\b(whatsapp|zap|wa-akg)\b/;
 
 export function listExpertSkills(){
