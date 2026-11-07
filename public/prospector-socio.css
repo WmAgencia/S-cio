@@ -365,3 +365,19 @@ body .wa-inbox .wa-chat-avatar{background:#e8dfff!important;color:#5e35d3!import
 body .wa-inbox .wa-mode-btn.active{background:#eee8ff!important;border-color:#d9c8ff!important;color:#5129c3!important}
 body .wa-inbox .wa-bubble{max-width:min(85%,520px)!important}
 @media(max-width:760px){body .wa-inbox{border-radius:12px!important}body .wa-inbox-side-head{padding:16px!important}}
+
+/* Prospector conversation UX parity; keep Sócio channel, handoff and message features intact. */
+body .wa-inbox{grid-template-columns:minmax(265px,30%) minmax(0,1fr)!important;min-height:560px;box-shadow:0 8px 27px #4b2bbd0b!important;background:#fff!important;border:1px solid #e9e4f7!important;border-radius:17px!important}
+body .wa-inbox:has(.wa-inbox-details:not(.hidden)){grid-template-columns:minmax(240px,26%) minmax(0,1fr) minmax(230px,25%)!important}
+body .wa-inbox-side-head{padding:21px 20px 15px!important}
+body .wa-inbox-side-head h1{font-size:20px!important;letter-spacing:-.03em!important;font-weight:750!important}
+body .wa-inbox-side{background:#fff!important;border-right:1px solid #e9e4f7!important}
+body .wa-inbox-items{background:#fff!important}
+body .wa-list-row{min-height:74px!important;padding:12px 17px!important;gap:12px!important}
+body .wa-list-row.active{background:#f0eaff!important;box-shadow:inset 3px 0 #7243df!important}
+body .wa-chat-avatar{background:#e8dfff!important;color:#5e35d3!important;border:0!important;border-radius:50%!important}
+body .wa-inbox-main{background:#fff!important}
+body .wa-inbox-side-bottom{background:#faf8ff!important;border-top-color:#e9e4f7!important}
+body .wa-inbox-search{border-radius:11px!important}
+body .wa-inbox:has(.wa-inbox-details:not(.hidden)) .wa-inbox-main{min-width:0}
+@media(max-width:850px){body .wa-inbox{grid-template-columns:minmax(230px,36%) minmax(0,1fr)!important}}
