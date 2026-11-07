@@ -78,11 +78,15 @@
     /(^|\.)(fbcdn\.net|fbsbx\.com|cdninstagram\.com)$/.test(u.hostname.toLowerCase())?u.href:null;
   }catch{return null;}
  };
- const posterFromAd=ad=>[
-  ad?.creative?.object_story_spec?.video_data?.image_url,
-  ad?.creative?.object_story_spec?.link_data?.picture,
-  ad?.creative?.image_url,ad?.creative?.thumbnail_url
- ].map(mediaUrl).find(Boolean)||null;
+ const posterFromAd=ad=>{
+  const creative=ad?.creative||{},video=Boolean(creative.video_id||
+   creative.object_story_spec?.video_data?.video_id||creative.asset_feed_spec?.videos?.length);
+  const candidates=video?
+   [creative.object_story_spec?.video_data?.image_url,creative.thumbnail_url,
+    creative.image_url,creative.object_story_spec?.link_data?.picture]:
+   [creative.image_url,creative.object_story_spec?.link_data?.picture,creative.thumbnail_url];
+  return candidates.map(mediaUrl).find(Boolean)||null;
+ };
  // Replace placeholders instead of appending a tiny second image beside the button.
  const applyPoster=(holder,value,label)=>{
   const url=mediaUrl(value);
