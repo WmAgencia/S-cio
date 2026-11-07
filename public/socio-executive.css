@@ -148,3 +148,20 @@ body .px-danger-zone .btn:hover{color:#952d43!important;background:#ffeded!impor
 .px-wa-overview-list small{font-size:10px;color:#867b94}
 .px-wa-overview-list .px-live-dot{flex:none}
 @media(max-width:640px){.px-wa-overview-list{grid-template-columns:1fr}}
+
+/* Executive period selector and precise focus/contrast across reports and forms. */
+.px-chart-actions{display:flex;gap:5px;flex-wrap:wrap;padding:4px;border:1px solid #e5dcf4;border-radius:12px;background:#f8f6fd}
+.px-range-btn{border:1px solid transparent;background:transparent;color:#51376f;padding:7px 9px;border-radius:9px;font-size:11px;font-weight:750;cursor:pointer;min-height:32px}
+.px-range-btn:hover{background:#eee8fb;color:#4d2da7}
+.px-range-btn.active{background:#673de0;color:#fff;border-color:#673de0;box-shadow:0 4px 10px #5434aa23}
+.px-range-btn:focus-visible,.px-chart-hit:focus-visible{outline:3px solid #9d78ff;outline-offset:2px}
+.px-chart-hit{cursor:crosshair;stroke:transparent;stroke-width:2px;transition:stroke .15s ease,fill .15s ease}
+.px-chart-hit:hover,.px-chart-hit:focus{fill:#eee8ff;stroke:#6137d2;stroke-width:2.3px}
+.px-chart-wrap{border:1px solid #f0ebf9;background:linear-gradient(180deg,#fff 5%,#faf7ff 100%)}
+.px-legend .px-dot.purple{background:#643bdb}.px-legend .px-dot.green{background:#127858}
+.px-chart-actions + .btn{white-space:nowrap}
+body :is(.px-workspace,.px-assistant-window) .btn.primary:hover:not(:disabled){background:#5930c8!important;color:white!important;border-color:#5930c8!important}
+body :is(.px-workspace,.px-assistant-window) .btn.soft:hover:not(:disabled){background:#e9e1fc!important;color:#4828a8!important;border-color:#bda8ef!important}
+body .socio-catalog-clean #newProduct:hover,body .px-campaign-picker .btn.primary:hover{color:#fff!important}
+@media(max-width:650px){.px-chart-actions{width:100%;justify-content:space-between}.px-range-btn{flex:1}.px-panel-head{gap:10px}.px-chart-wrap{height:207px}.px-svg{height:180px}}
+@media(prefers-reduced-motion:reduce){.px-chart-hit{transition:none!important}}
