@@ -1,10 +1,10 @@
 // Hands-free, turn-based browser voice interaction. A user explicitly starts the
 // microphone, a small VAD detects the end of each utterance, and the same source
 // stays connected until they close the call. No recording is retained on disk; transcript requires human review.
-export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},onInterrupt=()=>{},canInterrupt=()=>false,silenceMs=1650,maxTurnMs=28000,minVoicedMs=650}){
+export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},onInterrupt=()=>{},canInterrupt=()=>false,silenceMs=2100,maxTurnMs=45000,minVoicedMs=650}){
  let active=false,stream=null,context=null,analyser=null,source=null,timer=null,recorder=null;
  let startedAt=0,lastSpeechAt=0,speechStartedAt=0,ambient=.003,finishing=false,processing=false;
- let generation=0,chunks=[],mime='',samples=null,bargeStarted=0,voicedMs=0,lastPollAt=0,turnAbort=null,startingCandidate=0;
+ let generation=0,chunks=[],mime='',samples=null,bargeStarted=0,voicedMs=0,lastPollAt=0,turnAbort=null,startingCandidate=0,lastAssistantSoundAt=0;
  const state=next=>{if(active||next==='off')onState(next);};
  const closeStream=()=>{
   if(timer){clearInterval(timer);timer=null;}
@@ -82,6 +82,7 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
   // Never record an echo while the assistant is speaking. A stronger,
   // sustained voice can interrupt without launching phantom STT requests.
   const assistantSpeaking=canInterrupt();
+  if(assistantSpeaking)lastAssistantSoundAt=now;
   if(processing||assistantSpeaking){
    const userSpeech=assistantSpeaking&&rms>Math.max(.062,ambient*5.2);
    if(userSpeech){
@@ -96,6 +97,8 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
    }else bargeStarted=0;
    return;
   }
+  // Suppress speaker echo trailing the end of TTS playback.
+  if(lastAssistantSoundAt&&now-lastAssistantSoundAt<800)return;
   // RMS is not true speech recognition. Treat isolated peaks as noise,
   // require sustained activity, and reject short/noisy recordings.
   const threshold=Math.max(.020,ambient*3.0);
@@ -145,7 +148,7 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
  function handleHidden(){if(document.hidden)stop();}
  function stop(){
   const wasActive=active;active=false;generation++;processing=false;finishing=false;bargeStarted=0;
-  startingCandidate=0;voicedMs=0;lastPollAt=0;
+  startingCandidate=0;voicedMs=0;lastPollAt=0;lastAssistantSoundAt=0;
   if(turnAbort){turnAbort.abort();turnAbort=null;}
   document.removeEventListener('visibilitychange',handleHidden);
   window.removeEventListener('pagehide',stop);
