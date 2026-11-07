@@ -120,7 +120,7 @@ export function validateAdsPlan(kind,input){
  return {entity:input.entity,id:input.id,dailyBudgetCents:input.dailyBudgetCents};
 }
 async function owned(c,id){
- const data=await graph(c,'/'+id,{fields:'id,account_id,name,status,effective_status'});
+ const data=await graph(c,'/'+id,{fields:'id,account_id,name,status,effective_status,daily_budget,lifetime_budget,campaign_id'});
  if('act_'+data.account_id!==c.account.id)throw fail(403,'Este objeto não pertence à conta selecionada.');
  return data;
 }
@@ -168,6 +168,10 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
  }else{
   const entity=await owned(c,payload.id);
   if(kind==='status')ensureSafeActivation(entity,payload.status);
+  if(kind==='budget'&&!(Number(entity.daily_budget)>0))
+   throw fail(409,Number(entity.lifetime_budget)>0?
+    'Esta campanha usa orçamento total. Não é seguro trocar para orçamento diário por este atalho.':
+    'O orçamento diário está em outro nível (conjunto de anúncios ou campanha). Edite o nível que possui orçamento.');
   summary={description:kind==='status'?(payload.status==='ACTIVE'?'Ativar: esta ação pode iniciar gastos conforme o orçamento da conta.':'Pausar veiculação.'):kind==='budget'?'Alterar orçamento diário: se estiver ativo, o conjunto poderá gastar o novo valor.':'Alterar nome.',account:c.account,object:entity,changes:payload};
  }
  const id=randomUUID();
@@ -235,6 +239,8 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
   }else{
    const entity=await owned(c,p.id);
    if(plan.kind==='status')ensureSafeActivation(entity,p.status);
+   if(plan.kind==='budget'&&!(Number(entity.daily_budget)>0))
+    throw fail(409,'O nível do orçamento mudou na Meta. Atualize a lista antes de tentar novamente.');
    const changes=plan.kind==='status'?{status:p.status}:plan.kind==='rename'?{name:p.name}:{daily_budget:p.dailyBudgetCents};
    const updated=await graph(c,'/'+p.id,changes,'POST');if(updated.success!==true)throw Object.assign(fail(503,'A Meta não confirmou a alteração.'),{uncertain:true});
    result.id=p.id;result.changes=changes;
