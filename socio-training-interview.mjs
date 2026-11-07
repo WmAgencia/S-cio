@@ -88,7 +88,7 @@ const markdown=d=>{
 };
 const next=(s,user)=>{
  const d=s.data,k=s.step,i=s.index||0,v=clean(user),n=normalized(v);
- if(v.length<2)throw err(422,'Responda à pergunta para continuar.');
+ if(v.length<2&&!(['approach','closing_mode','payment_methods'].includes(k)&&/^[1-5]$/.test(v)))throw err(422,'Responda à pergunta para continuar.');
  if(s.messages.length>100)throw err(429,'Limite de respostas atingido. Reinicie a entrevista.');
  if(k==='services'){d.services=serviceNames(v);if(!d.services.length)throw err(422,'Informe pelo menos um serviço.');s.step='service_detail';s.index=0;}
  else if(k==='company'){d.company=v.slice(0,120);s.step='audience';}
