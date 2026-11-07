@@ -62,7 +62,9 @@ test('Meta dashboard includes campaign thumbnail, ad video controls, swift navig
  assert.doesNotThrow(()=>new vm.Script(voice));
  assert.match(ui,/data-featured-media/);
  assert.match(ui,/el\.controls=true/);
- assert.match(ui,/el\.preload='none'/);
+ assert.match(ui,/el\.preload='metadata'/);
+ assert.match(ui,/data-px-media-play/);
+ assert.match(ui,/image_url/);
  assert.match(ui,/data-campaign-preview/);
  assert.match(ui,/data-px-marketing/);
  assert.match(ui,/const getCache=new Map/);
