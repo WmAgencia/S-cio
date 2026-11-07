@@ -1,0 +1,260 @@
+// Sócio executive dashboard, connected-account directory and dedicated Meta Ads analytics.
+// Everything is read-only except explicit OAuth/selection/QR actions owned by existing APIs.
+(()=>{
+ const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const number=x=>Number(x||0).toLocaleString('pt-BR',{maximumFractionDigits:0});
+ const money=(value,currency)=>{
+  const amount=Number(value);
+  if(!Number.isFinite(amount)||amount<0)return '—';
+  if(!/^[A-Z]{3}$/.test(currency||''))return amount.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+' · moeda da conta';
+  try{return new Intl.NumberFormat('pt-BR',{style:'currency',currency}).format(amount);}catch{return amount.toFixed(2)+' '+currency;}
+ };
+ const optional=async(api,path)=>{try{return {data:await api(path),ok:true};}catch(error){return {data:null,ok:false,reason:String(error?.message||'Dados indisponíveis').slice(0,120)};}};
+ const permissions=me=>new Set(me?.user?.permissions||[]);
+ const can=(me,permission)=>me?.user?.platformOwner||permissions(me).has(permission);
+ const selectedCurrency=(status)=>status?.selectedAccount?.currency||null;
+ const kpi=(label,value,meta,icon='◈',tone='purple')=>'<article class="px-kpi"><div class="px-kpi-top"><span class="px-kpi-label">'+esc(label)+'</span><span class="px-kpi-icon '+tone+'">'+icon+'</span></div>'+
+  '<strong class="px-kpi-number">'+esc(value)+'</strong><small>'+esc(meta)+'</small></article>';
+ const empty=(text)=>'<p class="px-muted">'+esc(text)+'</p>';
+ const chart=(points)=>{
+  const values=(Array.isArray(points)?points:[]).map(x=>({date:String(x.date||''),inbound:Number(x.inbound)||0,outbound:Number(x.outbound)||0}));
+  if(!values.length)return empty('Sem histórico de mensagens neste período.');
+  const max=Math.max(1,...values.map(x=>Math.max(x.inbound,x.outbound)));
+  const path=k=>values.map((d,i)=>(i?'L':'M')+(16+i/(Math.max(1,values.length-1))*712).toFixed(1)+','+(190-(d[k]/max)*162).toFixed(1)).join(' ');
+  const defs='<defs><linearGradient id="pxChartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7654ee" stop-opacity=".21"/><stop offset="1" stop-color="#7654ee" stop-opacity="0"/></linearGradient></defs>';
+  const floor=190,xlast=16+(values.length-1)/Math.max(1,values.length-1)*712;
+  const area=path('inbound')+' L'+xlast+','+floor+' L16,'+floor+'Z';
+  const guides=[.25,.5,.75,1].map(r=>'<line x1="16" x2="728" y1="'+(190-r*162)+'" y2="'+(190-r*162)+'" stroke="#e8e4f3" stroke-width="1" stroke-dasharray="4 7"/>').join('');
+  return '<svg class="px-svg" viewBox="0 0 748 212" preserveAspectRatio="none" role="img" aria-label="Gráfico de mensagens recebidas em roxo e enviadas em verde">'+defs+guides+
+   '<path d="'+area+'" fill="url(#pxChartFill)"/><path d="'+path('inbound')+'" stroke="#7650ed" fill="none" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>'+
+   '<path d="'+path('outbound')+'" stroke="#16a778" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'+
+   '<div class="px-axis"><span>'+esc(values[0].date)+'</span><span>'+esc(values[Math.floor(values.length/2)].date)+'</span><span>'+esc(values.at(-1).date)+'</span></div>';
+ };
+ const section=(title,subtitle,content,aside='')=>'<section class="px-panel"><div class="px-panel-head"><div><h2>'+esc(title)+'</h2><p>'+esc(subtitle)+'</p></div>'+aside+'</div>'+content+'</section>';
+ function advertRows(items,insightById,currency){
+  return '<div class="px-table-scroll"><table class="px-table"><thead><tr><th>Campanha</th><th>Situação</th><th>Gasto</th><th>Cliques</th><th>CPC</th><th>Impressões</th></tr></thead><tbody>'+
+   items.slice(0,40).map(c=>{
+    const m=insightById.get(String(c.id))||{},spend=Number(m.spend)||0,clicks=Number(m.clicks)||0;
+    return '<tr><td><strong>'+esc(c.name||c.id)+'</strong><small>'+esc(c.objective||c.id)+'</small></td>'+
+     '<td><span class="px-status '+(/ACTIVE/.test(c.effective_status||c.status)?'on':'off')+'">'+esc(c.effective_status||c.status||'—')+'</span></td>'+
+     '<td>'+money(spend,currency)+'</td><td>'+number(clicks)+'</td><td>'+(clicks?money(spend/clicks,currency):'—')+'</td><td>'+number(m.impressions||0)+'</td></tr>';
+   }).join('')+'</tbody></table></div>';
+ }
+ async function loadMeta(api,period='today'){
+  const [status,campaigns,ads,insights]=await Promise.all([
+   optional(api,'/api/marketing/official/status'),
+   optional(api,'/api/marketing/tools/campaigns'),
+   optional(api,'/api/marketing/tools/ads'),
+   optional(api,'/api/marketing/tools/insights?period='+encodeURIComponent(period))
+  ]);
+  const currency=selectedCurrency(status.data);
+  const list=campaigns.data?.items||[], adList=ads.data?.items||[],daily=insights.data?.items||[];
+  const total=key=>daily.reduce((sum,x)=>sum+(Number(x[key])||0),0);
+  const clicks=total('clicks'),spend=total('spend');
+  const purchase=record=>Array.isArray(record.actions)?record.actions.filter(x=>
+    /(^|\.)purchase$|omni_purchase|offsite_conversion\.fb_pixel_purchase/i.test(String(x.action_type||'')))
+    .reduce((n,x)=>n+(Number(x.value)||0),0):0;
+  const purchases=daily.reduce((sum,x)=>sum+purchase(x),0);
+  return {status,campaigns,ads,insights,currency,list,adList,daily,clicks,spend,purchases,
+   activeCampaigns:list.filter(x=>/ACTIVE/i.test(x.effective_status||x.status)).length,
+   activeAds:adList.filter(x=>/ACTIVE/i.test(x.effective_status||x.status)).length,
+   best:daily.filter(x=>Number(x.clicks)>0).sort((a,b)=>Number(b.clicks)-Number(a.clicks))[0]||null};
+ }
+ async function overview({root,api,me,navigate}){
+  root.innerHTML='<div class="px-loading">Montando indicadores reais da empresa…</div>';
+  const authorized=can(me,'audit.read'),ads=can(me,'marketing.read');
+  const calls=[
+   optional(api,'/api/dashboard'),
+   optional(api,'/api/dashboard/activity?range=1m'),
+   authorized?optional(api,'/api/dashboard/executive'):Promise.resolve({data:null,ok:false}),
+   optional(api,'/api/waakg/channels'),
+   authorized?optional(api,'/api/reports/monitor'):Promise.resolve({data:null,ok:false}),
+   ads?loadMeta(api,'today').catch(()=>null):Promise.resolve(null),
+   ads?optional(api,'/api/google-ads/campaigns?period=today'):Promise.resolve({ok:false}),
+  ];
+  const [dashboard,activity,exec,wa,monitor,meta,google]=await Promise.all(calls);
+  const d=dashboard.data||{},ex=exec.data||{},m=ex.counts||{},realWa=Array.isArray(wa.data)?wa.data.filter(c=>c.status==='connected').length:0;
+  const metaReady=meta?.insights.ok===true,googleReady=google.ok===true;
+  const googleMicros=googleReady?Number(google.data?.summary?.costMicros||0)/1e6:null;
+  const googleCode=google.data?.currencyCode||null;
+  const daily=activity.data?.points||[],received=daily.reduce((n,x)=>n+(Number(x.inbound)||0),0),sent=daily.reduce((n,x)=>n+(Number(x.outbound)||0),0);
+  const products=Array.isArray(ex.popularProducts)?ex.popularProducts:[];
+  const max=Math.max(1,...products.map(x=>x.requests));
+  root.innerHTML='<div class="px-workspace px-overview">'+
+   '<div class="px-page-heading"><div><span class="px-eyebrow">CENTRAL DE INTELIGÊNCIA</span><h1>Visão geral</h1><p>Operação, atendimento e publicidade da sua empresa em um único painel.</p></div>'+
+    '<button class="btn soft" data-px-reload type="button">↻ Atualizar indicadores</button></div>'+
+   '<div class="px-kpi-grid">'+
+    kpi('Conversas em aberto',number(d.openConversations),'Atendimento da empresa','▤')+
+    kpi('WhatsApps conectados',number(realWa),'Sessões vinculadas','◉','green')+
+    kpi('Mensagens hoje',number(d.messagesReceivedToday),'Recebidas · horário de Brasília','✉','blue')+
+    kpi('Oportunidades (30d)',authorized?number(m.opportunities):'—','Intenções, não vendas confirmadas','◇')+
+    kpi('Pedidos registrados (30d)',authorized?number(m.registeredOrders):'—','Pedidos, não pagamentos','▣','blue')+
+    kpi('Vendas pagas', '—','Sem conciliação financeira de produção','◈','muted')+
+   '</div>'+
+   '<div class="px-ads-strip">'+
+    '<article class="px-ads-metric"><div><span class="px-brand-dot meta"></span><strong>Meta Ads</strong><small>Gasto hoje</small></div><b>'+ (metaReady?money(meta.spend,meta.currency):'Não disponível')+'</b>'+
+     '<small>'+(metaReady?'Retornado pela conta autorizada':'Conecte ou valide a conta para consultar')+'</small></article>'+
+    '<article class="px-ads-metric"><div><span class="px-brand-dot google"></span><strong>Google Ads</strong><small>Gasto hoje</small></div><b>'+(googleReady?money(googleMicros,googleCode):'Não disponível')+'</b>'+
+     '<small>'+(googleReady?'Moeda da conta: '+(googleCode||'não identificada'):'Requer OAuth, conta selecionada e API autorizada')+'</small></article>'+
+    '<article class="px-ads-metric"><div><span class="px-brand-dot purple"></span><strong>Resultado de anúncios</strong><small>Hoje · Meta</small></div><b>'+(metaReady?number(meta.clicks)+' cliques':'Não disponível')+'</b>'+
+     '<small>'+(metaReady&&meta.clicks?'CPC: '+money(meta.spend/meta.clicks,meta.currency):'Sem CPC verificável')+'</small></article>'+
+   '</div>'+
+   '<div class="px-dual">'+
+    section('Atividade de conversas','Mensagens recebidas e enviadas nos últimos 30 dias',
+     '<div class="px-graph-counts"><div><span>Recebidas</span><strong>'+number(received)+'</strong></div><div><span>Enviadas</span><strong>'+number(sent)+'</strong></div><div><span>Volume total</span><strong>'+number(received+sent)+'</strong></div></div>'+
+     '<div class="px-chart-wrap">'+chart(daily)+'</div>'+
+     '<div class="px-legend"><span><i class="px-dot purple"></i> Recebidas</span><span><i class="px-dot green"></i> Enviadas</span></div>',
+     '<button type="button" class="btn sm soft" data-px-inbox>Ver conversas</button>')+
+    section('Produtos mais solicitados','Intenções identificadas nos últimos 30 dias — não vendas pagas',
+     products.length?'<div class="px-products-rank">'+products.map((p,i)=>
+      '<div class="px-rank"><div class="px-rank-title"><span>'+(i+1)+'. '+esc(p.name)+'</span><strong>'+number(p.requests)+' solicitações</strong></div>'+
+      '<div class="px-rank-track"><i style="width:'+Math.round(p.requests/max*100)+'%"></i></div></div>').join('')+'</div>':
+      empty(authorized?'Ainda não há produtos identificados em intenções de compra.':'Acesso ao relatório não disponível.'),
+      '<button type="button" class="btn sm soft" data-px-products>Catálogo</button>')+
+   '</div>'+
+   '<div class="px-dual">'+
+    section('Funil de atendimento','Oportunidades acompanhadas, sem confundir status com receita',
+      '<div class="px-funnel">'+[
+       ['Mensagens hoje',d.messagesReceivedToday],
+       ['Oportunidades',m.opportunities],
+       ['Pedidos registrados',m.registeredOrders],
+       ['Vendas pagas',null]
+      ].map(([label,val])=>'<div><span>'+esc(label)+'</span><strong>'+(val==null?'—':number(val))+'</strong></div>').join('')+'</div>'+
+      '<small class="px-muted">“Concluídas manualmente” não significa pagamento recebido.</small>')+
+    section('Campanhas em destaque','Dados reais da Meta Ads, quando a conta permitir leitura',
+     metaReady&&meta.best?'<div class="px-best-ad"><span>Campanha com mais cliques no período</span><strong>'+esc(meta.best.campaign_name||meta.best.campaign_id||'Campanha')+'</strong>'+
+      '<div><span>Cliques <b>'+number(meta.best.clicks)+'</b></span><span>Gasto <b>'+money(meta.best.spend,meta.currency)+'</b></span></div></div>':
+     empty('Nenhuma campanha com cliques confirmados para o período.'),
+     '<button class="btn sm soft" data-px-marketing type="button">Analisar Meta Ads</button>')+
+   '</div>'+
+   '<p class="px-provenance">Indicadores consolidados por empresa. Métricas publicitárias dependem das permissões Meta/Google; conversões atribuídas por anúncios não são comprovantes de pagamento. Nenhum número indisponível é substituído por uma estimativa.</p>'+
+  '</div>';
+  root.querySelector('[data-px-reload]')?.addEventListener('click',()=>overview({root,api,me,navigate}));
+  root.querySelector('[data-px-inbox]')?.addEventListener('click',()=>navigate('inbox'));
+  root.querySelector('[data-px-products]')?.addEventListener('click',()=>navigate('products'));
+  root.querySelector('[data-px-marketing]')?.addEventListener('click',()=>navigate('marketing'));
+ }
+ async function marketing({root,api,me,navigate,period='last_7d'}){
+  root.innerHTML='<div class="px-loading">Consultando campanhas da Meta…</div>';
+  if(!can(me,'marketing.read')){root.textContent='Você não tem acesso às campanhas desta empresa.';return;}
+  let data=null;try{data=await loadMeta(api,period);}catch{}
+  const connected=data?.status.data?.connected===true,selected=!!data?.status.data?.selectedAccount;
+  const campaigns=data?.list||[],ads=data?.adList||[],hasData=data?.insights.ok===true,currency=data?.currency;
+  const insightsMap=new Map((data?.daily||[]).map(x=>[String(x.campaign_id),x]));
+  const btn='<button type="button" class="btn soft" data-px-connect>Gerenciar conexões</button>';
+  root.innerHTML='<div class="px-workspace px-marketing">'+
+   '<div class="px-page-heading"><div><span class="px-eyebrow">MÍDIA PAGA · META ADS</span><h1>Campanhas e desempenho</h1>'+
+    '<p>Seus anúncios, resultados e custo de mídia — sem configurar contas nesta página.</p></div>'+btn+'</div>'+
+   (!connected||!selected?'<div class="px-notice"><strong>'+(!connected?'Conecte a Meta para visualizar as campanhas.':'Selecione a conta de anúncios em Conexões.')+'</strong><p>A autorização é feita em Conexões, por login oficial do Facebook.</p></div>':'')+
+   '<div class="px-marketing-filters" role="group" aria-label="Período dos anúncios">'+
+     [['today','Hoje'],['last_7d','7 dias'],['last_30d','30 dias']].map(([v,l])=>
+       '<button type="button" class="'+(period===v?'selected':'')+'" data-px-period="'+v+'" aria-pressed="'+(period===v)+'">'+l+'</button>').join('')+'</div>'+
+   '<div class="px-kpi-grid px-marketing-kpi">'+
+    kpi('Investimento',hasData?money(data.spend,currency):'—','Período selecionado','R$')+
+    kpi('Cliques',hasData?number(data.clicks):'—','Contados pela Meta','⌁','blue')+
+    kpi('CPC',hasData&&data.clicks?money(data.spend/data.clicks,currency):'—','Gasto ÷ cliques','↗','green')+
+    kpi('CPA atribuído',hasData&&data.purchases?money(data.spend/data.purchases,currency):'—','Evento Purchase · não receita','◈')+
+    kpi('Campanhas ativas',data?.campaigns.ok?number(data.activeCampaigns):'—','Situação atual da Meta','▤','green')+
+    kpi('Anúncios ativos',data?.ads.ok?number(data.activeAds):'—','Situação atual dos anúncios','◉','blue')+
+   '</div>'+
+   section('Suas campanhas','Ativas, pausadas e rascunhos retornados pela Meta',
+    data?.campaigns.ok?(campaigns.length?advertRows(campaigns,insightsMap,currency):empty('A conta não retornou campanhas.')):
+      empty(data?.campaigns.reason||'Conecte uma conta para listar campanhas.'))+
+   section('Anúncios e criativos','Anúncios vinculados à conta de anúncios selecionada',
+    data?.ads.ok?(ads.length?'<div class="px-ads-list">'+ads.slice(0,20).map(ad=>
+      '<div><div><strong>'+esc(ad.name||ad.id)+'</strong><small>'+esc(ad.id)+'</small></div>'+
+      '<span class="px-status '+(/ACTIVE/i.test(ad.effective_status||ad.status)?'on':'off')+'">'+esc(ad.effective_status||ad.status||'—')+'</span></div>').join('')+'</div>':
+      empty('Nenhum anúncio retornado pela conta.')):empty('Os anúncios estão indisponíveis até autorizar a leitura.'))+
+   section('Interpretação dos resultados','As plataformas reportam atribuições, não pagamentos conciliados',
+    '<div class="px-footnote">O CPA é calculado apenas quando a Meta retorna eventos Purchase. Esses eventos não são prova de pedido pago. Sem evento válido, o painel mostra “—”, em vez de inventar resultados.</div>')+
+   (connected&&selected?'<details class="px-advanced"><summary>Ferramentas avançadas e gerenciamento de anúncios</summary><div id="pxAdvancedMeta"></div></details>':'')+
+   '</div>';
+  root.querySelector('[data-px-connect]')?.addEventListener('click',()=>navigate('connections'));
+  root.querySelectorAll('[data-px-period]').forEach(b=>b.addEventListener('click',()=>marketing({root,api,me,navigate,period:b.dataset.pxPeriod})));
+  const advanced=root.querySelector('#pxAdvancedMeta'),details=advanced?.closest('details');
+  if(advanced&&details)details.addEventListener('toggle',()=>{
+   if(!details.open||advanced.dataset.loaded)return;advanced.dataset.loaded='1';
+   if(globalThis.SocioMetaOfficial)globalThis.SocioMetaOfficial.render({root:advanced,api,canManage:can(me,'marketing.manage')});
+  });
+ }
+ const connectBtn=(label,attr,enabled=true)=>'<button type="button" class="btn '+(enabled?'primary':'soft')+'" '+attr+' '+(!enabled?'disabled':'')+'>'+esc(label)+'</button>';
+ async function connections({root,api,me,navigate}){
+  root.innerHTML='<div class="px-loading">Verificando suas conexões autorizadas…</div>';
+  const [whatsapp,meta,google]=await Promise.all([
+   optional(api,'/api/waakg/channels'),
+   can(me,'marketing.read')?optional(api,'/api/marketing/official/status'):Promise.resolve({ok:false,data:null}),
+   can(me,'marketing.read')?optional(api,'/api/google-ads/status'):Promise.resolve({ok:false,data:null}),
+  ]);
+  const manageWa=can(me,'channels.manage'),manageAds=can(me,'marketing.manage');
+  const waList=Array.isArray(whatsapp.data)?whatsapp.data:[],connectedWa=waList.filter(w=>w.status==='connected');
+  const metaConnected=meta.data?.connected===true,googleConnected=google.data?.connected===true;
+  const metaSelected=meta.data?.selectedAccount,googleSelected=google.data?.selectedCustomerId;
+  root.innerHTML='<div class="px-workspace px-connections">'+
+   '<div class="px-page-heading"><div><span class="px-eyebrow">SUAS INTEGRAÇÕES</span><h1>Conexões</h1><p>Autorize uma vez. O Sócio organiza os dados e as campanhas no painel.</p></div></div>'+
+   '<div class="px-connection-grid">'+
+   '<section class="px-conn-card"><div class="px-conn-head"><span class="px-conn-icon wa">◉</span><div><h2>WhatsApp</h2><p>'+number(connectedWa.length)+' WhatsApp(s) conectado(s)</p></div><span class="px-status '+(connectedWa.length?'on':'off')+'">'+(connectedWa.length?'Ativo':'Pendente')+'</span></div>'+
+    '<div class="px-conn-list">'+(waList.length?waList.map(w=>
+      '<div class="px-conn-row"><span class="px-live-dot '+(w.status==='connected'?'on':'')+'"></span><span><strong>'+esc(w.label||'WhatsApp')+'</strong><small>'+esc((w.phone||'').startsWith('pending-')?'Aguardando QR':w.phone||'Sem telefone confirmado')+'</small></span></div>').join(''):
+     empty('Nenhum número conectado ainda.'))+'</div>'+
+    '<div class="px-conn-actions">'+connectBtn('+ Conectar WhatsApp','data-px-wa',manageWa)+'</div></section>'+
+   '<section class="px-conn-card"><div class="px-conn-head"><span class="px-conn-icon meta">f</span><div><h2>Meta Ads</h2><p>Login seguro com Facebook</p></div><span class="px-status '+(metaConnected?'on':'off')+'">'+(metaConnected?'Autorizado':'Pendente')+'</span></div>'+
+    '<div class="px-conn-list"><p class="px-muted">'+(metaSelected?'Conta selecionada: <strong>'+esc(metaSelected.account_name||metaSelected.account_id)+'</strong>':
+      metaConnected?'Autorização recebida. Escolha uma conta de anúncios.':'Nenhuma conta Meta conectada.')+'</p>'+
+    (metaConnected?'<label class="px-account-select">Conta de anúncios<select id="pxMetaAccount"><option value="">Carregando contas…</option></select></label>':'')+'</div>'+
+    '<div class="px-conn-actions">'+connectBtn(metaConnected?'Reconectar Facebook':'Conectar com Facebook','data-px-meta',manageAds&&meta.data?.configured!==false)+
+      (metaConnected?connectBtn('Usar conta selecionada','data-px-meta-select',manageAds):'')+'</div></section>'+
+   '<section class="px-conn-card"><div class="px-conn-head"><span class="px-conn-icon google">G</span><div><h2>Google Ads</h2><p>Autorização pela conta Google</p></div><span class="px-status '+(googleConnected?'on':'off')+'">'+(googleConnected?'Autorizado':'Pendente')+'</span></div>'+
+    '<div class="px-conn-list"><p class="px-muted">'+(googleSelected?'Conta Google Ads: <strong>'+esc(googleSelected)+'</strong>':
+       googleConnected?'Autorizada, aguardando seleção da conta.':'Nenhuma conta Google Ads conectada.')+'</p>'+
+      (googleConnected?'<label class="px-account-select">Conta Google Ads<select id="pxGoogleAccount"><option value="">Carregando contas…</option></select></label>':'')+
+      '<p class="px-muted">Leitura de campanhas; criação de anúncios Google ainda não habilitada.</p></div>'+
+    '<div class="px-conn-actions">'+connectBtn(googleConnected?'Reconectar Google':'Conectar com Google','data-px-google',manageAds&&google.data?.configured!==false)+
+      (googleConnected?connectBtn('Usar conta selecionada','data-px-google-select',manageAds):'')+'</div></section>'+
+   '</div><p class="px-provenance">Nenhuma senha, token ou chave de aplicativo é solicitada nesta página. As permissões são concedidas nas telas oficiais dos provedores. WhatsApp exige leitura do QR Code.</p>'+
+   '</div>';
+  const safeLocation=(uri,domain)=>{
+   const url=new URL(uri);if(url.protocol!=='https:'||!(url.hostname===domain||url.hostname.endsWith('.'+domain)))throw Error('Destino de autorização não reconhecido.');
+   location.assign(url.href);
+  };
+  root.querySelector('[data-px-wa]')?.addEventListener('click',()=>globalThis.SocioUX?.openQr({
+   api,toast:msg=>{const el=root.querySelector('.px-provenance');if(el)el.textContent=msg;},canManage:manageWa,
+   onConnected:()=>connections({root,api,me,navigate})}));
+  root.querySelector('[data-px-meta]')?.addEventListener('click',async ev=>{
+   ev.currentTarget.disabled=true;try{const r=await api('/api/marketing/official/connect','POST',{});safeLocation(r.authorizationUrl,'facebook.com');}
+   catch(e){root.querySelector('.px-provenance').textContent=e.message;ev.currentTarget.disabled=false;}
+  });
+  root.querySelector('[data-px-google]')?.addEventListener('click',async ev=>{
+   ev.currentTarget.disabled=true;try{const r=await api('/api/google-ads/connect','POST',{});safeLocation(r.authorizationUrl,'accounts.google.com');}
+   catch(e){root.querySelector('.px-provenance').textContent=e.message;ev.currentTarget.disabled=false;}
+  });
+  if(metaConnected){
+   const select=root.querySelector('#pxMetaAccount');
+   optional(api,'/api/marketing/official/accounts').then(result=>{
+    if(!select?.isConnected)return;select.replaceChildren(new Option('Escolha uma conta…',''));
+    for(const account of result.data?.accounts||[])select.add(new Option((account.name||account.id)+' · '+(account.currency||''),account.id));
+    select.value=metaSelected?.account_id||'';
+   });
+   root.querySelector('[data-px-meta-select]')?.addEventListener('click',async ev=>{
+    if(!select?.value)return;
+    ev.currentTarget.disabled=true;
+    try{await api('/api/marketing/official/account','POST',{accountId:select.value});await connections({root,api,me,navigate});}
+    catch(e){root.querySelector('.px-provenance').textContent=e.message;ev.currentTarget.disabled=false;}
+   });
+  }
+  if(googleConnected){
+   const select=root.querySelector('#pxGoogleAccount');
+   optional(api,'/api/google-ads/accounts').then(result=>{
+    if(!select?.isConnected)return;select.replaceChildren(new Option('Escolha uma conta…',''));
+    for(const account of result.data?.accounts||[])select.add(new Option(account.id,account.id));
+    select.value=googleSelected||'';
+   });
+   root.querySelector('[data-px-google-select]')?.addEventListener('click',async ev=>{
+    if(!select?.value)return;
+    ev.currentTarget.disabled=true;
+    try{await api('/api/google-ads/accounts/select','POST',{accountId:select.value});await connections({root,api,me,navigate});}
+    catch(e){root.querySelector('.px-provenance').textContent=e.message;ev.currentTarget.disabled=false;}
+   });
+  }
+ }
+ globalThis.SocioWorkspaceUI={overview,marketing,connections};
+})();
