@@ -60,7 +60,7 @@ function financeFixture({outage=false}={}){
  }};
  const request=async(url,opts)=>{
   const u=new URL(url);calls.push(u);
-  assert.equal(opts.method,'GET');
+  assert.equal(opts.method||'GET','GET');
   const ok=data=>({ok:true,json:async()=>data});
   const rejected=()=>({ok:false,json:async()=>({error:{message:'Field restricted'}})});
   if(u.pathname.endsWith('/me/adaccounts'))return ok({data:[{id:'act_123456',name:'Conta teste',currency:'BRL'}]});
