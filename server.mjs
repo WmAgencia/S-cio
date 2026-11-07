@@ -46,6 +46,7 @@ import {getTenantBusinessMonitor,getMasterSaasMonitor} from './socio-business-mo
 import {readSubscriptionStatus,createSubscriptionCheckout,createBillingPortal,processSubscriptionWebhook} from './socio-subscriptions.mjs';
 import {startGoogleAdsOAuth,finishGoogleAdsOAuth,googleAdsStatus,listGoogleAdsAccounts,selectGoogleAdsAccount,disconnectGoogleAds} from './socio-google-ads.mjs';
 import {createTrackingSite,listTrackingSites,enableTrackingSite,receiveSignedSiteEvent} from './socio-site-tracking.mjs';
+import {integrationReadiness} from './socio-integrations-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {createQuote,issueQuote,cancelQuote,publicQuote,approveQuote,declineQuote,listSales,createTestCheckout,processStripeTestEvent} from './sales-commerce.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
@@ -1015,6 +1016,8 @@ async function handle(req,res){
   return json(res,201,r.rows[0]);
  }
 
+ if(method==='GET'&&pathname==='/api/integrations/readiness')
+  return json(res,200,await integrationReadiness(pool,a));
  if(method==='GET'&&pathname==='/api/tracking/sites')
   return json(res,200,await listTrackingSites(pool,a));
  if(method==='POST'&&pathname==='/api/tracking/sites'){
