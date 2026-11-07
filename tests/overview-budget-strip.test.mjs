@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const ui=readFileSync(new URL('../public/socio-workspace-ui.js',import.meta.url),'utf8');
+const css=readFileSync(new URL('../public/socio-executive.css',import.meta.url),'utf8');
+
+test('ad funds summary is the first section of the company overview',()=>{
+ const start=ui.indexOf("async function overview(");
+ const end=ui.indexOf("async function marketing(",start);
+ const screen=ui.slice(start,end);
+ const header=screen.indexOf("root.innerHTML='<div class=\"px-workspace px-overview\">'+");
+ assert(header>0);
+ const body=screen.slice(header,header+4000);
+ assert(body.indexOf("px-budget-top")>=0);
+ assert(body.indexOf("px-budget-top")<body.indexOf("px-page-heading"));
+ assert(body.includes("budgetHeaderItem('meta_ads'"));
+ assert(body.includes("budgetHeaderItem('google_ads'"));
+ assert(body.includes("px-budget-meter"));
+});
+test('no unverified balance or exhaustion date is presented as financial fact',()=>{
+ const beginning=ui.indexOf("  // A prepaid balance is not the Meta account's");
+ const end=ui.indexOf("  root.innerHTML='<div class=\"px-workspace px-overview\">'+",beginning);
+ const card=ui.slice(beginning,end);
+ assert(beginning>0);
+ assert(card.includes('Saldo disponível'));
+ assert(card.includes('<strong>Não disponível</strong>'));
+ assert(card.includes('Duração estimada'));
+ assert(card.includes('<strong>—</strong>'));
+ assert.doesNotMatch(card,/Math\.round\([^)]*balance|spend_cap|balance\s*[-+]/);
+});
+test('budget line stays compact, mobile compatible, and does not imply a fake percentage',()=>{
+ assert.match(css,/\.px-budget-top-grid\{display:grid/);
+ assert.match(css,/\.px-budget-account\{[^}]*padding:10px 14px 9px/);
+ assert.match(css,/\.px-budget-meter\{height:4px/);
+ assert.match(css,/@media\(max-width:800px\)\{\.px-budget-top-grid\{grid-template-columns:1fr/);
+ assert.doesNotMatch(css,/\.px-budget-meter\s*>\s*span/);
+});
