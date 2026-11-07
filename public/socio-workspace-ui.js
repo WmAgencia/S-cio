@@ -25,9 +25,15 @@
   const floor=190,xlast=16+(values.length-1)/Math.max(1,values.length-1)*712;
   const area=path('inbound')+' L'+xlast+','+floor+' L16,'+floor+'Z';
   const guides=[.25,.5,.75,1].map(r=>'<line x1="16" x2="728" y1="'+(190-r*162)+'" y2="'+(190-r*162)+'" stroke="#e8e4f3" stroke-width="1" stroke-dasharray="4 7"/>').join('');
+  const hoverPoints=values.map((d,i)=>{
+   const x=(16+i/Math.max(1,values.length-1)*712).toFixed(1);
+   const y=(190-d.inbound/max*162).toFixed(1);
+   const label=esc(d.date+' — '+d.inbound+' recebidas, '+d.outbound+' enviadas');
+   return '<circle class="px-chart-hit" tabindex="0" cx="'+x+'" cy="'+y+'" r="9" fill="transparent" aria-label="'+label+'"><title>'+label+'</title></circle>';
+  }).join('');
   return '<svg class="px-svg" viewBox="0 0 748 212" preserveAspectRatio="none" role="img" aria-label="Gráfico de mensagens recebidas em roxo e enviadas em verde">'+defs+guides+
    '<path d="'+area+'" fill="url(#pxChartFill)"/><path d="'+path('inbound')+'" stroke="#7650ed" fill="none" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>'+
-   '<path d="'+path('outbound')+'" stroke="#16a778" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'+
+   '<path d="'+path('outbound')+'" stroke="#16a778" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'+hoverPoints+'</svg>'+
    '<div class="px-axis"><span>'+esc(values[0].date)+'</span><span>'+esc(values[Math.floor(values.length/2)].date)+'</span><span>'+esc(values.at(-1).date)+'</span></div>';
  };
  const section=(title,subtitle,content,aside='')=>'<section class="px-panel"><div class="px-panel-head"><div><h2>'+esc(title)+'</h2><p>'+esc(subtitle)+'</p></div>'+aside+'</div>'+content+'</section>';
@@ -75,12 +81,13 @@
    activeAds:adList.filter(x=>(x.effective_status||x.status)==='ACTIVE').length,
    best:daily.filter(x=>Number(x.clicks)>0).sort((a,b)=>Number(b.clicks)-Number(a.clicks))[0]||null};
  }
- async function overview({root,api,me,navigate}){
+ async function overview({root,api,me,navigate,activityRange='1m'}){
+  const range=['7d','1m','90d'].includes(activityRange)?activityRange:'1m';
   root.innerHTML='<div class="px-loading">Montando indicadores reais da empresa…</div>';
   const authorized=can(me,'audit.read'),ads=can(me,'marketing.read');
   const calls=[
    optional(api,'/api/dashboard'),
-   optional(api,'/api/dashboard/activity?range=1m'),
+   optional(api,'/api/dashboard/activity?range='+range),
    authorized?optional(api,'/api/dashboard/executive'):Promise.resolve({data:null,ok:false}),
    optional(api,'/api/waakg/channels'),
    authorized?optional(api,'/api/reports/monitor'):Promise.resolve({data:null,ok:false}),
@@ -116,11 +123,14 @@
      '<small>'+(metaReady&&meta.clicks?'CPC: '+money(meta.spend/meta.clicks,meta.currency):'Sem CPC verificável')+'</small></article>'+
    '</div>'+
    '<div class="px-dual">'+
-    section('Atividade de conversas','Mensagens recebidas e enviadas nos últimos 30 dias',
+    section('Atividade de conversas','Mensagens recebidas e enviadas, conforme o período selecionado',
      '<div class="px-graph-counts"><div><span>Recebidas</span><strong>'+number(received)+'</strong></div><div><span>Enviadas</span><strong>'+number(sent)+'</strong></div><div><span>Volume total</span><strong>'+number(received+sent)+'</strong></div></div>'+
      '<div class="px-chart-wrap">'+chart(daily)+'</div>'+
      '<div class="px-legend"><span><i class="px-dot purple"></i> Recebidas</span><span><i class="px-dot green"></i> Enviadas</span></div>',
-     '<button type="button" class="btn sm soft" data-px-inbox>Ver conversas</button>')+
+     '<div class="px-chart-actions" role="group" aria-label="Período do gráfico">'+
+       [['7d','7 dias'],['1m','30 dias'],['90d','90 dias']].map(([value,label])=>
+        '<button type="button" class="px-range-btn '+(range===value?'active':'')+'" data-px-chart-range="'+value+'" aria-pressed="'+(range===value)+'">'+label+'</button>').join('')+
+       '</div>')+
     section('Produtos mais solicitados','Intenções identificadas nos últimos 30 dias — não vendas pagas',
      products.length?'<div class="px-products-rank">'+products.map((p,i)=>
       '<div class="px-rank"><div class="px-rank-title"><span>'+(i+1)+'. '+esc(p.name)+'</span><strong>'+number(p.requests)+' solicitações</strong></div>'+
@@ -151,7 +161,10 @@
      '<button type="button" class="btn sm soft" data-px-connections>+ Conectar WhatsApp</button>')+
    '<p class="px-provenance">Indicadores consolidados por empresa. Métricas publicitárias dependem das permissões Meta/Google; conversões atribuídas por anúncios não são comprovantes de pagamento. Nenhum número indisponível é substituído por uma estimativa.</p>'+
   '</div>';
-  root.querySelector('[data-px-reload]')?.addEventListener('click',()=>overview({root,api,me,navigate}));
+  root.querySelector('[data-px-reload]')?.addEventListener('click',()=>overview({root,api,me,navigate,activityRange:range}));
+  root.querySelectorAll('[data-px-chart-range]').forEach(button=>button.addEventListener('click',()=>
+   overview({root,api,me,navigate,activityRange:button.dataset.pxChartRange})));
+
   root.querySelector('[data-px-inbox]')?.addEventListener('click',()=>navigate('inbox'));
   root.querySelector('[data-px-products]')?.addEventListener('click',()=>navigate('products'));
   root.querySelector('[data-px-connections]')?.addEventListener('click',()=>navigate('connections'));
