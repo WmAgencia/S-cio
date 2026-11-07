@@ -62,7 +62,7 @@ export async function monitorMetaBilling(pool,browserService){
    const result=await browserService.billing(pool,a,'read');
    if(result.observation)await saveMetaBillingObservation(pool,a,result);
    else await pool.query('UPDATE meta_billing_observations SET last_attempt_at=now(),last_error=$4 WHERE tenant_id=$1 AND user_id=$2 AND account_id=$3',
-    [row.tenant_id,row.user_id,row.account_id,'needs_login']);
+    [row.tenant_id,row.user_id,row.account_id,result.state==='busy'?'busy':'needs_login']);
    checked++;
   }catch{
    await pool.query("UPDATE meta_billing_observations SET last_attempt_at=now(),last_error='refresh_failed' WHERE tenant_id=$1 AND user_id=$2 AND account_id=$3",
