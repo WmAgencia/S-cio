@@ -13,7 +13,7 @@ test('separate Master and production sidebars stay behind primary-owner permissi
  assert.match(app,/const masterViews=new Set\(\['masterOverview','admin','masterPlans'\]\)/);
  assert.match(app,/const isPrimaryMaster=\(\)=>!!\(state\.me\?\.user\?\.platformOwner&&state\.me\?\.user\?\.homeTenantId\)/);
  assert.match(app,/if\(masterViews\.has\(next\)&&!isPrimaryMaster\(\)\)return;/);
- assert.match(app,/body\.classList\.toggle/);
+ assert.match(app,/body\?\.classList\?\.toggle/);
  assert.match(app,/socio-is-master/);
  assert.match(app,/syncMasterSwitch\(\)/);
  assert.match(app,/const homeTenantId=state\.me\.user\.homeTenantId/);
