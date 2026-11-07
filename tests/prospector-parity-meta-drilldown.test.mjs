@@ -19,7 +19,7 @@ test('WhatsApp layout keeps functional Sócio inbox, styled like Prospector',()=
  assert.match(inbox,/wa-inbox-items/);
  assert.match(inbox,/wa-inbox-main/);
  assert.match(inbox,/Mensagens <span id="inboxCount"/);
- assert.match(theme,/Prospector conversation UX parity/);
+ assert.match(theme,/Match Prospector's light, purple messenger proportions/);
 });
 test('company admins may delegate administrators but cannot change owner role',()=>{
  assert(permissionsFor('admin').includes('team.promote'));
