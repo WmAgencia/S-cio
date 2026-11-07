@@ -3,25 +3,71 @@
 (()=>{
  const escape=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const node=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=String(txt);return e;};
- let root=null,host=null,api=null,toast=null,csrf='',user=null,state=null,versions=[],busy=false,recorder=null,stream=null,recordChunks=[],recordTimer=null,transcriptText='',speaking=false;
+ let root=null,host=null,api=null,toast=null,csrf='',user=null,state=null,versions=[],busy=false,recorder=null,stream=null,recordChunks=[],recordTimer=null,transcriptText='',speaking=false,liveVoice=null,voiceState='off',finishSpeech=null;
  const canEdit=()=>user?.platformOwner||['owner','admin'].includes(user?.role);
- const say=text=>{
-  if(!state?.interview||state.interview.mode!=='voice'||!('speechSynthesis' in window))return;
+ const say=text=>new Promise(resolve=>{
+  if(!state?.interview||state.interview.mode!=='voice'||!('speechSynthesis' in window)){resolve();return;}
   try{
    window.speechSynthesis.cancel();
    const utterance=new SpeechSynthesisUtterance(text);
    utterance.lang='pt-BR';utterance.rate=1.04;utterance.pitch=1.0;
-   speaking=true;utterance.onend=()=>{speaking=false;};utterance.onerror=()=>{speaking=false;};
+   let settled=false;
+   const done=()=>{if(settled)return;settled=true;speaking=false;finishSpeech=null;resolve();};
+   finishSpeech=done;speaking=true;utterance.onend=done;utterance.onerror=done;
    window.speechSynthesis.speak(utterance);
-  }catch{speaking=false;}
- };
+  }catch{speaking=false;finishSpeech=null;resolve();}
+ });
  const stopVoice=()=>{
+  const active=liveVoice;liveVoice=null;voiceState='off';
+  try{active?.stop();}catch{}
   try{window.speechSynthesis?.cancel();}catch{}
+  finishSpeech?.();finishSpeech=null;speaking=false;
   if(recordTimer)clearTimeout(recordTimer);recordTimer=null;
   if(recorder?.state==='recording')recorder.stop();
   if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
   recorder=null;recordChunks=[];
  };
+ const voiceStatusText=()=>({
+  connecting:'Conectando microfone…',listening:'Microfone ativo · pode falar',hearing:'Estou ouvindo…',
+  speaking:'O Sócio está falando · você pode interromper',processing:'Entendendo sua resposta…',
+  off:'Voz desligada · ative quando quiser'
+ })[speaking?'speaking':voiceState]||'Treinamento por voz';
+ function updateVoiceStatus(){
+  const status=host?.querySelector('#psVoiceStatus');
+  if(status)status.textContent=voiceStatusText();
+  const btn=host?.querySelector('[data-ps-record]');
+  if(btn)btn.textContent=liveVoice?'Desligar voz':'Conversar por voz';
+ }
+ async function beginLiveVoice(){
+  if(liveVoice||!state?.interview||state.interview.completed)return;
+  const {createSocioVoiceSession}=await import('/socio-francisca-live.mjs');
+  const session=createSocioVoiceSession({
+   canInterrupt:()=>speaking,
+   onInterrupt:()=>{try{window.speechSynthesis?.cancel();}catch{}finishSpeech?.();voiceState='hearing';updateVoiceStatus();},
+   onState:status=>{voiceState=status;updateVoiceStatus();},
+   onError:message=>toast(message,true),
+   maxTurnMs:22000,
+   onTurn:async blob=>{
+    if(!liveVoice)return;
+    if(blob.size>3*1024*1024){toast('Fale em frases um pouco mais curtas.',true);return;}
+    const mime=(blob.type||'audio/webm').split(';')[0];
+    const response=await fetch('/api/training/interview/audio',{
+     method:'POST',credentials:'same-origin',
+     headers:{'Content-Type':mime,'X-CSRF-Token':csrf},body:blob});
+    const result=await response.json();
+    if(!response.ok)throw Error(result.error||'Transcrição indisponível.');
+    await submit(String(result.text||'').trim());
+   }
+  });
+  liveVoice=session;
+  try{await session.start();updateVoiceStatus();}
+  catch(error){liveVoice=null;session.stop();voiceState='off';updateVoiceStatus();throw error;}
+ }
+ async function toggleLiveVoice(){
+  if(liveVoice){stopVoice();updateVoiceStatus();return;}
+  try{await beginLiveVoice();await say(state?.interview?.question||'');}
+  catch(error){toast('Não foi possível ativar a voz contínua. Continue digitando: '+String(error.message||'').slice(0,120),true);}
+ }
  async function refresh(){
   const [i,v]=await Promise.all([api('/api/training/interview'),api('/api/training/versions')]);
   state=i||{interview:null};versions=Array.isArray(v)?v:[];paint();
@@ -54,9 +100,9 @@
    '<form id="psInterviewForm" class="ps-composer"><label for="psInterviewAnswer" class="ps-sr-only">Sua resposta</label>'+
    '<textarea id="psInterviewAnswer" name="text" rows="2" maxlength="850" required '+(busy?'disabled':'')+
    ' placeholder="'+(i.step==='approach_custom'?'Digite a primeira resposta do seu jeito…':'Escreva sua resposta ou use o microfone…')+'">'+escape(transcriptText)+'</textarea>'+
-   '<div class="ps-composer-actions">'+(i.mode==='voice'?button('◉ Gravar resposta','data-ps-record','btn soft'):'<span class="ps-composer-hint">Responda naturalmente.</span>')+
+   '<div class="ps-composer-actions">'+(i.mode==='voice'?button(liveVoice?'Desligar voz':'Conversar por voz','data-ps-record','btn soft'):'<span class="ps-composer-hint">Responda naturalmente.</span>')+
    '<button type="submit" class="btn primary" '+(busy?'disabled':'')+'>'+(busy?'Enviando…':'Enviar resposta →')+'</button></div>'+
-   '<div id="psVoiceStatus" role="status" class="ps-voice-status">'+(i.mode==='voice'?'A voz utiliza o microfone e a leitura disponíveis neste dispositivo.':'Sua resposta fica privada no espaço da empresa.')+'</div></form>')+
+   '<div id="psVoiceStatus" role="status" class="ps-voice-status">'+(i.mode==='voice'?escape(voiceStatusText()):'Sua resposta fica privada no espaço da empresa.')+'</div></form>')+
    '</section>';
  }
  const review=()=>{
@@ -78,7 +124,7 @@
    '<p class="ps-training-privacy">Método de vendas compartilhado; serviços, valores, conversas e manual sempre separados por empresa. Treinar não envia WhatsApp nem cria cobranças.</p>';
   host.querySelectorAll('[data-ps-start]').forEach(b=>b.addEventListener('click',()=>run(async()=>{
    const result=await api('/api/training/interview/start','POST',{mode:b.dataset.psStart});
-   state=result;transcriptText='';paint();say(result.interview.question);
+   state=result;transcriptText='';paint();if(result.interview.mode==='voice'){try{await beginLiveVoice();await say(result.interview.question);}catch(error){toast('Microfone indisponível: '+String(error.message||''),true);}}
   })));
   host.querySelector('#psInterviewForm')?.addEventListener('submit',ev=>{
    ev.preventDefault();const text=host.querySelector('#psInterviewAnswer')?.value||'';void submit(text);
@@ -89,7 +135,7 @@
    stopVoice();await api('/api/training/interview/reset','POST',{});
    transcriptText='';await refresh();
   }));
-  host.querySelector('[data-ps-record]')?.addEventListener('click',()=>void toggleRecording());
+  host.querySelector('[data-ps-record]')?.addEventListener('click',()=>void toggleLiveVoice());
   host.querySelector('[data-ps-save]')?.addEventListener('click',()=>run(async()=>{
    const draft=getDraft();if(!draft||draft.status!=='draft')return;
    await api('/api/training/versions/'+draft.id+'/edit','POST',{markdown:host.querySelector('#psDraftMarkdown').value});
@@ -118,7 +164,7 @@
   await run(async()=>{
    const result=await api('/api/training/interview/turn','POST',{text});
    state=result;transcriptText='';await refresh();
-   if(!result.interview.completed)say(result.interview.question);
+   if(result.interview.completed)stopVoice();else await say(result.interview.question);
   });
  }
  async function toggleRecording(){
