@@ -93,6 +93,7 @@
   const googleMicros=googleReady?Number(google.data?.summary?.costMicros||0)/1e6:null;
   const googleCode=google.data?.currencyCode||null;
   const daily=activity.data?.points||[],received=daily.reduce((n,x)=>n+(Number(x.inbound)||0),0),sent=daily.reduce((n,x)=>n+(Number(x.outbound)||0),0);
+  const connectedWa=Array.isArray(wa.data)?wa.data.filter(w=>w.status==='connected'):[];
   const products=Array.isArray(ex.popularProducts)?ex.popularProducts:[];
   const max=Math.max(1,...products.map(x=>x.requests));
   root.innerHTML='<div class="px-workspace px-overview">'+
@@ -142,11 +143,18 @@
      empty('Nenhuma campanha com cliques confirmados para o período.'),
      '<button class="btn sm soft" data-px-marketing type="button">Analisar Meta Ads</button>')+
    '</div>'+
+   section('Seus WhatsApps','Números conectados disponíveis para o atendimento',
+    connectedWa.length?'<div class="px-wa-overview-list">'+connectedWa.slice(0,8).map(w=>
+     '<div><span class="px-live-dot on"></span><div><strong>'+esc(w.label||'WhatsApp')+'</strong><small>'+esc(w.phone||'Número vinculado')+'</small></div><span class="px-status on">Conectado</span></div>').join('')+
+     (connectedWa.length>8?'<small>Mais '+number(connectedWa.length-8)+' número(s).</small>':'')+'</div>':
+     empty('Nenhum WhatsApp conectado no momento.'),
+     '<button type="button" class="btn sm soft" data-px-connections>+ Conectar WhatsApp</button>')+
    '<p class="px-provenance">Indicadores consolidados por empresa. Métricas publicitárias dependem das permissões Meta/Google; conversões atribuídas por anúncios não são comprovantes de pagamento. Nenhum número indisponível é substituído por uma estimativa.</p>'+
   '</div>';
   root.querySelector('[data-px-reload]')?.addEventListener('click',()=>overview({root,api,me,navigate}));
   root.querySelector('[data-px-inbox]')?.addEventListener('click',()=>navigate('inbox'));
   root.querySelector('[data-px-products]')?.addEventListener('click',()=>navigate('products'));
+  root.querySelector('[data-px-connections]')?.addEventListener('click',()=>navigate('connections'));
   root.querySelector('[data-px-marketing]')?.addEventListener('click',()=>navigate('marketing'));
  }
  async function marketing({root,api,me,navigate,period='last_7d'}){
