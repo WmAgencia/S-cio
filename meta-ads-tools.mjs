@@ -53,7 +53,7 @@ export function normalizeMetaAccountFinance(account){
  const minor=v=>{
   if(v===undefined||v===null||v==='')return null;
   const str=String(v);
-  if(!/^\\d{1,16}$/.test(str))return null;
+  if(!/^[0-9]{1,16}$/.test(str))return null;
   const n=Number(str);return Number.isSafeInteger(n)?n:null;
  };
  const detail=account?.funding_source_details;
