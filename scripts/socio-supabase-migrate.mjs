@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 export const TABLES=Object.freeze([
  'tenants','users','flow_image_jobs','meta_official_states','meta_official_grants','meta_official_revocations','meta_official_deletions','meta_official_account_selections','meta_ads_plans','meta_local_connections','meta_local_jobs','meta_browser_connections','meta_browser_writes','ads_media','ads_media_mcp_tokens','ads_oauth_clients','ads_oauth_codes','ads_oauth_tokens','marketing_oauth_attempts','marketing_oauth_grants','instagram_hosted_profiles','marketing_connections','marketing_report_receipts','marketing_daily_metrics','instagram_oauth_states','sessions','channels','instagram_accounts','products','agents','imports',
  'conversations','instagram_outbox','messages','audit','training_jobs','training_job_items',
- 'training_versions','waakg_links','waakg_scans','waakg_scan_chats',
+ 'training_versions','socio_training_interviews','waakg_links','waakg_scans','waakg_scan_chats',
  'waakg_import_snapshots','product_variants','product_media','product_campaign_links',
  'conversation_ui_state','message_ui_state','training_auto_runs',
  'message_outbox','ai_reply_attempts','sales_quotes','sales_orders','sales_payment_events','quote_requests','sale_intents','wa_tracking_links','wa_lead_attributions','meta_report_schedules','meta_report_runs','socio_skill_runs','socio_owner_skill_receipts','socio_owner_media_receipts',
