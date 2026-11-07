@@ -322,12 +322,19 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
   creative.asset_feed_spec?.videos?.[0]?.video_id||'');
  // Meta creative.thumbnail_url can be a 64px image. Use image_url
  // (original creative resolution) or the video image when available.
- const imageUrl=safeMedia(creative.image_url||
+ // A video creative can expose a generic image_url unrelated to its frame.
+ // Prefer the verified video thumbnail over generic image assets for video ads.
+ const imageUrl=safeMedia(
   creative.object_story_spec?.video_data?.image_url||
+  creative.image_url||
   creative.object_story_spec?.link_data?.picture||
   creative.asset_feed_spec?.images?.[0]?.url);
  let thumbnailUrl=safeMedia(creative.thumbnail_url),videoUrl=null;
- let posterUrl=imageUrl;
+ // Until video.picture loads, use the creative's own video frame rather than
+ // a generic destination/placement image that may be unrelated to the ad.
+ let posterUrl=numeric(videoId)?
+  safeMedia(creative.object_story_spec?.video_data?.image_url)||thumbnailUrl||imageUrl:
+  imageUrl;
  const imageHash=String(creative.image_hash||'');
  if(!posterUrl&&/^[0-9a-fA-F]{32}$/.test(imageHash)){
   try{
@@ -336,32 +343,44 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
    });
    const original=(images.data||[]).find(item=>item.hash?.toLowerCase()===imageHash.toLowerCase());
    posterUrl=safeMedia(original?.url)||null;
-  }catch{/* Continue with safe thumbnail if account image library is unavailable. */}
+  }catch{/* Continue without an optional library image. */}
  }
  let status=videoId&&numeric(videoId)?'video_unavailable':'image',previewUrl=null;
  let videoPageUrl=null,highestResolution=false;
  if(numeric(videoId)){
+  // A read-only poster lookup should not request video streams, permalinks or
+  // ad-preview HTML. This keeps thumbnail hydration fast and low-privilege.
   try{
-   const video=await graph(c,'/'+videoId,{fields:'id,source,picture'});
-   if(String(video.id)===videoId){
+   let video;
+   try{
+    video=await graph(c,'/'+videoId,{fields:options.posterOnly?'id,picture':'id,source,picture'});
+   }catch(error){
+    // Some ads_read tokens may read picture but not source.
+    video=await graph(c,'/'+videoId,{fields:'id,picture'});
+   }
+   if(String(video?.id)===videoId){
     videoUrl=safeMedia(video.source);
-    posterUrl=posterUrl||safeMedia(video.picture);
+    // When the ad is a video, the video's picture is more authoritative
+    // than a creative.image_url, which may describe a different placement.
+    posterUrl=safeMedia(video.picture)||posterUrl;
     thumbnailUrl=thumbnailUrl||safeMedia(video.picture);
-    // Separate optional lookup: a thumbnails permission failure must not
-    // discard an otherwise playable video stream.
-    if(!imageUrl){
-     try{
-      const thumbs=await graph(c,'/'+videoId,{fields:'thumbnails{uri,width,height,is_preferred}'});
-      const pictures=Array.isArray(thumbs.thumbnails?.data)?thumbs.thumbnails.data:[];
-      const largest=pictures.filter(t=>safeMedia(t.uri)).sort((a,b)=>
-       (Number(b.width)||0)*(Number(b.height)||0)-(Number(a.width)||0)*(Number(a.height)||0))[0];
-      if(largest&&(Number(largest.width)||0)>=320){posterUrl=safeMedia(largest.uri)||posterUrl;highestResolution=true;}
-     }catch{/* Optional high-resolution asset unavailable to this token. */}
-    }
+    try{
+     const thumbs=await graph(c,'/'+videoId,{fields:'thumbnails{uri,width,height,is_preferred}'});
+     const pictures=Array.isArray(thumbs.thumbnails?.data)?thumbs.thumbnails.data:[];
+     const largest=pictures.filter(p=>safeMedia(p.uri)).sort((x,y)=>
+      (Number(y.width)||0)*(Number(y.height)||0)-(Number(x.width)||0)*(Number(x.height)||0))[0];
+     if(largest&&(Number(largest.width)||0)>=320){
+      posterUrl=safeMedia(largest.uri)||posterUrl;
+      highestResolution=true;
+     }
+    }catch{/* Thumbnails may be unavailable with ads_read. */}
     if(videoUrl)status='video_ready';
    }
-  }catch{/* Some placements do not expose a stream even with ads_read. */}
+  }catch{/* Some videos are not readable by this account token. */}
  }
+ if(options.posterOnly)return {readOnly:true,adId,accountId:c.account.id,campaignId:String(ad.campaign_id||''),
+  name:String(ad.name||'').slice(0,200),posterUrl:posterUrl||thumbnailUrl,thumbnailUrl,
+  videoId:numeric(videoId)?videoId:null,quality:(highestResolution?'video_hd':posterUrl?'poster':'thumbnail_only')};
  if(numeric(videoId)){
   const pageId=String(creative.object_story_spec?.page_id||
    creative.object_story_spec?.video_data?.page_id||'');

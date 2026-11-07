@@ -49,12 +49,21 @@ test('HD poster takes priority over Meta 64px thumbnail, video has trusted exter
   source:'https://video.xx.fbcdn.net/highquality.mp4'});
  const m=await readSelectedAdMedia(f.pool,actor,'1111111111',{env,request:f.request});
  assert.equal(m.quality,'original_or_video');
- assert.match(m.posterUrl,/original-1080x1920/);
+ assert.match(m.posterUrl,/poster-hd/); // Video frames outrank a creative image from another placement.
  assert.match(m.thumbnailUrl,/64px/);
  assert.match(m.videoUrl,/highquality.mp4/);
  assert.equal(m.watchUrl,'https://www.facebook.com/watch/?v=2222222222');
  assert(!JSON.stringify(m).includes('secret-only-server-value'));
  assert(f.calls.every(u=>!u.searchParams.has('access_token')));
+});
+test('poster-only endpoint returns the verified frame without requesting MP4 or preview HTML',async()=>{
+ const f=fixture({imageUrl:'https://scontent.xx.fbcdn.net/generic-image.jpg'});
+ const media=await readSelectedAdMedia(f.pool,actor,'1111111111',{env,request:f.request,posterOnly:true});
+ assert.match(media.posterUrl,/poster-hd/);
+ assert.equal(media.videoUrl,undefined);
+ assert.equal(media.readOnly,true);
+ assert(f.calls.every(u=>!u.pathname.endsWith('/previews')));
+ assert(f.calls.every(u=>u.searchParams.get('fields')!=='id,source,picture'));
 });
 test('when Meta MP4 is not available the verified watch URL is available, and optional HD poster is used',async()=>{
  const f=fixture();
@@ -108,7 +117,9 @@ test('UI and CSS explicitly show media play control and prevent overflow',()=>{
  assert(css.includes('overflow-wrap:anywhere'));
  assert(css.includes('flex:0 0 min(34%,220px)'));
  assert(css.includes('px-media-play'));
- assert(ui.includes('const posterFromAd=ad=>mediaUrl(ad?.creative?.image_url'));
+ assert(ui.includes('const posterFromAd=ad=>{'));
+ assert(ui.includes('creative.thumbnail_url'));
+ assert(ui.includes('const applyPoster='));
  assert(ui.includes("playButton('Ver vídeo do anúncio"));
  assert(ui.includes('trustedVideoEmbed(result.videoEmbedUrl)'));
  assert(ui.includes('data-campaign-preview'));

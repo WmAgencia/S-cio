@@ -12,14 +12,14 @@
  const optional=async(api,path)=>{try{return {data:await api(path),ok:true};}catch(error){return {data:null,ok:false,reason:String(error?.message||'Dados indisponíveis').slice(0,120)};}};
  // Small per-company GET cache removes the blank transition on repeat visits.
  // In-flight calls are shared; values expire quickly and manual refresh clears them.
- const getCache=new Map();const snapshots=new Map();let selectedTenant=null,renderSerial=0;
+ const getCache=new Map();const snapshots=new Map();const posterCache=new Map();let selectedTenant=null,renderSerial=0;
  let liveRefreshTimer=null,liveRefreshSerial=0;
  const stopLiveRefresh=()=>{if(liveRefreshTimer){clearInterval(liveRefreshTimer);liveRefreshTimer=null;}liveRefreshSerial++;};
  const invalidateRender=()=>{renderSerial++;stopLiveRefresh();};
  const forTenant=me=>{const id=[me?.tenant?.id||'',me?.user?.id||'',me?.user?.role||''].join(':');
-  if(selectedTenant!==id){stopLiveRefresh();getCache.clear();snapshots.clear();selectedTenant=id;}
+  if(selectedTenant!==id){stopLiveRefresh();getCache.clear();posterCache.clear();snapshots.clear();selectedTenant=id;}
  };
- const clearCache=()=>{stopLiveRefresh();getCache.clear();snapshots.clear();selectedTenant=null;};
+ const clearCache=()=>{stopLiveRefresh();getCache.clear();posterCache.clear();snapshots.clear();selectedTenant=null;};
  const startLiveRefresh=(root,kind,renderId,refresh,updateWhilePlaying)=>{
   stopLiveRefresh();const serial=liveRefreshSerial;
   liveRefreshTimer=setInterval(async()=>{
@@ -78,9 +78,37 @@
     /(^|\.)(fbcdn\.net|fbsbx\.com|cdninstagram\.com)$/.test(u.hostname.toLowerCase())?u.href:null;
   }catch{return null;}
  };
- const posterFromAd=ad=>mediaUrl(ad?.creative?.image_url||
-  ad?.creative?.object_story_spec?.video_data?.image_url||
-  ad?.creative?.thumbnail_url);
+ const posterFromAd=ad=>{
+  const creative=ad?.creative||{},video=Boolean(creative.video_id||
+   creative.object_story_spec?.video_data?.video_id||creative.asset_feed_spec?.videos?.length);
+  const candidates=video?
+   [creative.object_story_spec?.video_data?.image_url,creative.thumbnail_url,
+    creative.image_url,creative.object_story_spec?.link_data?.picture]:
+   [creative.image_url,creative.object_story_spec?.link_data?.picture,creative.thumbnail_url];
+  return candidates.map(mediaUrl).find(Boolean)||null;
+ };
+ // Replace placeholders instead of appending a tiny second image beside the button.
+ const applyPoster=(holder,value,label)=>{
+  const url=mediaUrl(value);
+  if(!url||!holder?.isConnected)return false;
+  let img=holder.querySelector('.px-feature-poster');
+  if(!img){
+   img=document.createElement('img');img.className='px-feature-poster';
+   img.loading='lazy';img.alt=label||'Miniatura do anúncio';
+   holder.prepend(img);
+  }
+  if(img.getAttribute('src')!==url)img.src=url;
+  holder.querySelector('.px-feature-no-media')?.remove();
+  holder.classList.add('px-has-poster');
+  img.addEventListener('error',()=>{
+   // Broken signed CDN URL must not leave a misleading miniature.
+   holder.classList.remove('px-has-poster');img.remove();
+   if(!holder.querySelector('.px-feature-no-media')&&
+      !holder.querySelector('video,iframe'))
+    holder.insertAdjacentHTML('afterbegin','<div class="px-feature-no-media">Imagem indisponível</div>');
+  },{once:true});
+  return true;
+ };
  const trustedMetaPreview=value=>{
   try{
    const u=new URL(value);
@@ -220,7 +248,7 @@
    return '<div class="px-ad-creative-row">'+
     '<div class="px-ad-creative-media" data-px-ad-media="'+esc(ad.id)+'">'+
      (posterFromAd(ad)?posterView(posterFromAd(ad),'Miniatura do anúncio '+(ad.name||ad.id)):
-      '<div class="px-feature-no-media">Criativo</div>')+
+      '<div class="px-feature-no-media">Carregando capa…</div>')+
     '</div><div class="px-ad-creative-info"><strong>'+esc(ad.name||ad.id)+'</strong>'+
      '<small>ID '+esc(ad.id)+'</small>'+inherited+
      '<button type="button" class="px-quick-action" data-px-ad-play="'+esc(ad.id)+'">▶ Ver criativo</button></div>'+
@@ -501,9 +529,6 @@
        '<span>Compras atribuídas <b>'+(data.bestAd.purchases===null?'—':number(data.bestAd.purchases))+'</b></span></div>'+
       '<p class="px-muted">Reproduza o vídeo pelo botão Play quando a Meta disponibilizar a mídia. Eventos atribuídos não comprovam venda paga.</p></div></div>':
     empty(data?.adInsights.ok?'Sem anúncios com métricas suficientes no período.':'Relatório por anúncio indisponível nesta conta.')):'')+
-   (!selectedCampaign?section('Anúncios e criativos','Anúncios vinculados à conta de anúncios selecionada',
-    data?.ads.ok?(ads.length?adCards(ads,false):empty('Nenhum anúncio retornado pela conta.')):
-     empty('Os anúncios estão indisponíveis até autorizar a leitura.')):'')+
    section('Interpretação dos resultados','As plataformas reportam atribuições, não pagamentos conciliados',
     '<div class="px-footnote">O CPA é calculado apenas quando a Meta retorna eventos Purchase. Esses eventos não são prova de pedido pago. Sem evento válido, o painel mostra “—”, em vez de inventar resultados.</div>')+
    '<dialog id="pxCampaignDialog" class="px-campaign-dialog" aria-labelledby="pxActionTitle">'+
@@ -518,6 +543,58 @@
       '<button type="button" class="btn primary" data-px-action-confirm hidden>Confirmar na Meta</button></div></div></dialog>'+
    '</div>';
   snapshots.set('marketing',root.innerHTML);
+  if(selectedAdset&&visibleAds.length){
+   // Only visible cards fetch private, verified ad media. IntersectionObserver
+   // avoids bulk Graph calls for long campaigns; a short fallback covers old UAs.
+   const accountId=String(data?.status?.data?.selectedAccount?.id||'');
+   const byId=new Map(visibleAds.map(ad=>[String(ad.id),ad]));
+   const queue=[];let active=0;
+   const hydrate=async(holder,ad)=>{
+    if(!holder?.isConnected||renderId!==renderSerial)return;
+    const cacheKey=[selectedTenant,accountId,ad.id].join(':');
+    const saved=posterCache.get(cacheKey);
+    let poster=saved&&Date.now()-saved.at<180000?saved.poster:null;
+    if(!poster){
+     const result=await cached(api,'/api/marketing/tools/ad-media?adId='+
+      encodeURIComponent(ad.id)+'&posterOnly=1',60000);
+     poster=mediaUrl(result.data?.posterUrl)||mediaUrl(result.data?.thumbnailUrl);
+     if(poster)posterCache.set(cacheKey,{at:Date.now(),poster});
+    }
+    if(renderId!==renderSerial||!holder.isConnected)return;
+    if(poster)applyPoster(holder,poster,'Miniatura de '+String(ad.name||'anúncio'));
+    else{
+     const placeholder=holder.querySelector('.px-feature-no-media');
+     if(placeholder)placeholder.textContent='Sem miniatura';
+    }
+   };
+   const run=()=>{
+    while(queue.length&&active<3){
+     const [holder,ad]=queue.shift();active++;
+     Promise.resolve(hydrate(holder,ad)).catch(()=>{
+      if(holder.isConnected){
+       const label=holder.querySelector('.px-feature-no-media');
+       if(label)label.textContent='Miniatura indisponível';
+      }
+     }).finally(()=>{active--;run();});
+    }
+   };
+   const enqueue=(holder)=>{
+    const id=holder?.dataset?.pxAdMedia,ad=byId.get(String(id));
+    if(!ad||!/^\d{4,30}$/.test(String(id)))return;
+    queue.push([holder,ad]);run();
+   };
+   const holders=[...root.querySelectorAll('.px-ad-creative-media[data-px-ad-media]')];
+   if(typeof IntersectionObserver==='function'){
+    const observer=new IntersectionObserver(entries=>{
+     entries.forEach(entry=>{
+      if(!entry.isIntersecting)return;
+      observer.unobserve(entry.target);enqueue(entry.target);
+     });
+     if(renderId!==renderSerial)observer.disconnect();
+    },{rootMargin:'420px 0px'});
+    holders.forEach(holder=>observer.observe(holder));
+   }else holders.slice(0,30).forEach(enqueue);
+  }
   if(!selectedCampaign&&data?.bestAd?.id){
    const holder=root.querySelector('[data-featured-media]');
    const adName=String(data.bestAd.name||'Anúncio');
@@ -531,12 +608,8 @@
      return null;
     }
     media=result.data||{};
-    const poster=mediaUrl(media.posterUrl||media.thumbnailUrl)||bestThumbnail;
-    if(poster){
-     const img=holder.querySelector('.px-feature-poster');
-     if(img)img.src=poster;
-     else holder.insertAdjacentHTML('afterbegin',posterView(poster,'Miniatura do anúncio'));
-    }
+    const poster=mediaUrl(media.posterUrl)||mediaUrl(media.thumbnailUrl)||bestThumbnail;
+    if(poster)applyPoster(holder,poster,'Miniatura do anúncio '+adName);
     if(media.quality==='thumbnail_only')holder.classList.add('px-media-lowres');
     if(!mediaUrl(media.videoUrl)&&!trustedVideoEmbed(media.videoEmbedUrl)&&!trustedMetaPreview(media.previewUrl)){
      if(button){button.textContent='Sem vídeo disponível';button.disabled=true;}
@@ -551,7 +624,7 @@
     button.disabled=true;button.textContent='Carregando vídeo…';
     const result=media||await request;
     if(!result){button.disabled=false;button.textContent='Tentar novamente';return;}
-    const video=mediaUrl(result.videoUrl),poster=mediaUrl(result.posterUrl||result.thumbnailUrl)||bestThumbnail;
+    const video=mediaUrl(result.videoUrl),poster=mediaUrl(result.posterUrl)||mediaUrl(result.thumbnailUrl)||bestThumbnail;
     if(video){
      const el=document.createElement('video');
      el.className='px-feature-video';el.controls=true;el.playsInline=true;
@@ -593,7 +666,7 @@
      const player=document.createElement('video');player.controls=true;player.playsInline=true;
      player.preload='metadata';player.className='px-feature-video';
      player.setAttribute('aria-label','Vídeo de '+name);
-     const poster=mediaUrl(media.posterUrl||media.thumbnailUrl);if(poster)player.poster=poster;
+     const poster=mediaUrl(media.posterUrl)||mediaUrl(media.thumbnailUrl);if(poster)player.poster=poster;
      player.src=video;holder.replaceChildren(player);void player.play().catch(()=>{});
      button.textContent='Vídeo disponível';button.disabled=true;
     }else if(trustedVideoEmbed(media.videoEmbedUrl)){
@@ -607,8 +680,8 @@
      frame.setAttribute('allow','autoplay; encrypted-media; picture-in-picture');
      holder.replaceChildren(frame);button.textContent='Prévia disponível';button.disabled=true;
     }else{
-     const poster=mediaUrl(media.posterUrl||media.thumbnailUrl);
-     if(poster)holder.innerHTML=posterView(poster,'Imagem do anúncio '+name);
+     const poster=mediaUrl(media.posterUrl)||mediaUrl(media.thumbnailUrl);
+     if(poster)applyPoster(holder,poster,'Imagem do anúncio '+name);
      button.textContent=poster?'Imagem do criativo':'Mídia indisponível';button.disabled=true;
     }
    }catch(error){button.textContent=String(error.message||'Criativo indisponível').slice(0,65);button.disabled=false;}
