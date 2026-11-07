@@ -9,7 +9,7 @@ const featuresEnabled=()=>state.me?.tenant?.features||{};
 const featureAvailable=key=>featuresEnabled()[key]!==false;
 const ownAccountAvailable=()=>!!state.me?.user?.platformOwner||(state.me?.user?.permissions||[]).includes('account.manage');
 const viewAvailable=key=>!featureView[key]||featureAvailable(featureView[key])||key==='team'&&ownAccountAvailable();
-const titles={overview:'Visão geral',reports:'Relatórios',inbox:'WhatsApp',marketing:'Meta Ads',channels:'WhatsApps',products:'Produtos e serviços',sales:'Vendas',quotes:'Orçamentos',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
+const titles={overview:'Visão geral',inbox:'WhatsApp',connections:'Conexões',marketing:'Meta Ads',products:'Produtos e serviços',sales:'Vendas',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',admin:'Empresas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -140,18 +140,25 @@ async function boot(){
    if(accountNav){accountNav.title=accountLabel;accountNav.setAttribute('aria-label',accountLabel);}
    const marketingStatus=typeof location==='object'?new URL(location.href).searchParams.get('marketing'):null;
    const marketingProvider=typeof location==='object'?new URL(location.href).searchParams.get('provider'):null;
+   const googleOAuth=typeof location==='object'?new URL(location.href).searchParams.get('google_ads'):null;
+   const officialOAuth=typeof location==='object'?new URL(location.href).searchParams.get('meta_official'):null;
+   if(googleOAuth||officialOAuth){state.view='connections';if(typeof history==='object')history.replaceState(null,'',location.pathname);}
    if(['authorized','failed','cancelled'].includes(marketingStatus)){
-    state.view='marketing';
+    state.view='connections';
     if(typeof history==='object')history.replaceState(null,'',location.pathname);
    }
+   globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf});
    await changeView(state.view);
+   if(googleOAuth==='connected')toast('Conta Google autorizada. Selecione a conta de anúncios em Conexões.');
+   if(officialOAuth==='authorized')toast('Meta autorizada. Selecione a conta de anúncios em Conexões.');
+   if(googleOAuth==='failed'||officialOAuth==='failed')toast('Não foi possível concluir a conexão. Verifique sua conta.',true);
    if(marketingStatus==='authorized'){
     toast('Login autorizado. Verificando contas de anúncios disponíveis...');
     if(marketingProvider==='meta')void (async()=>{
      const provider=marketingProvider;
      try{
       const result=await api('/api/marketing/oauth/'+provider+'/test','POST',{});
-      if(state.view==='marketing'){
+      if(state.view==='connections'){
        await marketing();
        const target=view.querySelector('[data-marketing-result="'+provider+'"]');
        if(target){
@@ -180,7 +187,9 @@ async function boot(){
 async function changeView(next,conversationId=null){
  globalThis.SocioInterviewUI?.dispose();
  if(next!=='inbox'&&activeInbox){activeInbox.cleanup();activeInbox=null;}
- if(next==='channels')next='inbox';
+ if(next==='channels')next='connections';
+ if(next==='reports')next='overview';
+ if(next==='quotes')next='sales';
  if(next==='agent'){state.aiTab='agent';next='training';}
  else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
@@ -189,7 +198,7 @@ async function changeView(next,conversationId=null){
  const access=new Set(state.me?.user?.permissions||[]);
  if(next==='training'&&!access.has('training.manage'))next='overview';
  if((next==='sales'||next==='quotes')&&!access.has('sales.read'))next='overview';
- if(next==='reports'&&!access.has('audit.read'))next='overview';
+ if(next==='connections'&&!access.has('marketing.read')&&!access.has('channels.manage'))next='overview';
  if(next==='instagram')next='marketing';
  if(next==='marketing'&&!access.has('marketing.read'))next='overview';
  globalThis.SocioFlowImages?.dispose();
@@ -201,8 +210,7 @@ async function changeView(next,conversationId=null){
  setLoading();
  try{
   if(next==='overview')await overview();
-   if(next==='reports')await reports();
-  if(next==='channels')await channels();
+   if(next==='connections')await globalThis.SocioWorkspaceUI.connections({root:view,api,me:state.me,navigate:changeView});
   if(next==='products')await products();
   if(next==='sales'||next==='quotes')await window.SocioSales.render({api,e,toast,view,me:state.me,navigate:changeView,mode:next});
   if(next==='training'){
@@ -287,6 +295,7 @@ function emberIcon(kind){
  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(emberIcons[kind]||emberIcons.spark)+'</svg>';
 }
 async function overview(){
+ if(globalThis.SocioWorkspaceUI)return globalThis.SocioWorkspaceUI.overview({root:view,api,me:state.me,navigate:changeView});
  const [d,trend,recent,links]=await Promise.all([
   api('/api/dashboard'),api('/api/dashboard/activity?range=1m'),
   featureAvailable('whatsapp')?api('/api/inbox'):Promise.resolve([]),
@@ -507,6 +516,7 @@ async function channels(){
  }));
 }
 async function marketing(){
+ if(globalThis.SocioWorkspaceUI)return globalThis.SocioWorkspaceUI.marketing({root:view,api,me:state.me,navigate:changeView});
  if(globalThis.SocioMetaOfficial)return globalThis.SocioMetaOfficial.render({root:view,api,canManage:(state.me?.user?.permissions||[]).includes('marketing.manage')});
  if(!globalThis.SocioMetaLocal)throw Error('Recarregue a página para conectar o Ads Manager.');
  return globalThis.SocioMetaLocal.render({root:view,api,canManage:(state.me?.user?.permissions||[]).includes('marketing.manage')});
@@ -1395,6 +1405,7 @@ async function action(fn){try{await fn();}catch(err){toast(errMsg(err),true);}}
 
 const sidebarIcons={
  overview:'<rect x="3" y="3" width="8" height="8" rx="1.7"/><rect x="13" y="3" width="8" height="8" rx="1.7"/><rect x="3" y="13" width="8" height="8" rx="1.7"/><rect x="13" y="13" width="8" height="8" rx="1.7"/>',
+ connections:'<rect x="3" y="4" width="8" height="6" rx="2"/><rect x="13" y="14" width="8" height="6" rx="2"/><path d="M11 7h3a4 4 0 0 1 4 4v2M13 17H9a4 4 0 0 1-4-4v-2"/>',
  inbox:'<path d="M4 4h16v12h-5l-3 3-3-3H4z"/><path d="M7 9h10M7 12h7"/>',
  instagram:'<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.6 6.7h.01"/>',
  reports:'<path d="M4 20V11m5 9V5m5 15v-7m5 7V8"/><path d="M2 21h20"/>',
@@ -1422,7 +1433,7 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  key!=='agent'&&key!=='channels'&&viewAvailable(key)&&
+  key!=='agent'&&key!=='channels'&&key!=='reports'&&key!=='quotes'&&viewAvailable(key)&&
   (key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&
   (key!=='reports'||(state.me?.user?.permissions||[]).includes('audit.read'))&&
   (!['sales','quotes'].includes(key)||(state.me?.user?.permissions||[]).includes('sales.read'))&&
@@ -1501,5 +1512,5 @@ $$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{
  if(b.dataset.view==='training')state.aiTab='training';
  changeView(b.dataset.view);
 }));
-$('#logoutBtn').addEventListener('click',async()=>{clearInterval(commerceAlertTimer);$('#commerceAlerts').replaceChildren();try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
+$('#logoutBtn').addEventListener('click',async()=>{globalThis.SocioThalitaUI?.unmount();clearInterval(commerceAlertTimer);$('#commerceAlerts').replaceChildren();try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
 boot();
