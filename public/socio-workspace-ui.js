@@ -489,7 +489,7 @@
         empty('Nenhum conjunto de anúncios encontrado nesta campanha.'))):
     data?.campaigns.ok?(decoratedCampaigns.length?advertRows(decoratedCampaigns,insightsMap,currency,manage,data.adsetList||[]):empty('A conta não retornou campanhas.')):
       empty(data?.campaigns.reason||'Conecte uma conta para listar campanhas.'))+
-   section('Anúncio em destaque','Comparação de resultados na mesma conta e período',
+   (!selectedCampaign?section('Anúncio em destaque','Comparação de resultados na mesma conta e período',
     data?.bestAd?'<div class="px-featured-item px-featured-video">'+
       '<div class="px-feature-media" data-featured-media>'+posterView(bestThumbnail,'Miniatura do anúncio '+data.bestAd.name)+
        playButton('Ver vídeo do anúncio '+data.bestAd.name)+'</div>'+
@@ -500,7 +500,7 @@
        '<span>CTR <b>'+(data.bestAd.ctr===null?'—':esc(data.bestAd.ctr.toLocaleString('pt-BR',{maximumFractionDigits:2}))+'%')+'</b></span>'+
        '<span>Compras atribuídas <b>'+(data.bestAd.purchases===null?'—':number(data.bestAd.purchases))+'</b></span></div>'+
       '<p class="px-muted">Reproduza o vídeo pelo botão Play quando a Meta disponibilizar a mídia. Eventos atribuídos não comprovam venda paga.</p></div></div>':
-    empty(data?.adInsights.ok?'Sem anúncios com métricas suficientes no período.':'Relatório por anúncio indisponível nesta conta.'))+
+    empty(data?.adInsights.ok?'Sem anúncios com métricas suficientes no período.':'Relatório por anúncio indisponível nesta conta.')):'')+
    (!selectedCampaign?section('Anúncios e criativos','Anúncios vinculados à conta de anúncios selecionada',
     data?.ads.ok?(ads.length?adCards(ads,false):empty('Nenhum anúncio retornado pela conta.')):
      empty('Os anúncios estão indisponíveis até autorizar a leitura.')):'')+
@@ -518,7 +518,7 @@
       '<button type="button" class="btn primary" data-px-action-confirm hidden>Confirmar na Meta</button></div></div></dialog>'+
    '</div>';
   snapshots.set('marketing',root.innerHTML);
-  if(data?.bestAd?.id){
+  if(!selectedCampaign&&data?.bestAd?.id){
    const holder=root.querySelector('[data-featured-media]');
    const adName=String(data.bestAd.name||'Anúncio');
    let media=null;
