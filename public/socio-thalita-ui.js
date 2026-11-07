@@ -220,9 +220,9 @@
     '<p class="px-assistant-disclaimer">Ações exigem autorização e confirmação. Nenhum pagamento ou anúncio é criado silenciosamente.</p></section>';
   document.body.append(instance);
   const panel=get('.px-assistant-window'),fab=get('[data-thalita-toggle]');
-  function show(open){panel.classList.toggle('hidden',!open);fab.setAttribute('aria-expanded',String(open));if(open)get('#thalitaInput')?.focus();}
+  function show(open){if(!open)closeVoice();panel.classList.toggle('hidden',!open);fab.setAttribute('aria-expanded',String(open));if(open)get('#thalitaInput')?.focus();}
   fab.addEventListener('click',()=>show(panel.classList.contains('hidden')));
-  get('[data-thalita-close]').addEventListener('click',()=>{show(false);closeVoice();});
+  get('[data-thalita-close]').addEventListener('click',()=>show(false));
   get('#thalitaForm').addEventListener('submit',ev=>{ev.preventDefault();run(get('#thalitaInput')?.value);});
   get('#thalitaInput').addEventListener('keydown',ev=>{
    if(ev.key==='Enter'&&!ev.shiftKey){ev.preventDefault();run(ev.currentTarget.value);}
