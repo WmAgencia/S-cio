@@ -15,7 +15,7 @@ const actor={active_tenant_id:'tenant-hd',user_id:'owner-hd',role:'owner',tenant
  token_hash:'test-session',features:{meta_ads:true,ai:true,whatsapp:true,quotes:true,catalog:true}};
 const grant=sealMarketingSecret(JSON.stringify({tenant:actor.active_tenant_id,user:actor.user_id,
  token:'secret-only-server-value'}),env);
-function fixture({imageUrl=null,video=true,source=null,badHost=false}={}){
+function fixture({imageUrl=null,video=true,source=null,previewBody=null}={}){
  const calls=[];
  const pool={query:async(sql,args)=>{
   assert.equal(args[0],actor.active_tenant_id);
@@ -32,6 +32,8 @@ function fixture({imageUrl=null,video=true,source=null,badHost=false}={}){
   if(u.pathname.endsWith('/1111111111'))return ok({id:'1111111111',account_id:'123456',name:'Anúncio ao vivo',
    creative:{id:'8888888888',image_url:imageUrl||undefined,thumbnail_url:'https://scontent.xx.fbcdn.net/64px.jpg',
     video_id:video?'2222222222':undefined}});
+  if(u.pathname.endsWith('/1111111111/previews'))return ok({data:[{body:previewBody||
+   '<iframe src="https://www.facebook.com/ads/api/preview_iframe.php?d=mock123&amp;safe=1"></iframe>'}]});
   if(u.pathname.endsWith('/2222222222'))return ok({
    id:'2222222222',source:source||undefined,picture:'https://scontent.xx.fbcdn.net/video-small.jpg',
    ...(u.searchParams.get('fields')?.startsWith('thumbnails')?
@@ -61,6 +63,10 @@ test('when Meta MP4 is not available the verified watch URL is available, and op
  assert.equal(m.videoUrl,null);
  assert.match(m.watchUrl,/facebook.com\/watch\/\?v=2222222222/);
  assert.match(m.posterUrl,/poster-hd.jpg/);
+ assert.match(m.previewUrl,/^https:\/\/www\.facebook\.com\/ads\/api\/preview_iframe\.php\?/);
+ const malicious=fixture({previewBody:'<iframe src="https://fake-preview.example.invalid/embed"></iframe>'});
+ const unsafe=await readSelectedAdMedia(malicious.pool,actor,'1111111111',{env,request:malicious.request});
+ assert.equal(unsafe.previewUrl,null);
 });
 test('Prospector voice style is now shared with Thalita without repeated greetings',async()=>{
  const history=[{role:'user',content:'Quero analisar anúncios'},
@@ -108,6 +114,10 @@ test('UI and CSS explicitly show media play control and prevent overflow',()=>{
  assert(ui.includes('data-campaign-preview'));
  assert(ads.includes('creative{id,name,image_url'));
  assert.match(server,/socio-semantic-turn.mjs/);
+ assert(server.includes('frame-src https://www.facebook.com'));
+ assert(ui.includes('trustedMetaPreview(result.previewUrl)'));
+ assert(ui.includes('px-meta-preview-frame'));
+
  assert.match(voice,/newSemanticTurnBuffer/);
  assert(voice.includes('assessed.hold'));
 });
