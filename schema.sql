@@ -151,6 +151,14 @@ CREATE TABLE IF NOT EXISTS training_versions (
  FOREIGN KEY(tenant_id,job_id) REFERENCES training_jobs(tenant_id,id) ON DELETE CASCADE,
  UNIQUE(tenant_id,version)
 );
+-- Prospector-style guided training interview, isolated by company.
+-- Stores only the current private interview; the approved Markdown remains in training_versions.
+CREATE TABLE IF NOT EXISTS socio_training_interviews (
+ tenant_id uuid PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+ state jsonb NOT NULL DEFAULT '{}'::jsonb CHECK(jsonb_typeof(state)='object'),
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
 CREATE INDEX IF NOT EXISTS training_versions_tenant_idx ON training_versions(tenant_id,created_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS training_versions_one_approved_per_tenant ON training_versions(tenant_id) WHERE status='approved';
 
