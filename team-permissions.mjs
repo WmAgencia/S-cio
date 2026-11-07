@@ -2,7 +2,7 @@
 // Server routes must enforce permissions; the UI only reflects them.
 const owner=['inbox.read','inbox.write','catalog.read','catalog.manage','sales.read','sales.manage',
  'channels.manage','marketing.read','marketing.manage','training.manage','team.read','team.invite','team.manage','team.promote','audit.read'];
-const admin=[...owner];
+const admin=owner.filter(x=>x!=='team.promote');
 const manager=owner.filter(x=>!['team.invite','team.manage','team.promote'].includes(x));
 const viewer=['inbox.read','catalog.read','sales.read','marketing.read','team.read'];
 const agent=['inbox.read','inbox.write','catalog.read','account.manage'];
