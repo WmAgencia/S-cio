@@ -338,3 +338,17 @@ body .socio-catalog-clean #newProduct:hover,body .px-campaign-picker .btn.primar
 .px-campaign-detail-heading small{font-size:11px;color:#806e93}
 .px-campaign-back{background:#f1eaff;color:#5631aa;border:1px solid #dfd0ff;border-radius:9px;cursor:pointer;padding:9px 12px;font-weight:750;font-size:12px}
 .px-campaign-back:hover{background:#e8dcff}
+
+/* In-campaign creative previews: matching featured media controls. */
+.px-ad-creative-row{display:flex!important;align-items:center!important;gap:13px!important;padding:11px 14px!important;min-height:94px;flex-wrap:wrap}
+.px-ad-creative-row .px-ad-creative-media{flex:0 0 96px;height:72px;overflow:hidden;border:1px solid #ebe4f4;border-radius:10px;background:#f5f0fc}
+.px-ad-creative-media .px-feature-poster{width:100%;height:100%;object-fit:cover;border-radius:8px}
+.px-ad-creative-media .px-feature-no-media{height:100%;display:grid;place-items:center;font-size:11px}
+.px-ad-creative-media .px-feature-video,.px-ad-creative-media iframe{display:block;width:100%;height:100%;object-fit:contain;border:0}
+.px-ad-creative-row:has(video) .px-ad-creative-media,.px-ad-creative-row:has(iframe) .px-ad-creative-media{flex-basis:min(290px,100%);height:230px}
+.px-ad-creative-info{display:flex;flex-direction:column;gap:6px;min-width:170px;flex:1}
+.px-ad-creative-info strong{font-size:12px;overflow-wrap:anywhere}
+.px-ad-creative-info small{font-size:10px;color:#877895}
+.px-ad-creative-info .px-quick-action{align-self:flex-start}
+.px-ad-creative-row>.px-status{margin-left:auto}
+@media(max-width:600px){.px-ad-creative-row{align-items:flex-start!important}.px-ad-creative-info{min-width:0;flex-basis:55%}}
