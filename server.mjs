@@ -42,6 +42,7 @@ import {processNextAiReply} from './ai-replies.mjs';
 import {reconcileConfirmedOutbox} from './socio-outbound.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
+import {getTenantBusinessMonitor,getMasterSaasMonitor} from './socio-business-monitor.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {createQuote,issueQuote,cancelQuote,publicQuote,approveQuote,declineQuote,listSales,createTestCheckout,processStripeTestEvent} from './sales-commerce.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
@@ -990,6 +991,10 @@ async function handle(req,res){
   return json(res,201,r.rows[0]);
  }
 
+ if(method==='GET'&&pathname==='/api/reports/monitor'){
+  requirePermission(a,'audit.read');
+  return json(res,200,await getTenantBusinessMonitor(pool,a));
+ }
  if(method==='GET'&&pathname==='/api/reports'){
   requirePermission(a,'audit.read');
   const [totals,daily]=await Promise.all([
@@ -1581,6 +1586,10 @@ async function handle(req,res){
   cnpjCache.set(cnpj,{result,at:Date.now()});
   if(cnpjCache.size>150)cnpjCache.clear();
   return json(res,200,result);
+ }
+ if(method==='GET'&&pathname==='/api/admin/monitor'){
+  needPlatform(a);
+  return json(res,200,await getMasterSaasMonitor(pool,a));
  }
  if(method==='GET'&&pathname==='/api/admin/tenants'){
   needPlatform(a);
