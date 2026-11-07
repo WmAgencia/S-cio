@@ -330,7 +330,11 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
   creative.object_story_spec?.link_data?.picture||
   creative.asset_feed_spec?.images?.[0]?.url);
  let thumbnailUrl=safeMedia(creative.thumbnail_url),videoUrl=null;
- let posterUrl=imageUrl;
+ // Until video.picture loads, use the creative's own video frame rather than
+ // a generic destination/placement image that may be unrelated to the ad.
+ let posterUrl=numeric(videoId)?
+  safeMedia(creative.object_story_spec?.video_data?.image_url)||thumbnailUrl||imageUrl:
+  imageUrl;
  const imageHash=String(creative.image_hash||'');
  if(!posterUrl&&/^[0-9a-fA-F]{32}$/.test(imageHash)){
   try{
