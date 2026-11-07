@@ -1552,6 +1552,30 @@ async function handle(req,res){
   const versions=await query('SELECT id,job_id AS "jobId",version,status,knowledge_md AS markdown,report_json AS report,created_at AS "createdAt",approved_at AS "approvedAt" FROM training_versions WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 15',[a.active_tenant_id]);
   return json(res,200,versions.rows);
  }
+ // Revising an approved training creates a private draft; never mutates the live manual.
+ const trainingFork=pathname.match(/^\/api\/training\/versions\/([0-9a-f-]{36})\/fork$/);
+ if(trainingFork&&method==='POST'){
+  requirePermission(a,'training.manage');
+  const client=await pool.connect();
+  let versionId;
+  try{
+   await client.query('BEGIN');
+   await client.query('SELECT id FROM tenants WHERE id=$1 FOR UPDATE',[a.active_tenant_id]);
+   const existing=await client.query("SELECT id FROM training_versions WHERE tenant_id=$1 AND status='draft' ORDER BY created_at DESC LIMIT 1",[a.active_tenant_id]);
+   if(existing.rowCount){versionId=existing.rows[0].id;}
+   else{
+    const original=await client.query("SELECT job_id,knowledge_md,report_json FROM training_versions WHERE id=$1 AND tenant_id=$2 AND status='approved' FOR UPDATE",[trainingFork[1],a.active_tenant_id]);
+    if(!original.rowCount)throw fail(409,'Somente um treinamento aprovado desta empresa pode gerar rascunho.');
+    const next=await client.query("SELECT COALESCE(MAX(version),0)+1 AS version FROM training_versions WHERE tenant_id=$1",[a.active_tenant_id]);
+    versionId=id();
+    await client.query("INSERT INTO training_versions(id,tenant_id,job_id,version,status,knowledge_md,report_json) VALUES($1,$2,$3,$4,'draft',$5,$6)",[
+     versionId,a.active_tenant_id,original.rows[0].job_id,next.rows[0].version,original.rows[0].knowledge_md,original.rows[0].report_json]);
+   }
+   await client.query('COMMIT');
+  }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}finally{client.release();}
+  await audit(a,'training.version.forked',{sourceId:trainingFork[1],versionId});
+  return json(res,200,{ok:true,versionId});
+ }
  const knowledgeEdit=pathname.match(/^\/api\/training\/versions\/([0-9a-f-]{36})\/edit$/);
  if(knowledgeEdit&&method==='POST'){
   needRole(a,['owner','admin']);
