@@ -26,6 +26,38 @@
   const action=el('button',google.connected?'Consultar contas Google Ads':'Conectar Google Ads');
   action.type='button';action.className='btn soft';group.append(action);
   const selectors=el('div');group.append(selectors);
+  const metricsBtn=el('button','Consultar campanhas (30 dias)');
+  metricsBtn.type='button';metricsBtn.className='btn soft';
+  metricsBtn.disabled=!google.connected;
+  group.append(metricsBtn);
+  const reportBox=el('div');reportBox.setAttribute('aria-live','polite');group.append(reportBox);
+  metricsBtn.addEventListener('click',async()=>{
+   metricsBtn.disabled=true;reportBox.replaceChildren(el('p','Consultando campanhas autorizadas…'));
+   try{
+    const report=await api('/api/google-ads/campaigns');
+    reportBox.replaceChildren();
+    reportBox.append(el('p',report.campaigns.length+' campanhas consultadas, últimos 30 dias. Custo na moeda da conta (não identificada); conversões não comprovam venda.'));
+    const table=el('table');
+    const head=el('thead'),tr=el('tr');
+    for(const label of ['Campanha','Status','Impressões','Cliques','CTR','Custo (moeda da conta)','Conversões']){
+     const th=el('th',label);th.setAttribute('scope','col');tr.append(th);
+    }
+    head.append(tr);table.append(head);
+    const body=el('tbody');
+    for(const campaign of report.campaigns.slice(0,30)){
+     const row=el('tr');
+     const values=[campaign.name,campaign.status,campaign.impressions,campaign.clicks,
+      (Number(campaign.ctr)*100).toFixed(2)+'%',
+      (Number(campaign.costMicros)/1e6).toFixed(2),String(campaign.conversions)];
+     for(const value of values)row.append(el('td',value));
+     body.append(row);
+    }
+    table.append(body);
+    const region=el('div');region.style.overflowX='auto';region.append(table);reportBox.append(region);
+    if(report.campaigns.length>30)reportBox.append(el('p','Mostrando as 30 primeiras de até 100 campanhas.'));
+   }catch(e){reportBox.replaceChildren(el('p','Relatório indisponível: '+e.message));}
+   finally{metricsBtn.disabled=false;}
+  });
   action.addEventListener('click',async()=>{
    action.disabled=true;feedback.textContent='Conferindo acesso oficial…';
    try{
