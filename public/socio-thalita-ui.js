@@ -4,7 +4,7 @@
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let instance=null,api=null,me=null,csrf=null,busy=false,session=null,speaking=false,
   playbackContext=null,playbackSource=null,abort=null,finalize=null,turnRunId=null,voiceRequested=false,
-  voiceEpoch=0,transcriptionAbort=null,queryEpoch=0;
+  voiceEpoch=0,transcriptionAbort=null,queryEpoch=0,startingVoice=false;
  const get=sel=>instance?.querySelector(sel);
  // Audio output is unlocked by the explicit microphone click using a shared
  // Web Audio context. A new Audio().play() after asynchronous STT/LLM/TTS often
@@ -23,7 +23,7 @@
   speaking=false;finalize?.();finalize=null;
  }
  function closeVoice(){
-  voiceEpoch++;queryEpoch++;
+  voiceEpoch++;queryEpoch++;startingVoice=false;
   if(transcriptionAbort){transcriptionAbort.abort();transcriptionAbort=null;}
   const activeSession=session;session=null;voiceRequested=false;
   activeSession?.stop();finishVoice();
@@ -131,26 +131,31 @@
   }
  }
  async function startVoice(){
-  if(session){closeVoice();return;}
+  // One microphone session at a time, even if a click happens during import
+  // or while getUserMedia is awaiting a browser permission decision.
+  if(session||startingVoice){closeVoice();return;}
+  startingVoice=true;
   const startingEpoch=++voiceEpoch;
-  try{unlockPlayback();}catch(error){setStatus(error.message);return;}
+  try{unlockPlayback();}catch(error){startingVoice=false;setStatus(error.message);return;}
   if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){
-   setStatus('Microfone indisponível neste navegador. Use o chat.');return;
+   startingVoice=false;setStatus('Microfone indisponível neste navegador. Use o chat.');return;
   }
   try{
    const {createSocioVoiceSession}=await import('/socio-francisca-live.mjs');
-   session=createSocioVoiceSession({
-    canInterrupt:()=>speaking,
-    onInterrupt:()=>{finishVoice();setStatus('Interrompido. Estou ouvindo.');},
-    onError:message=>setStatus(message),
+   if(startingEpoch!==voiceEpoch)return;
+   const newSession=createSocioVoiceSession({
+    canInterrupt:()=>session===newSession&&speaking,
+    onInterrupt:()=>{if(session!==newSession)return;finishVoice();setStatus('Interrompido. Estou ouvindo.');},
+    onError:message=>{if(session===newSession)setStatus(message);},
     onState:next=>{
+     if(session!==newSession)return;
      setStatus(({connecting:'Conectando…',listening:'Ouvindo…',hearing:'Pode continuar falando…',
       processing:'Processando sua fala…',off:'Voz desligada'})[next]||'Pronta');
-     if(next==='off'&&session)closeVoice();
+     if(next==='off')closeVoice();
     },
     onTurn:async(blob,{signal}={})=>{
      const epoch=voiceEpoch;
-     if(!voiceRequested||!session||signal?.aborted)return;
+     if(!voiceRequested||session!==newSession||signal?.aborted)return;
      if(blob.size>3*1024*1024){setStatus('Áudio muito longo; tente uma frase mais curta.');return;}
      const controller=new AbortController();
      transcriptionAbort=controller;
@@ -161,22 +166,27 @@
        headers:{'Content-Type':blob.type.split(';')[0],'X-CSRF-Token':csrf},
        body:blob,signal:controller.signal});
       const data=await resp.json();
-      if(controller.signal.aborted||epoch!==voiceEpoch||!voiceRequested||!session)return;
+      if(controller.signal.aborted||epoch!==voiceEpoch||!voiceRequested||session!==newSession)return;
       if(!resp.ok)throw Error(data.error||'Transcrição indisponível');
       if(!meaningfulVoiceText(data.text)){setStatus('Não identifiquei uma solicitação clara. Pode continuar falando.');return;}
       await run(data.text,{voiceToken:epoch});
      }catch(error){
-      if(!controller.signal.aborted&&epoch===voiceEpoch&&voiceRequested)throw error;
+      if(!controller.signal.aborted&&epoch===voiceEpoch&&voiceRequested&&session===newSession)throw error;
      }finally{if(transcriptionAbort===controller)transcriptionAbort=null;}
     }
    });
-   await session.start();
-   if(startingEpoch!==voiceEpoch||!session?.active)return;
-   voiceRequested=true;
+   session=newSession;
+   await newSession.start();
+   if(startingEpoch!==voiceEpoch||session!==newSession||!newSession.active)return;
+   startingVoice=false;voiceRequested=true;
    const btn=get('[data-thalita-voice]');if(btn)btn.textContent='■ Encerrar conversa por voz';
    setStatus('Thalita conectada. Pode falar ou digitar.');
    void say('Oi! Sou a Thalita. Estou ouvindo. Pode falar comigo.');
-  }catch(e){closeVoice();setStatus('Não foi possível usar o microfone: '+e.message);}
+  }catch(e){
+   if(startingEpoch===voiceEpoch){
+    closeVoice();setStatus('Não foi possível usar o microfone: '+e.message);
+   }
+  }finally{if(startingEpoch===voiceEpoch)startingVoice=false;}
  }
  function unmount(){closeVoice();instance?.remove();instance=null;api=null;me=null;csrf=null;turnRunId=null;}
  function mount({client,auth,csrfToken}){
