@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
 import {Client} from 'pg';
+import {createServer} from 'node:net';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const getFreePort=()=>new Promise((resolve,reject)=>{
+ const server=createServer();server.once('error',reject);
+ server.listen(0,'127.0.0.1',()=>{const address=server.address();server.close(()=>resolve(address.port));});
+});
 
 test('HTTP tenant bundles: master creates company with optional modules, switch blocks API, editing restores access',
  {skip:!process.env.DATABASE_URL,timeout:90000},async t=>{
@@ -11,7 +16,7 @@ test('HTTP tenant bundles: master creates company with optional modules, switch 
  target.pathname='/'+name;
  const admin=new Client({connectionString:process.env.DATABASE_URL});
  await admin.connect();await admin.query('CREATE DATABASE '+name);
- const port=35500+Math.floor(Math.random()*14500);
+ const port=await getFreePort();
  const app=spawn(process.execPath,['server.mjs'],{env:{...process.env,DATABASE_URL:target.href,
   PORT:String(port),NODE_ENV:'test',SETUP_TOKEN:'fixture-token-setup-for-company-features-2026',
   CHANNEL_ENCRYPTION_KEY:'test-tenant-features-secret-long-enough-12345',
