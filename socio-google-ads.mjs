@@ -135,3 +135,61 @@ export async function disconnectGoogleAds(pool,a){
  await pool.query('DELETE FROM socio_google_ads_grants WHERE tenant_id=$1',[a.active_tenant_id]);
  return {disconnected:true};
 }
+
+
+/**
+ * Google Ads v26 campaign metrics, scoped to the tenant's explicitly selected
+ * and directly authorized customer. GET-only at our API, GAQL query is fixed
+ * and read-only. Never fetch manager-child accounts or issue mutate requests.
+ */
+export async function readGoogleAdsCampaigns(pool,a,{env=process.env,request=fetch}={}){
+ const {token,grant}=await readToken(pool,a,{env,request});
+ const customerId=grant.selected_customer_id;
+ if(!validId(customerId))throw fail(409,'Selecione uma conta Google Ads autorizada.');
+ const query=[
+  'SELECT campaign.id, campaign.name, campaign.status,',
+  'campaign.advertising_channel_type, metrics.impressions, metrics.clicks,',
+  'metrics.ctr, metrics.average_cpc, metrics.cost_micros, metrics.conversions',
+  'FROM campaign',
+  "WHERE segments.date DURING LAST_30_DAYS AND campaign.status != 'REMOVED'",
+  'ORDER BY metrics.cost_micros DESC LIMIT 100'
+ ].join(' ');
+ let response;
+ try{
+  response=await request('https://googleads.googleapis.com/v26/customers/'+customerId+'/googleAds:searchStream',{
+   method:'POST',redirect:'error',signal:AbortSignal.timeout(12000),
+   headers:{Authorization:'Bearer '+token,'developer-token':env.SOCIO_GOOGLE_ADS_DEVELOPER_TOKEN,
+    'Content-Type':'application/json'},
+   body:JSON.stringify({query})
+  });
+ }catch{throw fail(503,'Não foi possível consultar as campanhas Google Ads.');}
+ let chunks;
+ try{chunks=await response.json();}catch{throw fail(503,'Resposta Google Ads inválida.');}
+ if(!response.ok||!Array.isArray(chunks)||chunks.length>100)
+  throw fail(503,'Google Ads recusou a consulta de desempenho.');
+ const rows=[];
+ for(const chunk of chunks){
+  if(!chunk||!Array.isArray(chunk.results))throw fail(503,'Relatório Google Ads inválido.');
+  for(const row of chunk.results){
+   if(rows.length>=100)throw fail(503,'Relatório excedeu o limite de 100 campanhas.');
+   const campaign=row?.campaign,metrics=row?.metrics||{};
+   if(!/^\\d+$/.test(String(campaign?.id||''))||typeof campaign?.name!=='string'||campaign.name.length>250)
+    throw fail(503,'Dados de campanha inválidos.');
+   const int=(v)=>/^\\d{1,18}$/.test(String(v??'0'))?String(v??'0'):null;
+   const decimal=(v)=>{const n=Number(v??0);return Number.isFinite(n)&&n>=0&&n<=1e12?n:null;};
+   const impressions=int(metrics.impressions),clicks=int(metrics.clicks),costMicros=int(metrics.costMicros),
+    averageCpcMicros=int(metrics.averageCpc),ctr=decimal(metrics.ctr),conversions=decimal(metrics.conversions);
+   if([impressions,clicks,costMicros,averageCpcMicros,ctr,conversions].some(v=>v===null))
+    throw fail(503,'Métricas Google Ads inválidas.');
+   rows.push({id:String(campaign.id),name:campaign.name,
+    status:String(campaign.status||'UNKNOWN'),channel:String(campaign.advertisingChannelType||'UNKNOWN'),
+    impressions,clicks,costMicros,averageCpcMicros,ctr,conversions});
+  }
+ }
+ const sum=key=>rows.reduce((total,r)=>total+BigInt(r[key]),0n).toString();
+ return {accountId:customerId,period:'LAST_30_DAYS',readOnly:true,liveQuerySucceeded:true,
+  currencyCode:null,limits:{campaigns:100},summary:{campaigns:rows.length,
+   impressions:sum('impressions'),clicks:sum('clicks'),costMicros:sum('costMicros')},
+  campaigns:rows,
+  note:'Valores monetários estão em micros na moeda da conta, ainda não consultada. Conversões do Google Ads não comprovam pagamento ou receita.'};
+}
