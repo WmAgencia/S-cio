@@ -227,7 +227,6 @@ async function changeView(next,conversationId=null){
   if(next==='marketing')await marketing();
   if(next==='team')await team();
   if(next==='settings')await settings();
-  if(next==='settings')await settings();
   if(next==='admin')await admin();
  }catch(error){view.innerHTML=empty('!', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
 }
