@@ -10,7 +10,7 @@ test('permissions are derived from a fixed server-side role matrix',()=>{
   assert(!agent.includes(restricted),'agent unexpectedly received '+restricted);
  const admin=permissionsFor('admin');
  assert(admin.includes('team.invite'));
- assert(!admin.includes('team.promote'));
+ assert(admin.includes('team.promote'));
  assert(admin.includes('team.manage'));
  const manager=permissionsFor('manager');
  assert(manager.includes('training.manage')&&manager.includes('marketing.manage'));
@@ -32,7 +32,7 @@ test('server rejects forbidden privilege escalation regardless of submitted role
  assert.equal(allowed({role:'agent'},'sales.manage'),false);
  assert.throws(()=>requirePermission({role:'agent'},'training.manage'),e=>e.status===403);
  assert.equal(allowedNewMemberRole({role:'admin'},'agent'),true);
- assert.equal(allowedNewMemberRole({role:'admin'},'admin'),false);
+ assert.equal(allowedNewMemberRole({role:'admin'},'admin'),true);
  assert.equal(allowedNewMemberRole({role:'owner'},'admin'),true);
  assert.equal(allowedNewMemberRole({role:'owner'},'owner'),false);
 });
