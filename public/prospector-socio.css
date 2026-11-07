@@ -277,3 +277,30 @@ body .socio-knowledge-edit{background:#fbfaff!important;color:#382747!important;
  body .commerce-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(max-width:430px){body .commerce-summary{grid-template-columns:1fr}}
+
+
+/* Remaining commercial widgets and dialogs. */
+body .quote-draft-form textarea,body .quote-draft-form input,body .sale-item select,body .sale-item input,body .sale-links input{
+ background:#fff!important;color:#2d2143!important;border-color:#e6ddf5!important}
+body .quote-request-item{background:#fff!important;border-color:#e8dff5!important}
+body .quote-request-item .quote-mentioned-products{background:#faf7ff!important;color:#5b4580!important;border-color:#e6dcf5!important}
+body .report-bar-track{background:#eee8f8!important}
+body .report-note-grid>div{background:#fff!important;border-color:#e7dff2!important}
+body .report-note-grid strong,body .report-note-grid small{color:#37274f!important}
+body .commerce-alert{background:#fff!important;color:#302342!important;border:1px solid #d9c9f6!important;box-shadow:0 15px 35px #4d2e8d24!important}
+body .commerce-alert strong,body .commerce-alert h3{color:#2c2045!important}
+body .commerce-alert small,body .commerce-alert p{color:#776a87!important}
+body .socio-clean-section,body .socio-product-popup .card{background:#fff!important;border-color:#e7dff2!important;color:#312446!important}
+body .socio-catalog-clean .catalog-product{background:#fff!important;border-color:#ebe3f7!important}
+body .catalog-status.yes{background:#e9f8ef!important;color:#237a4b!important}
+body .catalog-status.no{background:#fff0ee!important;color:#a45248!important}
+body .catalog-cover,body .catalog-placeholder{background:#f2ebff!important;color:#7346c8!important}
+body .catalog-product-copy small{color:#897b97!important}
+body .catalog-variant-row input,body .catalog-gallery-item,body .catalog-campaign-list>div{background:#fff!important;color:#342344!important;border-color:#e9e2f5!important}
+body .catalog-ai-card{background:#f5efff!important;border-color:#e1d5fa!important;color:#4b3280!important}
+body .catalog-ai-card small{color:#8571a6!important}
+body .settings-tabs button{background:#f5efff!important;color:#665284!important;border-color:#e3d8f5!important}
+body .settings-tabs button.active{background:#7441ef!important;color:#fff!important;border-color:#7441ef!important}
+body .info-strip strong{color:#5e33c4!important}
+body .socio-train-result .code-preview{background:#faf8ff!important;color:#453454!important;border-color:#e9e1f8!important}
+body .flow-image-card textarea{background:#fff!important;color:#312342!important;border-color:#e8dffa!important}
