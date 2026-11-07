@@ -1891,7 +1891,7 @@ async function handle(req,res){
  throw fail(404,'Rota não encontrada.');
 }
 function needPlatform(a){if(!a.platform_owner)throw fail(403,'Somente a administração da Consecom pode acessar.');}
-function needRole(a,allowed){if(!allowed.includes(a.role)&&!a.platform_owner)throw fail(403,'Você não tem permissão para esta ação.');}
+function needRole(a,allowed){if(!allowed.includes(a.role)&&!(a.role==='manager'&&allowed.includes('admin'))&&!a.platform_owner)throw fail(403,'Você não tem permissão para esta ação.');}
 async function receiveWhatsApp(req,res){
  if(!process.env.META_APP_SECRET)throw fail(503,'Webhook ainda não configurado.');
  const {raw,data}=await body(req,500000);
