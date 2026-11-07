@@ -178,6 +178,7 @@ async function boot(){
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
 async function changeView(next,conversationId=null){
+ globalThis.SocioInterviewUI?.dispose();
  if(next!=='inbox'&&activeInbox){activeInbox.cleanup();activeInbox=null;}
  if(next==='channels')next='inbox';
  if(next==='agent'){state.aiTab='agent';next='training';}
@@ -946,6 +947,7 @@ async function training(){
   await training();
  }));
  mountAiGuideTabs();
+ if(globalThis.SocioInterviewUI)await globalThis.SocioInterviewUI.mount({root:view,api,toast,csrf:state.csrf,user:state.me.user});
  if(ongoing)trainingTimer=setTimeout(()=>{
   if(state.view==='training'&&state.aiTab==='training')
    training().catch(error=>toast(errMsg(error),true));
