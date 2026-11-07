@@ -101,12 +101,14 @@ test('platform routing prefers commercial skills only for commercial requests',a
  assert.equal(calls,1);assert.equal(response.readOnly,true);
  assert.equal(response.platform,'commerce');assert.equal(response.status,'completed');
 });
-test('HTTP and UI expose separate sales chat with no implicit outbound or payment',()=>{
+test('sales assistant endpoint remains safe while floating Thalita replaces duplicate sales chat',()=>{
  const server=readFileSync(new URL('../server.mjs',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../public/sales.js',import.meta.url),'utf8');
  assert.match(server,/\/api\/sales\/assistant\/chat/);
  assert.match(server,/assertApiFeature\(a.features,'\/api\/agent'\)/);
- assert.match(ui,/Converse com o Sócio sobre suas vendas/);
+ assert.doesNotMatch(ui,/Converse com o Sócio sobre suas vendas/);
+ const floating=readFileSync(new URL('../public/socio-thalita-ui.js',import.meta.url),'utf8');
+ assert.match(floating,/Assistente da sua empresa/);
  assert.match(ui,/data-quote-ai/);
  assert.match(ui,/Colocar sugestão no rascunho/);
  assert.match(ui,/Sugestão inserida nos campos, ainda não salva nem enviada/);
