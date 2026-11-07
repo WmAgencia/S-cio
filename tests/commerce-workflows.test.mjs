@@ -79,11 +79,11 @@ test('quote send fails closed with outbound disabled and never attempts delivery
  assert.equal(delivered,false);
 });
 
-test('navigation consolidates estimates and reports in the main workspace',()=>{
+test('sidebar hides sales while preserving existing quotes and reporting flows',()=>{
  const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
  const js=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
  const sales=readFileSync(new URL('../public/sales.js',import.meta.url),'utf8');
- assert.match(html,/data-view="sales"/);
+ assert.doesNotMatch(html,/data-view="sales"/);
  assert.match(html,/data-view="connections"/);
  assert.doesNotMatch(html,/data-view="quotes"/);
  assert.doesNotMatch(html,/data-view="reports"/);
