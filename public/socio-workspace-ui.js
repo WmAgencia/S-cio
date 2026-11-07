@@ -13,9 +13,10 @@
  // Small per-company GET cache removes the blank transition on repeat visits.
  // In-flight calls are shared; values expire quickly and manual refresh clears them.
  const getCache=new Map();const snapshots=new Map();let selectedTenant=null;
- const forTenant=me=>{const id=me?.tenant?.id||null;
+ const forTenant=me=>{const id=[me?.tenant?.id||'',me?.user?.id||'',me?.user?.role||''].join(':');
   if(selectedTenant!==id){getCache.clear();snapshots.clear();selectedTenant=id;}
  };
+ const clearCache=()=>{getCache.clear();snapshots.clear();selectedTenant=null;};
  const cached=async(api,path,ttl=25000)=>{
   const existing=getCache.get(path),now=Date.now();
   if(existing?.result&&now-existing.at<ttl)return existing.result;
@@ -364,7 +365,7 @@
   };
   root.querySelector('[data-px-wa]')?.addEventListener('click',()=>globalThis.SocioUX?.openQr({
    api,toast:msg=>{const el=root.querySelector('.px-provenance');if(el)el.textContent=msg;},canManage:manageWa,
-   onConnected:()=>connections({root,api,me,navigate})}));
+   onConnected:()=>{clearCache();return connections({root,api,me,navigate});}}));
   root.querySelector('[data-px-meta]')?.addEventListener('click',async ev=>{
    ev.currentTarget.disabled=true;try{const r=await api('/api/marketing/official/connect','POST',{});safeLocation(r.authorizationUrl,'facebook.com');}
    catch(e){root.querySelector('.px-provenance').textContent=e.message;ev.currentTarget.disabled=false;}
@@ -383,7 +384,7 @@
    root.querySelector('[data-px-meta-select]')?.addEventListener('click',async ev=>{
     if(!select?.value)return;
     ev.currentTarget.disabled=true;
-    try{await api('/api/marketing/official/account','POST',{accountId:select.value});await connections({root,api,me,navigate});}
+    try{await api('/api/marketing/official/account','POST',{accountId:select.value});clearCache();await connections({root,api,me,navigate});}
     catch(e){root.querySelector('.px-provenance').textContent=e.message;ev.currentTarget.disabled=false;}
    });
   }
@@ -397,10 +398,10 @@
    root.querySelector('[data-px-google-select]')?.addEventListener('click',async ev=>{
     if(!select?.value)return;
     ev.currentTarget.disabled=true;
-    try{await api('/api/google-ads/accounts/select','POST',{accountId:select.value});await connections({root,api,me,navigate});}
+    try{await api('/api/google-ads/accounts/select','POST',{accountId:select.value});clearCache();await connections({root,api,me,navigate});}
     catch(e){root.querySelector('.px-provenance').textContent=e.message;ev.currentTarget.disabled=false;}
    });
   }
  }
- globalThis.SocioWorkspaceUI={overview,marketing,connections};
+ globalThis.SocioWorkspaceUI={overview,marketing,connections,clearCache};
 })();
