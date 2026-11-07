@@ -84,33 +84,24 @@ test('CBO daily-budget campaign is editable only with plan and second confirmati
  assert.equal(mock.dbWrites.length,1);
  assert(mock.requests.every(x=>x.opts.method==='GET'));
 });
-test('Meta interface hides the advanced tools and shows campaign actions and a two-stage dialog',()=>{
+test('Meta interface hides advanced tools and shows campaign actions with a two-stage confirmation',()=>{
  const ui=load('public/socio-workspace-ui.js'),css=load('public/socio-executive.css'),server=load('server.mjs');
  assert.doesNotThrow(()=>new vm.Script(ui));
- assert.match(ui,/data-px-manage-status/);
- assert.match(ui,/data-px-manage-budget/);
- assert.match(ui,/data-px-action-review/);
- assert.match(ui,/data-px-action-confirm/);
- assert.match(ui,/\/api\/marketing\/tools\/plan/);
- assert.match(ui,/\/api\/marketing\/tools\/execute/);
- assert.match(ui,/plan\\?\\.requiresConfirmation/);
- assert.doesNotMatch(ui,/Ferramentas avançadas e gerenciamento de anúncios/);
- assert.match(css,/\\.px-campaign-dialog/);
- assert.match(server,/requirePermission\\(a,'marketing.manage'\\)/);
+ for(const marker of ['data-px-manage-status','data-px-manage-budget','data-px-action-review',
+  'data-px-action-confirm','/api/marketing/tools/plan','/api/marketing/tools/execute',
+  'plan.requiresConfirmation'])assert(ui.includes(marker),marker);
+ assert(!ui.includes('Ferramentas avançadas e gerenciamento de anúncios'));
+ assert(css.includes('.px-campaign-dialog'));
+ assert(server.includes("requirePermission(a,'marketing.manage')"));
 });
-test('Meta shows inline Facebook video and refreshes API data without interrupting playing media',()=>{
+test('inline Facebook player remains inside Sócio and realtime refresh never tears down a playing video',()=>{
  const ui=load('public/socio-workspace-ui.js'),css=load('public/socio-executive.css');
- assert.match(ui,/plugins\\/video.php/);
- assert.match(ui,/trustedVideoEmbed/);
- assert.match(ui,/createInlineFacebookVideo/);
- assert.match(ui,/placeholder\\.replaceChildren\\(frame\\)/);
- assert.match(ui,/holder\\.replaceChildren\\(frame\\)/);
- assert.doesNotMatch(ui,/Abrir vídeo na Meta/);
- assert.match(css,/\\.px-facebook-video-frame/);
- assert.match(css,/\\.px-feature-media\\.px-media-lowres:after\\{display:none/);
- assert.match(ui,/startLiveRefresh/);
- assert.match(ui,/},30000\\)/);
- assert.match(ui,/const playing=!!root\\.querySelector/);
- assert.match(ui,/if\\(playing\\)\\{await updateWhilePlaying/);
- assert.match(ui,/getCache\\.clear\\(\\)/);
+ for(const marker of ['/plugins/video.php','trustedVideoEmbed','createInlineFacebookVideo',
+  'placeholder.replaceChildren(frame)','holder.replaceChildren(frame)',
+  'startLiveRefresh','},30000)','const playing=!!root.querySelector',
+  'if(playing){await updateWhilePlaying','getCache.clear()'])
+  assert(ui.includes(marker),marker);
+ assert(!ui.includes('Abrir vídeo na Meta'));
+ assert(css.includes('.px-facebook-video-frame'));
+ assert(css.includes('.px-feature-media.px-media-lowres:after{display:none'));
 });
