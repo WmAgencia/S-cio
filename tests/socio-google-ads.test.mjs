@@ -16,12 +16,14 @@ const env={
 };
 const actor={role:'owner',user_id:uid,active_tenant_id:tenant,tenant_status:'trial',
  token_hash:'a'.repeat(64),features:{meta_ads:true,whatsapp:true,catalog:true,quotes:true,ai:true,team:true}};
-test('Google Ads is disabled until OAuth credentials, developer token, encryption and opt-in',()=>{
+test('Google Ads Cloud OAuth credentials enable read-only access without a developer token',()=>{
  const no=googleAdsConfig({});
  assert.equal(no.ready,false);
- assert(no.blockers.some(x=>x.includes('developer token')));
- const good=googleAdsConfig(env);
+ assert(no.blockers.some(x=>x.includes('Credenciais OAuth')));
+ const {SOCIO_GOOGLE_ADS_DEVELOPER_TOKEN:_legacy,...modern}=env;
+ const good=googleAdsConfig(modern);
  assert.equal(good.ready,true);
+ assert.equal(googleAdsConfig(env).ready,true);
  assert.equal(good.callback,'https://socio-app-production-762c.up.railway.app/api/google-ads/oauth/callback');
  assert.equal(good.mode,'oauth_read_only');
 });
@@ -67,7 +69,7 @@ test('callback only consumes state with live session and encrypts token; no prov
  assert.equal(calls.length,2);
  await assert.rejects(finishGoogleAdsOAuth({query:async()=>({rows:[]})},'b'.repeat(64),'valid-code-1234',{env}),{status:403});
 });
-test('account discovery requires valid Google Ads developer token header and tenant-bound encrypted grant',async()=>{
+test('account discovery uses OAuth Cloud project access and tenant-bound encrypted grant',async()=>{
  const cipher=sealMarketingSecret(JSON.stringify({tenant,uid,refresh:'r'.repeat(80)}),env);
  let selected=null,n=0;
  const pool={query:async(sql,args)=>{
@@ -84,19 +86,19 @@ test('account discovery requires valid Google Ads developer token header and ten
    return {ok:true,json:async()=>({access_token:'long-access-token-'+'a'.repeat(30)})};
   }
   assert.equal(url,'https://googleads.googleapis.com/v26/customers:listAccessibleCustomers');
-  assert.equal(opts.headers['developer-token'],env.SOCIO_GOOGLE_ADS_DEVELOPER_TOKEN);
+  assert.equal(opts.headers['developer-token'],undefined);
   assert.match(opts.headers.Authorization,/Bearer long-access-token/);
   return {ok:true,json:async()=>({resourceNames:['customers/1234567890','customers/0987654321']})};
  };
- const result=await listGoogleAdsAccounts(pool,actor,{env,request});
+ const result=await listGoogleAdsAccounts(pool,actor,{env:{...env,SOCIO_GOOGLE_ADS_DEVELOPER_TOKEN:undefined},request});
  assert.equal(result.accounts.length,2);
  assert.equal(result.readOnly,true);
  assert(!JSON.stringify(result).includes('r'.repeat(80)));
- const chosen=await selectGoogleAdsAccount(pool,actor,'0987654321',{env,request});
+ const chosen=await selectGoogleAdsAccount(pool,actor,'0987654321',{env:{...env,SOCIO_GOOGLE_ADS_DEVELOPER_TOKEN:undefined},request});
  assert.equal(chosen.selectedCustomerId,'0987654321');
  assert.equal(selected,'0987654321');
- await assert.rejects(selectGoogleAdsAccount(pool,actor,'5555555555',{env,request}),{status:403});
- await assert.rejects(selectGoogleAdsAccount(pool,{...actor,role:'agent'},'1234567890',{env,request}),{status:403});
+ await assert.rejects(selectGoogleAdsAccount(pool,actor,'5555555555',{env:{...env,SOCIO_GOOGLE_ADS_DEVELOPER_TOKEN:undefined},request}),{status:403});
+ await assert.rejects(selectGoogleAdsAccount(pool,{...actor,role:'agent'},'1234567890',{env:{...env,SOCIO_GOOGLE_ADS_DEVELOPER_TOKEN:undefined},request}),{status:403});
  assert(n>=5);
 });
 test('Google disconnected state is clear and every grant query is tenant-scoped',async()=>{
