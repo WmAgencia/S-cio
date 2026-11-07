@@ -200,3 +200,80 @@ body .ps-interview-shell{color:#2a2140;margin-bottom:18px}
 @media(prefers-reduced-motion:reduce){
  .ps-progress>div,.ps-mode,body .btn,body .nav-item{transition:none!important;animation:none!important}
 }
+
+
+/* Inbox — remove the last hard-coded espresso surfaces; keep native WhatsApp layout. */
+body .wa-inbox{--wa-wall:#f8f6fe;--wa-card:#fff;--wa-panel:#fff;--wa-ink:#302745;
+--wa-muted:#8b7f9c;--wa-edge:#e8e1f5;--wa-accent:#7040e9;--wa-green:#57b980;
+background:#fff!important;color:#302745!important;border-color:#e9e2f6!important;box-shadow:0 7px 28px #5134a70c!important}
+body .wa-inbox-side{background:#fff!important;border-color:#ede7f7!important}
+body .wa-inbox-main{background:#faf8ff!important;color:#302745!important}
+body .wa-inbox-side-head h1,body .wa-thread-header strong,body .wa-chat-name-line strong,body .wa-inbox-welcome h2,body .wa-inbox-empty-list strong{color:#2b2044!important}
+body .wa-inbox-eyebrow{color:#7140dc!important}
+body .wa-round-icon,body .wa-small-action{color:#735aa4!important;background:#fff!important;border-color:#ece5f7!important}
+body .wa-round-icon:hover,body .wa-small-action:hover{background:#eee7ff!important;color:#6334cf!important}
+body .wa-inbox-search{background:#f9f7ff!important;border-color:#e6dff5!important;color:#7f65b0!important}
+body .wa-inbox-search input{color:#3b3051!important;background:transparent!important;border:0!important;box-shadow:none!important}
+body .wa-filters button{background:#f8f5ff!important;color:#75618d!important;border-color:#e7dff4!important}
+body .wa-filters button.active{background:#7140ef!important;color:#fff!important;border-color:#7140ef!important}
+body .wa-filters button:hover:not(.active){background:#eee7ff!important;color:#6337c7!important}
+body .wa-list-row-wrap,body .wa-inbox-side-bottom,body .wa-thread-header{border-color:#eee7f8!important}
+body .wa-list-row{color:#302743!important}
+body .wa-list-row:hover{background:#f8f3ff!important}
+body .wa-list-row.active{background:#efe8ff!important;box-shadow:inset 3px 0 #7447ec!important}
+body .wa-chat-avatar{background:#e9dfff!important;color:#6339c8!important;border-color:#ded0f8!important}
+body .wa-chat-name-line small,body .wa-chat-preview,body .wa-chat-meta,body .wa-inbox-side-bottom,body .wa-inbox-welcome p,body .wa-inbox-welcome small,body .wa-inbox-empty-list p{color:#86788f!important}
+body .wa-thread-header{background:#fff!important}
+body .wa-message-list{background:#faf8ff!important}
+body .wa-message-bubble{background:#fff!important;border-color:#eee7f7!important;color:#372c4c!important;box-shadow:0 2px 7px #55319e0c!important}
+body .wa-message-row.outgoing .wa-message-bubble{background:#e8dfff!important;border-color:#dacaf8!important;color:#382456!important}
+body .wa-message-row.internal .wa-message-bubble{background:#fff8e8!important;border-color:#e9d9af!important;color:#765626!important}
+body .wa-message-bubble:hover{border-color:#bba6f5!important}
+body .wa-message-meta,body .wa-message-row.internal .wa-message-meta{color:#84718f!important}
+body .wa-message-quote{background:#f5f0ff!important;border-left-color:#8b65f3!important;color:#4c3b67!important}
+body .wa-inbox-details{background:#fff!important;border-color:#e8e0f5!important;color:#3b2b52!important;box-shadow:-9px 0 25px #40257112!important}
+body .wa-inbox-details :is(h2,h3,strong),body .wa-details-top strong{color:#2e2248!important}
+body .wa-inbox-details :is(p,small){color:#8c7c9c!important}
+body .wa-compose{background:#fff!important;border-color:#eee6f7!important;color:#3b2b52!important}
+body .wa-compose-top,body .wa-compose-foot,body .wa-compose-row{background:#fff!important;border-color:#efe7f6!important}
+body .wa-compose-ownership{color:#665481!important}
+body .wa-mode-btn{background:#f4efff!important;color:#6037c7!important;border-color:#e4d9fa!important}
+body .wa-mode-btn.active,body .wa-compose-send{background:#7643f2!important;color:#fff!important;border-color:#7643f2!important}
+body .wa-inbox-dialog{background:#2f1c5b70!important}
+body .wa-dialog-surface{background:#fff!important;color:#34254c!important;border-color:#e8dff7!important}
+body .wa-inbox .wa-high-contrast .wa-message-bubble{color:#25203d!important}
+/* Orders, budgets and commercial opportunities retain data and permission logic, but use calm neutral cards. */
+body .commerce-page .card,body .quote-request-item{background:#fff!important;border-color:#e9e3f4!important;color:#2b2142!important}
+body .commerce-summary>div{background:#fff!important;border-color:#e9e4f7!important;box-shadow:0 5px 20px #583ca00b!important}
+body .commerce-summary small,body .commerce-section-heading span{color:#82758f!important}
+body .commerce-summary strong{color:#2b2047!important}
+body .commerce-section-heading h2{color:#2f234c!important}
+body .commerce-lead-card{background:#fff!important;color:#32254a!important;border:1px solid #e9e2f7!important;box-shadow:0 6px 23px #533aa40b!important}
+body .commerce-lead-card:hover{border-color:#baa6f8!important;box-shadow:0 10px 26px #5136a61b!important}
+body .commerce-lead-avatar{background:#eee5ff!important;color:#6f41d6!important}
+body .commerce-lead-eyebrow{color:#7446db!important}
+body .commerce-lead-copy h3{color:#2d2047!important}
+body .commerce-lead-copy small,body .commerce-lead-copy p,body .commerce-lead-total small{color:#857991!important}
+body .commerce-lead-total strong{color:#473078!important}
+body .commerce-lead-actions,body .commerce-lead-detail,body .quote-quick-editor{border-color:#efe8f7!important}
+body .commerce-item-row select,body .commerce-item-row input{background:#fff!important;color:#332646!important;border-color:#e6def3!important}
+body .commerce-empty{background:#fff!important;border-color:#ddd0f3!important}
+body .commerce-empty h3{color:#32224d!important}
+body .commerce-empty p{color:#877890!important}
+body .quote-quick-editor summary{color:#623cc6!important}
+body .sale-record{border-color:#eee6f5!important}
+body .sale-record strong{color:#2c2244!important}
+body .sale-item label{color:#726383!important}
+body .quote-alert-toggle input{accent-color:#784cf1!important}
+body .socio-training-clean :is(.card,.socio-training-center,.socio-train-result){background:#fff!important;color:#342648!important;border-color:#e8e1f7!important}
+body .socio-training-center h2,body .socio-clean-head h2{color:#2d2046!important}
+body .socio-training-center>p,body .socio-training-center .form-note{color:#80758f!important}
+body .socio-train-emblem{background:#f1eaff!important;border-color:#e4daf8!important;color:#6b3dd5!important;box-shadow:none!important}
+body .socio-train-account{background:#faf7ff!important;border-color:#e6dff5!important;color:#4e376c!important}
+body .socio-knowledge-edit{background:#fbfaff!important;color:#382747!important;border-color:#e8e1f5!important}
+@media(max-width:780px){
+ body #view:has(.wa-inbox){padding:10px!important}
+ body .wa-inbox{width:100%!important;border-radius:13px!important}
+ body .commerce-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:430px){body .commerce-summary{grid-template-columns:1fr}}
