@@ -10,9 +10,9 @@ test('Master/production switch is restricted to initial owner account',()=>{
  assert.match(html,/id="masterProductionSwitch"[^>]+hidden/);
  assert.match(js,/const isPrimaryMaster=\(\)=>!!\(state\.me\?\.user\?\.platformOwner&&state\.me\?\.user\?\.homeTenantId\)/);
  assert.match(js,/if\(!isPrimaryMaster\(\)\)return;/);
- assert.match(js,/if\(state\.view==='admin'\)/);
+ assert.match(js,/if\(isMasterView\(\)\)/);
  assert.match(js,/api\('\/api\/admin\/switch','POST',\{tenantId:homeTenantId\}\)/);
- assert.match(js,/await changeView\('admin'\)/);
+ assert.match(js,/await changeView\('masterOverview'\)/);
  assert.match(server,/homeTenantId:\(a\.platform_owner&&a\.role==='owner'\)\?a\.tenant_id:null/);
  assert.match(server,/if\(method==='POST'&&pathname==='\/api\/admin\/switch'\)\{\s*needPlatform\(a\)/);
 });
