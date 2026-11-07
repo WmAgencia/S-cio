@@ -1723,6 +1723,7 @@ async function handle(req,res){
  if(teamMember&&method==='PATCH'){
   requirePermission(a,'team.manage');
   const {data}=await body(req,2000),change=validateMemberPatch(data);
+  if(change.role==='admin')requirePermission(a,'team.promote');
   if(teamMember[1]===a.user_id)throw fail(403,'Você não pode alterar o próprio perfil por esta rota.');
   const c=await pool.connect();
   try{
