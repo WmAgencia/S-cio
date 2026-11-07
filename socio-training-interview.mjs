@@ -176,6 +176,7 @@ export async function transcribeSocioTraining(bytes,mime,{env=process.env,reques
  if(!env.GROQ_API_KEY||env.GROQ_API_KEY.length<20)throw err(503,'Transcrição de voz ainda não está configurada.');
  const extensions={'audio/webm':'webm','audio/ogg':'ogg','audio/mp4':'m4a','audio/mpeg':'mp3','audio/wav':'wav'};
  const data=new FormData();data.set('model','whisper-large-v3-turbo');data.set('language','pt');
+ data.set('response_format','verbose_json');data.set('timestamp_granularities[]','segment');data.set('temperature','0');
  data.set('file',new Blob([bytes],{type:mime}),'treinamento.'+extensions[mime]);
  let r;
  try{r=await request('https://api.groq.com/openai/v1/audio/transcriptions',{
@@ -183,6 +184,18 @@ export async function transcribeSocioTraining(bytes,mime,{env=process.env,reques
  });}catch{throw err(503,'Transcrição indisponível. Você pode continuar digitando.');}
  if(!r.ok)throw err(503,'O serviço de transcrição não respondeu.');
  let json;try{json=await r.json();}catch{throw err(503,'Transcrição inválida.');}
- const text=clean(json?.text,850);if(text.length<2)throw err(422,'Não consegui entender. Tente falar novamente.');
+ const text=clean(json?.text,850);
+ const plain=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+  .replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+ if(text.length<2||/^(?:e ai\s*){1,10}$/.test(plain)||/^(?:oi\s*){2,8}$/.test(plain))
+  throw err(422,'Não identifiquei uma solicitação clara. Pode continuar falando.');
+ const segments=Array.isArray(json?.segments)?json.segments.filter(x=>x&&typeof x==='object'):[];
+ // Whisper verbose_json exposes segment confidence. Silence/low-confidence
+ // segments are not allowed to create phantom messages or request tools.
+ if(segments.length&&segments.every(x=>{
+  const probability=Number(x.no_speech_prob),logprob=Number(x.avg_logprob),ratio=Number(x.compression_ratio);
+  return (Number.isFinite(probability)&&probability>=0.7&&Number.isFinite(logprob)&&logprob<=-0.55)||
+   (Number.isFinite(ratio)&&ratio>2.4&&Number.isFinite(logprob)&&logprob<-0.5);
+ }))throw err(422,'Não detectei fala suficientemente clara. Tente novamente.');
  return {text,model:'whisper-large-v3-turbo',approved:false};
 }
