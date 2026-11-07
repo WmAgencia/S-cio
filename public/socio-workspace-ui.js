@@ -529,8 +529,6 @@
        '<span>Compras atribuídas <b>'+(data.bestAd.purchases===null?'—':number(data.bestAd.purchases))+'</b></span></div>'+
       '<p class="px-muted">Reproduza o vídeo pelo botão Play quando a Meta disponibilizar a mídia. Eventos atribuídos não comprovam venda paga.</p></div></div>':
     empty(data?.adInsights.ok?'Sem anúncios com métricas suficientes no período.':'Relatório por anúncio indisponível nesta conta.')):'')+
-   section('Interpretação dos resultados','As plataformas reportam atribuições, não pagamentos conciliados',
-    '<div class="px-footnote">O CPA é calculado apenas quando a Meta retorna eventos Purchase. Esses eventos não são prova de pedido pago. Sem evento válido, o painel mostra “—”, em vez de inventar resultados.</div>')+
    '<dialog id="pxCampaignDialog" class="px-campaign-dialog" aria-labelledby="pxActionTitle">'+
     '<div class="px-action-dialog-content"><div class="px-action-heading"><h2 id="pxActionTitle">Alterar campanha</h2><button type="button" class="px-dialog-close" data-px-action-close aria-label="Fechar">×</button></div>'+
     '<p id="pxActionDetails" class="px-dialog-help"></p>'+
