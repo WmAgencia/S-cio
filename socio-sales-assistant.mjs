@@ -25,9 +25,9 @@ function productText(p){
 }
 export function suggestQuoteForRequest(request,products){
  if(!request||!Array.isArray(products))throw fail(422,'Solicitação ou catálogo inválido.');
- if(request.status==='resolved'||request.delivery_status!=='not_sent'){
+ if(request.status==='resolved'||request.delivery_status!=='not_sent'||String(request.draft_text||'').trim()){
   return {readyToReview:false,amountCents:null,text:null,
-   reason:'Este pedido já foi resolvido ou teve tentativa de envio; confira o histórico antes de preparar outro.'};
+   reason:'Este pedido já tem um rascunho, foi resolvido ou teve tentativa de envio; confira o histórico antes de substituir.'};
  }
  const search=norm(request.summary);
  const matched=products.filter(p=>p.active===true&&norm(p.name).length>=4&&search.includes(norm(p.name)));
