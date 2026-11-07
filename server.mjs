@@ -43,6 +43,7 @@ import {reconcileConfirmedOutbox} from './socio-outbound.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
 import {getTenantBusinessMonitor,getMasterSaasMonitor} from './socio-business-monitor.mjs';
+import {readSubscriptionStatus,createSubscriptionCheckout,createBillingPortal,processSubscriptionWebhook} from './socio-subscriptions.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {createQuote,issueQuote,cancelQuote,publicQuote,approveQuote,declineQuote,listSales,createTestCheckout,processStripeTestEvent} from './sales-commerce.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
@@ -300,6 +301,12 @@ async function handle(req,res){
  if(/^\/webhooks\/google-ads\/[0-9a-f-]{36}$/i.test(pathname))
   throw fail(410,'O conector Google Ads foi desativado.');
  // Stripe server-to-server webhook validates its raw signature before using JSON.
+ if(pathname==='/webhooks/stripe-saas'&&method==='POST'){
+  const {raw}=await body(req,200000);
+  if(!limiter(authAttempts,'stripe-billing:'+clientIp(req),60000,250))
+   throw fail(429,'Limite de eventos do Stripe atingido.');
+  return json(res,200,await processSubscriptionWebhook(pool,raw,req.headers['stripe-signature']));
+ }
  if(pathname==='/webhooks/stripe-test'&&method==='POST'){
   const {raw}=await body(req,160000);
   const result=await processStripeTestEvent(pool,raw,req.headers['stripe-signature']);
@@ -991,6 +998,19 @@ async function handle(req,res){
   return json(res,201,r.rows[0]);
  }
 
+ if(method==='GET'&&pathname==='/api/billing/status'){
+  return json(res,200,await readSubscriptionStatus(pool,a));
+ }
+ if(method==='POST'&&pathname==='/api/billing/checkout'){
+  if(!limiter(simulationAttempts,'billing-checkout:'+a.active_tenant_id,3600000,8))
+   throw fail(429,'Aguarde antes de abrir um novo Checkout.');
+  return json(res,200,await createSubscriptionCheckout(pool,a));
+ }
+ if(method==='POST'&&pathname==='/api/billing/portal'){
+  if(!limiter(simulationAttempts,'billing-portal:'+a.active_tenant_id,60000,6))
+   throw fail(429,'Aguarde antes de abrir o portal de cobrança.');
+  return json(res,200,await createBillingPortal(pool,a));
+ }
  if(method==='GET'&&pathname==='/api/reports/monitor'){
   requirePermission(a,'audit.read');
   return json(res,200,await getTenantBusinessMonitor(pool,a));
