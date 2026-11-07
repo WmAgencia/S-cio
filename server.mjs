@@ -407,7 +407,8 @@ async function handle(req,res){
  if(pathname==='/api/flow/status'&&method==='GET')return json(res,200,await flowImages.status(a));
  if(pathname==='/api/flow/images'&&method==='POST'){
   if(!limiter(simulationAttempts,'flow-images:'+a.user_id,60000,12))throw fail(429,'Aguarde antes de gerar novamente.');
-  const result=await flowImages.create(pool,a,await body(req,32768),req.headers['idempotency-key']);
+  const {data}=await body(req,32768);
+  const result=await flowImages.create(pool,a,data,req.headers['idempotency-key']);
   await audit(a,'flow.image.requested',{jobId:result.id});
   return json(res,202,result);
  }

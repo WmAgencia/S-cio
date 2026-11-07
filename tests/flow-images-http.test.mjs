@@ -3,13 +3,16 @@ import assert from 'node:assert/strict';
 import {randomBytes} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {Client} from 'pg';
+import {createServer} from 'node:net';
 
 test('Flow HTTP requires login and CSRF, refuses unconfigured generation and hides foreign jobs',
  {skip:!process.env.DATABASE_URL,timeout:45000},async t=>{
  const name='socio_flow_http_test_'+randomBytes(5).toString('hex');
  const url=new URL(process.env.DATABASE_URL);url.pathname='/'+name;
  const admin=new Client({connectionString:process.env.DATABASE_URL});await admin.connect();await admin.query('CREATE DATABASE '+name);
- const port=35000+Math.floor(Math.random()*18000),base='http://127.0.0.1:'+port;
+ const probe=createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));
+ const port=probe.address().port;await new Promise(r=>probe.close(r));
+ const base='http://127.0.0.1:'+port;
  const child=spawn(process.execPath,['server.mjs'],{env:{...process.env,DATABASE_URL:url.href,PORT:String(port),NODE_ENV:'test',
   SETUP_TOKEN:'flow-fixture-setup-token-123456789012345',CHANNEL_ENCRYPTION_KEY:'flow-fixture-channel-encryption-123456789',
   SOCIO_LIVE_SYNC_ENABLED:'false',SOCIO_AUTOREPLY_ENABLED:'false',SOCIO_OUTBOUND_ENABLED:'false',
@@ -27,6 +30,6 @@ test('Flow HTTP requires login and CSRF, refuses unconfigured generation and hid
  const status=await fetch(base+'/api/flow/status',{headers});assert.equal(status.status,200);assert.equal((await status.json()).ready,false);
  assert.equal((await fetch(base+'/api/flow/images',{method:'POST',headers,body:JSON.stringify({prompt:'coffee'})})).status,403);
  const generation=await fetch(base+'/api/flow/images',{method:'POST',headers:{...headers,'x-csrf-token':csrf},body:JSON.stringify({prompt:'coffee'})});
- assert.equal(generation.status,503);
+ assert.equal(generation.status,503,await generation.text());
  assert.equal((await fetch(base+'/api/flow/images/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/content',{headers})).status,404);
 });
