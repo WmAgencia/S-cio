@@ -140,3 +140,11 @@ body .px-danger-zone .btn:hover{color:#952d43!important;background:#ffeded!impor
 
 /* Overview keeps top metrics and visual graph consistently aligned. */
 .px-overview .px-page-heading{padding-bottom:4px}
+
+.px-wa-overview-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.px-wa-overview-list>div{display:flex;align-items:center;gap:10px;background:#faf9fe;border:1px solid #ece6f6;border-radius:12px;padding:12px;min-width:0}
+.px-wa-overview-list>div>div{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1}
+.px-wa-overview-list strong{font-size:12px;color:#302047;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
+.px-wa-overview-list small{font-size:10px;color:#867b94}
+.px-wa-overview-list .px-live-dot{flex:none}
+@media(max-width:640px){.px-wa-overview-list{grid-template-columns:1fr}}
