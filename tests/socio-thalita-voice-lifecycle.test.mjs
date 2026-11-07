@@ -75,7 +75,9 @@ test('noise-gated VAD stops all input tracks and removes document listeners',asy
   static isTypeSupported(){return true;}
   constructor(){this.state='inactive';this.onstop=null;}
   start(){this.state='recording';recorderStarts++;}
-  stop(){if(this.state==='inactive')return;this.state='inactive';Promise.resolve().then(()=>this.onstop?.());}
+  stop(){if(this.state==='inactive')return;this.state='inactive';
+   this.ondataavailable?.({data:new Blob([new Uint8Array(400)])});
+   Promise.resolve().then(()=>this.onstop?.());}
  }
  class FakeAudioContext{
   state='running';
