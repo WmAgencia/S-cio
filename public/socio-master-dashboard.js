@@ -16,7 +16,7 @@
   '<small>'+esc(label)+'</small><strong>'+esc(value)+'</strong><span>'+esc(detail)+'</span></div></div>';
  const panel=(title,description,body,more='')=>'<section class="master-panel"><div class="master-panel-head"><div>'+
   '<h2>'+esc(title)+'</h2>'+(description?'<p>'+esc(description)+'</p>':'')+'</div>'+more+'</div>'+body+'</section>';
- const actions=()=>'<div class="master-page-actions"><button type="button" class="btn primary" data-master-go="admin">+ Nova empresa</button>'+
+ const actions=()=>'<div class="master-page-actions"><button type="button" class="btn primary" data-master-go="admin" data-master-create="1">+ Nova empresa</button>'+
   '<button type="button" class="btn soft" data-master-refresh>Atualizar dados</button></div>';
  const monthData=tenants=>{
   const current=new Date();const result=[];
@@ -125,7 +125,10 @@
   root.innerHTML=mode==='plans'?planView(raw,monitor):overview(raw,monitor);
   root.querySelectorAll('[data-master-go]').forEach(button=>button.addEventListener('click',()=>{
    if(button.dataset.masterPlan)try{sessionStorage.setItem('socio:master-plan-filter',button.dataset.masterPlan);}catch{}
-   navigate(button.dataset.masterGo);
+   const route=button.dataset.masterGo;
+   if(button.dataset.masterCreate==='1'){
+    Promise.resolve(navigate(route)).then(()=>document.querySelector('#newCompany')?.click()).catch(()=>{});
+   }else navigate(route);
   }));
   root.querySelectorAll('[data-master-refresh]').forEach(button=>button.addEventListener('click',()=>render({root,api,me,navigate,mode})
    .catch(err=>{root.innerHTML=feedback(err?.message||'Não foi possível atualizar os dados.');})));
