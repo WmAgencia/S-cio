@@ -119,8 +119,12 @@ export function validateAdsPlan(kind,input){
   throw fail(422,'Informe orçamento diário de uma campanha CBO ou conjunto de anúncios.');
  return {entity:input.entity,id:input.id,dailyBudgetCents:input.dailyBudgetCents};
 }
-async function owned(c,id){
- const data=await graph(c,'/'+id,{fields:'id,account_id,name,status,effective_status,daily_budget,lifetime_budget,campaign_id'});
+async function owned(c,id,kind='ad'){
+ // Meta Campaign and Ad Set expose budgets; Ads don't. Avoid querying
+ // unsupported Graph fields when preparing a status-only action.
+ const fields='id,account_id,name,status,effective_status'+
+  (kind==='campaign'||kind==='adset'?',daily_budget,lifetime_budget':'');
+ const data=await graph(c,'/'+id,{fields});
  if('act_'+data.account_id!==c.account.id)throw fail(403,'Este objeto não pertence à conta selecionada.');
  return data;
 }
@@ -166,7 +170,7 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
    account:c.account,name:payload.name,message:payload.message,headline:payload.headline,
    pageId:payload.pageId,imageHash:payload.imageHash,destination:payload.url,adsetId:payload.adsetId};
  }else{
-  const entity=await owned(c,payload.id);
+  const entity=await owned(c,payload.id,payload.entity);
   if(kind==='status')ensureSafeActivation(entity,payload.status);
   if(kind==='budget'&&!(Number(entity.daily_budget)>0))
    throw fail(409,Number(entity.lifetime_budget)>0?
@@ -237,7 +241,7 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
    if(!numeric(ad.id))throw Object.assign(fail(503,'Não foi possível confirmar o anúncio.'),{uncertain:true});
    result.adId=ad.id;result.delivery='PAUSED';await progress();
   }else{
-   const entity=await owned(c,p.id);
+   const entity=await owned(c,p.id,p.entity);
    if(plan.kind==='status')ensureSafeActivation(entity,p.status);
    if(plan.kind==='budget'&&!(Number(entity.daily_budget)>0))
     throw fail(409,'O nível do orçamento mudou na Meta. Atualize a lista antes de tentar novamente.');
