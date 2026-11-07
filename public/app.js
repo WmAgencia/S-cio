@@ -16,7 +16,7 @@ function syncMasterSwitch(){
  if(!button||!label)return;
  const visible=isPrimaryMaster(),master=isMasterView();
  button.classList.toggle('hidden',!visible);
- document.body.classList.toggle('socio-is-master',master);
+ document.body?.classList?.toggle('socio-is-master',master);
  $('#productionNav')?.classList.toggle('hidden',master);
  $('#masterNav')?.classList.toggle('hidden',!master);
  if(!visible)return;
