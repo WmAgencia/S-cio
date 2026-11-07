@@ -13,11 +13,32 @@
  // Small per-company GET cache removes the blank transition on repeat visits.
  // In-flight calls are shared; values expire quickly and manual refresh clears them.
  const getCache=new Map();const snapshots=new Map();let selectedTenant=null,renderSerial=0;
- const invalidateRender=()=>{renderSerial++;};
+ let liveRefreshTimer=null,liveRefreshSerial=0;
+ const stopLiveRefresh=()=>{if(liveRefreshTimer){clearInterval(liveRefreshTimer);liveRefreshTimer=null;}liveRefreshSerial++;};
+ const invalidateRender=()=>{renderSerial++;stopLiveRefresh();};
  const forTenant=me=>{const id=[me?.tenant?.id||'',me?.user?.id||'',me?.user?.role||''].join(':');
-  if(selectedTenant!==id){getCache.clear();snapshots.clear();selectedTenant=id;}
+  if(selectedTenant!==id){stopLiveRefresh();getCache.clear();snapshots.clear();selectedTenant=id;}
  };
- const clearCache=()=>{getCache.clear();snapshots.clear();selectedTenant=null;};
+ const clearCache=()=>{stopLiveRefresh();getCache.clear();snapshots.clear();selectedTenant=null;};
+ const startLiveRefresh=(root,kind,renderId,refresh,updateWhilePlaying)=>{
+  stopLiveRefresh();const serial=liveRefreshSerial;
+  liveRefreshTimer=setInterval(async()=>{
+   if(serial!==liveRefreshSerial||renderId!==renderSerial||document.hidden||!root.isConnected)return;
+   if(!root.querySelector('.px-'+kind)){stopLiveRefresh();return;}
+   if(root.querySelector('dialog[open]')||root.querySelector('[data-px-action-review]:disabled'))return;
+   const playing=!!root.querySelector('.px-feature-media video,.px-feature-media iframe');
+   try{
+    getCache.clear(); // Always ask server/Meta again, never reuse old KPI figures.
+    if(playing){await updateWhilePlaying?.();return;}
+    await refresh();
+   }catch{/* Keep the last confirmed values on transient provider errors. */}
+  },30000);
+ };
+ const displayLiveTime=root=>{
+  const label=root.querySelector('.px-live-indicator');
+  if(label&&label.isConnected)label.title='Última consulta iniciada às '+new Date().toLocaleTimeString('pt-BR')+
+   '. A Meta pode publicar métricas com atraso.';
+ };
  const cached=async(api,path,ttl=25000)=>{
   const existing=getCache.get(path),now=Date.now();
   if(existing?.result&&now-existing.at<ttl)return existing.result;
@@ -152,7 +173,7 @@
       childBudgets.slice(0,30).map(s=>'<div class="px-budget-child"><span><strong>'+esc(s.name||s.id)+'</strong>'+
        '<small>'+formattedDaily(s.daily_budget,currency)+'</small></span>'+actionButtons('adset',s,manage)+'</div>').join('')+
       '</div></details>':'';
-    return '<tr><td><div class="px-ad-name-cell">'+(picture?posterView(picture,'Miniatura de '+String(c.name||'')):'')+
+    return '<tr data-px-campaign-row="'+esc(c.id)+'"><td><div class="px-ad-name-cell">'+(picture?posterView(picture,'Miniatura de '+String(c.name||'')):'')+
      '<span><strong>'+esc(c.name||c.id)+'</strong><small>'+esc(c.objective||c.id)+'</small></span></div></td>'+
      '<td><span class="px-status '+((c.effective_status||c.status)==='ACTIVE'?'on':'off')+'">'+esc(c.effective_status||c.status||'—')+'</span></td>'+
      '<td><span class="px-budget-value">'+esc(btext)+'</span>'+budgetDetails+'</td>'+
@@ -254,6 +275,7 @@
     kpi('Pedidos registrados (30d)',authorized?number(m.registeredOrders):'—','Pedidos, não pagamentos','▣','blue')+
     kpi('Vendas pagas', '—','Sem conciliação financeira de produção','◈','muted')+
    '</div>'+
+   '<p class="px-live-indicator"><span class="px-live-dot"></span>Atualização automática a cada 30 segundos · indicadores retornados pelos provedores</p>'+
    '<div class="px-ads-strip">'+
     '<article class="px-ads-metric"><div><span class="px-brand-dot meta"></span><strong>Meta Ads</strong><small>Gasto hoje</small></div><b>'+ (metaReady?money(meta.spend,meta.currency):'Não disponível')+'</b>'+
      '<small>'+(metaReady?'Retornado pela conta autorizada':'Conecte ou valide a conta para consultar')+'</small></article>'+
@@ -325,6 +347,26 @@
   root.querySelectorAll('[data-px-chart-range]').forEach(button=>button.addEventListener('click',()=>
    overview({root,api,me,navigate,activityRange:button.dataset.pxChartRange})));
 
+  startLiveRefresh(root,'overview',renderId,
+   ()=>overview({root,api,me,navigate,activityRange:range}),
+   async()=>{
+    const [nextMeta,nextGoogle,nextDashboard]=await Promise.all([
+     ads?loadMeta(api,'today').catch(()=>null):Promise.resolve(null),
+     ads?optional(api,'/api/google-ads/campaigns?period=today'):Promise.resolve(null),
+     optional(api,'/api/dashboard')
+    ]);
+    if(renderId!==renderSerial||!root.querySelector('.px-overview'))return;
+    const cells=root.querySelectorAll('.px-ads-strip .px-ads-metric>b');
+    if(nextMeta?.insights.ok&&cells[0])cells[0].textContent=money(nextMeta.spend,nextMeta.currency);
+    if(nextGoogle?.ok&&cells[1])cells[1].textContent=money(Number(nextGoogle.data?.summary?.costMicros||0)/1e6,nextGoogle.data?.currencyCode);
+    if(nextMeta?.insights.ok&&cells[2])cells[2].textContent=number(nextMeta.clicks)+' cliques';
+    const first=root.querySelectorAll('.px-kpi-grid .px-kpi-number');
+    if(nextDashboard?.ok){
+     if(first[0])first[0].textContent=number(nextDashboard.data?.openConversations);
+     if(first[2])first[2].textContent=number(nextDashboard.data?.messagesReceivedToday);
+    }
+    displayLiveTime(root);
+   });
   root.querySelector('[data-px-inbox]')?.addEventListener('click',()=>navigate('inbox'));
   root.querySelector('[data-px-products]')?.addEventListener('click',()=>navigate('products'));
   root.querySelector('[data-px-connections]')?.addEventListener('click',()=>navigate('connections'));
@@ -548,6 +590,31 @@
     setDialogBusy(false);
    }
   });
+  startLiveRefresh(root,'marketing',renderId,
+   ()=>marketing({root,api,me,navigate,period}),
+   async()=>{
+    const current=await loadMeta(api,period,true).catch(()=>null);
+    if(renderId!==renderSerial||!root.querySelector('.px-marketing')||!current)return;
+    const kpis=root.querySelectorAll('.px-marketing-kpi .px-kpi-number');
+    const vals=[money(current.spend,current.currency),number(current.clicks),
+     current.clicks?money(current.spend/current.clicks,current.currency):'—',
+     current.purchases?money(current.spend/current.purchases,current.currency):'—',
+     number(current.activeCampaigns),number(current.activeAds)];
+    kpis.forEach((node,i)=>{if(vals[i]!==undefined)node.textContent=vals[i];});
+    const byId=new Map((current.daily||[]).map(x=>[String(x.campaign_id),x]));
+    root.querySelectorAll('tr[data-px-campaign-row]').forEach(row=>{
+     const metric=byId.get(row.dataset.pxCampaignRow);
+     if(!metric)return;
+     const cells=row.querySelectorAll(':scope > td');
+     if(cells.length<7)return;
+     const cost=Number(metric.spend)||0,clicks=Number(metric.clicks)||0;
+     cells[3].textContent=money(cost,current.currency);
+     cells[4].textContent=number(clicks);
+     cells[5].textContent=clicks?money(cost/clicks,current.currency):'—';
+     cells[6].textContent=number(metric.impressions||0);
+    });
+    displayLiveTime(root);
+   });
   root.querySelector('[data-px-connect]')?.addEventListener('click',()=>navigate('connections'));
   root.querySelectorAll('[data-px-period]').forEach(b=>b.addEventListener('click',()=>marketing({root,api,me,navigate,period:b.dataset.pxPeriod})));
 
