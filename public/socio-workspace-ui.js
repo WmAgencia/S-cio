@@ -26,7 +26,7 @@
    if(serial!==liveRefreshSerial||renderId!==renderSerial||document.hidden||!root.isConnected)return;
    if(!root.querySelector('.px-'+kind)){stopLiveRefresh();return;}
    if(root.querySelector('dialog[open]')||root.querySelector('[data-px-action-review]:disabled'))return;
-   const playing=!!root.querySelector('.px-feature-media video,.px-feature-media iframe');
+   const playing=!!root.querySelector('.px-feature-media video,.px-feature-media iframe,.px-ad-creative-media video,.px-ad-creative-media iframe');
    try{
     getCache.clear(); // Always ask server/Meta again, never reuse old KPI figures.
     if(playing){await updateWhilePlaying?.();return;}
@@ -426,7 +426,11 @@
     empty(data?.adInsights.ok?'Sem anúncios com métricas suficientes no período.':'Relatório por anúncio indisponível nesta conta.'))+
    section(selectedCampaign?'Anúncios da campanha':'Anúncios e criativos',selectedCampaign?'Anúncios vinculados a '+selectedCampaign.name:'Anúncios vinculados à conta de anúncios selecionada',
     data?.ads.ok?(visibleAds.length?'<div class="px-ads-list">'+visibleAds.slice(0,100).map(ad=>
-      '<div><div><strong>'+esc(ad.name||ad.id)+'</strong><small>'+esc(ad.id)+'</small></div>'+
+      '<div class="px-ad-creative-row">'+
+      '<div class="px-ad-creative-media" data-px-ad-media="'+esc(ad.id)+'">'+
+        (posterFromAd(ad)?posterView(posterFromAd(ad),'Miniatura do anúncio '+(ad.name||ad.id)):'<div class="px-feature-no-media">Criativo</div>')+
+      '</div><div class="px-ad-creative-info"><strong>'+esc(ad.name||ad.id)+'</strong><small>ID '+esc(ad.id)+'</small>'+
+      '<button type="button" class="px-quick-action" data-px-ad-play="'+esc(ad.id)+'">▶ Ver criativo</button></div>'+
       '<span class="px-status '+((ad.effective_status||ad.status)==='ACTIVE'?'on':'off')+'">'+esc(ad.effective_status||ad.status||'—')+'</span></div>').join('')+'</div>':
       empty('Nenhum anúncio retornado pela conta.')):empty('Os anúncios estão indisponíveis até autorizar a leitura.'))+
    section('Interpretação dos resultados','As plataformas reportam atribuições, não pagamentos conciliados',
@@ -503,6 +507,41 @@
     }
    });
   }
+  // Ads inside a campaign use the same tenant/account-verified media endpoint as the featured ad.
+  root.querySelectorAll('[data-px-ad-play]').forEach(button=>button.addEventListener('click',async()=>{
+   const adId=button.dataset.pxAdPlay,holder=root.querySelector('[data-px-ad-media="'+adId+'"]');
+   if(!/^\d{4,30}$/.test(adId||'')||!holder||button.disabled)return;
+   button.disabled=true;button.textContent='Carregando…';
+   try{
+    const response=await cached(api,'/api/marketing/tools/ad-media?adId='+encodeURIComponent(adId),25000);
+    if(!response.ok||!response.data)throw new Error('A Meta não disponibilizou este criativo.');
+    if(!holder.isConnected)return;
+    const media=response.data,video=mediaUrl(media.videoUrl);
+    const name=visibleAds.find(a=>String(a.id)===adId)?.name||'Anúncio';
+    if(video){
+     const player=document.createElement('video');player.controls=true;player.playsInline=true;
+     player.preload='metadata';player.className='px-feature-video';
+     player.setAttribute('aria-label','Vídeo de '+name);
+     const poster=mediaUrl(media.posterUrl||media.thumbnailUrl);if(poster)player.poster=poster;
+     player.src=video;holder.replaceChildren(player);void player.play().catch(()=>{});
+     button.textContent='Vídeo disponível';button.disabled=true;
+    }else if(trustedVideoEmbed(media.videoEmbedUrl)){
+     const player=createInlineFacebookVideo(media.videoEmbedUrl,'Vídeo de '+name);
+     holder.replaceChildren(player);button.textContent='Vídeo disponível';button.disabled=true;
+    }else if(trustedMetaPreview(media.previewUrl)){
+     const frame=document.createElement('iframe');frame.className='px-meta-preview-frame';
+     frame.title='Prévia de '+name;frame.src=trustedMetaPreview(media.previewUrl);
+     frame.loading='lazy';frame.referrerPolicy='no-referrer';
+     frame.setAttribute('sandbox','allow-scripts allow-same-origin allow-presentation allow-popups');
+     frame.setAttribute('allow','autoplay; encrypted-media; picture-in-picture');
+     holder.replaceChildren(frame);button.textContent='Prévia disponível';button.disabled=true;
+    }else{
+     const poster=mediaUrl(media.posterUrl||media.thumbnailUrl);
+     if(poster)holder.innerHTML=posterView(poster,'Imagem do anúncio '+name);
+     button.textContent=poster?'Imagem do criativo':'Mídia indisponível';button.disabled=true;
+    }
+   }catch(error){button.textContent=String(error.message||'Criativo indisponível').slice(0,65);button.disabled=false;}
+  }));
   root.querySelectorAll('[data-px-open-campaign]').forEach(button=>button.addEventListener('click',()=>marketing({root,api,me,navigate,period,campaignId:button.dataset.pxOpenCampaign})));
   root.querySelector('[data-px-campaign-back]')?.addEventListener('click',()=>marketing({root,api,me,navigate,period}));
   // Manual campaign actions reuse the server's 15-minute plan, second
