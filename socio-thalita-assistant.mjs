@@ -9,6 +9,8 @@ import {askSalesAssistant} from './socio-sales-assistant.mjs';
 import {speakToSocioSkill} from './socio-skill-router.mjs';
 import {groqResponse} from './groq-client.mjs';
 import {validateProduct} from './catalog.mjs';
+import {readAdsTool} from './meta-ads-tools.mjs';
+import {readGoogleAdsCampaigns} from './socio-google-ads.mjs';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const pending=new Map();
 const normalize=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -24,6 +26,12 @@ function makeDraft(a,action,label){
  pending.set(sessionKey(a),{id,action,label,expires:Date.now()+8*60*1000});
  return {status:'approval_required',executed:false,message:'Revise antes de executar: '+label,
   confirmation:{id,label,expiresInSeconds:480},readOnly:false};
+}
+const moneyBR=cent=>(Number(cent||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const safeName=name=>String(name||'').replace(/[\r\n<>]/g,' ').slice(0,110);
+function exactProduct(rows,name){
+ const matches=rows.filter(x=>normalize(x.name)===normalize(name));
+ return matches.length===1?matches[0]:null;
 }
 function parseMoney(text){
  const raw=String(text||'').trim().replace(/^R\$\s*/i,'');
@@ -51,6 +59,25 @@ export async function askThalita(pool,a,body={},opts={}){
    return makeDraft(a,{kind:'delete_product',productId:matches[0].id},'Excluir permanentemente '+matches[0].name+
     ' e suas variações, fotos e associações? O histórico comercial anterior será preservado.');
   }
+  // An exact catalog item is required; every price/stock change is one-use approved.
+  const stock=/^(?:atualize|alterar?|mude|defina|ajuste)\s+(?:o\s+)?estoque\s+d[oa]\s+produto\s+(.+?)\s+para\s+(\d{1,7})[.!]?$/i.exec(message);
+  const price=/^(?:atualize|alterar?|mude|defina|ajuste)\s+(?:o\s+)?pre[cç]o\s+d[oa]\s+produto\s+(.+?)\s+para\s+(R\$\s*\d[\d.,]*)[.!]?$/i.exec(message);
+  if(stock||price){
+   requirePermission(a,'catalog.manage');
+   const found=stock||price,field=stock?'stock_quantity':'price_cents';
+   const value=stock?Number(found[2]):parseMoney(found[2].replace(/[.!]$/,''));
+   if(value===null||!Number.isSafeInteger(value)||value<0||
+      (stock&&value>1000000)||(!stock&&value>=100000000))
+    return {status:'needs_details',executed:false,message:'Valor inválido. Para estoque, use um número inteiro. Para preço, use R$ 129,90.'};
+   const products=await pool.query('SELECT id,name,price_cents,stock_quantity FROM products WHERE tenant_id=$1',[a.active_tenant_id]);
+   const product=exactProduct(products.rows,found[1]);
+   if(!product)return {status:'needs_details',executed:false,
+    message:'Não encontrei um único produto com esse nome exato. Consulte o catálogo antes de alterar. Nenhum dado mudou.'};
+   const before=field==='price_cents'?moneyBR(product.price_cents):product.stock_quantity==null?'sem controle':String(product.stock_quantity);
+   const after=field==='price_cents'?moneyBR(value):String(value);
+   return makeDraft(a,{kind:'update_product',productId:product.id,field,value},
+    'Alterar '+(stock?'estoque':'preço')+' de '+safeName(product.name)+' de '+before+' para '+after+'?');
+  }
   const create=/^(?:cadastre|cadastrar|crie|criar|adicione|adicionar)\s+(?:o\s+)?produto\s+(.+?)\s+(?:por|preco|valor)\s+(?:de\s+)?(R\$\s*\d[\d.,]*)[.!]?$/i.exec(message);
   if(create){
    requirePermission(a,'catalog.manage');
@@ -60,16 +87,84 @@ export async function askThalita(pool,a,body={},opts={}){
      ', sem estoque controlado? Revise antes de confirmar.');
   }
  }
+ // Answers come from the active tenant's stored records, never inferred from chat text.
+ if(/\b(produtos?|catalogo|estoque|precos?|preco do produto)\b/.test(lower)&&features.catalog){
+  requirePermission(a,'catalog.read');
+  const response=await pool.query(
+   'SELECT id,name,price_cents,stock_quantity,active FROM products WHERE tenant_id=$1 ORDER BY name ASC LIMIT 150',
+   [a.active_tenant_id]);
+  const matching=response.rows.filter(x=>normalize(x.name).length>2&&lower.includes(normalize(x.name)));
+  const selected=(matching.length?matching:response.rows).slice(0,12);
+  return {status:'completed',readOnly:true,executed:false,
+   message:selected.length?'Catálogo da sua empresa ('+response.rows.length+' itens consultados):\n'+selected.map(p=>
+    '• '+safeName(p.name)+' — '+moneyBR(p.price_cents)+
+    ' · '+(p.active?'ativo':'inativo')+
+    ' · estoque '+(p.stock_quantity===null?'sem controle':p.stock_quantity)).join('\n')+
+    '\nPara alterar um preço ou estoque, peça a mudança usando o nome exato; eu solicitarei confirmação.':
+    'Não há produtos cadastrados para esta empresa.',
+   data:{products:selected.map(p=>({id:p.id,name:p.name,priceCents:p.price_cents,
+    stockQuantity:p.stock_quantity,active:p.active}))}};
+ }
+ if(/\b(whatsapp|whatsapps|numeros conectados|canais de atendimento|conversas em aberto)\b/.test(lower)&&features.whatsapp){
+  requirePermission(a,'inbox.read');
+  const [channels,conversations]=await Promise.all([
+   pool.query('SELECT label,phone,status FROM channels WHERE tenant_id=$1 ORDER BY label LIMIT 40',[a.active_tenant_id]),
+   pool.query("SELECT count(*)::int AS n FROM conversations WHERE tenant_id=$1 AND status<>'resolved'",[a.active_tenant_id])
+  ]);
+  const connected=channels.rows.filter(x=>x.status==='connected');
+  return {status:'completed',readOnly:true,executed:false,
+   message:'Canais do seu espaço: '+channels.rows.length+' cadastrados, '+connected.length+
+    ' marcados como conectados na base e '+Number(conversations.rows[0]?.n||0)+
+    ' conversas em aberto.\n'+channels.rows.slice(0,8).map(x=>
+     '• '+safeName(x.label)+' — '+(x.status==='connected'?'conectado':'pendente ou desconectado')).join('\n')+
+    '\nA conexão em tempo real precisa ser conferida na guia Conexões. Nenhuma mensagem foi enviada.',
+   data:{channelCount:channels.rows.length,connectedInDatabase:connected.length,
+    openConversations:Number(conversations.rows[0]?.n||0)}};
+ }
  if(/\b(meta ads|facebook ads|gerenciador de anuncios|campanha na meta|anuncio na meta|pixel)\b/.test(lower)){
   if(!features.meta_ads)return {status:'feature_disabled',executed:false,message:'Meta Ads não está ativado para esta empresa.'};
+  const asksForMetrics=/\b(gasto|gastos|cliques|cpc|cpa|metricas|desempenho|relatorio|resultado|investimento|campanhas ativas)\b/.test(lower);
+  if(asksForMetrics){
+   requirePermission(a,'marketing.read');
+   try{
+    const report=await (opts.metaReport||readAdsTool)(pool,a,'insights',{period:/\bhoje\b/.test(lower)?'today':'last_7d'});
+    const rows=Array.isArray(report.items)?report.items:[];
+    const sum=k=>rows.reduce((n,x)=>n+(Number(x[k])||0),0);
+    const spend=sum('spend'),clicks=sum('clicks'),impressions=sum('impressions');
+    return {status:'completed',readOnly:true,executed:false,
+     message:'Meta Ads · '+(/\bhoje\b/.test(lower)?'hoje':'últimos 7 dias')+
+      ': '+rows.length+' campanha(s) com métricas, gasto '+spend.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+
+      ' na moeda da conta, '+clicks+' cliques e '+impressions+' impressões. '+
+      (clicks?'CPC médio: '+(spend/clicks).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+
+       ' na moeda da conta.':'Sem cliques confirmados para calcular CPC.')+
+      ' Esses dados não comprovam vendas pagas.',
+     data:{period:/\bhoje\b/.test(lower)?'today':'last_7d',spend,clicks,impressions,campaignsWithMetrics:rows.length}};
+   }catch(error){return {status:'unavailable',readOnly:true,executed:false,
+    message:'Não consegui consultar as métricas reais da Meta Ads nesta empresa. Verifique a conexão em Conexões. '+String(error.message||'').slice(0,150)};}
+  }
   requirePermission(a,'marketing.manage');
   const r=await (opts.marketing||speakToSocioSkill)(pool,a,
     {message,runId:body.runId||null},{});
   return {...r,executed:r.executed===true};
  }
- if(/\b(google ads|campanhas google)\b/.test(lower))
-  return {status:'guide',readOnly:true,executed:false,
-   message:'A consulta de campanhas Google Ads está disponível em Conexões e Visão geral quando a API da sua empresa estiver autorizada. A criação de anúncios Google ainda não está habilitada no Sócio.'};
+ if(/\b(google ads|campanhas google)\b/.test(lower)){
+  if(!features.meta_ads)return {status:'feature_disabled',readOnly:true,executed:false,message:'Integração de anúncios desabilitada para esta empresa.'};
+  requirePermission(a,'marketing.read');
+  try{
+   const result=await (opts.googleReport||readGoogleAdsCampaigns)(pool,a,{period:/\bhoje\b/.test(lower)?'today':'last_30d'});
+   const summary=result.summary||{};
+   const cost=Number(summary.costMicros||0)/1000000;
+   return {status:'completed',readOnly:true,executed:false,
+    message:'Google Ads · '+(result.period==='TODAY'?'hoje':'últimos 30 dias')+': '+
+     Number(summary.campaigns||0)+' campanha(s), '+
+     Number(summary.clicks||0)+' cliques, '+Number(summary.impressions||0)+' impressões e gasto de '+
+     cost.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+
+     ' na moeda da conta. Nenhuma campanha ou pagamento foi modificado.',
+    data:{readOnly:true,...summary,currencyCode:result.currencyCode||null}};
+  }catch(error){return {status:'unavailable',readOnly:true,executed:false,
+   message:'Não foi possível consultar o Google Ads desta empresa. Verifique a autorização e a conta escolhida em Conexões. '+String(error.message||'').slice(0,120)};}
+ }
+
  if(/\b(venda|vendas|orcamento|pedido|cliente interessado|oportunidad)/.test(lower)&&features.quotes){
   requirePermission(a,'sales.read');
   return {...await (opts.sales||askSalesAssistant)(pool,a,{message}),executed:false};
@@ -120,6 +215,22 @@ export async function confirmThalita(pool,a,input={}){
     audit:{kind:task.kind,productId:task.productId}};
   }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}
   finally{client.release();}
+ }
+ if(task.kind==='update_product'){
+  if(!['price_cents','stock_quantity'].includes(task.field)||!Number.isSafeInteger(task.value)||
+    task.value<0||task.field==='stock_quantity'&&task.value>1000000||
+    task.field==='price_cents'&&task.value>=100000000)throw fail(422,'Alteração inválida.');
+  const field=task.field;
+  const updated=await pool.query(
+   'UPDATE products SET '+field+'=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,name,price_cents,stock_quantity',
+   [a.active_tenant_id,task.productId,task.value]);
+  if(!updated.rowCount)throw fail(404,'Produto não existe mais nesta empresa.');
+  const item=updated.rows[0];
+  return {status:'completed',executed:true,
+   message:'Produto '+safeName(item.name)+' atualizado. '+
+    (field==='price_cents'?'Novo preço: '+moneyBR(item.price_cents):'Estoque: '+item.stock_quantity)+
+    '. Nenhuma mensagem foi enviada.',
+   audit:{kind:'update_product',productId:task.productId,field}};
  }
  if(task.kind==='create_product'){
   const p=validateProduct({name:task.name,priceCents:task.priceCents,active:true,stockQuantity:null});
