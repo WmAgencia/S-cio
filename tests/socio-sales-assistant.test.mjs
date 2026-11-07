@@ -39,8 +39,8 @@ test('do not quote ambiguous, unpriced, out of stock, variant or unidentified pr
   product({variants}),product({stock_quantity:null}),product({stock_quantity:1}),
   product({price_cents:0})
  ])assert.equal(suggestQuoteForRequest(request(),[p]).readyToReview,false);
- assert.equal(suggestQuoteForRequest(request(),[product(),product({name:'Primavera'})]).readyToReview,true,
-  'Partial word matches should not fabricate a second complete product match.');
+ assert.equal(suggestQuoteForRequest(request(),[product(),product({name:'Primavera'})]).readyToReview,false,
+  'Ambiguous overlapping product names must not produce a fabricated total.');
  assert.equal(suggestQuoteForRequest(request({status:'resolved'}),[base]).readyToReview,false);
  assert.equal(suggestQuoteForRequest(request({delivery_status:'processing'}),[base]).readyToReview,false);
 });
