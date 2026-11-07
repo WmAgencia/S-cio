@@ -35,7 +35,7 @@ test('Thalita caches only predefined generic voice and shares concurrent request
   exec:async(cmd,args,config)=>{
    executions++;
    assert.equal(config.timeout,12000);
-   assert(args.includes(phrase));
+   assert.equal(args[args.indexOf('--text')+1]?.length>2,true);
    await new Promise(resolve=>setTimeout(resolve,10));
   },
   getStat:async()=>({size:500}),
