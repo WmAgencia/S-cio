@@ -118,6 +118,13 @@
     '<button class="px-assistant-close" type="button" data-thalita-close aria-label="Fechar Thalita">×</button></header>'+
     '<div class="px-assistant-feed" id="thalitaMessages" role="log" aria-live="polite">'+
      '<div class="px-assistant-line assistant"><small>Thalita</small><p>Oi! Posso consultar indicadores, explicar resultados e preparar ações para você aprovar. O que precisa?</p></div></div>'+
+    '<div class="px-assistant-suggestions" role="group" aria-label="Perguntas rápidas">'+
+     '<button type="button" data-thalita-suggest="Me mostre os indicadores e mensagens de hoje.">Resumo de hoje</button>'+
+     '<button type="button" data-thalita-suggest="Quais produtos e estoques temos cadastrados?">Produtos</button>'+
+     '<button type="button" data-thalita-suggest="Quantos WhatsApps conectados e conversas em aberto temos?">WhatsApp</button>'+
+     '<button type="button" data-thalita-suggest="Qual foi o gasto e CPC da Meta Ads hoje?">Meta Ads</button>'+
+     '<button type="button" data-thalita-suggest="Como estão as campanhas Google Ads hoje?">Google Ads</button>'+
+    '</div>'+
     '<div class="px-assistant-approval" id="thalitaConfirm"></div>'+
     '<form id="thalitaForm"><label for="thalitaInput" class="ps-sr-only">Fale com Thalita</label>'+
      '<textarea id="thalitaInput" maxlength="1400" rows="2" placeholder="Pergunte ou peça uma ação…" required></textarea>'+
@@ -134,6 +141,7 @@
   get('#thalitaInput').addEventListener('keydown',ev=>{
    if(ev.key==='Enter'&&!ev.shiftKey){ev.preventDefault();run(ev.currentTarget.value);}
   });
+  instance.querySelectorAll('[data-thalita-suggest]').forEach(button=>button.addEventListener('click',()=>run(button.dataset.thalitaSuggest)));
   get('[data-thalita-voice]').addEventListener('click',startVoice);
  }
  globalThis.SocioThalitaUI={mount,unmount};
