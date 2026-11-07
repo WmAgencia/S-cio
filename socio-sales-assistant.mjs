@@ -83,8 +83,19 @@ export async function askSalesAssistant(pool,actor,{message,requestId=null}={}){
  const base={status:'completed',readOnly:true,executed:false,skillId:'commerce.assistant',
   catalogCount:catalog.length,pendingQuoteRequests:quotes.length,openPurchaseIntents:sales.length,
   approvedTraining,limits:'Nenhuma mensagem, orçamento ou pagamento foi criado ou enviado.'};
- if(requestId){
-  const q=quotes.find(x=>x.id===requestId);
+ const normalizedMessage=norm(message);
+ const wantsPreview=/\b(prepara|preparar|preparacao|sugestao|rascunho|monta|montar|cotacao)\b/.test(normalizedMessage)&&
+  /\b(orcamento|orcamentos|cotacao|proposta|rascunho)\b/.test(normalizedMessage);
+ let chosenId=requestId;
+ if(!chosenId&&wantsPreview){
+  if(/\b(ultimo|ultima|mais recente)\b/.test(normalizedMessage))chosenId=quotes[0]?.id||null;
+  else{
+   const matches=quotes.filter(q=>norm(q.customer_name).length>=3&&normalizedMessage.includes(norm(q.customer_name)));
+   if(matches.length===1)chosenId=matches[0].id;
+  }
+ }
+ if(chosenId){
+  const q=quotes.find(x=>x.id===chosenId);
   if(!q)throw fail(404,'Solicitação pendente não encontrada nesta empresa.');
   const preview=suggestQuoteForRequest(q,catalog);
   return {...base,requestId:q.id,preview,
@@ -92,6 +103,9 @@ export async function askSalesAssistant(pool,actor,{message,requestId=null}={}){
     '\n'+(preview.readyToReview?'Sugestão para revisão: '+preview.text+' Total: '+money(preview.amountCents)+'.':
      'Não calculei um valor: '+preview.reason)+
     '\nNenhuma proposta foi salva ou enviada. Confira as informações com o cliente antes de aprovar.'};
+ }
+ if(wantsPreview){
+  return {...base,message:'Informe o nome do cliente ou peça “prepare o orçamento do último pedido”. Se houver produtos ou quantidades incertos, confirmarei antes de calcular. Nenhum orçamento foi salvo ou enviado.'};
  }
  const wantsQuotes=/\b(orcamento|orcamentos|cotacao|cotacoes|proposta|propostas)\b/.test(trimMessage);
  const wantsOpportunities=/\b(lead|leads|interessados?|interessadas?|oportunidade|oportunidades|vendas|pedidos|comprar|clientes)\b/.test(trimMessage);
