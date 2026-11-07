@@ -173,9 +173,9 @@ export async function readGoogleAdsCampaigns(pool,a,{env=process.env,request=fet
   for(const row of chunk.results){
    if(rows.length>=100)throw fail(503,'Relatório excedeu o limite de 100 campanhas.');
    const campaign=row?.campaign,metrics=row?.metrics||{};
-   if(!/^\\d+$/.test(String(campaign?.id||''))||typeof campaign?.name!=='string'||campaign.name.length>250)
+   if(!/^[0-9]+$/.test(String(campaign?.id||''))||typeof campaign?.name!=='string'||campaign.name.length>250)
     throw fail(503,'Dados de campanha inválidos.');
-   const int=(v)=>/^\\d{1,18}$/.test(String(v??'0'))?String(v??'0'):null;
+   const int=(v)=>/^[0-9]{1,18}$/.test(String(v??'0'))?String(v??'0'):null;
    const decimal=(v)=>{const n=Number(v??0);return Number.isFinite(n)&&n>=0&&n<=1e12?n:null;};
    const impressions=int(metrics.impressions),clicks=int(metrics.clicks),costMicros=int(metrics.costMicros),
     averageCpcMicros=int(metrics.averageCpc),ctr=decimal(metrics.ctr),conversions=decimal(metrics.conversions);
