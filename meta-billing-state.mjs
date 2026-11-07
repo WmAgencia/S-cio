@@ -45,3 +45,31 @@ export function assessMetaFunds(observation,{dailySpendMinor=null,minimumMinor=3
   reason:state==='critical'?'A verba está acabando. Verifique a recarga.':
    state==='low'?'O saldo está baixo. Planeje a próxima recarga.':null};
 }
+
+export function verifyMetaPixCode(code,expectedAmountMinor){
+ topupAmount(expectedAmountMinor);
+ if(typeof code!=='string'||code.length>1024||code.length<30||! /^[\x20-\x7e]+$/.test(code))
+  throw fail('Código Pix não identificado.');
+ const fields=new Map();let pos=0;
+ while(pos<code.length){
+  const id=code.slice(pos,pos+2),n=code.slice(pos+2,pos+4);
+  if(!/^[0-9]{2}$/.test(id)||!/^[0-9]{2}$/.test(n))throw fail('Código Pix inválido.');
+  const length=Number(n),end=pos+4+length;
+  if(end>code.length||fields.has(id))throw fail('Código Pix ambíguo.');
+  fields.set(id,code.slice(pos+4,end));pos=end;
+ }
+ const amount=fields.get('54');
+ if(fields.get('00')!=='01'||fields.get('53')!=='986'||fields.get('58')!=='BR'||
+  !String(fields.get('26')||'').toLowerCase().includes('br.gov.bcb.pix')||
+  !/^[0-9]{1,8}\.[0-9]{2}$/.test(amount||'')||
+  Math.round(Number(amount)*100)!==expectedAmountMinor||!/^6304[0-9A-F]{4}$/.test(code.slice(-8)))
+  throw fail('O valor ou a moeda do Pix não corresponde à recarga solicitada.');
+ let crc=0xffff;
+ for(const char of code.slice(0,-4)){
+  crc^=char.charCodeAt(0)<<8;
+  for(let i=0;i<8;i++)crc=(crc&0x8000)?(crc<<1)^0x1021:crc<<1;
+  crc&=0xffff;
+ }
+ if(crc.toString(16).toUpperCase().padStart(4,'0')!==code.slice(-4))throw fail('Código Pix corrompido.');
+ return {pixCode:code,amountMinor:expectedAmountMinor,currency:'BRL',amountVerified:true};
+}
