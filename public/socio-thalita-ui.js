@@ -3,7 +3,8 @@
 (()=>{
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let instance=null,api=null,me=null,csrf=null,busy=false,session=null,speaking=false,
-  playbackContext=null,playbackSource=null,abort=null,finalize=null,turnRunId=null,voiceRequested=false;
+  playbackContext=null,playbackSource=null,abort=null,finalize=null,turnRunId=null,voiceRequested=false,
+  voiceEpoch=0,transcriptionAbort=null,queryEpoch=0;
  const get=sel=>instance?.querySelector(sel);
  // Audio output is unlocked by the explicit microphone click using a shared
  // Web Audio context. A new Audio().play() after asynchronous STT/LLM/TTS often
@@ -22,12 +23,14 @@
   speaking=false;finalize?.();finalize=null;
  }
  function closeVoice(){
+  voiceEpoch++;queryEpoch++;
+  if(transcriptionAbort){transcriptionAbort.abort();transcriptionAbort=null;}
   session?.stop();session=null;voiceRequested=false;finishVoice();
   if(playbackContext){Promise.resolve(playbackContext.close()).catch(()=>{});playbackContext=null;}
   const btn=get('[data-thalita-voice]');if(btn)btn.textContent='◉ Conversar por voz';
   const label=get('#thalitaVoiceState');if(label)label.textContent='Voz desligada';
  }
- async function say(text){
+ async function say(text,{onPlaybackStart}={}){
   if(!session||!voiceRequested||!text?.trim())return;
   finishVoice();speaking=true;setStatus('Preparando voz Thalita…');
   const controller=new AbortController();abort=controller;
@@ -47,7 +50,7 @@
     let done=false;
     const settle=()=>{if(done)return;done=true;finalize=null;resolve();};
     finalize=settle;source.onended=settle;
-    try{source.start();setStatus('Thalita falando · pode interromper.');}
+    try{source.start();setStatus('Thalita falando · pode interromper.');onPlaybackStart?.();}
     catch(error){settle();reject(error);}
    });
   }catch(error){
@@ -59,6 +62,11 @@
    if(abort===controller){finishVoice();if(!failed)setStatus(session?'Microfone ativo. Pode falar.':'Voz desligada');}
   }
  }
+ const meaningfulVoiceText=text=>{
+  const normalized=String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[!?.,]/g,'').trim();
+  // STT hallucinations produced repeatedly by silence/ambient noise.
+  return normalized.length>=3&&!/^(e ai|oi|ola|hum|aham|ta|ok|obrigado|e|ai|sim|nao)$/.test(normalized);
+ };
  function setStatus(message){
   const label=get('#thalitaVoiceState');if(label)label.textContent=String(message);
  }
@@ -69,14 +77,33 @@
   const content=document.createElement('p');content.textContent=String(text||'').slice(0,4200);
   el.append(name,content);feed.append(el);feed.scrollTop=feed.scrollHeight;
  }
- async function run(text){
+ async function run(text,{voiceToken=null}={}){
   const message=String(text||'').trim();if(!message||busy)return;
+  if(voiceToken!==null&&(!voiceRequested||voiceEpoch!==voiceToken))return;
+  const queryId=++queryEpoch;
+  const isActive=()=>queryId===queryEpoch&&instance&&
+   (voiceToken===null||(voiceRequested&&voiceToken===voiceEpoch));
   const input=get('#thalitaInput');if(input)input.value='';
-  busy=true;get('[data-thalita-send]').disabled=true;add('user',message);setStatus('Consultando o Sócio…');
+  busy=true;get('[data-thalita-send]').disabled=true;
+  add('user',message);setStatus('Consultando seus dados…');
+  // A short spoken acknowledgement makes the tool lookup sound natural,
+  // without manufacturing metrics or putting a long report into the TTS.
+  if(session&&voiceRequested){
+   const mentionMeta=/meta\s*(ads|edge|eds?)|campanh|facebook\s*ads/i.test(message);
+   void say(mentionMeta?'Perfeito, vou conferir suas campanhas e os resultados.':
+    'Certo, vou consultar os dados e já te explico.').catch(()=>{});
+  }
   try{
    const result=await api('/api/thalita/ask','POST',{message,runId:turnRunId});
+   if(!isActive())return;
    turnRunId=result.runId&&result.status==='ready'?result.runId:null;
-   add('assistant',result.message||'Consulta concluída.');
+   const answer=result.message||'Consulta concluída.';
+   if(session&&voiceRequested){
+    let shown=false;
+    const show=()=>{if(!shown&&isActive()){shown=true;add('assistant',answer);}};
+    await say(result.speechText||answer,{onPlaybackStart:show});
+    show(); // If TTS is unavailable, the answer still remains readable.
+   }else add('assistant',answer);
    const holder=get('#thalitaConfirm');holder.replaceChildren();
    if(result.status==='approval_required'&&result.confirmation){
     const explanation=document.createElement('p');explanation.textContent=result.confirmation.label;
@@ -93,8 +120,8 @@
     no.addEventListener('click',()=>{holder.replaceChildren();add('assistant','Alteração cancelada.');});
     holder.append(explanation,yes,no);
    }
-   if(session&&voiceRequested)await say(result.message||'Consulta concluída.');
-  }catch(e){add('assistant','Não foi possível concluir: '+e.message);}
+
+  }catch(e){if(isActive())add('assistant','Não foi possível concluir: '+e.message);}
   finally{
    busy=false;const btn=get('[data-thalita-send]');if(btn)btn.disabled=false;
    // Preserve an audio failure message instead of immediately overwriting it.
@@ -104,6 +131,7 @@
  }
  async function startVoice(){
   if(session){closeVoice();return;}
+  const startingEpoch=++voiceEpoch;
   try{unlockPlayback();}catch(error){setStatus(error.message);return;}
   if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){
    setStatus('Microfone indisponível neste navegador. Use o chat.');return;
@@ -114,17 +142,36 @@
     canInterrupt:()=>speaking,
     onInterrupt:()=>{finishVoice();setStatus('Interrompido. Estou ouvindo.');},
     onError:message=>setStatus(message),
-    onState:next=>setStatus(({connecting:'Conectando…',listening:'Ouvindo…',hearing:'Pode continuar falando…',
-      processing:'Processando sua fala…',off:'Voz desligada'})[next]||'Pronta'),
-    onTurn:async blob=>{
+    onState:next=>{
+     setStatus(({connecting:'Conectando…',listening:'Ouvindo…',hearing:'Pode continuar falando…',
+      processing:'Processando sua fala…',off:'Voz desligada'})[next]||'Pronta');
+     if(next==='off'&&session)closeVoice();
+    },
+    onTurn:async(blob,{signal}={})=>{
+     const epoch=voiceEpoch;
+     if(!voiceRequested||!session||signal?.aborted)return;
      if(blob.size>3*1024*1024){setStatus('Áudio muito longo; tente uma frase mais curta.');return;}
-     const resp=await fetch('/api/thalita/transcribe',{method:'POST',credentials:'same-origin',
-      headers:{'Content-Type':blob.type.split(';')[0],'X-CSRF-Token':csrf},body:blob});
-     const data=await resp.json();if(!resp.ok)throw Error(data.error||'Transcrição indisponível');
-     await run(data.text||'');
+     const controller=new AbortController();
+     transcriptionAbort=controller;
+     if(signal?.aborted)controller.abort();
+     else signal?.addEventListener('abort',()=>controller.abort(),{once:true});
+     try{
+      const resp=await fetch('/api/thalita/transcribe',{method:'POST',credentials:'same-origin',
+       headers:{'Content-Type':blob.type.split(';')[0],'X-CSRF-Token':csrf},
+       body:blob,signal:controller.signal});
+      const data=await resp.json();
+      if(controller.signal.aborted||epoch!==voiceEpoch||!voiceRequested||!session)return;
+      if(!resp.ok)throw Error(data.error||'Transcrição indisponível');
+      if(!meaningfulVoiceText(data.text)){setStatus('Não identifiquei uma solicitação clara. Pode continuar falando.');return;}
+      await run(data.text,{voiceToken:epoch});
+     }catch(error){
+      if(!controller.signal.aborted&&epoch===voiceEpoch&&voiceRequested)throw error;
+     }finally{if(transcriptionAbort===controller)transcriptionAbort=null;}
     }
    });
-   await session.start();voiceRequested=true;
+   await session.start();
+   if(startingEpoch!==voiceEpoch||!session?.active)return;
+   voiceRequested=true;
    const btn=get('[data-thalita-voice]');if(btn)btn.textContent='■ Encerrar conversa por voz';
    setStatus('Thalita conectada. Pode falar ou digitar.');
    void say('Oi! Sou a Thalita. Estou ouvindo. Pode falar comigo.');
