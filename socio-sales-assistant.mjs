@@ -84,7 +84,7 @@ export async function askSalesAssistant(pool,actor,{message,requestId=null}={}){
   catalogCount:catalog.length,pendingQuoteRequests:quotes.length,openPurchaseIntents:sales.length,
   approvedTraining,limits:'Nenhuma mensagem, orçamento ou pagamento foi criado ou enviado.'};
  const normalizedMessage=norm(message);
- const wantsPreview=/\b(prepara|preparar|preparacao|sugestao|rascunho|monta|montar|cotacao)\b/.test(normalizedMessage)&&
+ const wantsPreview=/\b(prepara|prepare|preparar|preparacao|sugestao|rascunho|monta|montar|cotacao)\b/.test(normalizedMessage)&&
   /\b(orcamento|orcamentos|cotacao|proposta|rascunho)\b/.test(normalizedMessage);
  let chosenId=requestId;
  if(!chosenId&&wantsPreview){
