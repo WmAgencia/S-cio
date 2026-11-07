@@ -43,7 +43,20 @@
     /(^|\.)(fbcdn\.net|fbsbx\.com|cdninstagram\.com)$/.test(u.hostname.toLowerCase())?u.href:null;
   }catch{return null;}
  };
- const posterFromAd=ad=>mediaUrl(ad?.creative?.thumbnail_url||ad?.creative?.object_story_spec?.video_data?.image_url);
+ const posterFromAd=ad=>mediaUrl(ad?.creative?.image_url||
+  ad?.creative?.object_story_spec?.video_data?.image_url||
+  ad?.creative?.thumbnail_url);
+ const watchUrl=value=>{
+  try{
+   const url=new URL(value);
+   return url.protocol==='https:'&&url.hostname==='www.facebook.com'&&
+    url.pathname==='/watch/'&&/^\d{4,30}$/.test(url.searchParams.get('v')||'')?
+    url.href:null;
+  }catch{return null;}
+ };
+ const playButton=(label='Reproduzir anúncio')=>
+  '<button type="button" class="px-media-play" data-px-media-play aria-label="'+esc(label)+'">'+
+   '<span aria-hidden="true">▶</span> Ver vídeo</button>';
  const posterView=(image,label)=>image?
   '<img class="px-feature-poster" loading="lazy" src="'+esc(image)+'" alt="'+esc(label||'Miniatura do criativo')+'">':
   '<div class="px-feature-no-media" role="note">Miniatura não disponível</div>';
@@ -230,13 +243,14 @@
    '<p class="px-provenance">Indicadores consolidados por empresa. Métricas publicitárias dependem das permissões Meta/Google; conversões atribuídas por anúncios não são comprovantes de pagamento. Nenhum número indisponível é substituído por uma estimativa.</p>'+
   '</div>';
   snapshots.set('overview',root.innerHTML);
-  if(featuredAd&&!featuredThumb){
+  if(featuredAd){
    const placeholder=root.querySelector('[data-campaign-preview]');
    cached(api,'/api/marketing/tools/ad-media?adId='+encodeURIComponent(featuredAd.id),25000).then(result=>{
     if(!placeholder?.isConnected||!result.ok)return;
-    const src=mediaUrl(result.data?.thumbnailUrl);
+    const src=mediaUrl(result.data?.posterUrl||result.data?.thumbnailUrl);
     if(src)placeholder.innerHTML=posterView(src,'Criativo da campanha');
-   });
+    if(result.data?.quality==='thumbnail_only')placeholder?.classList.add('px-media-lowres');
+   }).catch(()=>{});
   }
   root.querySelector('[data-px-reload]')?.addEventListener('click',()=>{
    getCache.clear();overview({root,api,me,navigate,activityRange:range});
@@ -286,7 +300,8 @@
       empty(data?.campaigns.reason||'Conecte uma conta para listar campanhas.'))+
    section('Anúncio em destaque','Comparação de resultados na mesma conta e período',
     data?.bestAd?'<div class="px-featured-item px-featured-video">'+
-      '<div class="px-feature-media" data-featured-media>'+posterView(bestThumbnail,'Miniatura do anúncio '+data.bestAd.name)+'</div>'+
+      '<div class="px-feature-media" data-featured-media>'+posterView(bestThumbnail,'Miniatura do anúncio '+data.bestAd.name)+
+       playButton('Ver vídeo do anúncio '+data.bestAd.name)+'</div>'+
       '<div class="px-feature-details"><span class="px-feature-label">'+esc(data.adRankingMethod||'Anúncio da conta')+'</span>'+
       '<strong>'+esc(data.bestAd.name)+'</strong>'+
       '<div class="px-feature-stats"><span>Cliques <b>'+(data.bestAd.clicks===null?'—':number(data.bestAd.clicks))+'</b></span>'+
@@ -307,16 +322,56 @@
   snapshots.set('marketing',root.innerHTML);
   if(data?.bestAd?.id){
    const holder=root.querySelector('[data-featured-media]');
-   cached(api,'/api/marketing/tools/ad-media?adId='+encodeURIComponent(data.bestAd.id),25000).then(result=>{
-    if(!holder?.isConnected||!result.ok)return;
-    const video=mediaUrl(result.data?.videoUrl),poster=mediaUrl(result.data?.thumbnailUrl)||bestThumbnail;
+   const adName=String(data.bestAd.name||'Anúncio');
+   let media=null;
+   const button=holder?.querySelector('[data-px-media-play]');
+   const request=cached(api,'/api/marketing/tools/ad-media?adId='+encodeURIComponent(data.bestAd.id),25000).then(result=>{
+    if(!holder?.isConnected)return null;
+    if(!result.ok){
+     button&&(button.textContent='Mídia indisponível');
+     button&&(button.disabled=true);
+     return null;
+    }
+    media=result.data||{};
+    const poster=mediaUrl(media.posterUrl||media.thumbnailUrl)||bestThumbnail;
+    if(poster){
+     const img=holder.querySelector('.px-feature-poster');
+     if(img)img.src=poster;
+     else holder.insertAdjacentHTML('afterbegin',posterView(poster,'Miniatura do anúncio'));
+    }
+    if(media.quality==='thumbnail_only')holder.classList.add('px-media-lowres');
+    if(!mediaUrl(media.videoUrl)&&!watchUrl(media.watchUrl)){
+     if(button){button.textContent='Sem vídeo disponível';button.disabled=true;}
+    }
+    return media;
+   }).catch(()=>{
+    if(button){button.textContent='Mídia indisponível';button.disabled=true;}
+    return null;
+   });
+   button?.addEventListener('click',async()=>{
+    if(!holder?.isConnected)return;
+    button.disabled=true;button.textContent='Carregando vídeo…';
+    const result=media||await request;
+    if(!result){button.disabled=false;button.textContent='Tentar novamente';return;}
+    const video=mediaUrl(result.videoUrl),poster=mediaUrl(result.posterUrl||result.thumbnailUrl)||bestThumbnail;
     if(video){
      const el=document.createElement('video');
      el.className='px-feature-video';el.controls=true;el.playsInline=true;
-     el.preload='none';el.setAttribute('aria-label','Reproduzir vídeo do anúncio '+data.bestAd.name);
+     el.preload='metadata';el.setAttribute('aria-label','Vídeo do anúncio '+adName);
      if(poster)el.poster=poster;
      el.src=video;holder.replaceChildren(el);
-    }else if(poster)holder.innerHTML=posterView(poster,'Miniatura do anúncio');
+     void el.play().catch(()=>{/* Native player still exposes its play control. */});
+    }else{
+     const external=watchUrl(result.watchUrl);
+     if(external){
+      const link=document.createElement('a');
+      link.href=external;link.target='_blank';link.rel='noopener noreferrer';
+      link.className='px-media-external';link.textContent='▶ Abrir vídeo na Meta';
+      holder.append(link);button.remove();
+     }else{
+      button.textContent='Vídeo não disponibilizado';button.disabled=true;
+     }
+    }
    });
   }
   root.querySelector('[data-px-connect]')?.addEventListener('click',()=>navigate('connections'));
