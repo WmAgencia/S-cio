@@ -613,8 +613,12 @@
     }
    }catch(error){button.textContent=String(error.message||'Criativo indisponível').slice(0,65);button.disabled=false;}
   }));
-  root.querySelectorAll('[data-px-open-campaign]').forEach(button=>button.addEventListener('click',()=>marketing({root,api,me,navigate,period,campaignId:button.dataset.pxOpenCampaign})));
+  root.querySelectorAll('[data-px-open-campaign]').forEach(button=>button.addEventListener('click',()=>
+   marketing({root,api,me,navigate,period,campaignId:button.dataset.pxOpenCampaign})));
+  root.querySelectorAll('[data-px-open-adset]').forEach(button=>button.addEventListener('click',()=>
+   marketing({root,api,me,navigate,period,campaignId,adsetId:button.dataset.pxOpenAdset})));
   root.querySelector('[data-px-campaign-back]')?.addEventListener('click',()=>marketing({root,api,me,navigate,period}));
+  root.querySelector('[data-px-adset-back]')?.addEventListener('click',()=>marketing({root,api,me,navigate,period,campaignId}));
   // Manual campaign actions reuse the server's 15-minute plan, second
   // confirmation and tenant/selected-account validation. No action is made
   // directly by clicking a row or editing an input.
@@ -626,7 +630,8 @@
   const review=modal?.querySelector('[data-px-action-review]');
   const confirm=modal?.querySelector('[data-px-action-confirm]');
   const allItems=[...decoratedCampaigns.map(item=>({...item,kind:'campaign'})),
-   ...(data?.adsetList||[]).map(item=>({...item,kind:'adset'}))];
+   ...(selectedCampaign?campaignAdsets:(data?.adsetList||[])).map(item=>({...item,kind:'adset'})),
+   ...visibleAds.map(item=>({...item,kind:'ad'}))];
   let edit=null,draftId=null,submitting=false;
   const closeModal=()=>{
    if(submitting)return;
@@ -657,8 +662,9 @@
     if(confirm)confirm.hidden=true;
     if(review)review.hidden=false;
     if(budgetField)budgetField.hidden=edit.kind!=='budget';
-    const kindLabel=kind==='campaign'?'Campanha':'Conjunto de anúncios';
-    if(title)title.textContent=edit.kind==='budget'?'Editar orçamento diário':edit.next==='PAUSED'?'Pausar campanha':'Ativar campanha';
+    const kindLabel=kind==='campaign'?'Campanha':kind==='adset'?'Conjunto de anúncios':'Anúncio';
+    if(title)title.textContent=edit.kind==='budget'?'Editar orçamento diário':
+     (edit.next==='PAUSED'?'Pausar ':'Ativar ')+kindLabel.toLowerCase();
     if(details)details.textContent=kindLabel+': '+String(item.name||item.id)+
      (edit.kind==='status'?(edit.next==='ACTIVE'?' · Pode iniciar gastos de publicidade.':' · Vai interromper a veiculação.'):' · Orçamento atual '+formattedDaily(item.daily_budget,currency));
     if(budgetInput&&edit.kind==='budget')budgetInput.value=(Number(item.daily_budget)/100).toFixed(2).replace('.',',');
@@ -680,7 +686,9 @@
     draftId=plan.id;
     const change=edit.kind==='budget'?
      'De '+formattedDaily(edit.item.daily_budget,currency)+' para '+formattedDaily(input.dailyBudgetCents,currency)+'.':
-     edit.next==='ACTIVE'?'Ativar a veiculação. A Meta poderá gastar conforme os orçamentos configurados.':'Pausar a veiculação desta campanha.';
+     edit.next==='ACTIVE'?'Ativar '+(edit.entity==='ad'?'este anúncio':edit.entity==='adset'?'este conjunto':'esta campanha')+
+      '. A Meta poderá gastar conforme os orçamentos configurados.':
+      'Pausar '+(edit.entity==='ad'?'este anúncio':edit.entity==='adset'?'este conjunto':'esta campanha')+'.';
     if(preview){preview.textContent=change+' Confirme somente se está correto.';preview.hidden=false;}
     if(feedback)feedback.textContent='Prévia pronta. Nada foi alterado ainda.';
     review.hidden=true;confirm.hidden=false;confirm.focus();
@@ -698,7 +706,7 @@
     getCache.clear();snapshots.delete('marketing');snapshots.delete('overview');
     draftId=null;submitting=false;
     modal.close();
-    await marketing({root,api,me,navigate,period,campaignId});
+    await marketing({root,api,me,navigate,period,campaignId,adsetId});
    }catch(error){
     if(feedback)feedback.textContent=String(error.message||'Não foi possível concluir. Confira antes de repetir.');
     draftId=null;
@@ -707,7 +715,7 @@
    }
   });
   startLiveRefresh(root,'marketing',renderId,
-   ()=>marketing({root,api,me,navigate,period,campaignId}),
+   ()=>marketing({root,api,me,navigate,period,campaignId,adsetId}),
    async()=>{
     const current=await loadMeta(api,period,true).catch(()=>null);
     if(renderId!==renderSerial||!root.querySelector('.px-marketing')||!current)return;
@@ -732,7 +740,7 @@
     displayLiveTime(root);
    });
   root.querySelector('[data-px-connect]')?.addEventListener('click',()=>navigate('connections'));
-  root.querySelectorAll('[data-px-period]').forEach(b=>b.addEventListener('click',()=>marketing({root,api,me,navigate,period:b.dataset.pxPeriod})));
+  root.querySelectorAll('[data-px-period]').forEach(b=>b.addEventListener('click',()=>marketing({root,api,me,navigate,period:b.dataset.pxPeriod,campaignId,adsetId})));
 
  }
  const connectBtn=(label,attr,enabled=true)=>'<button type="button" class="btn '+(enabled?'primary':'soft')+'" '+attr+' '+(!enabled?'disabled':'')+'>'+esc(label)+'</button>';
