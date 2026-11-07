@@ -17,23 +17,31 @@ export function googleAdsConfig(env=process.env){
  }catch{}
  const credentials=Boolean(
   /^[0-9a-z-]+\.apps\.googleusercontent\.com$/.test(env.SOCIO_GOOGLE_OAUTH_CLIENT_ID||'')&&
-  typeof env.SOCIO_GOOGLE_OAUTH_CLIENT_SECRET==='string'&&env.SOCIO_GOOGLE_OAUTH_CLIENT_SECRET.length>=12&&
-  typeof env.SOCIO_GOOGLE_ADS_DEVELOPER_TOKEN==='string'&&env.SOCIO_GOOGLE_ADS_DEVELOPER_TOKEN.length>=10);
+  typeof env.SOCIO_GOOGLE_OAUTH_CLIENT_SECRET==='string'&&env.SOCIO_GOOGLE_OAUTH_CLIENT_SECRET.length>=12);
+ // Since Sep 9, 2026 Google Ads API access is tied to the OAuth Cloud project.
+ // Existing developer-token headers are tolerated for legacy environments but optional.
  let encryption=false;try{marketingSecretKey(env);encryption=true;}catch{}
  const ready=env.SOCIO_GOOGLE_ADS_ENABLED==='true'&&credentials&&encryption&&Boolean(origin);
  return {ready,credentials,encryption,callback:origin?origin+'/api/google-ads/oauth/callback':null,
   blockers:[...(env.SOCIO_GOOGLE_ADS_ENABLED!=='true'?['Ativação Google Ads pendente.']:[]),
-  ...(!credentials?['Credenciais OAuth e developer token ausentes.']:[]),
+  ...(!credentials?['Credenciais OAuth do aplicativo ausentes.']:[]),
   ...(!encryption?['Proteção dos tokens não configurada.']:[]),
   ...(!origin?['URL HTTPS pública não configurada.']:[])],
   mode:'oauth_read_only'};
+}
+// Developer tokens were sunset by Google Ads on Sep 9, 2026. Never force one
+// on new tenants; accept the legacy env only to preserve existing setups.
+function adsHeaders(token,env,{json=false}={}){
+ return {Authorization:'Bearer '+token,
+  ...(env.SOCIO_GOOGLE_ADS_DEVELOPER_TOKEN?{'developer-token':env.SOCIO_GOOGLE_ADS_DEVELOPER_TOKEN}:{}),
+  ...(json?{'Content-Type':'application/json'}:{})};
 }
 async function requestJson(url,{method='GET',body,headers={},request=fetch}={}){
  let response;try{response=await request(url,{method,headers,...(body?{body:new URLSearchParams(body)}:{}),
   redirect:'error',signal:AbortSignal.timeout(12000)});
  }catch{throw fail(503,'Google Ads indisponível.');}
  let data;try{data=await response.json()}catch{throw fail(503,'Resposta Google Ads inválida.');}
- if(!response.ok||data.error)throw fail(503,'Google recusou a consulta. Verifique OAuth e developer token.');
+ if(!response.ok||data.error)throw fail(503,'Google recusou a consulta. Verifique a autorização OAuth e o nível de acesso da API no Google Cloud.');
  return data;
 }
 function configured(env){const c=googleAdsConfig(env);if(!c.ready)throw fail(503,'Google Ads não configurado.');return c;}
@@ -110,7 +118,7 @@ async function readToken(pool,a,{env=process.env,request=fetch}={}){
 export async function listGoogleAdsAccounts(pool,a,{env=process.env,request=fetch}={}){
  const {token,grant}=await readToken(pool,a,{env,request});
  const data=await requestJson('https://googleads.googleapis.com/v26/customers:listAccessibleCustomers',{
-  request,headers:{Authorization:'Bearer '+token,'developer-token':env.SOCIO_GOOGLE_ADS_DEVELOPER_TOKEN}});
+  request,headers:adsHeaders(token,env)});
  if(!Array.isArray(data.resourceNames)||data.resourceNames.length>500)
   throw fail(503,'Google retornou lista de contas inválida.');
  const ids=data.resourceNames.map(v=>/^customers\/\d{10}$/.test(String(v))?v.slice(10):null);
@@ -158,8 +166,7 @@ export async function readGoogleAdsCampaigns(pool,a,{env=process.env,request=fet
  try{
   response=await request('https://googleads.googleapis.com/v26/customers/'+customerId+'/googleAds:searchStream',{
    method:'POST',redirect:'error',signal:AbortSignal.timeout(12000),
-   headers:{Authorization:'Bearer '+token,'developer-token':env.SOCIO_GOOGLE_ADS_DEVELOPER_TOKEN,
-    'Content-Type':'application/json'},
+   headers:adsHeaders(token,env,{json:true}),
    body:JSON.stringify({query})
   });
  }catch{throw fail(503,'Não foi possível consultar as campanhas Google Ads.');}
