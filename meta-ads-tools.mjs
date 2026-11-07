@@ -283,7 +283,7 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
  if(!numeric(adId))throw fail(422,'Selecione um anúncio válido.');
  const c=await context(pool,a,options);
  const ad=await graph(c,'/'+adId,{
-  fields:'id,name,account_id,campaign_id,creative{id,image_url,thumbnail_url,video_id,object_story_spec,asset_feed_spec}'
+  fields:'id,name,account_id,campaign_id,creative{id,image_url,image_hash,thumbnail_url,video_id,object_story_spec,asset_feed_spec}'
  });
  const account=String(c.account.id||'').replace(/^act_/,'');
  if(String(ad?.account_id)!==account||String(ad?.id)!==adId)
@@ -308,6 +308,16 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
   creative.asset_feed_spec?.images?.[0]?.url);
  let thumbnailUrl=safeMedia(creative.thumbnail_url),videoUrl=null;
  let posterUrl=imageUrl;
+ const imageHash=String(creative.image_hash||'');
+ if(!posterUrl&&/^[0-9a-fA-F]{32}$/.test(imageHash)){
+  try{
+   const images=await graph(c,'/'+c.account.id+'/adimages',{
+    fields:'hash,url,width,height',hashes:[imageHash],limit:1
+   });
+   const original=(images.data||[]).find(item=>item.hash?.toLowerCase()===imageHash.toLowerCase());
+   posterUrl=safeMedia(original?.url)||null;
+  }catch{/* Continue with safe thumbnail if account image library is unavailable. */}
+ }
  let status=videoId&&numeric(videoId)?'video_unavailable':'image';
  if(numeric(videoId)){
   try{
@@ -316,6 +326,17 @@ export async function readSelectedAdMedia(pool,a,adId,options={}){
     videoUrl=safeMedia(video.source);
     posterUrl=posterUrl||safeMedia(video.picture);
     thumbnailUrl=thumbnailUrl||safeMedia(video.picture);
+    // Separate optional lookup: a thumbnails permission failure must not
+    // discard an otherwise playable video stream.
+    if(!imageUrl){
+     try{
+      const thumbs=await graph(c,'/'+videoId,{fields:'thumbnails{uri,width,height,is_preferred}'});
+      const pictures=Array.isArray(thumbs.thumbnails?.data)?thumbs.thumbnails.data:[];
+      const largest=pictures.filter(t=>safeMedia(t.uri)).sort((a,b)=>
+       (Number(b.width)||0)*(Number(b.height)||0)-(Number(a.width)||0)*(Number(a.height)||0))[0];
+      if(largest&&(Number(largest.width)||0)>=320)posterUrl=safeMedia(largest.uri)||posterUrl;
+     }catch{/* Optional high-resolution asset unavailable to this token. */}
+    }
     if(videoUrl)status='video_ready';
    }
   }catch{/* Some placements do not expose a stream even with ads_read. */}
