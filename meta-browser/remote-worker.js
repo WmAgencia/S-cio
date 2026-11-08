@@ -83,8 +83,19 @@ async function command(method, data = {}) {
       await page.getByText('Fundos disponíveis',{exact:true}).first().waitFor({timeout:20000});
       snapshot={url:page.url(),body:await page.locator('body').innerText()};
     }catch{
-      return {state:'needs_login',accountId:data.accountId,
-        message:'Abra a sessão isolada do faturamento no Sócio, entre na Meta e clique em Atualizar saldo.'};
+      // Cookie presence distinguishes missing login from a layout/access
+      // change. Never return cookie values or page content to the frontend.
+      let authenticated=false;
+      try{
+        const cookies=await context.cookies('https://www.facebook.com');
+        authenticated=cookies.some(c=>c.name==='c_user'&&c.value)&&
+          cookies.some(c=>c.name==='xs'&&c.value);
+      }catch{/* Treat uncertain authentication as needing login. */}
+      return authenticated?
+        {state:'wallet_not_found',accountId:data.accountId,
+         message:'Login da Meta identificado, mas a página de fundos disponíveis não carregou. Confira a conta selecionada na janela e tente Atualizar saldo.'}:
+        {state:'needs_login',accountId:data.accountId,
+         message:'A autorização de anúncios não inclui login de faturamento. Entre na Meta nesta janela do Sócio, salve a sessão e consulte o saldo.'};
     }
     // Snapshot is bound to the selected official ad account on the server.
     // A bill, campaign limit or unrelated account cannot be treated as funds.

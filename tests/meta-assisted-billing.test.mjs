@@ -63,6 +63,6 @@ test('assisted worker never automatically clicks final Meta payment/generation c
  assert(worker.includes("verifyMetaPixCode(candidate,intent.amountMinor)"));
  assert(!/getByRole\('button',\{name:['"](?:Avançar|Pagar|Confirmar pagamento)/.test(worker));
  const ui=readFileSync(new URL('../public/meta-billing-ui.js',import.meta.url),'utf8');
- assert(ui.includes('os comandos serão enviados ao navegador isolado'));
+ assert(ui.includes('Estar conectado em outra aba do Facebook não conecta esta sessão isolada'));
  assert(ui.includes('Nenhum pagamento é feito automaticamente'));
 });
