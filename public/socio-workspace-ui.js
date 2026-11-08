@@ -12,12 +12,12 @@
  const optional=async(api,path)=>{try{return {data:await api(path),ok:true};}catch(error){return {data:null,ok:false,reason:String(error?.message||'Dados indisponíveis').slice(0,120)};}};
  // Small per-company GET cache removes the blank transition on repeat visits.
  // In-flight calls are shared; values expire quickly and manual refresh clears them.
- const getCache=new Map();const snapshots=new Map();const posterCache=new Map();let selectedTenant=null,renderSerial=0;
+ const getCache=new Map();const snapshots=new Map();const posterCache=new Map();const billingAutoAttempts=new Map();let selectedTenant=null,renderSerial=0;
  let liveRefreshTimer=null,liveRefreshSerial=0;
  const stopLiveRefresh=()=>{if(liveRefreshTimer){clearInterval(liveRefreshTimer);liveRefreshTimer=null;}liveRefreshSerial++;};
  const invalidateRender=()=>{renderSerial++;stopLiveRefresh();};
  const forTenant=me=>{const id=[me?.tenant?.id||'',me?.user?.id||'',me?.user?.role||''].join(':');
-  if(selectedTenant!==id){stopLiveRefresh();window.SocioMetaBilling?.dispose();getCache.clear();posterCache.clear();snapshots.clear();selectedTenant=id;}
+  if(selectedTenant!==id){stopLiveRefresh();window.SocioMetaBilling?.dispose();getCache.clear();posterCache.clear();billingAutoAttempts.clear();snapshots.clear();selectedTenant=id;}
  };
  const clearCache=()=>{stopLiveRefresh();getCache.clear();posterCache.clear();snapshots.clear();selectedTenant=null;};
  const startLiveRefresh=(root,kind,renderId,refresh,updateWhilePlaying)=>{
@@ -506,6 +506,33 @@
   });
   root.querySelectorAll('[data-px-chart-range]').forEach(button=>button.addEventListener('click',()=>
    overview({root,api,me,navigate,activityRange:button.dataset.pxChartRange})));
+
+  // With a previously authorized billing browser, read the Meta wallet on
+  // entry and at most every five minutes. OAuth for ads does not share the
+  // separate billing-browser login, so never imply that an unsaved session
+  // can be reused from an external facebook.com tab.
+  if(ads&&metaReady&&can(me,'marketing.manage')&&!document.hidden){
+   const scope=selectedTenant+':'+String(metaBilling?.data?.account?.id||'');
+   const lastAttempt=billingAutoAttempts.get(scope)||0,now=Date.now();
+   const checked=Date.parse(finance?.checkedAt||'');
+   const recentBrowserValue=finance?.availableFundsSource==='meta_billing_browser'&&
+    Number.isFinite(checked)&&now-checked<5*60000;
+   const verifiedApiValue=finance?.availableFundsSource==='meta_stored_balance'&&
+    Number.isSafeInteger(finance?.availableFundsMinor);
+   if(!recentBrowserValue&&!verifiedApiValue&&now-lastAttempt>=5*60000){
+    billingAutoAttempts.set(scope,now);
+    void (async()=>{
+     const state=await cached(api,'/api/marketing/browser/status',60000);
+     if(state?.ok!==true||state.data?.session_present!==true)return;
+     const result=await api('/api/marketing/billing/refresh','POST',{background:true});
+     if(result?.state!=='observed'||!result.observation||
+        renderId!==renderSerial||scope!==selectedTenant+':'+String(metaBilling?.data?.account?.id||'')||
+        !root.isConnected||!root.querySelector('.px-overview'))return;
+     getCache.delete('/api/marketing/tools/finance');
+     await overview({root,api,me,navigate,activityRange:range});
+    })().catch(()=>{/* The card continues to show unavailable/stale, not a fabricated balance. */});
+   }
+  }
 
   startLiveRefresh(root,'overview',renderId,
    ()=>overview({root,api,me,navigate,activityRange:range}),
