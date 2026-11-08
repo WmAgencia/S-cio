@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { mkdirSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import {allowRemoteResource,isMetaURL} from './network-policy.js';
-import {parseObservedMetaBalance,topupAmount,verifyMetaPixCode} from '../meta-billing-state.mjs';
+import {parseObservedMetaBalance,metaBillingDetailsURL,topupAmount,verifyMetaPixCode} from '../meta-billing-state.mjs';
 const require = createRequire(import.meta.url);
 const dist = dirname(require.resolve('api-anything'));
 const internal = name => import(pathToFileURL(join(dist, `${name}.js`)).href);
@@ -73,21 +73,22 @@ async function command(method, data = {}) {
     if(method==='billing_read'&&billingIntent&&billingIntent.expires>Date.now())return {state:'busy',accountId:data.accountId};
     billingIntent=null;
     await command('open');
-    const target=new URL('https://adsmanager.facebook.com/billing_hub/payment_settings/');
-    target.searchParams.set('asset_id',data.accountId.slice(4));
-    target.searchParams.set('payment_account_id_from_jsmodule',data.accountId.slice(4));
-    target.searchParams.set('placement','ads_manager');
+    // Use the same account details URL displayed by the current Meta Billing
+    // Hub. We inspect the rendered page; never reuse another browser's cookies.
+    const target=metaBillingDetailsURL(data.accountId);
+    let snapshot;
     try{
-      await activePage().goto(target.href,{waitUntil:'domcontentloaded',timeout:45000});
-      await page.getByRole('heading',{name:'Fundos disponíveis',exact:true}).waitFor({timeout:15000});
-      if(await page.getByRole('heading',{name:data.accountName,exact:true,level:1}).count()!==1)
-        throw new Error('BILLING_ACCOUNT_MISMATCH');
-    }catch(error){
-      if(error.message==='BILLING_ACCOUNT_MISMATCH')throw error;
+      await activePage().goto(target,{waitUntil:'domcontentloaded',timeout:45000});
+      // Meta's UI often renders the balance as text rather than an H1/H2.
+      await page.getByText('Fundos disponíveis',{exact:true}).first().waitFor({timeout:20000});
+      snapshot={url:page.url(),body:await page.locator('body').innerText()};
+    }catch{
       return {state:'needs_login',accountId:data.accountId,
-        message:'Conclua o login e as verificações da Meta no navegador de faturamento.'};
+        message:'Abra a sessão isolada do faturamento no Sócio, entre na Meta e clique em Atualizar saldo.'};
     }
-    const observation=parseObservedMetaBalance({url:page.url(),body:await page.locator('body').innerText(),
+    // Snapshot is bound to the selected official ad account on the server.
+    // A bill, campaign limit or unrelated account cannot be treated as funds.
+    const observation=parseObservedMetaBalance({...snapshot,
       accountId:data.accountId,accountName:data.accountName,currency:data.currency});
     if(method==='billing_read')return {state:'observed',observation};
     billingIntent={accountId:data.accountId,accountName:data.accountName,amountMinor:data.amountMinor,expires:Date.now()+10*60000};
