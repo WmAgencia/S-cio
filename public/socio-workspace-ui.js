@@ -313,6 +313,15 @@
   forTenant(me);
   if(!root.querySelector('.px-overview'))setPreview(root,'overview');
   const authorized=can(me,'audit.read'),ads=can(me,'marketing.read');
+  // Google Ads may not yet have project OAuth or a selected customer.
+  // Its campaigns route returns 503 when disabled: don't poll it every 30s.
+  const googleOverview=async()=>{
+   const status=await cached(api,'/api/google-ads/status',60000);
+   if(status?.ok!==true||status?.data?.configured!==true||
+      status?.data?.connected!==true||!status?.data?.selectedCustomerId)
+    return {ok:false,data:null,skipped:'google_not_connected'};
+   return cached(api,'/api/google-ads/campaigns?period=today',60000);
+  };
   const calls=[
    cached(api,'/api/dashboard',12000),
    cached(api,'/api/dashboard/activity?range='+range,16000),
@@ -320,7 +329,7 @@
    cached(api,'/api/waakg/channels',12000),
    authorized?cached(api,'/api/reports/monitor',16000):Promise.resolve({data:null,ok:false}),
    ads?loadMeta(api,'today').catch(()=>null):Promise.resolve(null),
-   ads?cached(api,'/api/google-ads/campaigns?period=today',60000):Promise.resolve({ok:false}),
+   ads?googleOverview():Promise.resolve({ok:false}),
    ads?cached(api,'/api/marketing/tools/finance',45000):Promise.resolve({ok:false}),
   ];
   const [dashboard,activity,exec,wa,monitor,meta,google,metaBilling]=await Promise.all(calls);
