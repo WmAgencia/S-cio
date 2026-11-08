@@ -6,6 +6,18 @@ export function topupAmount(value){
   throw fail('Informe um valor de R$ 1,00 a R$ 100.000,00. A Meta valida os limites finais.');
  return value;
 }
+// Official billing URL seen in the current Meta Ads billing UI (Nov 2026).
+// This URL selects the exact ad account; it does NOT transmit a browser session.
+export function metaBillingDetailsURL(accountId,{businessId}={}){
+ if(!/^act_[0-9]{4,30}$/.test(accountId||''))throw fail('Conta de anúncios inválida.');
+ const id=accountId.slice(4);
+ const u=new URL('https://adsmanager.facebook.com/adsmanager/billing_hub/accounts/details/');
+ u.searchParams.set('asset_id',id);
+ u.searchParams.set('payment_account_id',id);
+ u.searchParams.set('placement','BILLING_HUB');
+ if(/^[0-9]{4,30}$/.test(String(businessId||'')))u.searchParams.set('business_id',businessId);
+ return u.href;
+}
 export function parseObservedMetaBalance({url,body,accountId,accountName,currency='BRL',observedAt=new Date().toISOString()}){
  let u;try{u=new URL(url);}catch{throw fail('Página de faturamento inválida.');}
  if(u.protocol!=='https:'||!['adsmanager.facebook.com','business.facebook.com'].includes(u.hostname)||
