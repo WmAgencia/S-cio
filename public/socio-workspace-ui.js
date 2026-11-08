@@ -331,14 +331,20 @@
    ads?loadMeta(api,'today').catch(()=>null):Promise.resolve(null),
    ads?googleOverview():Promise.resolve({ok:false}),
    ads?cached(api,'/api/marketing/tools/finance',45000):Promise.resolve({ok:false}),
+   ads?cached(api,'/api/marketing/browser/status',30000):Promise.resolve({ok:false}),
   ];
-  const [dashboard,activity,exec,wa,monitor,meta,google,metaBilling]=await Promise.all(calls);
+  const [dashboard,activity,exec,wa,monitor,meta,google,metaBilling,browserBilling]=await Promise.all(calls);
   if(renderId!==renderSerial)return;
   const d=dashboard.data||{},ex=exec.data||{},m=ex.counts||{},realWa=Array.isArray(wa.data)?wa.data.filter(c=>c.status==='connected').length:0;
   const metaReady=meta?.insights.ok===true,googleReady=google.ok===true;
   const googleMicros=googleReady?Number(google.data?.summary?.costMicros||0)/1e6:null;
   const googleCode=google.data?.currencyCode||null;
   const finance=metaBilling?.ok?metaBilling.data?.finance:null;
+  // Meta OAuth grants access to campaigns; a saved billing browser session is
+  // separate. Do not imply that opening Meta in an external tab logs this in.
+  const billingSession=browserBilling?.ok===true?
+   (browserBilling.data?.configured===false?'unconfigured':
+    browserBilling.data?.session_present===true?'connected':'disconnected'):'unknown';
   const metaBillingUrl=(()=>{
    try{
     const url=new URL(metaBilling?.data?.paymentsUrl);
@@ -378,7 +384,10 @@
    const browserObserved=billing?.finance?.availableFundsSource==='meta_billing_browser';
    const billingStatus=billing?.finance?.availableFundsStatus;
    const billingExplanation=provider==='meta_ads'&&!fundsAvailable&&connected?
-    billingStatus==='field_restricted'?'A Meta restringiu a consulta do saldo nesta autorização.':
+    billingSession==='disconnected'?'Sua conta de anúncios está conectada, mas falta entrar no faturamento uma vez dentro do Sócio. Use Conectar faturamento e ler saldo.':
+    billingSession==='connected'?'Sessão de faturamento salva. O valor ainda não foi identificado; use Atualizar saldo para verificar a tela.':
+    billingSession==='unconfigured'?'O navegador de faturamento está desativado no servidor.':
+    billingStatus==='field_restricted'?'A Meta restringiu a consulta do saldo pela API. É necessária uma leitura do faturamento.':
     prepay?'A conta é pré-paga, mas a Meta não retornou o saldo pela API. Consulte o faturamento.':
     billingStatus==='not_prepaid'?'Esta conta utiliza faturamento; não há saldo pré-pago informado.':
     'A consulta financeira não retornou saldo verificável.':'';
@@ -388,7 +397,10 @@
     new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}).format(new Date(checkedAt));
    const displayFunds=fundsAvailable?moneyMinor(funds,currencyCode):'Não disponível';
    const status=!ads?'Sem permissão':!connected?'Conta não autorizada':
-    fundsAvailable?(browserObserved?'Saldo observado no faturamento Meta':'Saldo pré-pago confirmado'):prepay?'Saldo pré-pago não retornado':
+    fundsAvailable?(browserObserved?'Saldo observado no faturamento Meta':'Saldo pré-pago confirmado'):
+    provider==='meta_ads'&&billingSession==='disconnected'?'Faturamento ainda não conectado':
+    provider==='meta_ads'&&billingSession==='connected'?'Aguardando leitura do faturamento':
+    prepay?'Saldo pré-pago não retornado':
     billing?.finance?.isPrepaid===false?'Cobrança automática / faturamento':'Tipo de cobrança não identificado';
    const limitText=capAvailable?'Limite de gastos restante: '+moneyMinor(cap,currencyCode):'';
    const paymentUrl=billing?.paymentsUrl||null;
@@ -404,7 +416,7 @@
     (billingExplanation?'<small class="px-budget-limit">'+esc(billingExplanation)+'</small>':'')+
     (checkedLabel?'<small class="px-budget-limit">'+esc(checkedLabel)+'</small>':'')+
     (balanceAlert&&['low','critical'].includes(balanceAlert.state)?'<p class="px-budget-warning" role="status">'+esc(balanceAlert.reason)+'</p>':'')+
-    (provider==='meta_ads'&&connected&&can(me,'marketing.manage')?'<div class="px-budget-billing-actions"><button type="button" class="px-budget-billing-link" data-px-billing="pix">Adicionar saldo por Pix</button><button type="button" class="px-budget-billing-link" data-px-billing="balance">Atualizar saldo</button></div>':'')+
+    (provider==='meta_ads'&&connected&&can(me,'marketing.manage')?'<div class="px-budget-billing-actions"><button type="button" class="px-budget-billing-link" data-px-billing="pix">Adicionar saldo por Pix</button><button type="button" class="px-budget-billing-link" data-px-billing="balance">'+(billingSession==='disconnected'?'Conectar faturamento e ler saldo':'Atualizar saldo')+'</button></div>':'')+
     (paymentUrl?'<a class="px-budget-billing-link" href="'+esc(paymentUrl)+'" target="_blank" rel="noopener noreferrer" title="Gerar recarga Pix no faturamento oficial da Meta, se disponível">Abrir recarga na Meta</a>':'')+
     '<div class="px-budget-meter" role="img" aria-label="Percentual restante não verificado"></div>'+
     '</article>';
