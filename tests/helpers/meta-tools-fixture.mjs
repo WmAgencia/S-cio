@@ -74,7 +74,7 @@ export async function metaToolsScenario(pool){
  const diagnostic=await readAdvancedMetaTool(pool,a,'diagnosis',{},opts);
  assert.equal(diagnostic.summary.spend,12.5);
  assert.match(diagnostic.warning,/não são mensagens/);
- const finance=await readAdsTool(pool,a,'finance',{},opts);assert.equal(new URL(finance.paymentsUrl).pathname,'/billing_hub/payment_settings/');assert.equal(new URL(finance.paymentsUrl).searchParams.get('business_id'),'777888');
+ const finance=await readAdsTool(pool,a,'finance',{},opts);assert.equal(new URL(finance.paymentsUrl).pathname,'/adsmanager/billing_hub/accounts/details/');assert.equal(new URL(finance.paymentsUrl).searchParams.get('business_id'),'777888');
  await assert.rejects(prepareAdsPlan(pool,a,'status',{entity:'campaign',id:'887766',status:'ACTIVE'},opts),{status:403});
  await assert.rejects(prepareAdsPlan(pool,a,'status',{entity:'ad',id:'998866',status:'ACTIVE'},opts),{status:409});
  const rejectedPaused=await prepareAdsPlan(pool,a,'status',{entity:'ad',id:'998866',status:'PAUSED'},opts);
