@@ -26,7 +26,7 @@ export function parseObservedMetaBalance({url,body,accountId,accountName,currenc
   u.searchParams.get('asset_id')!==accountId.slice(4)||
   (u.searchParams.has('payment_account_id')&&
    (u.searchParams.getAll('payment_account_id').length!==1||
-    u.searchParams.get('payment_account_id')!==accountId.slice(4)))))
+    u.searchParams.get('payment_account_id')!==accountId.slice(4))))
   throw fail('A página de faturamento não corresponde à conta selecionada.');
  if(currency!=='BRL')throw fail('A leitura assistida está disponível apenas para contas BRL.');
  if(typeof accountName!=='string'||!accountName.trim()||accountName.length>200)throw fail('Conta não identificada.');
