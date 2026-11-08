@@ -639,7 +639,8 @@ async function handle(req,res){
   const {data}=await body(req,2000);
   if(billingRoute[1]==='prepare'&&data.confirmed!==true)
    throw fail(422,'Confira o valor antes de preparar a recarga.');
-  const result=await metaBrowser.billing(pool,a,billingRoute[1]==='refresh'?'read':billingRoute[1]==='pix'?'pix':'prepare',{amountMinor:data.amountMinor});
+  const result=await metaBrowser.billing(pool,a,billingRoute[1]==='refresh'?'read':billingRoute[1]==='pix'?'pix':'prepare',{
+   amountMinor:data.amountMinor,background:billingRoute[1]==='refresh'&&data.background===true});
   const saved=result.observation?await saveMetaBillingObservation(pool,a,result):null;
   await audit(a,'marketing.billing.'+billingRoute[1],{accountId:result.accountId,state:result.state});
   return json(res,200,{...result,...saved,paymentInitiated:false});

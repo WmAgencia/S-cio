@@ -86,7 +86,7 @@
   $('[data-refresh]').addEventListener('click',()=>void run('refresh'));
   $('[data-pix]').addEventListener('click',()=>void run('pix'));
   $('[data-finish]').addEventListener('click',async()=>{
-   try{await queue;await api('/api/marketing/browser/finish','POST',{});stopScreen();$('[data-viewer]').hidden=true;status('Sessão salva. Agora clique em Atualizar saldo ou Preparar Pix.');}catch(e){status(e.message);}
+   try{await queue;await api('/api/marketing/browser/finish','POST',{});stopScreen();$('[data-viewer]').hidden=true;status('Sessão salva. Consultando fundos disponíveis na Meta…');void run('refresh');}catch(e){status(e.message);}
   });
   $('[data-copy]').addEventListener('click',async()=>{
    try{await navigator.clipboard.writeText($('[data-pix-code]').value);status('Pix copiado.');}catch{status('Selecione o código exibido para copiar manualmente.');}
