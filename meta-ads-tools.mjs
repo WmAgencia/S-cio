@@ -6,6 +6,7 @@ import {openMarketingSecret} from './marketing-integrations.mjs';
 import {requirePermission} from './team-permissions.mjs';
 import {assertApiFeature} from './tenant-features.mjs';
 import {normalizeImage} from './media-storage.mjs';
+import {metaBillingDetailsURL} from './meta-billing-state.mjs';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const text=(v,max=200)=>typeof v==='string'&&v.trim()&&v.length<=max?v.trim():null;
 const numeric=v=>typeof v==='string'&&/^\d{4,30}$/.test(v);
@@ -108,12 +109,10 @@ export async function readAdsTool(pool,a,kind,input={},options={}){
    finance.isPrepaid===false?'not_prepaid':'not_reported';
   finance.pix={generationSupported:false,mode:'official_billing',
    reason:'A integração oficial disponível não fornece emissão de Pix de recarga no Sócio. Gere o pagamento no faturamento da Meta.'};
-  const billing=new URL('https://adsmanager.facebook.com/billing_hub/payment_settings/');
-  billing.searchParams.set('asset_id',id.slice(4));billing.searchParams.set('payment_account_id_from_jsmodule',id.slice(4));billing.searchParams.set('placement','ads_manager');
-  if(numeric(data.business?.id))billing.searchParams.set('business_id',data.business.id);
+  const billingUrl=metaBillingDetailsURL(id,{businessId:data.business?.id});
   const {funding_source_details:unused,...publicAccount}=data;
-  return {account:publicAccount,finance,paymentsUrl:billing.href,manualPayment:true,
-   paymentLinkType:'meta_billing_settings',pixCodeAvailable:false};
+  return {account:publicAccount,finance,paymentsUrl:billingUrl,manualPayment:true,
+   paymentLinkType:'meta_billing_details',pixCodeAvailable:false};
  }
  if(kind==='pages')return listing(await availablePages(c));
  if(kind==='insights'){
