@@ -57,8 +57,9 @@ test('only a rendered Pix with matching amount, BRL and valid checksum can be co
 });
 test('assisted worker never automatically clicks final Meta payment/generation controls',()=>{
  const worker=readFileSync(new URL('../meta-browser/remote-worker.js',import.meta.url),'utf8');
- assert(worker.includes("name:'Fundos disponíveis'"));
- assert(worker.includes("name:data.accountName"));
+ assert(worker.includes("getByText('Fundos disponíveis',{exact:true})"));
+ assert(worker.includes('metaBillingDetailsURL(data.accountId)'));
+ assert(worker.includes('parseObservedMetaBalance({...snapshot'));
  assert(worker.includes("verifyMetaPixCode(candidate,intent.amountMinor)"));
  assert(!/getByRole\('button',\{name:['"](?:Avançar|Pagar|Confirmar pagamento)/.test(worker));
  const ui=readFileSync(new URL('../public/meta-billing-ui.js',import.meta.url),'utf8');
