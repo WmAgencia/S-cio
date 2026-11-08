@@ -38,8 +38,8 @@ test('unverified, ambiguous, or non-stored funding is never shown as wallet mone
 test('payment link opens official Meta billing, never claims a Pix was generated',()=>{
  const source=readFileSync(new URL('../meta-ads-tools.mjs',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../public/socio-workspace-ui.js',import.meta.url),'utf8');
- assert.match(source,/https:\/\/adsmanager\.facebook\.com\/billing_hub\/payment_settings\//);
- assert.match(source,/paymentLinkType:'meta_billing_settings',pixCodeAvailable:false/);
+ assert.match(source,/metaBillingDetailsURL\(id,\{businessId:data\.business\?\.id\}\)/);
+ assert.match(source,/paymentLinkType:'meta_billing_details',pixCodeAvailable:false/);
  assert.match(ui,/url\.hostname==='adsmanager\.facebook\.com'/);
  assert.match(ui,/Abrir recarga na Meta/);
  assert.doesNotMatch(ui,/Pix gerado|QR Pix gerado/);
