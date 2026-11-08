@@ -22,14 +22,21 @@ export function parseObservedMetaBalance({url,body,accountId,accountName,currenc
  let u;try{u=new URL(url);}catch{throw fail('Página de faturamento inválida.');}
  if(u.protocol!=='https:'||!['adsmanager.facebook.com','business.facebook.com'].includes(u.hostname)||
   !u.pathname.includes('/billing_hub/')||!/^act_[0-9]{4,30}$/.test(accountId||'')||
-  u.searchParams.get('asset_id')!==accountId.slice(4))
+  u.searchParams.getAll('asset_id').length!==1||
+  u.searchParams.get('asset_id')!==accountId.slice(4)||
+  (u.searchParams.has('payment_account_id')&&
+   (u.searchParams.getAll('payment_account_id').length!==1||
+    u.searchParams.get('payment_account_id')!==accountId.slice(4)))))
   throw fail('A página de faturamento não corresponde à conta selecionada.');
  if(currency!=='BRL')throw fail('A leitura assistida está disponível apenas para contas BRL.');
  if(typeof accountName!=='string'||!accountName.trim()||accountName.length>200)throw fail('Conta não identificada.');
  const lines=String(body||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
- if(!lines.includes(accountName.trim()))throw fail('O nome da conta de anúncios não foi confirmado na Meta.');
  const header=lines.indexOf('Fundos disponíveis');
  if(header<0)throw fail('Saldo não identificado. Conclua o login e as verificações da Meta.');
+ // Only accept the account label belonging to the visible wallet section,
+ // not a similarly named advertiser listed elsewhere in the navigation.
+ if(!lines.slice(Math.max(0,header-12),header).includes(accountName.trim()))
+  throw fail('O nome da conta de anúncios não foi confirmado no faturamento da Meta.');
  const end=lines.indexOf('Como você pagará',header+1);
  if(end<0||end-header>15)throw fail('Formato do faturamento não reconhecido.');
  const values=lines.slice(header+1,end).filter(line=>/^R\$\s*(?:[0-9]{1,3}(?:\.[0-9]{3})*|[0-9]+),[0-9]{2}$/.test(line));
