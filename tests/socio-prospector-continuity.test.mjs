@@ -6,7 +6,7 @@ import {
  analyzeSocioContinuity,socioContinuityPrompt
 } from '../socio-prospector-continuity.mjs';
 import {polishCustomerReply} from '../socio-intelligence.mjs';
-import {buildAiInstructions} from '../ai-replies.mjs';
+import {buildAiInstructions,processNextAiReply} from '../ai-replies.mjs';
 
 const messages=[
  {direction:'inbound',body:'Quanto custa o produto?'},
@@ -123,4 +123,30 @@ test('real and lab use the same contextual engine, no new writes or sends',()=>{
  assert.match(server,/simulation:true,continuity/);
  assert.match(server,/buildLabInput\(history,data\.message\)/);
  assert.match(server,/simulation:true,continuity/);
+});
+
+
+test('real reply worker performs human handoff before model or WhatsApp send for explicit stop or human requests',async()=>{
+ const env={SOCIO_OUTBOUND_ENABLED:'true',SOCIO_AUTOREPLY_ENABLED:'true',
+  WA_AKG_API_KEY:'test-only-not-a-real-secret',WA_AKG_BASE_URL:'https://gateway.test.invalid',
+  GROQ_API_KEY:'fake-groq-key-for-unit-tests-long-enough'};
+ for(const customerMessage of ['Não me envie mais mensagens','Quero atendimento humano']){
+  const calls=[],tenant='11111111-1111-4111-8111-111111111111';
+  const pool={query:async(sql,args=[])=>{
+   calls.push({sql,args});
+   if(sql.startsWith('SELECT m.id AS inbound_id'))
+    return {rowCount:1,rows:[{body:customerMessage,tenant_id:tenant,conversation_id:'22222222-2222-4222-8222-222222222222'}]};
+   if(sql.startsWith("UPDATE conversation_ui_state SET handling_mode='human'")){
+    assert.equal(args[0],tenant);return {rowCount:1,rows:[]};
+   }
+   throw Error('No model claim or send is permitted for stop/human handoff');
+  }};
+  const r=await processNextAiReply(pool,{env,
+   respond:async()=>{throw Error('model must not be called');},
+   deliver:async()=>{throw Error('WhatsApp must not be called');}
+  });
+  assert.equal(r.handedOff,true);
+  assert.equal(r.noMessageSent,true);
+  assert.equal(calls.length,2);
+ }
 });
