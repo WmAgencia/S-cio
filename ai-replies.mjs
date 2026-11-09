@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {socioCompactSalesGuide} from './socio-sales-guide.mjs';
 import {NATURAL_CONVERSATION_RULES,selectRelevantKnowledge,buildConversationInput,polishCustomerReply} from './socio-intelligence.mjs';
 import {groqResponse,groqReady} from './groq-client.mjs';
-import {analyzeSocioContinuity,socioContinuityPrompt} from './socio-prospector-continuity.mjs';
+import {analyzeSocioContinuity,socioContinuityPrompt,classifySocioTopic} from './socio-prospector-continuity.mjs';
 import {deliverToConversation,canAutoReply} from './socio-outbound.mjs';
 
 export function buildAiInstructions({name,tenantName,tone,instructions,knowledge,products=[],question='',simulation=false,catalogText=null,continuity=null}){
@@ -60,7 +60,8 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
  const m=found.rows[0],attemptId=randomUUID();
  // Stop requests and requests for a person must hand the conversation back
  // to the company without any automatic outbound message.
- if(/\b(parar|pare|stop|descadastrar|não me envie|nao me envie|falar com (um )?humano|falar com (um )?atendente)\b/i.test(String(m.body||''))){
+ if(['stop','human'].includes(classifySocioTopic(m.body))||
+  /\b(parar|pare|stop|descadastrar|não me envie|nao me envie|falar com (um )?humano|falar com (um )?atendente)\b/i.test(String(m.body||''))){
   await pool.query("UPDATE conversation_ui_state SET handling_mode='human',ai_activated_at=NULL,updated_at=now() "+
    "WHERE tenant_id=$1 AND conversation_id=$2 AND handling_mode='ai_assist'",
    [m.tenant_id,m.conversation_id]);
