@@ -530,7 +530,7 @@ async function handle(req,res){
   if(!limiter(simulationAttempts,'marketing-skill:'+a.user_id,60000,12))
    throw fail(429,'Muitas solicitações. Tente novamente em um minuto.');
   const {data}=await body(req,3500);
-  const answer=await speakToSocioSkill(pool,a,{message:data.message,runId:data.runId,imageHash:data.imageHash});
+  const answer=await speakToSocioSkill(pool,a,{message:data.message,runId:data.runId,imageHash:data.imageHash,videoId:data.videoId});
   await audit(a,'marketing.skill.request',{runId:answer.runId,status:answer.status,skill:answer.skillId||'ads.campaign.launch'});
   return json(res,200,answer);
  }
