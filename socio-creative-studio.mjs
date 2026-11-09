@@ -1,0 +1,49 @@
+// Sócio Creative Studio v1. Drafts only; never authorizes Meta POST or spend.
+// Uses ONLY provided business/category/location — no unverified superiority,
+// discounts, prices, deadlines, health results, scarcity, or buyer attributes.
+export const CREATIVE_STUDIO_VERSION='socio-creative-studio-v1';
+const trim=x=>String(x??'').replace(/[\r\n\t<>]+/g,' ')
+ .replace(/[\u0000-\u001f\u007f]/g,'').replace(/\s{2,}/g,' ').trim();
+const truncated=(x,n)=>trim(x).slice(0,n).trim();
+const normalize=x=>trim(x).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const risky=/\b(?:garantid[oa]s?|comprovad[oa]s?|milagros[oa]s?|cura|curar|resultados? em \d+ dias?|100\s?%|primeiro lugar|melhor do mundo|sem risco|desconto|promocao|gratis|gratuit[oa]|ultima[s]? unidade[s]?|so hoje|metade do preco)\b/i;
+function safeInput(raw,limit){return truncated(raw,limit);}
+function assess(raw){
+ const text=normalize(raw);
+ return risky.test(text)||/\b\d+\s?%\b/.test(text);
+}
+export function buildApprovedAdCreativeDrafts(brief={},tenantName='Empresa'){
+ const name=safeInput(tenantName,55)||'Empresa';
+ const category=safeInput(brief.category,65)||'produtos e serviços';
+ const city=safeInput(brief.cityName,52)||'sua região';
+ const destination=brief.destination==='website'?'site':brief.destination==='whatsapp'?'WhatsApp':'atendimento';
+ const cta=destination==='WhatsApp'?'Fale com nossa equipe pelo WhatsApp.':
+  destination==='site'?'Confira os detalhes no nosso site.':'Entre em contato para saber mais.';
+ const unsafeClaims=assess(category)||assess(name);
+ const opening=category.charAt(0).toUpperCase()+category.slice(1);
+ const variants=[
+  {style:'apresentacao',headline:truncated(opening+' em '+city,120),
+   message:truncated('Conheça '+category+' de '+name+' em '+city+'. '+cta,500)},
+  {style:'consultivo',headline:truncated('Quer saber mais sobre '+category+'?',120),
+   message:truncated('Buscando informações sobre '+category+' em '+city+'? Converse com a equipe de '+name+' e tire suas dúvidas. '+cta,500)},
+  {style:'objetivo',headline:truncated(name+' | '+opening,120),
+   message:truncated('Confira as opções de '+category+' com '+name+'. '+cta,500)}
+ ];
+ const results=variants.map(v=>({...v,headline:v.headline||'Conheça nossos produtos',
+  message:v.message||'Fale com a equipe para mais detalhes.'}));
+ return {
+  name:truncated('Sócio | '+category+' | '+city,120),
+  variants:results,
+  reviewRequired:unsafeClaims,
+  reviewReason:unsafeClaims?'A descrição fornecida pode conter promessa, oferta, resultado ou urgência não verificados. Revise o produto antes de anunciar.':null,
+  rules:['Não declarar preços, prazos, descontos, estoque ou resultados não verificados.',
+   'A Meta revisa o anúncio; a aprovação não é garantida.',
+   'A criação ocorre pausada e veiculação requer autorização separada.'],
+  provenance:'briefing_do_proprietario_sem_verificacao_de_alegacoes',
+  executionAllowed:!unsafeClaims
+ };
+}
+export function primaryCreativeDraft(brief={},tenantName='Empresa'){
+ const result=buildApprovedAdCreativeDrafts(brief,tenantName);
+ return {name:result.name,headline:result.variants[0].headline,message:result.variants[0].message};
+}
