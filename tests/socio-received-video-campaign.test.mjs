@@ -32,10 +32,10 @@ function db({ownerCount=1}={}){
 const search=async(path)=>{
  const url=new URL(path,'https://wa.test');
  assert.equal(url.searchParams.get('jid'),jid);
- const media=url.searchParams.get('type')==='VIDEO';
- assert.equal(url.searchParams.get('fromMe'),media?'false':null);
- return {data:media?[video,{...video,fromMe:true,keyId:'FAKEVIDEO'}]:
-  [video,command,{...command,content:'promoção de outra conta',
+ assert.equal(url.searchParams.get('type'),null);
+ assert.equal(url.searchParams.get('fromMe'),null);
+ return {data:[video,{...video,fromMe:true,keyId:'FAKEVIDEO'},command,
+  {...command,content:'promoção de outra conta',
    remoteJid:'5515999999999@s.whatsapp.net'}]};
 };
 test('incoming selection rejects outgoing and unrelated chats, and finds exact recent owner video',()=>{
