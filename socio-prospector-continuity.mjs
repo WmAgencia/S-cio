@@ -30,7 +30,8 @@ const twoQuestions=/\?.{1,400}\?/;
 
 export function classifySocioTopic(message=''){
  const s=normalize(message);
- return TOPICS.find(([,regex])=>regex.test(s))?.[0]||'general';
+ const declined=/\b(?:nao|nunca)\s+(?:quero|vou|pretendo)\s+(?:comprar|contratar|fechar)\b/.test(s);
+ return TOPICS.find(([topic,regex])=>!(topic==='sale'&&declined)&&regex.test(s))?.[0]||'general';
 }
 
 export function analyzeSocioContinuity(history=[],incoming=''){
