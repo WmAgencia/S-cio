@@ -43,7 +43,7 @@ import {processLiveInboxSync} from './inbox-live-sync.mjs';
 import {processNextAiReply,buildAiInstructions} from './ai-replies.mjs';
 import {normalizeLabHistory,buildLabInput,polishCustomerReply,reviewReplyStyle} from './socio-intelligence.mjs';
 import {analyzeSocioContinuity} from './socio-prospector-continuity.mjs';
-import {memoryEnabled,readConversationMemory,clearConversationMemory,purgeExpiredConversationMemories} from './socio-conversation-memory.mjs';
+import {readConversationMemory,clearConversationMemory,purgeExpiredConversationMemories} from './socio-conversation-memory.mjs';
 import {reconcileConfirmedOutbox} from './socio-outbound.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
@@ -2162,16 +2162,17 @@ async function main(){
   finally{ownerAlertBusy=false;}
  },12000);
  ownerAlertWorker.unref();
- // Physically purge expired derived topic summaries every hour. Never delete
- // underlying messages, which follow the existing inbox retention policy.
- if(memoryEnabled()){
-  const memoryPurgeWorker=setInterval(async()=>{
-   if(workersBlocked())return;
-   try{await purgeExpiredConversationMemories(pool);}
-   catch(error){console.warn('[socio-ai-memory-purge]',String(error?.code||'PURGE_ERROR').slice(0,35));}
-  },3600000);
-  memoryPurgeWorker.unref();
- }
+ // Physically purge expired derived topic summaries on startup and hourly,
+ // even if the feature was disabled after previously storing a memory.
+ // Underlying customer messages are never deleted by this worker.
+ const purgeConversationTopics=async()=>{
+  if(workersBlocked())return;
+  try{await purgeExpiredConversationMemories(pool);}
+  catch(error){console.warn('[socio-ai-memory-purge]',String(error?.code||'PURGE_ERROR').slice(0,35));}
+ };
+ void purgeConversationTopics();
+ const memoryPurgeWorker=setInterval(purgeConversationTopics,3600000);
+ memoryPurgeWorker.unref();
  // AI only attempts replies if explicitly enabled, agent enabled and each
  // conversation handed over. Claims are durable to avoid duplicate messages.
  let replyBusy=false;
