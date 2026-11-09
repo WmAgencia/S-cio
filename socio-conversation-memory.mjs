@@ -113,25 +113,27 @@ export async function refreshConversationMemory(pool,{tenantId,conversationId,en
    "VALUES($1,$2,'{}'::jsonb,$3,$4) ON CONFLICT(tenant_id,conversation_id) DO NOTHING",
    [tenantId,conversationId,iso(firstCursor(clock)),ZERO_UUID]);
   const locked=await client.query(
-   'SELECT state,seen_created_at,seen_message_id,expires_at FROM socio_conversation_memory '+
+   'SELECT state,seen_created_at::text AS seen_cursor,seen_message_id,expires_at,expires_at::text AS expired_cursor FROM socio_conversation_memory '+
    'WHERE tenant_id=$1 AND conversation_id=$2 FOR UPDATE',[tenantId,conversationId]);
   const row=locked.rows[0];
   const expired=new Date(row.expires_at).getTime()<=clock.getTime();
   let state=expired?emptyState():sanitizeMemoryState(row.state);
-  let seenAt=expired?new Date(row.expires_at):new Date(row.seen_created_at||firstCursor(clock));
+  // Keep PostgreSQL's microsecond timestamp as text. JS Date truncates to
+  // milliseconds and can replay the last row on every invocation.
+  let seenAt=expired?row.expired_cursor:row.seen_cursor||iso(firstCursor(clock));
   let seenId=expired?ZERO_UUID:row.seen_message_id||ZERO_UUID;
   let processed=0;
   for(let batch=0;batch<MEMORY_MAX_BATCHES;batch++){
    const messages=await client.query(
-    'SELECT id,created_at,direction,body FROM messages '+
+    'SELECT id,created_at::text AS cursor_at,direction,body FROM messages '+
     "WHERE tenant_id=$1 AND conversation_id=$2 AND direction IN ('inbound','outbound') "+
     'AND (created_at,id)>($3::timestamptz,$4::uuid) '+
     'ORDER BY created_at ASC,id ASC LIMIT $5',
-    [tenantId,conversationId,iso(seenAt),seenId,MEMORY_BATCH_LIMIT]);
+    [tenantId,conversationId,seenAt,seenId,MEMORY_BATCH_LIMIT]);
    if(!messages.rowCount)break;
    state=accumulateMemoryTopics(state,messages.rows);
    const last=messages.rows.at(-1);
-   seenAt=new Date(last.created_at);
+   seenAt=last.cursor_at;
    seenId=last.id;
    processed+=messages.rowCount;
    if(messages.rowCount<MEMORY_BATCH_LIMIT)break;
@@ -141,7 +143,7 @@ export async function refreshConversationMemory(pool,{tenantId,conversationId,en
     'UPDATE socio_conversation_memory SET state=$3::jsonb,seen_created_at=$4,seen_message_id=$5,'+
     "updated_at=now(),expires_at=now()+interval '30 days' "+
     'WHERE tenant_id=$1 AND conversation_id=$2',
-    [tenantId,conversationId,JSON.stringify(state),iso(seenAt),seenId]);
+    [tenantId,conversationId,JSON.stringify(state),seenAt,seenId]);
   }
   return {state,processed,retentionDays:MEMORY_RETENTION_DAYS};
  });
@@ -168,10 +170,10 @@ export async function clearConversationMemory(pool,{tenantId,conversationId}={})
  checkIdentity(tenantId,conversationId);
  return tx(pool,async client=>{
   await lockConversation(client,tenantId,conversationId);
-  const last=await client.query('SELECT id,created_at FROM messages '+
+  const last=await client.query('SELECT id,created_at::text AS cursor_at FROM messages '+
    "WHERE tenant_id=$1 AND conversation_id=$2 AND direction IN ('inbound','outbound') "+
    'ORDER BY created_at DESC,id DESC LIMIT 1',[tenantId,conversationId]);
-  const seenAt=last.rows[0]?.created_at||new Date();
+  const seenAt=last.rows[0]?.cursor_at||new Date().toISOString();
   const seenId=last.rows[0]?.id||ZERO_UUID;
   await client.query(
    'INSERT INTO socio_conversation_memory(tenant_id,conversation_id,state,seen_created_at,seen_message_id,updated_at,expires_at) '+
@@ -179,7 +181,7 @@ export async function clearConversationMemory(pool,{tenantId,conversationId}={})
    "ON CONFLICT(tenant_id,conversation_id) DO UPDATE SET state='{}'::jsonb,"+
    "seen_created_at=EXCLUDED.seen_created_at,seen_message_id=EXCLUDED.seen_message_id,"+
    'updated_at=now(),expires_at=EXCLUDED.expires_at',
-   [tenantId,conversationId,iso(seenAt),seenId]);
+   [tenantId,conversationId,seenAt,seenId]);
   return {cleared:true,originalHistoryPreserved:true};
  });
 }
