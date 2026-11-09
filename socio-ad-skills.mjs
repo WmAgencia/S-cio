@@ -93,13 +93,13 @@ function promptFor(brief,resources){
  if(!brief.pageId)return resources.pages?.length?
   'Qual Página do Facebook devo utilizar? '+resources.pages.slice(0,5).map(x=>x.name+' (página '+x.id+')').join('; '):
   'A Meta não retornou uma Página autorizada. Conecte uma Página à sua conta de anúncios.';
- if(!brief.imageHash)return 'Me envie uma foto do produto para este anúncio. Eu vou preparar o criativo e subir a imagem para a Meta.';
+ if(!brief.imageHash&&!brief.videoId)return 'Me envie uma foto ou um vídeo do produto. O arquivo precisa ser importado na biblioteca Meta da sua empresa.';
  if(!brief.cityKey)return 'Não consegui confirmar essa cidade na Meta. Escreva o nome completo da cidade e do estado.';
  return null;
 }
 function publicBrief(b){
  return {category:b.category||null,cityName:b.cityName||null,dailyBudgetCents:b.dailyBudgetCents||null,
-  destination:b.destination||null,genders:Array.isArray(b.genders)?b.genders:[],hasPhoto:Boolean(b.imageHash),
+  destination:b.destination||null,genders:Array.isArray(b.genders)?b.genders:[],hasPhoto:Boolean(b.imageHash),hasVideo:Boolean(b.videoId),
   pageId:b.pageId||null,imageName:b.imageName||null,whatsappPhone:b.whatsappPhone||null,url:b.url||null,cityKey:b.cityKey||null};
 }
 async function enrich(pool,a,brief,{read=readAdsTool,options={}}={}){
@@ -124,7 +124,7 @@ async function enrich(pool,a,brief,{read=readAdsTool,options={}}={}){
   try{resources.pages=(await read(pool,a,'pages',{},options)).items||[];}catch{}
   if(resources.pages.length===1)brief.pageId=resources.pages[0].id;
  }
- if(!brief.imageHash){
+ if(!brief.imageHash&&!brief.videoId){
   try{resources.images=(await read(pool,a,'images',{},options)).items||[];}catch{}
   // Only auto-use an existing image when it unambiguously mentions the requested product.
   const keyword=clean(brief.category).split(' ')[0];
@@ -133,10 +133,12 @@ async function enrich(pool,a,brief,{read=readAdsTool,options={}}={}){
  }
  return {brief,resources};
 }
-export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=null}={},opts={}){
+export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=null,videoId=null}={},opts={}){
  authorize(a);
  if(typeof message!=='string'||message.length>1400)throw bad(422,'Pedido muito longo.');
  if(imageHash!==null&&!validImageHash(imageHash))throw bad(422,'Imagem enviada inválida.');
+ if(videoId!==null&&!/^\d{4,30}$/.test(String(videoId)))throw bad(422,'Vídeo Meta inválido.');
+ if(imageHash!==null&&videoId!==null)throw bad(422,'Selecione somente um tipo de mídia.');
  const selected=await (opts.resolve||resolveSelectedOfficialAccount)(pool,a,opts);
  const accountId=selected.id;
  if(selected.currency!=='BRL')throw bad(409,'Esta skill está configurada para orçamento em reais. Selecione uma conta Meta em BRL antes de continuar.');
@@ -207,7 +209,8 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   if(candidate.length>=3&&candidate.length<=70&&!/\b(R\$|orcamento|campanha|pode criar|autorizo)\b/i.test(candidate))
    brief.category=candidate;
  }
- if(imageHash){brief.imageHash=imageHash;brief.imageName='Foto enviada nesta conversa';}
+ if(imageHash){delete brief.videoId;brief.imageHash=imageHash;brief.imageName='Foto enviada nesta conversa';}
+ if(videoId){delete brief.imageHash;brief.videoId=String(videoId);brief.imageName='Vídeo importado nesta conta Meta';}
  const {resources}=await enrich(pool,a,brief,{read:opts.read||readAdsTool,options:opts});
  const prompt=promptFor(brief,resources);
  if(prompt){
@@ -230,7 +233,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
  }
  // Meta validates actual page/image/city ownership during prepareAdsPlan.
  const creative=skillAdCopy(brief,a.tenant_name);
- const input={...creative,pageId:brief.pageId,imageHash:brief.imageHash,cityName:brief.cityName,
+ const input={...creative,pageId:brief.pageId,...(brief.videoId?{videoId:brief.videoId}:{imageHash:brief.imageHash}),cityName:brief.cityName,
   cityKey:brief.cityKey,dailyBudgetCents:brief.dailyBudgetCents,ageMin:18,ageMax:65,
   ...(brief.genders?.length?{genders:brief.genders}:{}),
   ...(brief.destination==='whatsapp'?{whatsappPhone:brief.whatsappPhone}:{url:brief.url})};
@@ -256,7 +259,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
  return {runId:run.id,status:'ready',brief:publicBrief(brief),planId:plan.id,
   creativeVariants:creativeDrafts.variants,selectedCreativeStyle:creativeDrafts.variants[0].style,
   message:'Preparei a campanha '+creative.name+'. Público: '+(brief.genders?.[0]===2?'mulheres, ':'')+
-   'maiores de 18 anos em '+brief.cityName+'. Página: '+brief.pageId+'. Foto: '+(brief.imageName||'criativo enviado')+'. Orçamento diário definido: R$ '+
+   'maiores de 18 anos em '+brief.cityName+'. Página: '+brief.pageId+'. Mídia: '+(brief.imageName||'criativo enviado')+'. Orçamento diário definido: R$ '+
    (brief.dailyBudgetCents/100).toFixed(2).replace('.',',')+'/dia. Destino: '+
    (brief.destination==='whatsapp'?'WhatsApp WA-AKG':'site')+'. '+
    (pixelPlanId?'Um Pixel novo também está incluído na autorização, mas ainda precisará ser instalado no site. ':'' )+
