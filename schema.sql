@@ -1045,6 +1045,22 @@ CREATE TABLE IF NOT EXISTS socio_whatsapp_meta_video_imports (
 CREATE INDEX IF NOT EXISTS socio_whatsapp_meta_video_imports_tenant_idx
  ON socio_whatsapp_meta_video_imports(tenant_id,created_at DESC);
 
+-- One-off owner-authorized pilot: immutable operation ID, exactly-once attempt.
+CREATE TABLE IF NOT EXISTS socio_whatsapp_meta_video_pilot_jobs (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ channel_id uuid NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ account_id text NOT NULL,
+ status text NOT NULL CHECK (status IN ('started','uploaded','not_found','failed','uncertain')),
+ meta_video_id text,
+ reason_code text,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS socio_whatsapp_meta_video_pilot_jobs_tenant_idx
+ ON socio_whatsapp_meta_video_pilot_jobs(tenant_id,created_at DESC);
+
 -- Opt-in SaaS billing. Isolated from sales_orders (customer purchases / Stripe test).
 -- A subscription status NEVER directly changes tenants.status: no automatic suspension.
 CREATE TABLE IF NOT EXISTS socio_billing_accounts (
