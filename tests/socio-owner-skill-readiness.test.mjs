@@ -10,7 +10,7 @@ const channel=()=>({id:randomUUID(),status:'connected',phone:'5515888123456',ses
 const flags={SOCIO_OWNER_COMMANDS_ENABLED:'true',SOCIO_OWNER_MEDIA_ENABLED:'true',
  SOCIO_OWNER_AUDIO_ENABLED:'true',SOCIO_OUTBOUND_ENABLED:'true',
  SOCIO_OWNER_MEDIA_TENANT_ID:tenant,GROQ_API_KEY:'long-authorization-not-a-real-key-111'};
-function db(channels,owners=1){
+function db(channels,owners=1,ownerChannelIds=owners&&channels[0]?[channels[0].id]:[]){
  const called=[];return{called,query:async(sql,params)=>{
   called.push({sql,params});
   assert.deepEqual(params,[tenant]);
@@ -18,7 +18,9 @@ function db(channels,owners=1){
   if(sql.startsWith('SELECT COUNT(*)::int AS matches')){
    assert.match(sql,/u.role IN \('owner','admin'\)/);
    assert.match(sql,/HAVING COUNT\(u.id\)=1/);
-   return {rows:[{matches:owners}]};
+   assert.match(sql,/array_agg\(DISTINCT verified\.channel_id\)/);
+   assert.match(sql,/GROUP BY c\.id,c\.channel_id/);
+   return {rows:[{matches:owners,channel_ids:ownerChannelIds}]};
   }
   throw Error('Unexpected SQL read');
  }};
@@ -32,7 +34,7 @@ test('WA-AKG readiness returns tenant-scoped verified pilot state but performs n
  }});
  assert.equal(x.textReady,true);assert.equal(x.photoReady,true);assert.equal(x.audioReady,true);
  assert.equal(x.connectedSessions,1);assert.equal(x.verifiedOwnerConversations,1);
- assert.equal(x.readOnly,true);assert.equal(x.tenantScoped,true);assert.equal(checked,1);
+ assert.equal(x.readOnly,true);assert.equal(x.tenantScoped,true);assert.equal(x.ownerOnConnectedSession,true);assert.equal(checked,1);
  assert.equal(pool.called.length,2);
  assert(pool.called.every(v=>/SELECT/.test(v.sql)&&!/(INSERT|UPDATE|DELETE|POST)/.test(v.sql)));
  assert(!JSON.stringify(x).includes('GROQ_API_KEY'));
@@ -77,4 +79,33 @@ test('status endpoint and panel are read-only and text command requires owner id
  assert.match(ui,/Verificar conexão WA-AKG/);
  assert.match(inbox,/SELECT COUNT\(\*\) FROM users verified_owner/);
  assert.match(inbox,/verified_owner.tenant_id=m.tenant_id/);
+});
+
+test('owner conversation on a different connected/unconnected channel MUST NOT make pilot ready',async()=>{
+ const active=channel(),stale={...channel(),status:'not_connected'};
+ // This tenant has a legitimate owner conversation — but ONLY on stale.
+ const pool=db([active,stale],1,[stale.id]);
+ const res=await ownerWhatsAppReadiness(pool,actor,{env:flags,getStatus:async id=>{
+  assert.equal(id,active.session_id);return {connected:true,connectedNumber:active.phone};
+ }});
+ assert.equal(res.connectedSessions,1);
+ assert.equal(res.verifiedOwnerConversations,1);
+ assert.equal(res.ownerOnConnectedSession,false);
+ assert.equal(res.textReady,false);
+ assert.equal(res.photoReady,false);
+ assert.equal(res.audioReady,false);
+ assert.match(res.blockers.join(' '),/mesmo canal/);
+});
+test('tenant with several WA-AKG sessions requires owner on the actual live channel',async()=>{
+ const offline=channel(),live=channel();
+ offline.phone='5515999999999';
+ const pool=db([offline,live],1,[live.id]);
+ const status=await ownerWhatsAppReadiness(pool,actor,{
+  env:flags,
+  getStatus:async sessionId=>sessionId===live.session_id?
+   {connected:true,connectedNumber:live.phone}:{connected:false,connectedNumber:offline.phone}
+ });
+ assert.equal(status.connectedSessions,1);
+ assert.equal(status.ownerOnConnectedSession,true);
+ assert.equal(status.textReady,true);
 });
