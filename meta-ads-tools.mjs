@@ -207,13 +207,17 @@ export function validateAdsPlan(kind,input){
   const whatsapp=kind==='create_whatsapp';
   const name=text(input.name,120),url=whatsapp?null:safeUrl(input.url),message=text(input.message,2200),headline=text(input.headline,120);
   const phone=whatsapp?String(input.whatsappPhone||'').replace(/\D/g,''):null;
-  if(!name||(!whatsapp&&!url)||(whatsapp&&!/^55[1-9][0-9]{9,10}$/.test(phone))||!message||!headline||!numeric(input.pageId)||!text(input.imageHash,100)||!numeric(input.cityKey)||!text(input.cityName,100)||!money(input.dailyBudgetCents))throw fail(422,'Preencha nome, página, imagem, cidade, link HTTPS, texto, título e orçamento diário (de 1 a 100.000 na moeda da conta).');
+  const imageHash=text(input.imageHash,100),videoId=numeric(input.videoId)?String(input.videoId):null;
+  if(!name||(!whatsapp&&!url)||(whatsapp&&!/^55[1-9][0-9]{9,10}$/.test(phone))||!message||!headline||!numeric(input.pageId)||
+    Number(Boolean(imageHash))+Number(Boolean(videoId))!==1||!numeric(input.cityKey)||!text(input.cityName,100)||!money(input.dailyBudgetCents))
+   throw fail(422,'Preencha nome, página, vídeo importado OU imagem, cidade, link HTTPS/WhatsApp, texto, título e orçamento diário (de 1 a 100.000 na moeda da conta).');
   const ageMin=Number(input.ageMin||18),ageMax=Number(input.ageMax||65);
   if(!Number.isInteger(ageMin)||!Number.isInteger(ageMax)||ageMin<18||ageMax>65||ageMin>ageMax)throw fail(422,'Faixa etária inválida.');
   const genders=input.genders===undefined?[]:input.genders;
   if(!Array.isArray(genders)||genders.length>2||genders.some(g=>g!==1&&g!==2)||
      new Set(genders).size!==genders.length)throw fail(422,'Segmentação de gênero inválida.');
-  return {name,url,whatsappPhone:phone,message,headline,pageId:input.pageId,imageHash:input.imageHash,
+  return {name,url,whatsappPhone:phone,message,headline,pageId:input.pageId,
+   ...(videoId?{videoId}:{imageHash}),
    cityKey:input.cityKey,cityName:input.cityName.trim(),dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax,genders};
 
  }
@@ -355,8 +359,12 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
    const destination=whatsapp?chatLink:p.url;
    const creative=await graph(c,'/'+c.account.id+'/adcreatives',{
     name:p.name+' · Criativo',
-    object_story_spec:{page_id:p.pageId,link_data:{image_hash:p.imageHash,link:destination,
-     message:p.message,name:p.headline,call_to_action:{type:whatsapp?'WHATSAPP_MESSAGE':'LEARN_MORE',value:{link:destination}}}}
+    object_story_spec:{page_id:p.pageId,
+     ...(p.videoId?{video_data:{
+      video_id:p.videoId,title:p.headline,message:p.message,
+      call_to_action:{type:whatsapp?'WHATSAPP_MESSAGE':'LEARN_MORE',value:{link:destination}}
+     }}:{link_data:{image_hash:p.imageHash,link:destination,
+      message:p.message,name:p.headline,call_to_action:{type:whatsapp?'WHATSAPP_MESSAGE':'LEARN_MORE',value:{link:destination}}}})}
    },'POST');
    if(!numeric(creative.id))throw Object.assign(fail(503,'A Meta não retornou o ID do criativo.'),{uncertain:true});result.creativeId=creative.id;await progress();
    const ad=await graph(c,'/'+c.account.id+'/ads',{name:p.name+' · Anúncio',adset_id:adset.id,creative:{creative_id:creative.id},status:'PAUSED'},'POST');
