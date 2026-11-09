@@ -215,8 +215,10 @@ export async function importLastOutgoingVideo(pool,a,{
    accountId:account.id,replayed:true,
    message:'Esse vídeo já teve uma tentativa de upload. Não vou reenviar automaticamente.'};
  }
+ let phase='media_download';
  try{
   const video=await download({sessionId:source.session_id,messageId,env});
+  phase='meta_video_upload';
   const outcome=await upload(pool,a,video,{
    env,title:'Sócio WhatsApp · '+preview.video.sentAt.slice(0,16).replace('T',' '),
   });
@@ -230,6 +232,7 @@ export async function importLastOutgoingVideo(pool,a,{
    processing:true,uploadedBytes:video.bytes.length,
    message:'Vídeo enviado à biblioteca de vídeos da Meta. Processamento pode estar pendente. Nenhuma campanha ou anúncio foi criado.'};
  }catch(error){
+  if(!error.phase)error.phase=phase;
   await pool.query("UPDATE socio_whatsapp_meta_video_imports "+
    "SET status=$2,updated_at=now() WHERE id=$1 AND tenant_id=$3",
    [claimId,error?.uncertain?'uncertain':'failed',a.active_tenant_id]).catch(()=>{});
