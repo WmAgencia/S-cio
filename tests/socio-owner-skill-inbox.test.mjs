@@ -28,7 +28,8 @@ test('one verified owner private message can ask for a paused campaign and get a
  const row={inbound_id:inbound,tenant_id:tenant,conversation_id:conversation,
   body:'Sócio, cria campanha de roupa feminina em Sorocaba gastando seis reais por dia',
   user_id:user,role:'owner',platform_owner:false,tenant_status:'active',
-  tenant_name:'Loja do Bairro',features:{meta_ads:true,whatsapp:true,ai:true}};
+  tenant_name:'Loja do Bairro',features:{meta_ads:true,whatsapp:true,ai:true},
+  session_id:'socio_test_001',connected_phone:'5515888123456'};
  const records=[],queries=[];
  const pool={query:async(sql,args=[])=>{
   queries.push({sql,args});
@@ -67,16 +68,21 @@ test('one verified owner private message can ask for a paused campaign and get a
   assert.match(args.clientRequestId,/^[a-f0-9-]{36}$/);
   return {sent:true};
  };
- const result=await processOwnerSkillInbox(pool,{env,enabled:true,speak,deliver});
+ const getStatus=async(id,opts)=>{
+  assert.equal(id,'socio_test_001');assert.equal(opts.env,env);
+  return {connected:true,connectedNumber:'5515888123456'};
+ };
+ const result=await processOwnerSkillInbox(pool,{env,enabled:true,speak,deliver,getStatus});
  assert.equal(result.processed,true);assert.equal(result.replySent,true);
  assert.equal(spoke,1);assert.equal(delivered,1);
- const again=await processOwnerSkillInbox(pool,{env,enabled:true,speak,deliver});
+ const again=await processOwnerSkillInbox(pool,{env,enabled:true,speak,deliver,getStatus});
  assert.equal(again.reason,'NO_AUTHORIZED_OWNER_COMMAND');
  assert.equal(spoke,1);assert.equal(delivered,1);
 });
 test('ambiguous gateway send is not retried by the worker',async()=>{
  const row={inbound_id:randomUUID(),tenant_id:randomUUID(),conversation_id:randomUUID(),
-  body:'Sócio, pode criar',user_id:randomUUID(),role:'owner',tenant_status:'active',features:{ai:true,meta_ads:true,whatsapp:true}};
+  body:'Sócio, pode criar',user_id:randomUUID(),role:'owner',tenant_status:'active',features:{ai:true,meta_ads:true,whatsapp:true},
+  session_id:'socio_test_002',connected_phone:'5515888123456'};
  let state='processing';
  const pool={query:async(sql,args)=>{
   if(sql.startsWith('SELECT m.id AS inbound_id'))return {rowCount:1,rows:[row]};
@@ -89,8 +95,39 @@ test('ambiguous gateway send is not retried by the worker',async()=>{
   throw Error('Unexpected SQL');
  }};
  const result=await processOwnerSkillInbox(pool,{env,enabled:true,
+  getStatus:async()=>({connected:true,connectedNumber:'5515888123456'}),
   speak:async()=>({status:'completed',runId:randomUUID(),message:'Pronto, criado pausado'}),
   deliver:async()=>{throw Error('Gateway timeout')}});
  assert.equal(result.replySent,false);assert.equal(result.reason,'DELIVERY_UNCONFIRMED');
  assert.equal(state,'uncertain');
+});
+
+test('owner command never executes Meta when the actual WhatsApp session is missing or mismatched',async()=>{
+ const row={inbound_id:randomUUID(),tenant_id:randomUUID(),conversation_id:randomUUID(),
+  body:'Sócio, pode criar',user_id:randomUUID(),role:'owner',tenant_status:'active',
+  features:{ai:true,meta_ads:true,whatsapp:true},session_id:'socio_test_001',
+  connected_phone:'5515888123456'};
+ for(const live of [{connected:false,connectedNumber:row.connected_phone},
+  {connected:true,connectedNumber:'5511111111111'},null]){
+  let claims=0,spoke=0,delivered=0;
+  const db={query:async(sql)=>{
+   if(sql.startsWith('SELECT m.id AS inbound_id')){
+    assert.match(sql,/JOIN waakg_links l ON l.channel_id=ch.id/);
+    assert.match(sql,/l.session_id/);
+    return {rowCount:1,rows:[row]};
+   }
+   claims++;throw Error('Never claim or mutate without a live session: '+sql);
+  }};
+  const status=await processOwnerSkillInbox(db,{env,enabled:true,
+   getStatus:async(id,opts)=>{
+    assert.equal(id,row.session_id);assert.equal(opts.env,env);
+    if(!live)throw Error('gateway offline');
+    return live;
+   },
+   speak:async()=>{spoke++;throw Error('Never execute Meta')},
+   deliver:async()=>{delivered++;throw Error('Never send')}
+  });
+  assert.equal(status.reason,'SESSION_NOT_VERIFIED');
+  assert.equal(claims,0);assert.equal(spoke,0);assert.equal(delivered,0);
+ }
 });
