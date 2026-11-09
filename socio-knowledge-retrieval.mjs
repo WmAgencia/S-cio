@@ -10,7 +10,7 @@ const STOP=new Set(('a ao aos as o os de da das do dos e em no na nos nas por pa
  'um uma uns umas que qual quais como quanto quando onde quero queria preciso poderia pode '+
  'tem tenho voce voces meu minha seus suas isso esse essa sobre me eu ja agora tudo '+
  'tambem entao ser fazer saber favor sera sendo muito mais nos nossa nesta desta sua '+
- 'hoje gostaria ainda ser ter fazer estou ficou').split(' '));
+ 'hoje gostaria ainda ser ter fazer estou ficou empresa negocio negocio').split(' '));
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safe=x=>String(x??'').replace(/\r\n?/g,'\n').replace(/[\u0000-\u0008\u000b\u000e-\u001f\u007f]/g,'').trim();
 const fold=x=>safe(x).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
