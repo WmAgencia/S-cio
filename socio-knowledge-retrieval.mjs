@@ -14,8 +14,8 @@ const STOP=new Set(('a ao aos as o os de da das do dos e em no na nos nas por pa
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safe=x=>String(x??'').replace(/\r\n?/g,'\n').replace(/[\u0000-\u0008\u000b\u000e-\u001f\u007f]/g,'').trim();
 const fold=x=>safe(x).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-const words=x=>[...new Set((fold(x).match(/[a-z0-9]{3,}/g)||[])
- .filter(w=>!STOP.has(w)).slice(0,35))];
+const words=(x,limit=35)=>[...new Set((fold(x).match(/[a-z0-9]{3,}/g)||[])
+ .filter(w=>!STOP.has(w)).slice(0,limit))];
 const base=x=>x.replace(/(mente|amentos?|imentos?|acoes|acao|adoras?|adores?|ando|endo|idas?|idos?|ados?|adas?|icas?|icos?|es|s)$/,'');
 const synonyms=[
  ['prazo','entrega','recebimento','chega','tempo'],
@@ -82,7 +82,7 @@ export function splitApprovedMarkdown(markdown){
  return chunks;
 }
 function scoreChunk(chunk,query){
- const q=words(query),title=words(chunk.title),body=words(chunk.body);
+ const q=words(query,16),title=words(chunk.title,45),body=words(chunk.body,180);
  if(!q.length)return {score:0,matched:[]};
  const bodyset=new Set(body),titleset=new Set(title);
  let points=0;const matched=[];
@@ -105,7 +105,7 @@ export function retrieveApprovedKnowledge({markdown='',question='',version=null,
  const scored=chunks.map(chunk=>({...chunk,...scoreChunk(chunk,question)}));
  const relevant=scored.filter(x=>x.score>=1.6&&x.matched.length>0)
   .sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id));
- const policies=scored.filter(x=>x.guardrail).sort((a,b)=>a.id.localeCompare(b.id));
+ const policies=scored.filter(x=>x.guardrail).sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id)).slice(0,2);
  const wanted=[...policies,...relevant];
  let used=0;const chosen=[],seen=new Set();
  for(const item of wanted){
@@ -115,11 +115,12 @@ export function retrieveApprovedKnowledge({markdown='',question='',version=null,
   const head='['+item.id+'] '+item.title+'\n';
   const remaining=cap-used-head.length-2;
   if(remaining<100)break;
+  if(item.guardrail&&body.length>600)body=body.slice(0,600).trim();
   if(body.length>remaining){
    // Relevant content is not truncated into a false "fact". Skip unless
-   // this is an oversized *guardrail* section: its beginning stays visible.
+   // this is a guardrail: its beginning stays visible, within a small budget.
    if(!item.guardrail)continue;
-   body=body.slice(0,remaining).trim();
+   body=body.slice(0,Math.min(remaining,600)).trim();
   }
   seen.add(item.id);chosen.push({...item,body});
   used+=head.length+body.length+2;
