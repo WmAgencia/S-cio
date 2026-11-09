@@ -133,14 +133,27 @@ export function reviewReplyStyle(reply,{hasConversation=false}={}){
  return {signals,needsReview:signals.length>0,checks:'style_only'};
 }
 
-export function polishCustomerReply(reply,{hasConversation=false,maxChars=700}={}){
- let text=String(reply||'').trim();
- if(!text)return '';
- if(hasConversation){
-  const next=text.replace(/^(?:oi|ol[aá]|bom dia|boa tarde|boa noite)[!,.:\s]+(?:tudo bem[?!,.:\s]*)?/i,'').trim();
+// Adapted from Prospector's refineChatReply: never rewrite an explicitly
+// requested example of a greeting or a literal customer-facing script.
+export function polishCustomerReply(reply,{hasConversation=false,maxChars=700,incoming='',previousAssistant=''}={}){
+ const original=String(reply||'').trim();
+ if(!original)return '';
+ let text=original;
+ const literal=/\b(?:roteiro|mensagem inicial|mensagem de boas vindas|escrev|redig|como cumpriment|como saud|frase de abertura|texto de abertura|fala literalmente|citar exatamente|texto exato)\b/
+  .test(fold(incoming));
+ if(hasConversation&&!literal){
+  const next=text.replace(/^(?:oi+|oie+|ol[aá]|bom dia|boa tarde|boa noite)(?:\s*,\s*[\p{L}]{2,28})?[!,.:\s–—-]+(?:tudo bem[?!,.:\s]*)?/iu,'').trim();
   if(next&&next!==text)text=next.charAt(0).toUpperCase()+next.slice(1);
+  const filler=/^(?:claro|entendi|perfeito|com certeza|sem problema|vamos l[aá]|[oó]timo)(?:[!,.:\s–—-]+|$)/i;
+  const current=text.match(filler)?.[0],prior=String(previousAssistant||'').match(filler)?.[0];
+  if(current&&prior&&fold(current).replace(/[!,.:\s–—-]+/g,'')===fold(prior).replace(/[!,.:\s–—-]+/g,'')){
+   const without=text.replace(filler,'').trim();
+   if(without)text=without.charAt(0).toUpperCase()+without.slice(1);
+  }
  }
- const shorter=text.replace(/\s*(?:Se precisar de algo mais,?\s*(?:me avise|estou [aà] disposi[cç][aã]o)[.!]?|Caso tenha outras d[uú]vidas,?\s*estou [aà] disposi[cç][aã]o[.!]?)$/i,'').trim();
- if(shorter)text=shorter;
- return text.slice(0,Math.max(100,Math.min(1500,Number(maxChars)||700))).trim();
+ if(!literal){
+  const shorter=text.replace(/\s*(?:Se precisar de algo mais,?\s*(?:me avise|estou [aà] disposi[cç][aã]o)[.!]?|Caso tenha outras d[uú]vidas,?\s*estou [aà] disposi[cç][aã]o[.!]?)$/i,'').trim();
+  if(shorter)text=shorter;
+ }
+ return (text||original).slice(0,Math.max(100,Math.min(1500,Number(maxChars)||700))).trim();
 }
