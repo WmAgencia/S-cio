@@ -1,6 +1,7 @@
 // Conversational owner-only advertising skill runner.
 // No automatic activation/spend. WA-AKG remains the WhatsApp provider.
 // No ChatGPT connector tokens or arbitrary Graph endpoints.
+import {buildApprovedAdCreativeDrafts,primaryCreativeDraft} from './socio-creative-studio.mjs';
 import {randomUUID} from 'node:crypto';
 import {requirePermission} from './team-permissions.mjs';
 import {assertApiFeature} from './tenant-features.mjs';
@@ -65,15 +66,7 @@ export function extractCampaignBrief(text,previous={}){
  return result;
 }
 export function skillAdCopy(brief,tenantName){
- const name=String(tenantName||'Loja').replace(/[<>]/g,'').slice(0,65);
- const category=(brief.category||'produtos').slice(0,45);
- const city=(brief.cityName||'sua região').slice(0,55);
- return {
-  name:('Sócio | '+category+' | '+city).slice(0,120),
-  headline:(category[0].toUpperCase()+category.slice(1)+' em '+city).slice(0,120),
-  message:('Conheça '+category+' de '+name+' em '+city+'. Consulte opções e disponibilidade'+
-   (brief.destination==='whatsapp'?' pelo WhatsApp.':'.')).slice(0,500)
- };
+ return primaryCreativeDraft(brief,tenantName);
 }
 export function chooseMetaCity(items,name){
  if(!Array.isArray(items)||!name)return null;
@@ -225,6 +218,16 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
    note:brief.destination==='whatsapp'?
     'Para conversas WhatsApp, a origem pode ser apenas indicativa conforme os dados do WA-AKG; não existe Pixel instalado dentro do WhatsApp.':null};
  }
+ // Check promotional claims before preparing even a paused Meta action.
+ const creativeDrafts=buildApprovedAdCreativeDrafts(brief,a.tenant_name);
+ if(creativeDrafts.reviewRequired){
+  brief.category=null;
+  await pool.query("UPDATE socio_skill_runs SET brief=$2::jsonb,updated_at=now() WHERE id=$1 AND tenant_id=$3 AND user_id=$4 AND status='collecting'",
+   [run.id,JSON.stringify(brief),a.active_tenant_id,a.user_id]);
+  return {runId:run.id,status:'collecting',brief:publicBrief(brief),
+   message:creativeDrafts.reviewReason+' Qual produto ou serviço você deseja anunciar, sem alegações não comprovadas?',
+   creativeReviewRequired:true};
+ }
  // Meta validates actual page/image/city ownership during prepareAdsPlan.
  const creative=skillAdCopy(brief,a.tenant_name);
  const input={...creative,pageId:brief.pageId,imageHash:brief.imageHash,cityName:brief.cityName,
@@ -251,6 +254,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   "WHERE id=$1 AND tenant_id=$5 AND user_id=$6 AND status='collecting'",
   [run.id,JSON.stringify(brief),plan.id,pixelPlanId,a.active_tenant_id,a.user_id]);
  return {runId:run.id,status:'ready',brief:publicBrief(brief),planId:plan.id,
+  creativeVariants:creativeDrafts.variants,selectedCreativeStyle:creativeDrafts.variants[0].style,
   message:'Preparei a campanha '+creative.name+'. Público: '+(brief.genders?.[0]===2?'mulheres, ':'')+
    'maiores de 18 anos em '+brief.cityName+'. Página: '+brief.pageId+'. Foto: '+(brief.imageName||'criativo enviado')+'. Orçamento diário definido: R$ '+
    (brief.dailyBudgetCents/100).toFixed(2).replace('.',',')+'/dia. Destino: '+
