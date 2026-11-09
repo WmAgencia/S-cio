@@ -25,7 +25,7 @@ test('PostgreSQL: one-off pilot binds real tenant owner, live channel, selected 
    [u,a,email(u),u2,b,email(u2)]);
   await pool.query("INSERT INTO channels(id,tenant_id,label,phone,provider,status) "+
    "VALUES($1,$2,'Ativo','5515981732994','waakg','connected'),"+
-   "($3,$4,'Outro','5515981732994','waakg','connected')",[ch,a,ch2,b]);
+   "($3,$4,'Outro','5515981732995','waakg','connected')",[ch,a,ch2,b]);
   await pool.query("INSERT INTO waakg_links(id,tenant_id,channel_id,session_id) "+
    "VALUES($1,$2,$3,'video_test_session_1'),($4,$5,$6,'video_test_session_2')",
    [randomUUID(),a,ch,randomUUID(),b,ch2]);
