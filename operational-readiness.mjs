@@ -17,12 +17,12 @@ export async function getOperationalReadiness(pool,tenantId,{
    "AND status='approved' ORDER BY version DESC LIMIT 1",[tenantId]),
   pool.query("SELECT COUNT(*)::int AS n FROM products WHERE tenant_id=$1 AND active=true",[tenantId])
  ]);
- const linked=channels.rows.filter(c=>Boolean(c.session_id));
+ const linked=channels.rows.filter(c=>c.status==='connected'&&Boolean(c.session_id));
  let confirmed=0,unreachable=0;
  const checked=[];
  for(const c of linked.slice(0,10)){
   try{
-   const remote=await getStatus(c.session_id,{timeoutMs:4500});
+   const remote=await getStatus(c.session_id,{timeoutMs:4500,env});
    const match=remote.connected&&remote.connectedNumber===
     String(c.phone||'').replace(/\D/g,'');
    if(match)confirmed++;
