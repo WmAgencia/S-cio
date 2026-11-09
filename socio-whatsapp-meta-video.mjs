@@ -74,20 +74,69 @@ export function latestOutgoingVideo(messages,jid,{now=Date.now()}={}){
  return item?{messageId:String(item.keyId||item.id),
   sentAt:new Date(timeMs(item.timestamp)).toISOString(),kind:'video',fromMe:true}:null;
 }
-export async function findLastOutgoingVideo(pool,a,{channelId,recipientPhone}={},{
+// Incoming videos are allowed ONLY from a uniquely registered owner/admin
+// of the same tenant. A message from an arbitrary WhatsApp contact can never
+// acquire administrative control or authorize a Meta upload.
+export function latestIncomingVideo(messages,jid,{now=Date.now()}={}){
+ if(!Array.isArray(messages)||!/^\d{12,15}@s\.whatsapp\.net$/.test(String(jid)))return null;
+ const matches=messages.filter(m=>{
+  const when=timeMs(m?.timestamp),id=String(m?.keyId||m?.id||'');
+  return m?.fromMe===false&&m?.remoteJid===jid&&
+   /^(VIDEO|videoMessage)$/i.test(String(m?.type||''))&&msgId(id)&&
+   when!==null&&when<=now+10000&&when>=now-maxAgeMs;
+ }).sort((a,b)=>timeMs(b.timestamp)-timeMs(a.timestamp));
+ const item=matches[0];
+ return item?{messageId:String(item.keyId||item.id),
+  sentAt:new Date(timeMs(item.timestamp)).toISOString(),kind:'video',fromMe:false}:null;
+}
+async function verifyIncomingOwner(pool,a,phone){
+ const result=await pool.query(
+  "SELECT id FROM users WHERE tenant_id=$1 AND active=true "+
+  "AND role IN ('owner','admin') AND phone IS NOT NULL "+
+  "AND regexp_replace(phone,'[^0-9]','','g')=$2 LIMIT 2",
+  [a.active_tenant_id,phone]);
+ if(result.rows.length!==1)
+  throw fail(403,'Este remetente não está identificado como proprietário/admin único da empresa no Sócio.');
+ return result.rows[0].id;
+}
+export function recentAdInstruction(messages,jid,direction,video,{now=Date.now()}={}){
+ if(!video||!Array.isArray(messages))return null;
+ const ref=timeMs(video.sentAt),inbound=direction==='incoming';
+ const rows=messages.filter(m=>{
+  const when=timeMs(m?.timestamp);
+  return m?.remoteJid===jid&&m.fromMe===!inbound&&
+   when!==null&&Math.abs(when-ref)<=10*60000&&when<=now+10000&&
+   typeof m.content==='string'&&m.content.trim().length>=10&&
+   /^(TEXT|conversation|extendedTextMessage)$/i.test(String(m.type||'TEXT'));
+ }).sort((a,b)=>timeMs(b.timestamp)-timeMs(a.timestamp));
+ const latest=rows.find(m=>/an[uú]ncio|campanha|divulgar|promover/i.test(m.content));
+ return latest?latest.content.replace(/[<>\r\n\t]/g,' ').replace(/\s+/g,' ').trim().slice(0,500):null;
+}
+export async function findLastOutgoingVideo(pool,a,{channelId,recipientPhone,direction='outgoing'}={},{
  env=process.env,getStatus=getSessionStatus,read=gatewayRead,now=Date.now()
 }={}){
  const recipient=brazilWhatsappDestination(recipientPhone);
+ if(!['outgoing','incoming'].includes(direction))throw fail(422,'Direção do vídeo inválida.');
+ if(direction==='incoming')await verifyIncomingOwner(pool,a,recipient);
  const source=await verifiedSourceSession(pool,a,channelId,{getStatus,env});
  const jid=recipient+'@s.whatsapp.net';
  let response;
  try{
-  const params=new URLSearchParams({jid,type:'VIDEO',fromMe:'true',limit:'50',page:'1'});
+  const params=new URLSearchParams({jid,type:'VIDEO',fromMe:direction==='incoming'?'false':'true',limit:'50',page:'1'});
   response=await read('/api/messages/'+encodeURIComponent(source.session_id)+'/search?'+params,{env});
  }catch{throw fail(503,'Não consegui consultar os vídeos deste WhatsApp. Tente novamente quando terminar a sincronização.');}
- const video=latestOutgoingVideo(response?.data,jid,{now});
- return {channelId:String(source.channel_id),recipientPhone:recipient,
-  video,found:Boolean(video),message:video?
+ const video=direction==='incoming'?latestIncomingVideo(response?.data,jid,{now}):
+  latestOutgoingVideo(response?.data,jid,{now});
+ let instruction=null;
+ if(video){
+  try{
+   const list=await read('/api/messages/'+encodeURIComponent(source.session_id)+'/search?'+
+    new URLSearchParams({jid,limit:'50',page:'1'}),{env});
+   instruction=recentAdInstruction(list?.data,jid,direction,video,{now});
+  }catch{} // Optional preview only; never broaden media search or change owner proof.
+ }
+ return {channelId:String(source.channel_id),recipientPhone:recipient,direction,
+  instruction,video,found:Boolean(video),message:video?
    'Último vídeo enviado encontrado. Confirme o envio para a biblioteca da Meta Ads; nenhum anúncio será criado.':
    'Nenhum vídeo enviado para esse contato foi encontrado no histórico sincronizado dos últimos 30 dias.'};
 }
@@ -131,7 +180,7 @@ export async function downloadVerifiedWhatsAppVideo({sessionId,messageId,env=pro
  return checkMetaVideoFile(bytes,mime);
 }
 export async function importLastOutgoingVideo(pool,a,{
- channelId,recipientPhone,messageId,confirmed
+ channelId,recipientPhone,direction='outgoing',messageId,confirmed
 }={},{
  env=process.env,getStatus=getSessionStatus,read=gatewayRead,
  download=downloadVerifiedWhatsAppVideo,upload=uploadAdVideo,
@@ -140,7 +189,7 @@ export async function importLastOutgoingVideo(pool,a,{
  permission(a);
  if(confirmed!==true||!msgId(messageId))
   throw fail(422,'Selecione o vídeo encontrado e confirme o upload.');
- const preview=await findLastOutgoingVideo(pool,a,{channelId,recipientPhone},
+ const preview=await findLastOutgoingVideo(pool,a,{channelId,recipientPhone,direction},
   {env,getStatus,read,now});
  if(!preview.video||preview.video.messageId!==messageId)
   throw fail(409,'O último vídeo mudou ou não está disponível. Atualize a busca antes de enviar.');

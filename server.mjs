@@ -530,7 +530,7 @@ async function handle(req,res){
   if(!limiter(simulationAttempts,'marketing-skill:'+a.user_id,60000,12))
    throw fail(429,'Muitas solicitações. Tente novamente em um minuto.');
   const {data}=await body(req,3500);
-  const answer=await speakToSocioSkill(pool,a,{message:data.message,runId:data.runId,imageHash:data.imageHash});
+  const answer=await speakToSocioSkill(pool,a,{message:data.message,runId:data.runId,imageHash:data.imageHash,videoId:data.videoId});
   await audit(a,'marketing.skill.request',{runId:answer.runId,status:answer.status,skill:answer.skillId||'ads.campaign.launch'});
   return json(res,200,answer);
  }
@@ -596,7 +596,8 @@ async function handle(req,res){
    throw fail(429,'Aguarde antes de consultar outro vídeo.');
   const qs=new URL(req.url,'http://local').searchParams;
   return json(res,200,await findLastOutgoingVideo(pool,a,{
-   channelId:qs.get('channelId'),recipientPhone:qs.get('recipientPhone')
+   channelId:qs.get('channelId'),recipientPhone:qs.get('recipientPhone'),
+   direction:qs.get('direction')||'outgoing'
   }));
  }
  if(pathname==='/api/marketing/tools/whatsapp-video/import'&&method==='POST'){
@@ -606,7 +607,7 @@ async function handle(req,res){
   const {data}=await body(req,3000);
   const result=await importLastOutgoingVideo(pool,a,{
    channelId:data.channelId,recipientPhone:data.recipientPhone,
-   messageId:data.messageId,confirmed:data.confirmed
+   direction:data.direction||'outgoing',messageId:data.messageId,confirmed:data.confirmed
   });
   await audit(a,'marketing.official.video.imported',{
    channelId:data.channelId,accountId:result.accountId,videoId:result.videoId,

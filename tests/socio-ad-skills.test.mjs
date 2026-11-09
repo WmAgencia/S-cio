@@ -199,3 +199,59 @@ test('unverified advertising promises are stopped before preparing any Meta plan
  assert.equal(prepare,0);
  assert.equal(execute,0);
 });
+
+test('video received through Sócio can prepare a R$ 6 WhatsApp campaign in Sorocaba, never activated',async()=>{
+ const pool=fakePool(),prepared=[],executed=[],videoId='1824013938791734';
+ const withoutImages=async(db,a,kind)=>kind==='images'?{items:[]}:read(db,a,kind);
+ const opts={resolve,read:withoutImages,
+  prepare:async(_p,_a,kind,input)=>{
+   prepared.push({kind,input});return {id:randomUUID()};
+  },
+  execute:async(_p,_a,id,confirmed)=>{
+   assert.equal(confirmed,true);
+   executed.push(id);
+   return {status:'succeeded',result:{campaignId:'998811',adsetId:'998812',adId:'998813',delivery:'PAUSED'}};
+  }
+ };
+ const text='Crie um anúncio para WhatsApp, em Sorocaba, gastando 6 reais por dia, com esse vídeo';
+ const first=await speakToAdSkill(pool,actor,{message:text,videoId},opts);
+ assert.equal(first.status,'collecting','Never infer the subject from raw video metadata.');
+ assert.match(first.message,/produto ou serviço/);
+ assert.equal(first.brief.dailyBudgetCents,600);
+ assert.equal(first.brief.cityName,'Sorocaba');
+ assert.equal(first.brief.hasVideo,true);
+ assert.equal(prepared.length,0);
+ const ready=await speakToAdSkill(pool,actor,{message:'serviços de publicidade',runId:first.runId},opts);
+ assert.equal(ready.status,'ready');
+ assert.equal(ready.brief.hasVideo,true);
+ assert.equal(ready.brief.hasPhoto,false);
+ assert.equal(prepared.length,1);
+ assert.equal(prepared[0].kind,'create_whatsapp');
+ assert.equal(prepared[0].input.videoId,videoId);
+ assert.equal(prepared[0].input.imageHash,undefined);
+ assert.equal(prepared[0].input.dailyBudgetCents,600);
+ assert.equal(prepared[0].input.cityName,'Sorocaba');
+ assert.equal(prepared[0].input.whatsappPhone,'5515999999999');
+ assert.equal(validateAdsPlan('create_whatsapp',prepared[0].input).videoId,videoId);
+ assert.equal(executed.length,0);
+ const denied=await speakToAdSkill(pool,actor,{message:'não autorizei',runId:first.runId},opts);
+ assert.equal(denied.status,'ready');assert.equal(executed.length,0);
+ const approved=await speakToAdSkill(pool,actor,{message:'pode criar',runId:first.runId},opts);
+ assert.equal(approved.status,'completed');
+ assert.equal(executed.length,1);
+ assert.match(approved.message,/PAUSADOS/);
+ const replay=await speakToAdSkill(pool,actor,{message:'pode criar',runId:first.runId},opts);
+ assert.equal(replay.status,'completed');
+ assert.equal(executed.length,1);
+});
+test('campaign accepts either video or image, never both and not unrecognized video IDs',()=>{
+ const base={name:'Criativo teste',message:'Texto legítimo',headline:'Título',
+  pageId:'123456789',whatsappPhone:'5515999999999',
+  cityKey:'654321',cityName:'Sorocaba',dailyBudgetCents:600};
+ const result=validateAdsPlan('create_whatsapp',{...base,videoId:'1824013938791734'});
+ assert.equal(result.videoId,'1824013938791734');
+ assert.equal(result.imageHash,undefined);
+ assert.throws(()=>validateAdsPlan('create_whatsapp',{...base,videoId:'invalid'}),{status:422});
+ assert.throws(()=>validateAdsPlan('create_whatsapp',{...base,videoId:'1824013938791734',imageHash}),{status:422});
+ assert.throws(()=>validateAdsPlan('create_whatsapp',base),{status:422});
+});
