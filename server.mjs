@@ -1,4 +1,5 @@
 import {readAdsTool,readSelectedAdMedia,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
+import {listTenantVideoChannels,findLastOutgoingVideo,importLastOutgoingVideo} from './socio-whatsapp-meta-video.mjs';
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {previewMetaCommand} from './meta-ads-commands.mjs';
 import {SOCIO_AD_SKILLS} from './socio-ad-skills.mjs';
@@ -583,6 +584,34 @@ async function handle(req,res){
   if(!limiter(simulationAttempts,'meta-image:'+a.user_id,60000,8))throw fail(429,'Aguarde antes de enviar outra imagem.');
   const {data}=await body(req,4500000);const result=await uploadAdImage(pool,a,data.contentBase64);
   await audit(a,'marketing.official.image.uploaded',{hash:result.hash,accountId:result.accountId});return json(res,201,result);
+ }
+ if(pathname==='/api/marketing/tools/whatsapp-video/channels'&&method==='GET'){
+  requirePermission(a,'marketing.manage');
+  return json(res,200,await listTenantVideoChannels(pool,a));
+ }
+ if(pathname==='/api/marketing/tools/whatsapp-video/last'&&method==='GET'){
+  requirePermission(a,'marketing.manage');
+  if(!limiter(simulationAttempts,'wa-video-last:'+a.user_id,60000,8))
+   throw fail(429,'Aguarde antes de consultar outro vídeo.');
+  const qs=new URL(req.url,'http://local').searchParams;
+  return json(res,200,await findLastOutgoingVideo(pool,a,{
+   channelId:qs.get('channelId'),recipientPhone:qs.get('recipientPhone')
+  }));
+ }
+ if(pathname==='/api/marketing/tools/whatsapp-video/import'&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  if(!limiter(simulationAttempts,'wa-video-import:'+a.user_id,60000,2))
+   throw fail(429,'Aguarde antes de importar outro vídeo.');
+  const {data}=await body(req,3000);
+  const result=await importLastOutgoingVideo(pool,a,{
+   channelId:data.channelId,recipientPhone:data.recipientPhone,
+   messageId:data.messageId,confirmed:data.confirmed
+  });
+  await audit(a,'marketing.official.video.imported',{
+   channelId:data.channelId,accountId:result.accountId,videoId:result.videoId,
+   status:result.status,replayed:Boolean(result.replayed)
+  });
+  return json(res,result.replayed?200:201,result);
  }
  if(pathname==='/api/marketing/tools/plan'&&method==='POST'){
   requirePermission(a,'marketing.manage');const {data}=await body(req,12000);
