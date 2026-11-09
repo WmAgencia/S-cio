@@ -183,8 +183,8 @@ export async function importLastOutgoingVideo(pool,a,{
   await pool.query("UPDATE socio_whatsapp_meta_video_imports "+
    "SET status=$2,updated_at=now() WHERE id=$1 AND tenant_id=$3",
    [claimId,error?.uncertain?'uncertain':'failed',a.active_tenant_id]).catch(()=>{});
-  if(error?.uncertain)throw fail(503,
-   'Não foi possível confirmar o resultado na Meta. Confira a biblioteca antes de qualquer nova tentativa.');
+  if(error?.uncertain)throw Object.assign(fail(503,
+   'Não foi possível confirmar o resultado na Meta. Confira a biblioteca antes de qualquer nova tentativa.'),{uncertain:true});
   throw error;
  }
 }
