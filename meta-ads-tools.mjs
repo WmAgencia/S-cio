@@ -20,7 +20,7 @@ async function context(pool,a,options={},write=false){
  if(write&&!grant.scopes.includes('ads_management'))throw fail(403,'Autorize ads_management ao conectar sua conta Meta.');
  const secret=JSON.parse(openMarketingSecret(grant.token_encrypted,options.env||process.env));
  if(secret.tenant!==a.active_tenant_id||secret.user!==a.user_id)throw fail(403,'Autorização de outra empresa.');
- return {account,token:secret.token,options};
+ return {account,token:secret.token,options,tenantId:a.active_tenant_id};
 }
 async function graph(c,path,params={},method='GET'){
  if(!/^\/(act_\d+|\d+|search)(\/(campaigns|adsets|ads|adcreatives|adimages|adspixels|insights|promote_pages|previews))?$/.test(path))throw fail(422,'Operação Meta inválida.');
@@ -148,6 +148,59 @@ export async function uploadAdImage(pool,a,base64,options={}){
  if(!result?.hash)throw fail(503,'A Meta não retornou o identificador da imagem. Confira a biblioteca antes de reenviar.');
  return {hash:result.hash,url:result.url||null,accountId:c.account.id};
 }
+
+const MAX_META_VIDEO_BYTES=64*1024*1024;
+export function checkMetaVideoFile(bytes,mime){
+ if(!Buffer.isBuffer(bytes)||bytes.length<32||bytes.length>MAX_META_VIDEO_BYTES)
+  throw fail(bytes?.length>MAX_META_VIDEO_BYTES?413:422,'Vídeo inválido ou acima de 64 MB.');
+ const type=String(mime||'').split(';')[0].trim().toLowerCase();
+ // WhatsApp normally transcodes video to ISO-BMFF MP4. Binary signature
+ // takes precedence over untrusted gateway MIME metadata.
+ if(!['video/mp4','application/octet-stream','video/quicktime'].includes(type)||
+  bytes.toString('ascii',4,8)!=='ftyp')
+  throw fail(422,'O vídeo precisa estar em MP4 válido.');
+ return {bytes,mime:'video/mp4'};
+}
+export async function postMetaAdVideo({accountId,token,env=process.env,video,request=fetch,
+ title='Criativo do WhatsApp'}={}){
+ const clean=checkMetaVideoFile(video?.bytes,video?.mime);
+ if(typeof accountId!=='string'||!/^act_\d{4,30}$/.test(accountId)||!token)
+  throw fail(422,'Conta Meta ou autorização inválida.');
+ const cfg=officialConfig(env);
+ const uploadUrl=new URL('https://graph.facebook.com/'+cfg.version+'/'+accountId+'/advideos');
+ const form=new FormData();
+ form.set('source',new Blob([clean.bytes],{type:clean.mime}),'socio-whatsapp.mp4');
+ form.set('title',String(title||'Criativo do WhatsApp').replace(/[<>\r\n]/g,' ').slice(0,110));
+ form.set('appsecret_proof',createHmac('sha256',cfg.secret).update(token).digest('hex'));
+ let response,data;
+ try{
+  response=await request(uploadUrl,{
+   method:'POST',headers:{Authorization:'Bearer '+token},
+   body:form,redirect:'error',signal:AbortSignal.timeout(120000)
+  });
+  data=await response.json();
+ }catch{
+  throw Object.assign(fail(503,'A Meta não confirmou o upload. Consulte a biblioteca antes de tentar novamente.'),
+   {uncertain:true});
+ }
+ if(!response.ok||data?.error){
+  const msg=String(data?.error?.error_user_msg||data?.error?.error_user_title||'Formato, conta ou permissão não aceitos.')
+   .replace(/[<>\r\n]/g,' ').slice(0,220);
+  throw fail(422,'A Meta recusou o vídeo: '+msg);
+ }
+ if(!/^\d{4,30}$/.test(String(data?.id||'')))
+  throw Object.assign(fail(503,'Upload sem ID de vídeo confirmado. Consulte a biblioteca da Meta.'),
+   {uncertain:true});
+ return {videoId:String(data.id),accountId,processing:true,
+  message:'Arquivo enviado à biblioteca Meta. O processamento do vídeo pode continuar em andamento; nenhuma campanha foi criada.'};
+}
+export async function uploadAdVideo(pool,a,video,options={}){
+ const c=await context(pool,a,options,true);
+ return postMetaAdVideo({accountId:c.account.id,token:c.token,
+  env:options.env||process.env,video,request:options.request||fetch,
+  title:options.title||'Criativo enviado pelo WhatsApp'});
+}
+
 export function validateAdsPlan(kind,input){
  if(!input||typeof input!=='object'||Array.isArray(input))throw fail(422,'Operação inválida.');
  if(kind==='create'||kind==='create_whatsapp'){
@@ -172,10 +225,12 @@ export function validateAdsPlan(kind,input){
  if(kind==='create_ad'){
   const name=text(input.name,120),url=safeUrl(input.url),message=text(input.message,2200),
    headline=text(input.headline,120);
-  if(!name||!url||!message||!headline||!numeric(input.adsetId)||
-   !numeric(input.pageId)||!text(input.imageHash,100))
-   throw fail(422,'Escolha conjunto, página, imagem, link HTTPS, título e texto para o novo anúncio.');
-  return {name,url,message,headline,adsetId:input.adsetId,pageId:input.pageId,imageHash:input.imageHash};
+  const imageHash=text(input.imageHash,100),videoId=numeric(input.videoId)?String(input.videoId):null;
+  if(!name||!url||!message||!headline||!numeric(input.adsetId)||!numeric(input.pageId)||
+    Number(Boolean(imageHash))+Number(Boolean(videoId))!==1)
+   throw fail(422,'Escolha conjunto, Página, um vídeo importado OU uma imagem, link HTTPS, título e texto do anúncio.');
+  return {name,url,message,headline,adsetId:input.adsetId,pageId:input.pageId,
+   ...(videoId?{videoId}:{imageHash})};
  }
  if(!['status','rename','budget'].includes(kind)||!['campaign','adset','ad'].includes(input.entity)||!numeric(input.id))throw fail(422,'Selecione uma campanha, conjunto ou anúncio válido.');
  if(kind==='status'){
@@ -200,9 +255,27 @@ function ensureSafeActivation(entity,status){
  if(status==='ACTIVE'&&['WITH_ISSUES','DISAPPROVED'].includes(entity?.effective_status))
   throw fail(409,'Este anúncio ou campanha tem problemas de veiculação ou foi rejeitado. Corrija a causa na Meta antes de preparar uma ativação.');
 }
-async function validateAssets(c,payload){
+async function validateAssets(c,payload,pool){
  const pages=await availablePages(c);
  if(!(pages.data||[]).some(p=>p.id===payload.pageId))throw fail(403,'Página não autorizada para esta conta.');
+ if(payload.videoId){
+  // Restrict video creation to media uploaded and audited by THIS tenant
+  // into THIS account. A video readable by the token in a different ad
+  // account never qualifies to create an advertisement here.
+  if(!pool)throw fail(503,'Não foi possível validar a origem do vídeo.');
+  const ownedVideo=await pool.query(
+   "SELECT id FROM socio_whatsapp_meta_video_imports WHERE tenant_id=$1 "+
+   "AND account_id=$2 AND meta_video_id=$3 AND status='uploaded' LIMIT 1",
+   [c.tenantId,c.account.id,payload.videoId]);
+  if(!ownedVideo.rowCount)throw fail(403,'Vídeo não foi importado e confirmado nesta conta da empresa.');
+  let video;
+  try{video=await graph(c,'/'+payload.videoId,{fields:'id,status'});}
+  catch{throw fail(409,'Não foi possível confirmar se o vídeo terminou de processar na Meta.');}
+  const status=typeof video?.status==='object'?video.status.video_status:video?.status;
+  if(String(video?.id)!==payload.videoId||String(status||'').toLowerCase()!=='ready')
+   throw fail(409,'A Meta ainda não confirmou que o vídeo está pronto. Verifique a biblioteca antes de criar o anúncio.');
+  return;
+ }
  const images=await graph(c,'/'+c.account.id+'/adimages',{fields:'hash,name',hashes:[payload.imageHash],limit:100});
  if(!(images.data||[]).some(i=>i.hash===payload.imageHash))throw fail(403,'Imagem não encontrada nesta conta. Atualize a biblioteca.');
 }
@@ -210,7 +283,7 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
  const c=await context(pool,a,options,true),payload=validateAdsPlan(kind,input);
  let summary;
  if(kind==='create'||kind==='create_whatsapp'){
-  await validateAssets(c,payload);
+  await validateAssets(c,payload,pool);
   if(kind==='create_whatsapp'){
    const channel=await pool.query("SELECT id FROM channels WHERE tenant_id=$1 AND provider='waakg' AND phone=$2 AND status='connected' LIMIT 1",
     [a.active_tenant_id,payload.whatsappPhone]);
@@ -233,10 +306,13 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
    account:c.account,name:payload.name,pixelName:payload.name,operation:'create_pixel',createsPixel:true};
  }else if(kind==='create_ad'){
   await owned(c,payload.adsetId);
-  await validateAssets(c,payload);
-  summary={description:'Adicionar anúncio com imagem a um conjunto existente da conta selecionada. Criativo e anúncio serão criados PAUSADOS.',
+  await validateAssets(c,payload,pool);
+  summary={description:payload.videoId?
+   'Adicionar anúncio com VÍDEO previamente importado ao conjunto existente. Criativo e anúncio serão criados PAUSADOS; sem início de gastos.':
+   'Adicionar anúncio com imagem a um conjunto existente da conta selecionada. Criativo e anúncio serão criados PAUSADOS.',
    account:c.account,name:payload.name,message:payload.message,headline:payload.headline,
-   pageId:payload.pageId,imageHash:payload.imageHash,destination:payload.url,adsetId:payload.adsetId};
+   pageId:payload.pageId,...(payload.videoId?{videoId:payload.videoId}:{imageHash:payload.imageHash}),
+   destination:payload.url,adsetId:payload.adsetId};
  }else{
   const entity=await owned(c,payload.id,payload.entity);
   if(kind==='status')ensureSafeActivation(entity,payload.status);
@@ -264,7 +340,7 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
  try{
   if(plan.kind==='create'||plan.kind==='create_whatsapp'){
    const whatsapp=plan.kind==='create_whatsapp';
-   await validateAssets(c,p);
+   await validateAssets(c,p,pool);
    const campaign=await graph(c,'/'+c.account.id+'/campaigns',{name:p.name,objective:whatsapp?'OUTCOME_ENGAGEMENT':'OUTCOME_TRAFFIC',special_ad_categories:[],status:'PAUSED',is_adset_budget_sharing_enabled:false},'POST');
    if(!numeric(campaign.id))throw Object.assign(fail(503,'A Meta não retornou o ID da campanha.'),{uncertain:true});
    result.campaignId=campaign.id;await progress();
@@ -297,11 +373,16 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
    await progress();
   }else if(plan.kind==='create_ad'){
    await owned(c,p.adsetId);
-   await validateAssets(c,p);
+   await validateAssets(c,p,pool);
    const creative=await graph(c,'/'+c.account.id+'/adcreatives',{
-    name:p.name+' · Criativo',object_story_spec:{page_id:p.pageId,link_data:{
-     image_hash:p.imageHash,link:p.url,message:p.message,name:p.headline,
-     call_to_action:{type:'LEARN_MORE',value:{link:p.url}}}}},'POST');
+    name:p.name+' · Criativo',object_story_spec:{page_id:p.pageId,
+     ...(p.videoId?{video_data:{
+      video_id:p.videoId,message:p.message,title:p.headline,
+      call_to_action:{type:'LEARN_MORE',value:{link:p.url}}
+     }}:{link_data:{
+      image_hash:p.imageHash,link:p.url,message:p.message,name:p.headline,
+      call_to_action:{type:'LEARN_MORE',value:{link:p.url}}
+     }})}},'POST');
    if(!numeric(creative.id))throw Object.assign(fail(503,'Não foi possível confirmar o criativo.'),{uncertain:true});
    result.creativeId=creative.id;await progress();
    const ad=await graph(c,'/'+c.account.id+'/ads',{

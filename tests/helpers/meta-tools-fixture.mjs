@@ -32,6 +32,7 @@ export async function metaToolsScenario(pool){
   if(path==='/act_123456/ads')return response({data:[{id:'554433',creative:{object_story_spec:{page_id:'445566'}}}]});
   if(path==='/act_123456')return response({id:'act_123456',currency:'BRL',amount_spent:'1234',spend_cap:'2000',business:{id:'777888'}});
   if(path==='/445566')return response({id:'445566',name:'Página existente na conta'});
+  if(path==='/1616096903323428')return response({id:'1616096903323428',status:{video_status:'ready'}});
   if(path==='/998877/adsets')return response({data:[{id:'121212',name:'Conjunto de teste',effective_status:'ACTIVE'}]});
   if(path==='/998877/ads')return response({data:[{id:'343434',name:'Anúncio de teste',effective_status:'ACTIVE'}]});
   if(path==='/998877/insights')return response({data:[{campaign_id:'998877',spend:'12.27',clicks:'488',impressions:'3098'}]});
@@ -178,5 +179,43 @@ export async function metaToolsScenario(pool){
  assert.match(rejected.error,/Já existe Pixel/);
  assert.equal(writes.length,writesBeforePixel+1,'No extra pixel created when Meta lists an existing one');
  await assert.rejects(prepareAdsPlan(pool,{...a,role:'agent'},'create_pixel',{name:'Outro pixel'},opts),{status:403});
+
+
+ // A WhatsApp MP4 in the Meta LIBRARY is not an advertisement. Only an
+ // explicitly reviewed plan creates one PAUSED, using a video belonging to
+ // the tenant's selected ad account. Never accept a video from another tenant.
+ const source=await pool.query(
+  "SELECT id FROM channels WHERE tenant_id=$1 AND provider='waakg' ORDER BY id LIMIT 1",
+  [a.active_tenant_id]
+ );
+ await pool.query(
+  "INSERT INTO socio_whatsapp_meta_video_imports "+
+  "(id,tenant_id,channel_id,user_id,account_id,provider_message_id,recipient_hash,status,meta_video_id) "+
+  "VALUES($1,$2,$3,$4,$5,'fixture-video-id','"+
+   "a".repeat(64)+"','uploaded','1616096903323428')",
+  [randomUUID(),a.active_tenant_id,source.rows[0].id,a.user_id,'act_123456']
+ );
+ const videoAd={name:'Anúncio com vídeo WhatsApp',url:'https://example.test',
+  headline:'Conheça o produto',message:'Veja nosso produto.',pageId:'445566',
+  videoId:'1616096903323428',adsetId:'998877'};
+ const beforeVideo=writes.length;
+ const videoPlan=await prepareAdsPlan(pool,a,'create_ad',videoAd,opts);
+ assert.equal(videoPlan.summary.videoId,videoAd.videoId);
+ assert.equal(writes.length,beforeVideo,'Video plan is read-only until approval');
+ const videoMade=await executeAdsPlan(pool,a,videoPlan.id,true,opts);
+ assert.equal(videoMade.status,'succeeded');
+ assert.equal(writes.length,beforeVideo+2);
+ assert.equal(writes.at(-2).path,'/act_123456/adcreatives');
+ const story=JSON.parse(writes.at(-2).body.object_story_spec);
+ assert.equal(story.video_data.video_id,videoAd.videoId);
+ assert.equal(story.link_data,undefined);
+ assert.equal(writes.at(-1).body.status,'PAUSED');
+ assert.equal(videoMade.result.delivery,'PAUSED');
+ const replayVideo=await executeAdsPlan(pool,a,videoPlan.id,true,opts);
+ assert.equal(replayVideo.replayed,true);
+ assert.equal(writes.length,beforeVideo+2,'Never duplicate a confirmed video ad');
+ await assert.rejects(prepareAdsPlan(pool,a,'create_ad',
+  {...videoAd,videoId:'999999999999'},opts),{status:403});
+ await assert.rejects(prepareAdsPlan(pool,{...a,active_tenant_id:randomUUID()},'create_ad',videoAd,opts));
 
 }
