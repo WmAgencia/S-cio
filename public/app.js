@@ -1100,7 +1100,7 @@ async function agent(){
  const labHistory=[]; // local to this training screen, never saved as customer memory
  view.innerHTML=
  '<div class="two-pane train"><div class="card card-pad"><div class="section-title">Identidade e comportamento</div><form id="agentForm" class="form-stack"><label>Nome do agente<input name="name" required maxlength="80" value="'+e(ag.name||'Sócio')+'"></label><label>Tom de voz<input name="tone" required maxlength="300" value="'+e(ag.tone||'Profissional e natural')+'"></label><label>Instruções e limites<textarea name="instructions" required maxlength="6000" rows="8">'+e(ag.instructions||'')+'</textarea></label><label>Modo operacional<select name="enabled"><option value="false"'+(!ag.enabled?' selected':'')+'>Em preparação</option><option value="true"'+(ag.enabled?' selected':'')+'>Preparado para integrar (não envia sozinho)</option></select></label><button type="submit" class="btn primary">Salvar personalidade →</button><p class="form-note">Marcar como preparado não conecta um WhatsApp ou libera envios automáticos.</p></form></div>'+
- '<div class="card"><div class="panel-head"><div><h2>Laboratório de conversas</h2><p>Faça perguntas como se fosse um cliente.</p></div>'+badge('Simulação','gray')+'</div><div class="messages-preview" id="simulationMessages"><div class="bubble">Olá! Este é seu laboratório. Configure produtos e treinamento e faça uma pergunta para experimentar a personalidade do seu Sócio.</div></div><p class="form-note" id="simulationQuality" role="status" aria-live="polite">Teste isolado: nenhuma mensagem é enviada ao WhatsApp. A revisão automática avalia apenas sinais de linguagem.</p><form class="chat-compose" id="simulateForm"><input name="message" required maxlength="1200" placeholder="Ex.: Quais serviços vocês oferecem?" autocomplete="off"><button type="submit" class="btn primary">Enviar ↗</button></form>'+(missing?'<div class="info-strip" style="margin:14px">Configure GROQ_API_KEY no Railway para ativar as respostas do Groq no simulador.</div>':'')+'</div></div>';
+ '<div class="card"><div class="panel-head"><div><h2>Laboratório de conversas</h2><p>Faça perguntas como se fosse um cliente.</p></div>'+badge('Simulação','gray')+'</div><div class="messages-preview" id="simulationMessages"><div class="bubble">Olá! Este é seu laboratório. Configure produtos e treinamento e faça uma pergunta para experimentar a personalidade do seu Sócio.</div></div><p class="form-note" id="simulationQuality" role="status" aria-live="polite">Teste isolado: nenhuma mensagem é enviada ao WhatsApp. A revisão automática avalia apenas sinais de linguagem.</p><p class="form-note" id="simulationEvidence" aria-live="polite">A origem das informações aprovadas aparecerá aqui quando a busca estiver ativada.</p><form class="chat-compose" id="simulateForm"><input name="message" required maxlength="1200" placeholder="Ex.: Quais serviços vocês oferecem?" autocomplete="off"><button type="submit" class="btn primary">Enviar ↗</button></form>'+(missing?'<div class="info-strip" style="margin:14px">Configure GROQ_API_KEY no Railway para ativar as respostas do Groq no simulador.</div>':'')+'</div></div>';
  $('#agentForm').addEventListener('submit',async ev=>{ev.preventDefault();const d=formValues(ev.currentTarget);await action(async()=>{await api('/api/agent','PUT',{...d,enabled:d.enabled==='true'});toast('Personalidade atualizada.');await agent();});});
  $('#simulateForm').addEventListener('submit',async ev=>{
   ev.preventDefault();const form=ev.currentTarget,txt=val(form,'message');if(!txt)return;
@@ -1114,6 +1114,20 @@ async function agent(){
     const flags=Array.isArray(result.quality?.signals)?result.quality.signals:[];
     const labels={repeated_greeting:'saudação repetida',generic_closing:'encerramento genérico',robotic_intro:'apresentação robótica',length:'resposta longa',empty:'resposta vazia'};
     quality.textContent=(flags.length?'Revisar linguagem: '+flags.map(flag=>labels[flag]||flag).join(', ')+'.':'Sem sinais superficiais de linguagem robótica nesta resposta.')+' Isso não comprova a exatidão das informações.';
+   }
+   const evidence=$('#simulationEvidence');
+   if(evidence){
+    const k=result.knowledgeEvidence;
+    if(!k)evidence.textContent='Busca de fontes aprovadas ainda não ativada neste ambiente.';
+    else {
+     const version=k.provenance?.versionNumber!=null?'Versão aprovada '+k.provenance.versionNumber+'. ':'';
+     const sections=Array.isArray(k.matches)?k.matches.map(x=>x.id+' — '+x.title).slice(0,5):[];
+     const label=k.status==='supported'?'Trechos relacionados encontrados.':
+      k.status==='no_approved_knowledge'?'Nenhum treinamento aprovado disponível.':
+      'Não foram encontradas evidências suficientes no manual aprovado.';
+     evidence.textContent=version+label+(sections.length?' Seções consultadas: '+sections.join('; ')+'.':'')+
+      ' Verifique os fatos antes de publicar o atendimento.';
+    }
    }
    msgs.insertAdjacentHTML('beforeend','<div class="bubble">'+e(result.reply||'Não foi possível gerar uma resposta.')+'</div>');
    const cards=Array.isArray(result.productCards)?result.productCards:[];
