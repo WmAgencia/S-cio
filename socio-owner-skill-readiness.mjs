@@ -15,14 +15,15 @@ export async function ownerWhatsAppReadiness(pool,actor,{env=process.env,getStat
   pool.query("SELECT ch.id,ch.status,ch.phone,l.session_id FROM channels ch "+
    "LEFT JOIN waakg_links l ON l.channel_id=ch.id AND l.tenant_id=ch.tenant_id "+
    "WHERE ch.tenant_id=$1 AND ch.provider='waakg' ORDER BY ch.id LIMIT 20",[tenantId]),
-  pool.query("SELECT COUNT(*)::int AS matches FROM ("+
-   " SELECT c.id FROM conversations c JOIN channels ch ON ch.id=c.channel_id "+
+  pool.query("SELECT COUNT(*)::int AS matches, "+
+   "COALESCE(array_agg(DISTINCT verified.channel_id),ARRAY[]::uuid[]) AS channel_ids FROM ("+
+   " SELECT c.id,c.channel_id FROM conversations c JOIN channels ch ON ch.id=c.channel_id "+
    " AND ch.tenant_id=c.tenant_id AND ch.provider='waakg' "+
    " JOIN users u ON u.tenant_id=c.tenant_id AND u.active=true "+
    " AND u.role IN ('owner','admin') AND u.phone IS NOT NULL "+
    " AND regexp_replace(u.phone,'[^0-9]','','g')=c.customer_phone "+
    " WHERE c.tenant_id=$1 AND c.customer_phone ~ '^[0-9]{10,15}$' "+
-   " GROUP BY c.id HAVING COUNT(u.id)=1"+
+   " GROUP BY c.id,c.channel_id HAVING COUNT(u.id)=1"+
    ") verified",[tenantId])
  ]);
  const flags={
@@ -35,19 +36,28 @@ export async function ownerWhatsAppReadiness(pool,actor,{env=process.env,getStat
  };
  const selected=(channels.rows||[]).filter(ch=>ch.status==='connected'&&validSessionId(ch.session_id)).slice(0,10);
  let gatewayConnected=0,gatewayMismatch=0,gatewayUnreachable=0;
+ const liveChannelIds=new Set();
  for(const ch of selected){
   try{
    const live=await getStatus(ch.session_id,{env});
-   if(live.connected&&live.connectedNumber&&live.connectedNumber===String(ch.phone||'').replace(/\D/g,''))gatewayConnected++;
+   if(live.connected&&live.connectedNumber&&live.connectedNumber===String(ch.phone||'').replace(/\D/g,'')){
+   gatewayConnected++;
+   liveChannelIds.add(String(ch.id));
+  }
    else gatewayMismatch++;
   }catch{gatewayUnreachable++;}
  }
  const matchedConversations=Number(owners.rows?.[0]?.matches||0);
+ const verifiedOwnerChannels=new Set((owners.rows?.[0]?.channel_ids||[]).map(String));
+ // A verified owner elsewhere in this tenant does not authorize the currently
+ // connected number. Both proofs must refer to the SAME WA-AKG channel.
+ const ownerOnConnectedSession=[...liveChannelIds].some(id=>verifiedOwnerChannels.has(id));
  const blockers=[];
  if(!channels.rows?.length)blockers.push('Nenhum canal WA-AKG vinculado a esta empresa.');
  if(!selected.length)blockers.push('Nenhum canal WA-AKG está marcado como conectado e com sessão válida.');
  if(selected.length&&!gatewayConnected)blockers.push('O WA-AKG não confirmou uma sessão conectada ao número do canal.');
  if(!matchedConversations)blockers.push('Não há conversa privada de proprietário/admin com telefone único verificado no tenant.');
+ else if(!ownerOnConnectedSession)blockers.push('A conversa verificada do proprietário não está no mesmo canal de uma sessão WA-AKG conectada.');
  if(!flags.outbound)blockers.push('O envio de respostas pelo gateway está desabilitado.');
  if(!flags.commands)blockers.push('O processamento de comandos do proprietário está desabilitado.');
  // Media and audio are optional, but must be enabled for full image/voice workflow.
@@ -58,7 +68,7 @@ export async function ownerWhatsAppReadiness(pool,actor,{env=process.env,getStat
   readOnly:true,tenantScoped:true,
   channels:(channels.rows||[]).length,connectedSessions:gatewayConnected,
   sessionProblems:gatewayMismatch+gatewayUnreachable,
-  verifiedOwnerConversations:matchedConversations,
+  verifiedOwnerConversations:matchedConversations,ownerOnConnectedSession,
   textReady,photoReady,audioReady,
   settings:{commandsEnabled:flags.commands,mediaEnabled:flags.media,
    audioEnabled:flags.audio,outboundEnabled:flags.outbound,pilotTenantSelected:flags.pilotTenant,
