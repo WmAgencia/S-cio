@@ -1,5 +1,6 @@
 import {readAdsTool,readSelectedAdMedia,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
 import {listTenantVideoChannels,findLastOutgoingVideo,importLastOutgoingVideo} from './socio-whatsapp-meta-video.mjs';
+import {runVideoPilotOnce} from './socio-whatsapp-meta-video-pilot.mjs';
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {previewMetaCommand} from './meta-ads-commands.mjs';
 import {SOCIO_AD_SKILLS} from './socio-ad-skills.mjs';
@@ -2274,6 +2275,22 @@ async function main(){
   if(process.env.NODE_ENV!=='test'){
    const warming=setTimeout(()=>{void prewarmThalitaAcknowledgements().catch(()=>{});},1500);
    warming.unref();
+  }
+  // Explicit one-time, source+destination+Meta-account scoped pilot. Not a
+  // recurring worker and never a campaign activation. The DB receipt prevents
+  // duplicate uploads across restarts or simultaneous service replicas.
+  if(process.env.SOCIO_WA_VIDEO_PILOT_ONCE==='true'&&process.env.NODE_ENV!=='test'){
+   const oneTime=setTimeout(()=>{
+    if(workersBlocked())return;
+    void runVideoPilotOnce(pool).then(result=>{
+     console.info('[socio-wa-meta-video-pilot]',JSON.stringify(result));
+    }).catch(error=>{
+     console.warn('[socio-wa-meta-video-pilot]',JSON.stringify({
+      reason:'UNEXPECTED_ERROR',code:String(error?.status||'UNEXPECTED').slice(0,16)
+     }));
+    });
+   },10000);
+   oneTime.unref();
   }
  });
  process.on('SIGTERM',()=>server.close(()=>Promise.allSettled([metaBrowser.close(),flowImages.close()]).then(()=>pool.end()).then(()=>process.exit(0))));
