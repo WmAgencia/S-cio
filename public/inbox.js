@@ -3,7 +3,7 @@
    when the dedicated WA-AKG gateway is operating in read-only mode. */
 (function(){
  'use strict';
- function create({api,e,toast,view,changeView,openQr}){
+ function create({api,e,toast,view,changeView,openQr,canManageMemory=false}){
   let conversations=[],active=null,thread=null,filter='all',search='',filterMessages='',selected=new Set();
   let reply=null,menuId=null,pointer=null,longTimer=null,refreshTimer=null,searchTimer=null,draftTimer=null;
   let infoOpen=false,helpOpen=false,menuAt=null,team=null,lock=false,disposed=false,lastFetch=0,syncing=false,cancelSync=false,suppressClick=false,noteMode=false,sendKey=null,sendFingerprint=null;
@@ -175,7 +175,10 @@
     '<div class="wa-compose-foot"><span>Enter '+(asNote?'salva nota':'envia mensagem')+' · Shift + Enter pula linha · Alt + R responde</span>'+
       '<div class="wa-compose-extras">'+
        (enabled&&!controlledByAi?'<button type="button" class="wa-inline-link" data-chat-action="toggle-notes">'+(noteMode?'Voltar ao '+(instagram?'Instagram':'WhatsApp'):'Nota interna')+'</button>':'')+
-       '<button type="button" class="wa-inline-link" data-chat-action="ai-suggest">✳ Sugerir resposta</button></div></div>'+
+       '<button type="button" class="wa-inline-link" data-chat-action="ai-suggest">✳ Sugerir resposta</button>'+ 
+       (canManageMemory&&!instagram?'<button type="button" class="wa-inline-link" data-chat-action="memory-status">Memória da IA</button>'+ 
+        '<button type="button" class="wa-inline-link" data-chat-action="memory-clear" title="Limpa apenas os assuntos resumidos; não apaga mensagens">Limpar memória</button>':'')+
+       '</div></div>'+ 
     '<div class="wa-ai-suggestion hidden" id="inboxSuggestion" role="status" aria-live="polite"></div>';
   }
   function threadMarkup(c){
@@ -363,6 +366,19 @@
    if(action==='save-note'){await submitNote();return;}
    if(action==='submit-compose'){await submitComposer();return;}
    if(action==='toggle-notes'){noteMode=!noteMode;renderComposer();byId('inboxDraft')?.focus();return;}
+   if(action==='memory-status'&&canManageMemory){
+    const result=await api('/api/conversations/'+active+'/ai-memory');
+    const topics=result.state?.recentTopics||[];
+    toast(!result.enabled?'Memória persistente desativada neste ambiente.':!result.exists?'Ainda não há memória da IA nesta conversa.':
+     'Assuntos lembrados: '+(topics.join(', ')||'nenhum identificado')+'. Somente rótulos, sem mensagens.');
+    return;
+   }
+   if(action==='memory-clear'&&canManageMemory){
+    if(!window.confirm('Limpar a memória de assuntos desta conversa? As mensagens originais serão preservadas.'))return;
+    await api('/api/conversations/'+active+'/ai-memory','DELETE',{});
+    toast('Memória de assuntos limpa. O histórico original permanece disponível.');
+    return;
+   }
    if(action==='take'){await setPref({handling_mode:'human'});return;}
    if(action==='assist'){await setPref({handling_mode:'ai_assist'});toast(thread?.capabilities?.aiAutoReply?'Conversa entregue à IA; respostas seguem as configurações do agente.':'Conversa atribuída à IA. Automatização exige Groq configurado e ativação do envio.');return;}
    if(action==='pin'){await setPref({pinned:!c.pinned});return;}
