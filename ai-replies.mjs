@@ -6,6 +6,7 @@ import {NATURAL_CONVERSATION_RULES,selectRelevantKnowledge,buildConversationInpu
 import {groqResponse,groqReady} from './groq-client.mjs';
 import {analyzeSocioContinuity,socioContinuityPrompt,classifySocioTopic} from './socio-prospector-continuity.mjs';
 import {deliverToConversation,canAutoReply} from './socio-outbound.mjs';
+import {memoryEnabled,refreshConversationMemory,mergeConversationMemory} from './socio-conversation-memory.mjs';
 
 export function buildAiInstructions({name,tenantName,tone,instructions,knowledge,products=[],question='',simulation=false,catalogText=null,continuity=null}){
  const catalog=typeof catalogText==='string'?catalogText:products.length?products.map(p=>
@@ -87,7 +88,15 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
   ]);
   history.rows.reverse();
   const context=buildConversationInput(history.rows,m.body);
-  const continuity=analyzeSocioContinuity(history.rows,m.body);
+  // When opted in, persist ONLY topic labels (no extra customer text).
+  // A memory storage outage cannot authorize a send or change the existing
+  // tenant ownership/outbox checks; fall back to current history context.
+  let remembered=null;
+  if(memoryEnabled(env)){
+   try{remembered=await refreshConversationMemory(pool,{tenantId:m.tenant_id,conversationId:m.conversation_id,env});}
+   catch{remembered=null;}
+  }
+  const continuity=mergeConversationMemory(remembered?.state,analyzeSocioContinuity(history.rows,m.body));
   const instructions=buildAiInstructions({name:m.agent_name,tenantName:m.tenant_name,tone:m.tone,
    instructions:m.instructions,knowledge:m.knowledge_md,products:products.rows,question:m.body,continuity});
   const result=await respond({instructions,

@@ -8,7 +8,7 @@ export const TABLES=Object.freeze([
  'conversations','instagram_outbox','messages','audit','training_jobs','training_job_items',
  'training_versions','socio_training_interviews','waakg_links','waakg_scans','waakg_scan_chats',
  'waakg_import_snapshots','product_variants','product_media','product_campaign_links',
- 'conversation_ui_state','message_ui_state','training_auto_runs',
+ 'conversation_ui_state','message_ui_state','socio_conversation_memory','training_auto_runs',
  'message_outbox','ai_reply_attempts','sales_quotes','sales_orders','sales_payment_events','quote_requests','sale_intents','wa_tracking_links','wa_lead_attributions','meta_report_schedules','meta_report_runs','socio_skill_runs','socio_owner_skill_receipts','socio_owner_media_receipts',
  'socio_billing_accounts','socio_billing_webhook_events','socio_google_ads_states',
  'socio_google_ads_grants','socio_tracking_sites','socio_tracking_events'

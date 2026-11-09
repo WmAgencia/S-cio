@@ -43,6 +43,7 @@ import {processLiveInboxSync} from './inbox-live-sync.mjs';
 import {processNextAiReply,buildAiInstructions} from './ai-replies.mjs';
 import {normalizeLabHistory,buildLabInput,polishCustomerReply,reviewReplyStyle} from './socio-intelligence.mjs';
 import {analyzeSocioContinuity} from './socio-prospector-continuity.mjs';
+import {readConversationMemory,clearConversationMemory,purgeExpiredConversationMemories} from './socio-conversation-memory.mjs';
 import {reconcileConfirmedOutbox} from './socio-outbound.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
@@ -1747,6 +1748,23 @@ async function handle(req,res){
    productCards:matchCatalogProducts(data.message,catalogProducts)
   });
  }
+ // Topic memory is tenant-owned and stores no raw chat. Authorized staff can
+ // inspect or clear it without changing the source WhatsApp conversation.
+ const memoryMatch=pathname.match(/^\/api\/conversations\/([a-f0-9-]{36})\/ai-memory$/i);
+ if(memoryMatch&&(method==='GET'||method==='DELETE')){
+  requirePermission(a,'training.manage');
+  const conversationId=memoryMatch[1];
+  if(method==='GET'){
+   return json(res,200,await readConversationMemory(pool,{
+    tenantId:a.active_tenant_id,conversationId
+   }));
+  }
+  const cleared=await clearConversationMemory(pool,{
+   tenantId:a.active_tenant_id,conversationId
+  });
+  await audit(a,'agent.memory.cleared',{conversationId});
+  return json(res,200,cleared);
+ }
  // Inbox v2: tenant-bound WhatsApp-style management. Keep legacy API for
  // existing dashboards and migrations; never expose gateway send operations.
  if(pathname==='/api/inbox/v2'||pathname==='/api/inbox/capabilities'||pathname==='/api/inbox/sync'||
@@ -2144,6 +2162,17 @@ async function main(){
   finally{ownerAlertBusy=false;}
  },12000);
  ownerAlertWorker.unref();
+ // Physically purge expired derived topic summaries on startup and hourly,
+ // even if the feature was disabled after previously storing a memory.
+ // Underlying customer messages are never deleted by this worker.
+ const purgeConversationTopics=async()=>{
+  if(workersBlocked())return;
+  try{await purgeExpiredConversationMemories(pool);}
+  catch(error){console.warn('[socio-ai-memory-purge]',String(error?.code||'PURGE_ERROR').slice(0,35));}
+ };
+ void purgeConversationTopics();
+ const memoryPurgeWorker=setInterval(purgeConversationTopics,3600000);
+ memoryPurgeWorker.unref();
  // AI only attempts replies if explicitly enabled, agent enabled and each
  // conversation handed over. Claims are durable to avoid duplicate messages.
  let replyBusy=false;

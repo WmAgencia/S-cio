@@ -1267,6 +1267,7 @@ async function inbox(){
  if(!window.SocioInbox)throw new Error('Módulo de conversas não foi carregado. Recarregue a página.');
  if(activeInbox)activeInbox.cleanup();
  activeInbox=window.SocioInbox.create({api,e,toast,view,changeView,
+  canManageMemory:state.me.user.platformOwner||['owner','admin','manager'].includes(state.me.user.role),
   openQr:()=>window.SocioUX.openQr({api,toast,
    canManage:state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role),
    onConnected:()=>state.view==='inbox'?inbox():Promise.resolve()})
