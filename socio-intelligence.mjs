@@ -139,7 +139,7 @@ export function polishCustomerReply(reply,{hasConversation=false,maxChars=700,in
  const original=String(reply||'').trim();
  if(!original)return '';
  let text=original;
- const literal=/\b(?:roteiro|mensagem inicial|mensagem de boas vindas|escrev|redig|como cumpriment|como saud|frase de abertura|texto de abertura|fala literalmente|citar exatamente|texto exato)\b/
+ const literal=/\b(?:roteiro|mensagem inicial|mensagem de boas vindas|escrev\w*|redig\w*|como cumpriment\w*|como saud\w*|frase de abertura|texto de abertura|fala literalmente|citar exatamente|texto exato)\b/
   .test(fold(incoming));
  if(hasConversation&&!literal){
   const next=text.replace(/^(?:oi+|oie+|ol[aá]|bom dia|boa tarde|boa noite)(?:\s*,\s*[\p{L}]{2,28})?[!,.:\s–—-]+(?:tudo bem[?!,.:\s]*)?/iu,'').trim();
