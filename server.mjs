@@ -1739,7 +1739,8 @@ async function handle(req,res){
   const response=await groqResponse({
    instructions:system,input:buildLabInput(history,data.message),maxOutputTokens:550
   });
-  const reply=polishCustomerReply(response.reply,{hasConversation,incoming:data.message});
+  const reply=polishCustomerReply(response.reply,{hasConversation,incoming:data.message,
+   previousAssistant:history.filter(turn=>turn.role==='assistant').at(-1)?.content||''});
   return json(res,200,{
    reply,simulation:true,provider:'groq',model:response.model,
    quality:reviewReplyStyle(response.reply,{hasConversation}),
