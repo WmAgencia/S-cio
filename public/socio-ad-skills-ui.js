@@ -76,6 +76,87 @@
    videoConfirm.className='btn primary';videoConfirm.disabled=true;videoForm.append(videoConfirm);
    const resultText=E('p');resultText.setAttribute('role','status');videoForm.append(resultText);
    let selectedVideo=null,loadedChannels=false;
+   // A library upload is NOT an ad. Review and confirm a separate PAUSED
+   // ad in an existing ad set; the selected Meta account never changes here.
+   const adForm=E('div');adForm.className='form-stack';videoBox.append(adForm);
+   const adTitle=E('h3','Criar anúncio PAUSADO com o vídeo importado');adForm.append(adTitle);
+   adForm.append(E('p','O vídeo precisa concluir o processamento na Meta. Selecione conjunto, Página, link e textos; o Sócio prepara a prévia antes de criar o anúncio.'));
+   const adAccount=E('p','Conta selecionada: '+String(account.account_id||''));
+   adForm.append(adAccount);
+   const videoStatus=E('p');videoStatus.setAttribute('role','status');adForm.append(videoStatus);
+   const adInputs={};
+   function field(name,label,tag='input'){
+    const labelEl=E('label',label);adForm.append(labelEl);
+    const el=E(tag);el.setAttribute('aria-label',label);
+    adForm.append(el);adInputs[name]=el;return el;
+   }
+   const adset=field('adsetId','Conjunto de anúncios existente','select');
+   const page=field('pageId','Página autorizada','select');
+   const adName=field('name','Nome do anúncio');adName.maxLength=120;
+   const landing=field('url','Site HTTPS de destino');landing.type='url';
+   const headline=field('headline','Título do anúncio');headline.maxLength=120;
+   const primaryText=field('message','Texto principal do anúncio','textarea');primaryText.maxLength=2200;primaryText.rows=3;
+   const previewAd=E('button','Preparar anúncio com vídeo (pausado)');previewAd.type='button';
+   previewAd.className='btn soft';previewAd.disabled=true;adForm.append(previewAd);
+   const confirmAd=E('button','Confirmar criação do anúncio pausado');confirmAd.type='button';
+   confirmAd.className='btn primary';confirmAd.disabled=true;adForm.append(confirmAd);
+   const adResult=E('p');adResult.setAttribute('role','status');adForm.append(adResult);
+   let uploadedVideoId=null,adPlanId=null;
+   function resetAdPlan(){adPlanId=null;confirmAd.disabled=true;adResult.textContent='';}
+   for(const el of Object.values(adInputs))el.addEventListener('input',resetAdPlan);
+   async function loadMetaAdAssets(){
+    const [sets,pages]=await Promise.all([
+     api('/api/marketing/tools/adsets'),api('/api/marketing/tools/pages')
+    ]);
+    adset.replaceChildren();page.replaceChildren();
+    for(const item of Array.isArray(sets.items)?sets.items:[]){
+     const option=E('option',String(item.name||'Conjunto')+' · '+String(item.id||''));
+     option.value=String(item.id||'');adset.append(option);
+    }
+    for(const item of Array.isArray(pages.items)?pages.items:[]){
+     const option=E('option',String(item.name||'Página')+' · '+String(item.id||''));
+     option.value=String(item.id||'');page.append(option);
+    }
+    previewAd.disabled=!adset.options.length||!page.options.length||!uploadedVideoId;
+    if(!adset.options.length||!page.options.length)
+     videoStatus.textContent='Esta conta precisa de uma Página autorizada e um conjunto existente antes de criar o anúncio.';
+   }
+   previewAd.addEventListener('click',async()=>{
+    resetAdPlan();previewAd.disabled=true;
+    adResult.textContent='Conferindo vídeo, Página, conjunto e dados da campanha…';
+    try{
+     if(!uploadedVideoId)throw Error('Primeiro importe o vídeo para esta conta Meta.');
+     const plan=await api('/api/marketing/tools/plan','POST',{
+      kind:'create_ad',input:{
+       name:adName.value.trim(),adsetId:adset.value,pageId:page.value,
+       url:landing.value.trim(),headline:headline.value.trim(),
+       message:primaryText.value.trim(),videoId:uploadedVideoId
+      }
+     });
+     if(!plan.id)throw Error('A Meta não confirmou uma prévia válida.');
+     adPlanId=plan.id;confirmAd.disabled=false;
+     adResult.textContent='Prévia confirmada: '+String(plan.summary?.description||'Anúncio PAUSADO')+
+      ' · '+String(plan.summary?.name||'')+
+      ' · título: '+String(plan.summary?.headline||'')+
+      ' · destino: '+String(plan.summary?.destination||'')+
+      '. Confira e clique em Confirmar para criar SEM ativar.';
+    }catch(e){adResult.textContent='Prévia indisponível: '+e.message;}
+    finally{previewAd.disabled=false;}
+   });
+   confirmAd.addEventListener('click',async()=>{
+    if(!adPlanId)return;
+    const planId=adPlanId;adPlanId=null;confirmAd.disabled=true;
+    adResult.textContent='Criando criativo e anúncio PAUSADOS na Meta… Não repita sem conferir o histórico.';
+    try{
+     const res=await api('/api/marketing/tools/execute','POST',{planId,confirmed:true});
+     if(res.status!=='succeeded'||!res.result?.adId)
+      throw Error(res.error||'A Meta não confirmou o anúncio. Verifique o histórico antes de tentar novamente.');
+     adResult.textContent='Anúncio criado PAUSADO na Meta. ID: '+res.result.adId+
+      ' · Criativo ID: '+String(res.result.creativeId||'')+
+      '. A veiculação não foi ativada e não gera gasto.';
+    }catch(e){adResult.textContent=e.message+' Confira o Gerenciador de Anúncios antes de qualquer nova tentativa.';}
+   });
+
    async function loadChannels(){
     const res=await api('/api/marketing/tools/whatsapp-video/channels');
     const channels=Array.isArray(res.channels)?res.channels:[];
@@ -125,6 +206,11 @@
       (answer.videoId?' ID Meta: '+answer.videoId+'.':'')+
       (answer.replayed?' Operação já registrada, não repetida.':'');
      selectedVideo=null;
+     if(answer.status==='uploaded'&&answer.videoId){
+      uploadedVideoId=String(answer.videoId);
+      videoStatus.textContent='Vídeo importado. ID '+uploadedVideoId+'. Verificando os recursos necessários para criar o anúncio…';
+      try{await loadMetaAdAssets();}catch(e){videoStatus.textContent='O vídeo foi importado, mas não consegui listar Página e conjuntos: '+e.message;}
+     }
     }catch(e){resultText.textContent=e.message+' Consulte a biblioteca Meta antes de tentar novamente.';selectedVideo=null;}
    });
   }
