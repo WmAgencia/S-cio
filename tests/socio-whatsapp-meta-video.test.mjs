@@ -87,8 +87,9 @@ test('Video preview asks gateway for only outbound VIDEO to the provided recipie
    const url=new URL(path,'https://wa.example.test');
    assert.match(path,/\/api\/messages\/socio_test_a17\/search/);
    assert.equal(url.searchParams.get('jid'),recipient+'@s.whatsapp.net');
-   assert.equal(url.searchParams.get('type'),'VIDEO');
-   assert.equal(url.searchParams.get('fromMe'),'true');
+   assert.equal(url.searchParams.get('type'),null);
+   assert.equal(url.searchParams.get('fromMe'),null);
+   assert.equal(url.searchParams.get('limit'),'100');
    assert.equal(options.env,env);
    return {data:[message(),message({fromMe:false,keyId:'not-owned'})]};
   }});

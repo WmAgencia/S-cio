@@ -122,19 +122,20 @@ export async function findLastOutgoingVideo(pool,a,{channelId,recipientPhone,dir
  const jid=recipient+'@s.whatsapp.net';
  let response;
  try{
-  const params=new URLSearchParams({jid,type:'VIDEO',fromMe:direction==='incoming'?'false':'true',limit:'50',page:'1'});
-  response=await read('/api/messages/'+encodeURIComponent(source.session_id)+'/search?'+params,{env});
- }catch{throw fail(503,'Não consegui consultar os vídeos deste WhatsApp. Tente novamente quando terminar a sincronização.');}
- const video=direction==='incoming'?latestIncomingVideo(response?.data,jid,{now}):
-  latestOutgoingVideo(response?.data,jid,{now});
- let instruction=null;
- if(video){
-  try{
-   const list=await read('/api/messages/'+encodeURIComponent(source.session_id)+'/search?'+
-    new URLSearchParams({jid,limit:'50',page:'1'}),{env});
-   instruction=recentAdInstruction(list?.data,jid,direction,video,{now});
-  }catch{} // Optional preview only; never broaden media search or change owner proof.
+  // Use the known-good WA-AKG conversation history route. Filtering by
+  // fromMe/type is done locally, so unsupported gateway query params cannot
+  // prevent reading the owner's video. We NEVER return other chats' messages.
+  const params=new URLSearchParams({jid,limit:'100',page:'1'});
+  response=await read('/api/messages/'+encodeURIComponent(source.session_id)+'/search?'+params,
+   {env,timeoutMs:16000});
+  if(!Array.isArray(response?.data))throw fail(503,'Formato inesperado do histórico WA-AKG.');
+ }catch(error){
+  throw Object.assign(fail(503,'Não consegui consultar o histórico de vídeos deste WhatsApp.'),
+   {phase:'gateway_history',originalCode:Number(error?.status||503)});
  }
+ const video=direction==='incoming'?latestIncomingVideo(response.data,jid,{now}):
+  latestOutgoingVideo(response.data,jid,{now});
+ const instruction=video?recentAdInstruction(response.data,jid,direction,video,{now}):null;
  return {channelId:String(source.channel_id),recipientPhone:recipient,direction,
   instruction,video,found:Boolean(video),message:video?
    'Último vídeo enviado encontrado. Confirme o envio para a biblioteca da Meta Ads; nenhum anúncio será criado.':
@@ -214,8 +215,10 @@ export async function importLastOutgoingVideo(pool,a,{
    accountId:account.id,replayed:true,
    message:'Esse vídeo já teve uma tentativa de upload. Não vou reenviar automaticamente.'};
  }
+ let phase='media_download';
  try{
   const video=await download({sessionId:source.session_id,messageId,env});
+  phase='meta_video_upload';
   const outcome=await upload(pool,a,video,{
    env,title:'Sócio WhatsApp · '+preview.video.sentAt.slice(0,16).replace('T',' '),
   });
@@ -229,6 +232,7 @@ export async function importLastOutgoingVideo(pool,a,{
    processing:true,uploadedBytes:video.bytes.length,
    message:'Vídeo enviado à biblioteca de vídeos da Meta. Processamento pode estar pendente. Nenhuma campanha ou anúncio foi criado.'};
  }catch(error){
+  if(!error.phase)error.phase=phase;
   await pool.query("UPDATE socio_whatsapp_meta_video_imports "+
    "SET status=$2,updated_at=now() WHERE id=$1 AND tenant_id=$3",
    [claimId,error?.uncertain?'uncertain':'failed',a.active_tenant_id]).catch(()=>{});
