@@ -72,7 +72,7 @@
    videoDirection.append(incoming,outgoing);videoDirection.value='incoming';videoForm.append(videoDirection);
    videoForm.append(E('label','Número da outra pessoa na conversa'));
    const videoRecipient=E('input');videoRecipient.type='tel';videoRecipient.maxLength=24;
-   videoRecipient.placeholder='DDD + telefone, por exemplo 15 99999-9999';
+   videoRecipient.placeholder='Telefone cadastrado do proprietário, por exemplo 15 99999-9999';
    videoRecipient.setAttribute('aria-label','Número da conversa com o vídeo');videoForm.append(videoRecipient);
    const findVideoBtn=E('button','Localizar último vídeo da conversa');findVideoBtn.type='button';
    findVideoBtn.className='btn soft';videoForm.append(findVideoBtn);
@@ -85,7 +85,7 @@
    prepareFromVideo.type='button';prepareFromVideo.className='btn soft';prepareFromVideo.disabled=true;
    videoForm.append(prepareFromVideo);
    prepareFromVideo.addEventListener('click',()=>{
-    if(!linkedVideoId)return;
+    if(!uploadedVideoId)return;
     if(selectedInstruction)applyInstruction(selectedInstruction);
     adForm.scrollIntoView({block:'nearest',behavior:'smooth'});
    });
@@ -93,7 +93,7 @@
    // ad in an existing ad set; the selected Meta account never changes here.
    const adForm=E('div');adForm.className='form-stack';videoBox.append(adForm);
    const adTitle=E('h3','Criar campanha de WhatsApp PAUSADA com o vídeo recebido');adForm.append(adTitle);
-   adForm.append(E('p','Confira a cidade, o orçamento diário, a Página e o WhatsApp que receberá clientes. O Sócio prepara uma campanha completa e PAUSADA.'));
+   adForm.append(E('p','Confira a cidade, o orçamento diário, a Página e o WhatsApp que receberá clientes. Para vídeo RECEBIDO, o remetente precisa estar cadastrado como proprietário/admin da empresa. O Sócio prepara uma campanha completa e PAUSADA.'));
    const adAccount=E('p','Conta selecionada: '+String(account.account_id||''));
    adForm.append(adAccount);
    const videoStatus=E('p');videoStatus.setAttribute('role','status');adForm.append(videoStatus);
@@ -140,6 +140,8 @@
    });
    function resetAdPlan(){adPlanId=null;confirmAd.disabled=true;adResult.textContent='';}
    for(const el of Object.values(adInputs))el.addEventListener('input',resetAdPlan);
+   city.addEventListener('input',()=>{cityKey.replaceChildren();resetAdPlan();});
+   cityKey.addEventListener('change',resetAdPlan);
    async function loadMetaAdAssets(){
     const pages=await api('/api/marketing/tools/pages');
     page.replaceChildren();
@@ -213,7 +215,7 @@
     selectedInfo.textContent='';resultText.textContent='';
    }
    videoRecipient.addEventListener('input',clearVideo);
-   videoChannel.addEventListener('change',clearVideo);
+   videoChannel.addEventListener('change',()=>{clearVideo();whatsapp.value=sourceNumbers[videoChannel.value]||'';});
    videoDirection.addEventListener('change',clearVideo);
    findVideoBtn.addEventListener('click',async()=>{
     clearVideo();findVideoBtn.disabled=true;selectedInfo.textContent='Verificando sessão, destino e histórico de vídeos…';
