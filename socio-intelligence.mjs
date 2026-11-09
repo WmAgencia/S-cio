@@ -125,7 +125,7 @@ export function reviewReplyStyle(reply,{hasConversation=false}={}){
  if(!text)signals.push('empty');
  if(hasConversation&&/^(oi|ol[aá]|bom dia|boa tarde|boa noite)[!,.\s]/i.test(text))
   signals.push('repeated_greeting');
- if(/\b(caso (?:tenha|necessite) (?:de )?(?:alguma|mais) (?:d[uú]vida|informa[cç][oõ]es)|se precisar de algo mais)\b/i.test(text))
+ if(/\b(caso (?:tenha|necessite) (?:de )?(?:alguma|mais|outras?) (?:d[uú]vida|informa[cç][oõ]es)|se precisar de algo mais)\b/i.test(text))
   signals.push('generic_closing');
  if(/\b(como (?:uma? )?(?:intelig[eê]ncia artificial|modelo de linguagem))\b/i.test(text))
   signals.push('robotic_intro');
