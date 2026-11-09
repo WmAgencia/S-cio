@@ -42,6 +42,7 @@ import {handleInboxApi} from './inbox-api.mjs';
 import {processLiveInboxSync} from './inbox-live-sync.mjs';
 import {processNextAiReply,buildAiInstructions} from './ai-replies.mjs';
 import {normalizeLabHistory,buildLabInput,polishCustomerReply,reviewReplyStyle} from './socio-intelligence.mjs';
+import {analyzeSocioContinuity} from './socio-prospector-continuity.mjs';
 import {reconcileConfirmedOutbox} from './socio-outbound.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
@@ -1731,13 +1732,14 @@ async function handle(req,res){
   const system=buildAiInstructions({
    name:config.name,tenantName:a.tenant_name,tone:config.tone,
    instructions:config.instructions,knowledge:config.knowledge_md,
-   catalogText:catalog,question:data.message,simulation:true
+   catalogText:catalog,question:data.message,simulation:true,continuity
   });
   const hasConversation=history.some(turn=>turn.role==='assistant');
+  const continuity=analyzeSocioContinuity(history.map(turn=>({direction:turn.role==='assistant'?'outbound':'inbound',body:turn.content})),data.message);
   const response=await groqResponse({
    instructions:system,input:buildLabInput(history,data.message),maxOutputTokens:550
   });
-  const reply=polishCustomerReply(response.reply,{hasConversation});
+  const reply=polishCustomerReply(response.reply,{hasConversation,incoming:data.message});
   return json(res,200,{
    reply,simulation:true,provider:'groq',model:response.model,
    quality:reviewReplyStyle(response.reply,{hasConversation}),
