@@ -65,6 +65,7 @@ export async function runVideoPilotOnce(pool,{
   "UPDATE socio_whatsapp_meta_video_pilot_jobs "+
   "SET status=$2,meta_video_id=$3,reason_code=$4,updated_at=now() WHERE id=$1 AND tenant_id=$5",
   [config.id,status,videoId,reasonCode,r.tenant_id]);
+ let phase='video_history';
  try{
   const input={channelId:r.channel_id,recipientPhone:config.recipient};
   // Exact cutoff is fixed when the user requested this one video; a later
@@ -75,6 +76,7 @@ export async function runVideoPilotOnce(pool,{
    await writeAudit('not_found');
    return {processed:true,reason:'PILOT_VIDEO_NOT_FOUND'};
   }
+  phase='video_import';
   const output=await importVideo(pool,actor,{
    ...input,messageId:latest.video.messageId,confirmed:true
   },{env,now:config.cutoff});
@@ -91,6 +93,7 @@ export async function runVideoPilotOnce(pool,{
   await writeAudit(error?.uncertain?'uncertain':'failed');
   return {processed:true,reason:error?.uncertain?'PILOT_UNCERTAIN':'PILOT_FAILED',
    status:error?.uncertain?'uncertain':'failed',
-   errorCode:String(error?.status||'UNEXPECTED').slice(0,16)};
+   errorCode:String(error?.status||'UNEXPECTED').slice(0,16),
+   phase:['gateway_history','video_history','video_import','media_download','meta_video_upload'].includes(error?.phase)?error.phase:phase};
  }
 }
