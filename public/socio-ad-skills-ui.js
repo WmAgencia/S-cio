@@ -69,10 +69,10 @@
    const videoDirection=E('select');videoDirection.setAttribute('aria-label','Direção da mídia');
    const outgoing=E('option','Vídeo enviado por este WhatsApp');outgoing.value='outgoing';
    const incoming=E('option','Vídeo recebido de proprietário autorizado');incoming.value='incoming';
-   videoDirection.append(outgoing,incoming);videoForm.append(videoDirection);
+   videoDirection.append(incoming,outgoing);videoDirection.value='incoming';videoForm.append(videoDirection);
    videoForm.append(E('label','Número da outra pessoa na conversa'));
    const videoRecipient=E('input');videoRecipient.type='tel';videoRecipient.maxLength=24;
-   videoRecipient.placeholder='DDD + telefone, por exemplo 15 99999-9999';
+   videoRecipient.placeholder='Telefone cadastrado do proprietário, por exemplo 15 99999-9999';
    videoRecipient.setAttribute('aria-label','Número da conversa com o vídeo');videoForm.append(videoRecipient);
    const findVideoBtn=E('button','Localizar último vídeo da conversa');findVideoBtn.type='button';
    findVideoBtn.className='btn soft';videoForm.append(findVideoBtn);
@@ -85,16 +85,15 @@
    prepareFromVideo.type='button';prepareFromVideo.className='btn soft';prepareFromVideo.disabled=true;
    videoForm.append(prepareFromVideo);
    prepareFromVideo.addEventListener('click',()=>{
-    if(!linkedVideoId)return;
-    box.value=(selectedInstruction||'Crie um anúncio para WhatsApp com esse vídeo').slice(0,1400);
-    runId=null;
-    form.requestSubmit();
+    if(!uploadedVideoId)return;
+    if(selectedInstruction)applyInstruction(selectedInstruction);
+    adForm.scrollIntoView({block:'nearest',behavior:'smooth'});
    });
    // A library upload is NOT an ad. Review and confirm a separate PAUSED
    // ad in an existing ad set; the selected Meta account never changes here.
    const adForm=E('div');adForm.className='form-stack';videoBox.append(adForm);
-   const adTitle=E('h3','Criar anúncio PAUSADO com o vídeo importado');adForm.append(adTitle);
-   adForm.append(E('p','O vídeo precisa concluir o processamento na Meta. Selecione conjunto, Página, link e textos; o Sócio prepara a prévia antes de criar o anúncio.'));
+   const adTitle=E('h3','Criar campanha de WhatsApp PAUSADA com o vídeo recebido');adForm.append(adTitle);
+   adForm.append(E('p','Confira a cidade, o orçamento diário, a Página e o WhatsApp que receberá clientes. Para vídeo RECEBIDO, o remetente precisa estar cadastrado como proprietário/admin da empresa. O Sócio prepara uma campanha completa e PAUSADA.'));
    const adAccount=E('p','Conta selecionada: '+String(account.account_id||''));
    adForm.append(adAccount);
    const videoStatus=E('p');videoStatus.setAttribute('role','status');adForm.append(videoStatus);
@@ -104,52 +103,73 @@
     const el=E(tag);el.setAttribute('aria-label',label);
     adForm.append(el);adInputs[name]=el;return el;
    }
-   const adset=field('adsetId','Conjunto de anúncios existente','select');
+   const city=field('city','Cidade');city.placeholder='Sorocaba';
+   const citySearch=E('button','Pesquisar cidade na Meta');citySearch.type='button';citySearch.className='btn soft';adForm.append(citySearch);
+   const cityKey=field('cityKey','Selecione a cidade encontrada','select');
+   const budget=field('budget','Orçamento diário (R$)');budget.type='number';budget.min='1';budget.step='0.01';
+   const whatsapp=field('whatsapp','WhatsApp conectado para receber clientes');whatsapp.maxLength=19;
    const page=field('pageId','Página autorizada','select');
-   const adName=field('name','Nome do anúncio');adName.maxLength=120;
-   const landing=field('url','Site HTTPS de destino');landing.type='url';
-   const headline=field('headline','Título do anúncio');headline.maxLength=120;
-   const primaryText=field('message','Texto principal do anúncio','textarea');primaryText.maxLength=2200;primaryText.rows=3;
-   const previewAd=E('button','Preparar anúncio com vídeo (pausado)');previewAd.type='button';
+   const adName=field('name','Nome da campanha');adName.maxLength=120;adName.value='Sócio | Campanha WhatsApp com vídeo';
+
+   const headline=field('headline','Título do anúncio');headline.maxLength=120;headline.value='Fale com nossa equipe';
+   const primaryText=field('message','Texto principal do anúncio','textarea');primaryText.maxLength=2200;primaryText.rows=3;primaryText.value='Conheça nossos produtos e serviços. Fale com a equipe pelo WhatsApp para saber mais.';
+   const previewAd=E('button','Preparar campanha WhatsApp PAUSADA');previewAd.type='button';
    previewAd.className='btn soft';previewAd.disabled=true;adForm.append(previewAd);
-   const confirmAd=E('button','Confirmar criação do anúncio pausado');confirmAd.type='button';
+   const confirmAd=E('button','Confirmar campanha PAUSADA na Meta');confirmAd.type='button';
    confirmAd.className='btn primary';confirmAd.disabled=true;adForm.append(confirmAd);
    const adResult=E('p');adResult.setAttribute('role','status');adForm.append(adResult);
-   let uploadedVideoId=null,adPlanId=null;
+   let uploadedVideoId=null,adPlanId=null,sourceNumbers={};
+   function applyInstruction(text){
+    const phrase=String(text||'').replace(/\s+/g,' ');
+    const amount=phrase.match(/(?:gastando|investindo|investir|R\$)\s*(?:R\$\s*)?(\d+(?:[,.]\d{1,2})?)/i)||phrase.match(/(\d+(?:[,.]\d{1,2})?)\s*reais?\s*por dia/i);
+    if(amount)budget.value=amount[1].replace(',','.');
+    const match=phrase.match(/\bem\s+([A-Za-zÀ-ÿ -]{3,50}?)(?=,|\s+(?:gastando|investindo|com (?:esse|este|o) v[ií]deo)|$)/i);
+    if(match)city.value=match[1].trim();
+    resetAdPlan();
+   }
+   citySearch.addEventListener('click',async()=>{
+    resetAdPlan();cityKey.replaceChildren();citySearch.disabled=true;
+    try{const r=await api('/api/marketing/tools/cities?q='+encodeURIComponent(city.value.trim()));
+     for(const item of Array.isArray(r.items)?r.items:[]){
+      if(!/^\d+$/.test(String(item.key||'')))continue;
+      const o=E('option',[item.name,item.region,item.country_name].filter(Boolean).join(' · '));o.value=item.key;cityKey.append(o);
+     }
+     if(!cityKey.options.length)throw Error('Cidade não encontrada na Meta.');
+     adResult.textContent='Selecione a cidade correta e confira a prévia.';
+    }catch(e){adResult.textContent=e.message;}finally{citySearch.disabled=false;}
+   });
    function resetAdPlan(){adPlanId=null;confirmAd.disabled=true;adResult.textContent='';}
    for(const el of Object.values(adInputs))el.addEventListener('input',resetAdPlan);
+   city.addEventListener('input',()=>{cityKey.replaceChildren();resetAdPlan();});
+   cityKey.addEventListener('change',resetAdPlan);
    async function loadMetaAdAssets(){
-    const [sets,pages]=await Promise.all([
-     api('/api/marketing/tools/adsets'),api('/api/marketing/tools/pages')
-    ]);
-    adset.replaceChildren();page.replaceChildren();
-    for(const item of Array.isArray(sets.items)?sets.items:[]){
-     const option=E('option',String(item.name||'Conjunto')+' · '+String(item.id||''));
-     option.value=String(item.id||'');adset.append(option);
-    }
+    const pages=await api('/api/marketing/tools/pages');
+    page.replaceChildren();
     for(const item of Array.isArray(pages.items)?pages.items:[]){
-     const option=E('option',String(item.name||'Página')+' · '+String(item.id||''));
-     option.value=String(item.id||'');page.append(option);
+     const o=E('option',String(item.name||'Página')+' · '+String(item.id||''));o.value=String(item.id||'');page.append(o);
     }
-    previewAd.disabled=!adset.options.length||!page.options.length||!uploadedVideoId;
-    if(!adset.options.length||!page.options.length)
-     videoStatus.textContent='Esta conta precisa de uma Página autorizada e um conjunto existente antes de criar o anúncio.';
+    previewAd.disabled=!page.options.length||!uploadedVideoId;
+    if(!page.options.length)videoStatus.textContent='Conecte uma Página Meta autorizada antes de criar a campanha.';
    }
    previewAd.addEventListener('click',async()=>{
     resetAdPlan();previewAd.disabled=true;
     adResult.textContent='Conferindo vídeo, Página, conjunto e dados da campanha…';
     try{
      if(!uploadedVideoId)throw Error('Primeiro importe o vídeo para esta conta Meta.');
+     if(!cityKey.options.length||!/^\d+$/.test(cityKey.value))throw Error('Pesquise e selecione a cidade correta na Meta.');
+     const daily=Number(budget.value);
+     if(!Number.isFinite(daily)||daily<1||daily>100000)throw Error('Confira o orçamento diário em reais.');
      const plan=await api('/api/marketing/tools/plan','POST',{
-      kind:'create_ad',input:{
-       name:adName.value.trim(),adsetId:adset.value,pageId:page.value,
-       url:landing.value.trim(),headline:headline.value.trim(),
+      kind:'create_whatsapp',input:{
+       name:adName.value.trim(),pageId:page.value,
+       cityKey:cityKey.value,cityName:city.value.trim(),dailyBudgetCents:Math.round(daily*100),
+       whatsappPhone:whatsapp.value.replace(/\D/g,''),headline:headline.value.trim(),
        message:primaryText.value.trim(),videoId:uploadedVideoId
       }
      });
      if(!plan.id)throw Error('A Meta não confirmou uma prévia válida.');
      adPlanId=plan.id;confirmAd.disabled=false;
-     adResult.textContent='Prévia confirmada: '+String(plan.summary?.description||'Anúncio PAUSADO')+
+     adResult.textContent='Prévia confirmada: '+String(plan.summary?.description||'Campanha WhatsApp PAUSADA')+
       ' · '+String(plan.summary?.name||'')+
       ' · título: '+String(plan.summary?.headline||'')+
       ' · destino: '+String(plan.summary?.destination||'')+
@@ -165,7 +185,8 @@
      const res=await api('/api/marketing/tools/execute','POST',{planId,confirmed:true});
      if(res.status!=='succeeded'||!res.result?.adId)
       throw Error(res.error||'A Meta não confirmou o anúncio. Verifique o histórico antes de tentar novamente.');
-     adResult.textContent='Anúncio criado PAUSADO na Meta. ID: '+res.result.adId+
+     adResult.textContent='Campanha criada PAUSADA na Meta. Campanha ID: '+String(res.result.campaignId||'')+
+      ' · Conjunto ID: '+String(res.result.adsetId||'')+' · Anúncio ID: '+res.result.adId+
       ' · Criativo ID: '+String(res.result.creativeId||'')+
       '. A veiculação não foi ativada e não gera gasto.';
     }catch(e){adResult.textContent=e.message+' Confira o Gerenciador de Anúncios antes de qualquer nova tentativa.';}
@@ -174,11 +195,12 @@
    async function loadChannels(){
     const res=await api('/api/marketing/tools/whatsapp-video/channels');
     const channels=Array.isArray(res.channels)?res.channels:[];
-    videoChannel.replaceChildren();
+    videoChannel.replaceChildren();sourceNumbers={};
     for(const ch of channels){
      const option=E('option',String(ch.label||'WhatsApp')+' · '+String(ch.phone||''));
-     option.value=ch.id;videoChannel.append(option);
+     option.value=ch.id;sourceNumbers[ch.id]=String(ch.phone||'');videoChannel.append(option);
     }
+    whatsapp.value=sourceNumbers[videoChannel.value]||'';
     if(!channels.length)selectedInfo.textContent='Conecte e verifique seu WhatsApp antes de procurar vídeos.';
     findVideoBtn.disabled=!channels.length;
     loadedChannels=true;
@@ -189,11 +211,11 @@
    });
    function clearVideo(){
     selectedVideo=null;videoConfirm.disabled=true;
-    prepareFromVideo.disabled=true;linkedVideoId=null;selectedInstruction=null;
+    uploadedVideoId=null;previewAd.disabled=true;resetAdPlan();selectedInstruction=null;
     selectedInfo.textContent='';resultText.textContent='';
    }
    videoRecipient.addEventListener('input',clearVideo);
-   videoChannel.addEventListener('change',clearVideo);
+   videoChannel.addEventListener('change',()=>{clearVideo();whatsapp.value=sourceNumbers[videoChannel.value]||'';});
    videoDirection.addEventListener('change',clearVideo);
    findVideoBtn.addEventListener('click',async()=>{
     clearVideo();findVideoBtn.disabled=true;selectedInfo.textContent='Verificando sessão, destino e histórico de vídeos…';
@@ -205,6 +227,7 @@
      selectedVideo={channelId:found.channelId,recipientPhone:found.recipientPhone,
       direction:videoDirection.value,messageId:found.video.messageId,sentAt:found.video.sentAt};
      selectedInstruction=typeof found.instruction==='string'?found.instruction:null;
+     applyInstruction(selectedInstruction);
      selectedInfo.textContent='Vídeo '+(videoDirection.value==='incoming'?'recebido':'enviado')+' em '+
       new Date(found.video.sentAt).toLocaleString('pt-BR')+
       '. '+(selectedInstruction?'Última instrução relacionada: “'+selectedInstruction+'”. ':'')+
@@ -228,7 +251,7 @@
      selectedVideo=null;
      if(answer.status==='uploaded'&&answer.videoId){
       uploadedVideoId=String(answer.videoId);
-      linkedVideoId=uploadedVideoId;prepareFromVideo.disabled=false;
+      prepareFromVideo.disabled=false;
       videoStatus.textContent='Vídeo importado. ID '+uploadedVideoId+'. Verificando os recursos necessários para criar o anúncio…';
       try{await loadMetaAdAssets();}catch(e){videoStatus.textContent='O vídeo foi importado, mas não consegui listar Página e conjuntos: '+e.message;}
      }
