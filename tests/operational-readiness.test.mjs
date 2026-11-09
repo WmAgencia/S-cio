@@ -24,7 +24,9 @@ test('Operational readiness reports verified WhatsApp vs merely configured Groq'
   WA_AKG_BASE_URL:'http://private',SOCIO_OUTBOUND_ENABLED:'true',
   SOCIO_AUTOREPLY_ENABLED:'true',SOCIO_LIVE_SYNC_ENABLED:'true'};
  let checks=0;
- const report=await getOperationalReadiness(pool,tenant,{env,getStatus:async()=>{
+ const report=await getOperationalReadiness(pool,tenant,{env,getStatus:async(_session,opts)=>{
+  assert.equal(opts.env,env);
+  assert.equal(opts.timeoutMs,4500);
   checks++;return {connected:true,connectedNumber:'5515999999999'};
  }});
  assert.equal(checks,1);
@@ -89,4 +91,26 @@ test('Groq automatic replies never include staff-only notes in selected history'
  const ui=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
  assert.match(ui,/Verificar operação/);
  assert.match(ui,/Testar conexão Groq/);
+});
+
+test('operational readiness does not call gateway for a channel marked disconnected',async()=>{
+ let queried=0,checked=0;
+ const pool={query:async(sql,args)=>{
+  queried++;assert.deepEqual(args,[tenant]);
+  if(sql.includes('FROM channels ch'))return {rowCount:1,rows:[{
+   id:'untrusted',label:'Desligado',phone:'5515999999999',session_id:'sessionA',status:'not_connected'
+  }]};
+  if(sql.includes('FROM agents'))return {rowCount:1,rows:[{enabled:true}]};
+  if(sql.includes('FROM training_versions'))return {rowCount:1,rows:[{version:2,status:'approved'}]};
+  if(sql.includes('FROM products'))return {rowCount:1,rows:[{n:1}]};
+  throw Error('Unexpected query');
+ }};
+ const readiness=await getOperationalReadiness(pool,tenant,{
+  env:{SOCIO_OUTBOUND_ENABLED:'true',SOCIO_AUTOREPLY_ENABLED:'true',
+   WA_AKG_API_KEY:'sample-key',WA_AKG_BASE_URL:'http://private',GROQ_API_KEY:'sample-groq-key'},
+  getStatus:async()=>{checked++;throw Error('Should not check disconnected channel');}
+ });
+ assert.equal(queried,4);assert.equal(checked,0);
+ assert.equal(readiness.numbers.verified,0);
+ assert.equal(readiness.checks[0].status,'action_required');
 });
