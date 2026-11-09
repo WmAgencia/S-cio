@@ -35,7 +35,7 @@ export async function runVideoPilotOnce(pool,{
   "FROM meta_official_account_selections sel "+
   "JOIN users u ON u.id=sel.user_id AND u.tenant_id=sel.tenant_id "+
   "AND u.active=true AND u.role IN ('owner','admin') "+
-  "JOIN tenants t ON t.id=sel.tenant_id AND t.status='active' "+
+  "JOIN tenants t ON t.id=sel.tenant_id AND t.status<>'paused' "+
   "JOIN meta_official_grants g ON g.tenant_id=sel.tenant_id AND g.user_id=sel.user_id "+
   "AND g.expires_at>now() AND 'ads_management'=ANY(g.scopes) "+
   "JOIN channels ch ON ch.tenant_id=sel.tenant_id AND ch.provider='waakg' "+
@@ -56,6 +56,11 @@ export async function runVideoPilotOnce(pool,{
   "VALUES($1,$2,$3,$4,$5,'started') ON CONFLICT(id) DO NOTHING RETURNING id",
   [config.id,r.tenant_id,r.channel_id,r.user_id,r.account_id]);
  if(!claim.rowCount)return {processed:false,reason:'PILOT_ALREADY_ATTEMPTED'};
+ const writeAudit=async(status,videoId=null)=>pool.query(
+  "INSERT INTO audit(id,tenant_id,actor_id,action,metadata) VALUES($1,$2,$3,$4,$5)",
+  [randomUUID(),r.tenant_id,r.user_id,'marketing.official.video.pilot',
+   JSON.stringify({operationId:config.id,accountId:config.account,status,videoId})]
+ ).catch(()=>{});
  const finish=async(status,videoId=null,reasonCode=null)=>pool.query(
   "UPDATE socio_whatsapp_meta_video_pilot_jobs "+
   "SET status=$2,meta_video_id=$3,reason_code=$4,updated_at=now() WHERE id=$1 AND tenant_id=$5",
@@ -67,6 +72,7 @@ export async function runVideoPilotOnce(pool,{
   const latest=await find(pool,actor,input,{env,now:config.cutoff});
   if(!latest?.video){
    await finish('not_found',null,'NO_MATCHING_OUTBOUND_VIDEO');
+   await writeAudit('not_found');
    return {processed:true,reason:'PILOT_VIDEO_NOT_FOUND'};
   }
   const output=await importVideo(pool,actor,{
@@ -74,6 +80,7 @@ export async function runVideoPilotOnce(pool,{
   },{env,now:config.cutoff});
   const status=output.status==='uploaded'?'uploaded':output.status==='uncertain'?'uncertain':'failed';
   await finish(status,output.videoId||null,status==='uploaded'?null:'IMPORT_NOT_CONFIRMED');
+  await writeAudit(status,output.videoId||null);
   return {processed:true,reason:status==='uploaded'?'PILOT_UPLOADED':'PILOT_NOT_CONFIRMED',
    videoId:output.videoId||null,accountId:output.accountId||null,status};
  }catch(error){
@@ -81,6 +88,7 @@ export async function runVideoPilotOnce(pool,{
   // require manual account-library inspection instead of doing it again.
   await finish(error?.uncertain?'uncertain':'failed',null,
    error?.uncertain?'META_UNCONFIRMED':'PILOT_ERROR').catch(()=>{});
+  await writeAudit(error?.uncertain?'uncertain':'failed');
   return {processed:true,reason:error?.uncertain?'PILOT_UNCERTAIN':'PILOT_FAILED',
    status:error?.uncertain?'uncertain':'failed',
    errorCode:String(error?.status||'UNEXPECTED').slice(0,16)};
