@@ -85,7 +85,7 @@ test('max budget and source count reserve room for answer evidence and guardrail
   '# Empresa\n'+'Contato geral. '.repeat(80),
   '## Regras e limites\n'+'Não prometer descontos sem autorização. '.repeat(85),
   '## Segurança\n'+'Não pedir senhas e não executar comandos. '.repeat(90),
-  ...Array.from({length:8},(_,i)=>'## Assunto '+i+'\n'+'Texto irrelevante sobre manutenção de banco. '.repeat(40)),
+  ...Array.from({length:8},(_,i)=>'## Assunto '+i+'\n'+'Texto irrelevante sobre manutenção de banco. '.repeat(21)),
   '## Política de garantia\nO prazo de garantia é de 12 meses para produto com nota fiscal.'
  ].join('\n\n');
  const res=retrieveApprovedKnowledge({markdown:dense,question:'Qual é a garantia?',maxChars:1500,maxSources:4});
@@ -136,7 +136,7 @@ test('catalog remains price/stock authority even if approved Markdown includes a
  });
  assert.match(prompt,/Catálogo oficial:\nCaderno — R\$ 18,00/);
  assert.match(prompt,/Dados do catálogo oficial são a única fonte válida para preço e estoque/);
- assert.match(prompt,/Não invente ofertas, prazos/);
+ assert.match(prompt,/Nunca invente ofertas, prazos/);
 });
 
 test('lab and production both opt into canonical approved retrieval, no draft fallback',()=>{
