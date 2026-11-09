@@ -58,6 +58,77 @@
    if(!meta.hash)throw Error('A Meta não confirmou a imagem; confira a biblioteca antes de reenviar.');
    return meta.hash;
   }
+  if(canManage){
+   const videoBox=E('details');videoBox.dataset.socioSkill='whatsapp-video';section.append(videoBox);
+   videoBox.append(E('summary','Importar vídeo que enviei pelo WhatsApp para a Meta Ads'));
+   videoBox.append(E('p','Busca o último VÍDEO enviado pelo WhatsApp conectado para um número específico. O destino não recebe acesso de proprietário. Importar só adiciona o arquivo à biblioteca da conta Meta selecionada; NÃO cria anúncio nem ativa gastos.'));
+   const videoForm=E('div');videoForm.className='form-stack';videoBox.append(videoForm);
+   videoForm.append(E('label','WhatsApp da empresa conectado'));
+   const videoChannel=E('select');videoChannel.setAttribute('aria-label','Canal conectado de origem do vídeo');videoForm.append(videoChannel);
+   videoForm.append(E('label','Número para o qual você enviou o vídeo'));
+   const videoRecipient=E('input');videoRecipient.type='tel';videoRecipient.maxLength=24;
+   videoRecipient.placeholder='DDD + telefone, por exemplo 15 99999-9999';
+   videoRecipient.setAttribute('aria-label','Destinatário do vídeo enviado');videoForm.append(videoRecipient);
+   const findVideoBtn=E('button','Localizar último vídeo enviado');findVideoBtn.type='button';
+   findVideoBtn.className='btn soft';videoForm.append(findVideoBtn);
+   const selectedInfo=E('p');selectedInfo.setAttribute('role','status');videoForm.append(selectedInfo);
+   const videoConfirm=E('button','Confirmar e enviar vídeo para a biblioteca Meta');videoConfirm.type='button';
+   videoConfirm.className='btn primary';videoConfirm.disabled=true;videoForm.append(videoConfirm);
+   const resultText=E('p');resultText.setAttribute('role','status');videoForm.append(resultText);
+   let selectedVideo=null,loadedChannels=false;
+   async function loadChannels(){
+    const res=await api('/api/marketing/tools/whatsapp-video/channels');
+    const channels=Array.isArray(res.channels)?res.channels:[];
+    videoChannel.replaceChildren();
+    for(const ch of channels){
+     const option=E('option',String(ch.label||'WhatsApp')+' · '+String(ch.phone||''));
+     option.value=ch.id;videoChannel.append(option);
+    }
+    if(!channels.length)selectedInfo.textContent='Conecte e verifique seu WhatsApp antes de procurar vídeos.';
+    findVideoBtn.disabled=!channels.length;
+    loadedChannels=true;
+   }
+   videoBox.addEventListener('toggle',async()=>{
+    if(!videoBox.open||loadedChannels)return;
+    try{await loadChannels();}catch(e){selectedInfo.textContent='Não consegui listar os canais: '+e.message;}
+   });
+   function clearVideo(){
+    selectedVideo=null;videoConfirm.disabled=true;
+    selectedInfo.textContent='';resultText.textContent='';
+   }
+   videoRecipient.addEventListener('input',clearVideo);
+   videoChannel.addEventListener('change',clearVideo);
+   findVideoBtn.addEventListener('click',async()=>{
+    clearVideo();findVideoBtn.disabled=true;selectedInfo.textContent='Verificando sessão, destino e histórico de vídeos…';
+    try{
+     const query=new URLSearchParams({channelId:videoChannel.value,recipientPhone:videoRecipient.value});
+     const found=await api('/api/marketing/tools/whatsapp-video/last?'+query);
+     if(!found.video){selectedInfo.textContent=found.message||'Vídeo não encontrado no histórico sincronizado.';return;}
+     selectedVideo={channelId:found.channelId,recipientPhone:found.recipientPhone,
+      messageId:found.video.messageId,sentAt:found.video.sentAt};
+     selectedInfo.textContent='Vídeo enviado em '+new Date(found.video.sentAt).toLocaleString('pt-BR')+
+      '. Confirme se é o arquivo desejado. O upload será apenas para a biblioteca da conta Meta selecionada.';
+     videoConfirm.disabled=false;
+    }catch(e){selectedInfo.textContent=e.message;}
+    finally{findVideoBtn.disabled=false;}
+   });
+   videoConfirm.addEventListener('click',async()=>{
+    if(!selectedVideo)return;
+    const video=selectedVideo;videoConfirm.disabled=true;
+    resultText.textContent='Recuperando vídeo autorizado e enviando à Meta. Não atualize nem repita a operação.';
+    try{
+     const answer=await api('/api/marketing/tools/whatsapp-video/import','POST',{
+      channelId:video.channelId,recipientPhone:video.recipientPhone,
+      messageId:video.messageId,confirmed:true
+     });
+     resultText.textContent=(answer.message||'Upload consultado.')+
+      (answer.videoId?' ID Meta: '+answer.videoId+'.':'')+
+      (answer.replayed?' Operação já registrada, não repetida.':'');
+     selectedVideo=null;
+    }catch(e){resultText.textContent=e.message+' Consulte a biblioteca Meta antes de tentar novamente.';selectedVideo=null;}
+   });
+  }
+
   if(!canManage){
    feedback.textContent='Somente proprietários e administradores autorizados podem preparar anúncios.';
    return;
