@@ -92,7 +92,8 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
   const result=await respond({instructions,
    input:context,
    maxOutputTokens:500,env});
-  const message=polishCustomerReply(result.reply,{hasConversation:continuity.hasAssistantReply,incoming:m.body});
+  const message=polishCustomerReply(result.reply,{hasConversation:continuity.hasAssistantReply,incoming:m.body,
+   previousAssistant:history.rows.filter(x=>x.direction==='outbound').at(-1)?.body||''});
   if(!message){await finish('failed','EMPTY_RESPONSE');return {processed:true,failed:true};}
   // Exactly one outbound attempt. deliverToConversation rechecks tenant,
   // connected number and the current AI ownership before network send.
