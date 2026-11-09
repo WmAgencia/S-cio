@@ -81,7 +81,7 @@
    videoConfirm.className='btn primary';videoConfirm.disabled=true;videoForm.append(videoConfirm);
    const resultText=E('p');resultText.setAttribute('role','status');videoForm.append(resultText);
    let selectedVideo=null,loadedChannels=false,selectedInstruction=null;
-   const prepareFromVideo=E('button','Preencher campanha de WhatsApp com o vídeo');
+   const prepareFromVideo=E('button','Preparar campanha de WhatsApp com este vídeo');
    prepareFromVideo.type='button';prepareFromVideo.className='btn soft';prepareFromVideo.disabled=true;
    videoForm.append(prepareFromVideo);
    prepareFromVideo.addEventListener('click',()=>{
