@@ -2,6 +2,7 @@
 // Never accepts group JIDs, external webhooks, customer instructions or anonymous calls.
 // Disabled by default, because real WA-AKG outbound / phone identity must be validated.
 import {randomUUID} from 'node:crypto';
+import {getSessionStatus} from './waakg-adapter.mjs';
 import {outboundEnabled,deliverToConversation} from './socio-outbound.mjs';
 import {speakToSocioSkill} from './socio-skill-router.mjs';
 
@@ -10,7 +11,7 @@ export const isOwnerSkillCommand=text=>typeof text==='string'&&text.length<=1400
 export const stripOwnerPrefix=text=>String(text||'').replace(prefix,'').trim();
 export async function processOwnerSkillInbox(pool,{
  env=process.env,deliver=deliverToConversation,speak=speakToSocioSkill,
- enabled=outboundEnabled(env)
+ getStatus=getSessionStatus,enabled=outboundEnabled(env)
 }={}){
  if(env.SOCIO_OWNER_COMMANDS_ENABLED!=='true')return {processed:false,reason:'OWNER_COMMANDS_DISABLED'};
  if(!enabled)return {processed:false,reason:'OUTBOUND_NOT_READY'};
@@ -20,11 +21,13 @@ export async function processOwnerSkillInbox(pool,{
  const found=await pool.query(
   "SELECT m.id AS inbound_id,m.tenant_id,m.conversation_id,m.body,"+
   "u.id AS user_id,u.role,u.platform_owner,u.name AS owner_name,"+
+  "ch.phone AS connected_phone,l.session_id,"+
   "t.status AS tenant_status,t.features,t.name AS tenant_name "+
   "FROM messages m "+
   "JOIN conversations c ON c.id=m.conversation_id AND c.tenant_id=m.tenant_id "+
   "JOIN channels ch ON ch.id=c.channel_id AND ch.tenant_id=m.tenant_id "+
   "AND ch.provider='waakg' AND ch.status='connected' "+
+  "JOIN waakg_links l ON l.channel_id=ch.id AND l.tenant_id=ch.tenant_id "+
   "JOIN users u ON u.tenant_id=m.tenant_id AND u.active=true "+
   "AND u.role IN ('owner','admin') AND u.phone IS NOT NULL "+
   "AND regexp_replace(u.phone,'[^0-9]','','g')=c.customer_phone "+
@@ -45,6 +48,14 @@ export async function processOwnerSkillInbox(pool,{
  const row=found.rows[0];
  if(!row)return {processed:false,reason:'NO_AUTHORIZED_OWNER_COMMAND'};
  if(!isOwnerSkillCommand(row.body))return {processed:false,reason:'UNRECOGNIZED_PREFIX'};
+ // A stale DB channel or forged owner conversation cannot authorize Meta
+ // mutations: verify the SAME private gateway session before even claiming
+ // the instruction. This also covers approval texts such as 'pode criar'.
+ let live;
+ try{live=await getStatus(row.session_id,{env});}
+ catch{return {processed:false,reason:'SESSION_NOT_VERIFIED'};}
+ if(!live?.connected||live.connectedNumber!==String(row.connected_phone||'').replace(/\D/g,''))
+  return {processed:false,reason:'SESSION_NOT_VERIFIED'};
  const command=stripOwnerPrefix(row.body);
  const receiptId=randomUUID();
  const inserted=await pool.query(
