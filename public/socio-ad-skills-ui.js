@@ -76,6 +76,13 @@
     if(file)add('Você','Foto enviada com segurança para a biblioteca de anúncios da conta selecionada.');
     runId=answer.runId;
     add('Sócio IA',answer.message||'Solicitação registrada.');
+    if(answer.status==='ready'&&Array.isArray(answer.creativeVariants)&&answer.creativeVariants.length){
+     const drafts=answer.creativeVariants.slice(0,3).map((draft,i)=>
+      (i+1)+(i===0?' (selecionada para criação)':' (alternativa para revisão)')+
+      ': '+String(draft.headline||'').slice(0,120)+' — '+String(draft.message||'').slice(0,500)
+     ).join('\n\n');
+     add('Prévia dos textos',drafts+'\n\nO plano atual usa a opção 1. As outras são referências para revisar ou criar outro pedido; não serão publicadas automaticamente.');
+    }
     if(answer.note)add('Rastreamento',answer.note);
     if(['completed','failed','action_required'].includes(answer.status))runId=null;
     feedback.textContent=answer.status==='ready'?'Plano pronto. Se estiver correto, responda “pode criar”.':
