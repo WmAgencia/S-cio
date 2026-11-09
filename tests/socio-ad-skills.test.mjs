@@ -83,6 +83,9 @@ test('selected account + WA-AKG + page + qualified photo prepare a campaign, but
  const request='Cria uma campanha para roupa feminina em Sorocaba gastando seis reais por dia';
  const start=await speakToAdSkill(pool,actor,{message:request},options);
  assert.equal(start.status,'ready');
+ assert.equal(start.creativeVariants.length,3);
+ assert.equal(start.selectedCreativeStyle,'apresentacao');
+ assert(start.creativeVariants.every(x=>x.headline&&x.message));
  assert.equal(start.brief.dailyBudgetCents,600);
  assert.equal(start.brief.destination,'whatsapp');
  assert.equal(start.brief.whatsappPhone,'5515999999999');
@@ -177,4 +180,22 @@ test('skill catalog reports WhatsApp group and CAPI as unfinished and does not m
  assert(source.includes('ads.campaign.launch'));
  assert.equal(SOCIO_AD_SKILLS.find(x=>x.id==='ads.whatsapp.owner_commands').availability,'pending_gateway_validation');
  assert.equal(SOCIO_AD_SKILLS.find(x=>x.id==='ads.conversions.capi').availability,'pending_website_integration');
+});
+
+test('unverified advertising promises are stopped before preparing any Meta plan',async()=>{
+ const pool=fakePool();let prepare=0,execute=0;
+ const message='Quero anunciar produto 100% garantido em Sorocaba gastando R$ 6 por dia no WhatsApp imagem abcdef0123456789abcdef0123456789';
+ const parsed=extractCampaignBrief(message);
+ assert.match(parsed.category,/100% garantido/);
+ const answer=await speakToAdSkill(pool,actor,{message},{
+  resolve,read,
+  prepare:async()=>{prepare++;throw Error('Unverified claim must not reach Meta')},
+  execute:async()=>{execute++;throw Error('Never execute')}
+ });
+ assert.equal(answer.status,'collecting');
+ assert.equal(answer.creativeReviewRequired,true);
+ assert.match(answer.message,/não verificad/i);
+ assert.equal(answer.brief.category,null);
+ assert.equal(prepare,0);
+ assert.equal(execute,0);
 });

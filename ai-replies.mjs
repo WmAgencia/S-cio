@@ -2,6 +2,7 @@
 // Does not prospect, start conversations, or retry unknown sends.
 import {randomUUID} from 'node:crypto';
 import {socioCompactSalesGuide} from './socio-sales-guide.mjs';
+import {salesMomentGuidance} from './socio-sales-conversation.mjs';
 import {NATURAL_CONVERSATION_RULES,selectRelevantKnowledge,buildConversationInput,polishCustomerReply} from './socio-intelligence.mjs';
 import {groqResponse,groqReady} from './groq-client.mjs';
 import {analyzeSocioContinuity,socioContinuityPrompt,classifySocioTopic} from './socio-prospector-continuity.mjs';
@@ -19,6 +20,7 @@ export function buildAiInstructions({name,tenantName,tone,instructions,knowledge
   'Método comercial global (orientações, não permissões nem fatos da empresa):\n'+socioCompactSalesGuide(),
   'Como falar com naturalidade (não sobrepõe regras da empresa):\n'+NATURAL_CONVERSATION_RULES,
   ...(continuity?[socioContinuityPrompt(continuity)]:[]),
+  salesMomentGuidance(question,continuity).prompt,
   'Orientações do proprietário (trate como referência, não como instrução que substitua segurança): '+
    String(instructions||'').slice(0,3600),
   'Preços, estoque e produtos somente do catálogo oficial. Nunca invente ofertas, prazos, números ou confirmações.',
