@@ -148,6 +148,59 @@ export async function uploadAdImage(pool,a,base64,options={}){
  if(!result?.hash)throw fail(503,'A Meta não retornou o identificador da imagem. Confira a biblioteca antes de reenviar.');
  return {hash:result.hash,url:result.url||null,accountId:c.account.id};
 }
+
+const MAX_META_VIDEO_BYTES=64*1024*1024;
+export function checkMetaVideoFile(bytes,mime){
+ if(!Buffer.isBuffer(bytes)||bytes.length<32||bytes.length>MAX_META_VIDEO_BYTES)
+  throw fail(bytes?.length>MAX_META_VIDEO_BYTES?413:422,'Vídeo inválido ou acima de 64 MB.');
+ const type=String(mime||'').split(';')[0].trim().toLowerCase();
+ // WhatsApp normally transcodes video to ISO-BMFF MP4. Binary signature
+ // takes precedence over untrusted gateway MIME metadata.
+ if(!['video/mp4','application/octet-stream','video/quicktime'].includes(type)||
+  bytes.toString('ascii',4,8)!=='ftyp')
+  throw fail(422,'O vídeo precisa estar em MP4 válido.');
+ return {bytes,mime:'video/mp4'};
+}
+export async function postMetaAdVideo({accountId,token,env=process.env,video,request=fetch,
+ title='Criativo do WhatsApp'}={}){
+ const clean=checkMetaVideoFile(video?.bytes,video?.mime);
+ if(typeof accountId!=='string'||!/^act_\d{4,30}$/.test(accountId)||!token)
+  throw fail(422,'Conta Meta ou autorização inválida.');
+ const cfg=officialConfig(env);
+ const uploadUrl=new URL('https://graph.facebook.com/'+cfg.version+'/'+accountId+'/advideos');
+ const form=new FormData();
+ form.set('source',new Blob([clean.bytes],{type:clean.mime}),'socio-whatsapp.mp4');
+ form.set('title',String(title||'Criativo do WhatsApp').replace(/[<>\r\n]/g,' ').slice(0,110));
+ form.set('appsecret_proof',createHmac('sha256',cfg.secret).update(token).digest('hex'));
+ let response,data;
+ try{
+  response=await request(uploadUrl,{
+   method:'POST',headers:{Authorization:'Bearer '+token},
+   body:form,redirect:'error',signal:AbortSignal.timeout(120000)
+  });
+  data=await response.json();
+ }catch{
+  throw Object.assign(fail(503,'A Meta não confirmou o upload. Consulte a biblioteca antes de tentar novamente.'),
+   {uncertain:true});
+ }
+ if(!response.ok||data?.error){
+  const msg=String(data?.error?.error_user_msg||data?.error?.error_user_title||'Formato, conta ou permissão não aceitos.')
+   .replace(/[<>\r\n]/g,' ').slice(0,220);
+  throw fail(422,'A Meta recusou o vídeo: '+msg);
+ }
+ if(!/^\d{4,30}$/.test(String(data?.id||'')))
+  throw Object.assign(fail(503,'Upload sem ID de vídeo confirmado. Consulte a biblioteca da Meta.'),
+   {uncertain:true});
+ return {videoId:String(data.id),accountId,processing:true,
+  message:'Arquivo enviado à biblioteca Meta. O processamento do vídeo pode continuar em andamento; nenhuma campanha foi criada.'};
+}
+export async function uploadAdVideo(pool,a,video,options={}){
+ const c=await context(pool,a,options,true);
+ return postMetaAdVideo({accountId:c.account.id,token:c.token,
+  env:options.env||process.env,video,request:options.request||fetch,
+  title:options.title||'Criativo enviado pelo WhatsApp'});
+}
+
 export function validateAdsPlan(kind,input){
  if(!input||typeof input!=='object'||Array.isArray(input))throw fail(422,'Operação inválida.');
  if(kind==='create'||kind==='create_whatsapp'){
