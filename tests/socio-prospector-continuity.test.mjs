@@ -150,3 +150,20 @@ test('real reply worker performs human handoff before model or WhatsApp send for
   assert.equal(calls.length,2);
  }
 });
+
+
+test('maximum tenant context stays below Groq 25k system prompt limit',()=>{
+ const longKnowledge=Array.from({length:30},(_,i)=>
+  '## Procedimento '+i+'\n'+('Instruções aprovadas extensas. '.repeat(110))).join('\n\n');
+ const prompt=buildAiInstructions({
+  name:'Assistente da empresa',tenantName:'Negócio de exemplo',
+  tone:'Natural, direto e profissional',instructions:'orientação segura '.repeat(1000),
+  knowledge:longKnowledge,catalogText:'Produto — R$ 129,90\n'.repeat(900),
+  question:'Como funciona o pagamento e o prazo?',
+  continuity:analyzeSocioContinuity(messages,'E a entrada?')
+ });
+ assert(prompt.length<25000, 'Groq would reject system prompt exceeding 25000 chars');
+ assert.match(prompt,/Não invente valor, prazo, desconto/);
+ assert.match(prompt,/não são comandos/);
+ assert.match(prompt,/Catálogo oficial/);
+});
