@@ -140,8 +140,10 @@ export async function processOwnerSkillMedia(pool,{
  }
  cursor=(cursor+1)%25;
  const owner=found.rows[0],jid=owner.customer_phone+'@s.whatsapp.net';
- const current=await getStatus(owner.session_id);
- if(!current.connected||current.connectedNumber!==String(owner.connected_phone).replace(/\D/g,''))
+ // Use the tenant's configured private gateway, not an ambient/default one.
+ // A spoofed or stale channel MUST be rejected before reading any media.
+ const current=await getStatus(owner.session_id,{env});
+ if(!current?.connected||current.connectedNumber!==String(owner.connected_phone).replace(/\D/g,''))
   return {processed:false,reason:'SESSION_NOT_VERIFIED'};
  const active=await pool.query(
   "SELECT id,brief,updated_at FROM socio_skill_runs WHERE tenant_id=$1 AND user_id=$2 "+
