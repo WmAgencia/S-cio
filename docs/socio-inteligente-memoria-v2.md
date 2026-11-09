@@ -5,7 +5,7 @@ Adaptado conceitualmente de Prospector/dashboard/francisca-conversation-memory.m
 
 ## O que está implementado
 - Memória compacta por tenant + conversa: apenas rótulos enumerados dos assuntos, tópicos citados em respostas, quantidade limitada de turnos e indicador de atendimento anterior.
-- Retenção de 30 dias desde a última atualização de tópicos; limpeza física periódica dos registros expirados enquanto a funcionalidade está habilitada.
+- Retenção de 30 dias desde a última atualização de tópicos; limpeza física dos registros expirados ao iniciar e a cada hora, inclusive se a gravação de novos resumos estiver desligada.
 - Cursor composto (created_at,id), processamento incremental de até quatro lotes de 200 mensagens por execução, transações com FOR UPDATE para impedir processamento duplicado entre réplicas.
 - Entrada protegida: somente conversas vinculadas ao próprio tenant; notas internas excluídas; até 30 dias de histórico considerados no primeiro processamento.
 - Contexto recente do atendimento e da simulação continuam funcionando sem banco de memória. Memória é um reforço de contexto, não fonte de fatos comerciais.
