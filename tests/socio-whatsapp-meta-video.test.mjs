@@ -44,7 +44,7 @@ function db({already=false}={}){
   if(sql.startsWith('SELECT status,meta_video_id FROM socio_whatsapp_meta_video_imports'))
    return {rowCount:1,rows:[{status:'uploaded',meta_video_id:'1616096903323428'}]};
   if(sql.startsWith('UPDATE socio_whatsapp_meta_video_imports')){
-   status=args[1];return {rowCount:1};
+   status=sql.includes("status='uploaded'")?'uploaded':args[1];return {rowCount:1};
   }
   throw Error('Unexpected SQL '+sql.slice(0,100));
  },getStatus:()=>status};
@@ -77,7 +77,7 @@ test('Listing channels and checking current gateway are tenant-bound and owner-o
  assert.equal(s.session_id,session);
  assert(db1.calls.every(x=>x.args[0]===tenant));
  await assert.rejects(verifiedSourceSession(db1,{...a,role:'viewer'},channel,{env,getStatus:live}),{status:403});
- await assert.rejects(verifiedSourceSession(db1,a,randomUUID(),{env,getStatus:async()=>({connected:true,connectedNumber:'5515999999999'})}),{status:409});
+ await assert.rejects(verifiedSourceSession(db1,a,channel,{env,getStatus:async()=>({connected:true,connectedNumber:'5515999999999'})}),{status:409});
  const missing={query:async()=>({rowCount:0,rows:[]})};
  await assert.rejects(verifiedSourceSession(missing,a,channel,{env,getStatus:live}),{status:409});
 });
