@@ -41,3 +41,30 @@ Rodar:
 
 ## Implantação
 Este PR deve ser revisado e a CI precisa aprovar antes de considerar merge para main. Nenhuma flag de autoenvio ou mídia deve ser habilitada por esta alteração. Não há migração de banco.
+
+
+## Adaptação de componentes do Prospector — continuidade v1
+
+Foi realizada uma leitura de arquivos do Prospector em seu branch main de novembro de 2026. Fontes consultadas:
+- Prospector/dashboard/francisca-conversation-state.mjs
+- Prospector/dashboard/francisca-conversation-memory.mjs
+- Prospector/dashboard/francisca-context-bank.mjs
+- Prospector/dashboard/francisca-chat-coach.mjs
+- Prospector/dashboard/francisca-dialogue-style.mjs
+- Prospector/dashboard/francisca-voice-context.mjs
+- Prospector/dashboard/francisca-semantic-turn.mjs
+
+**Portabilidade seletiva:** o módulo socio-prospector-continuity.mjs foi criado com classificação genérica de intenções, tópicos recentes, continuação, correção, mudança de assunto e perguntas múltiplas. Os rótulos não incluem mensagem bruta, telefone, e-mail, documento ou valor. A recuperação ocorre sobre até 80 mensagens existentes da própria empresa e conversa, já armazenadas pelo Sócio; não há tabela nova nem memória cruzada entre negócios. O laboratório gera os mesmos sinais a partir de seu histórico de sessão local, sem salvar esses turnos.
+
+**Proteções do Prospector adaptadas:** limpeza conservadora de saudações e bordões repetidos, mas mantendo textos quando o cliente pede literalmente um roteiro ou uma frase de saudação. Pedidos explícitos para parar ou falar com uma pessoa recebem handoff humano antes da chamada ao modelo.
+
+**Já existia no Sócio (não duplicar):**
+- socio-thalita-dialogue-style.mjs: port anterior da Francisca, com regras de voz e pós-processamento.
+- public/socio-francisca-live.mjs: microfone contínuo, reconhecimento de pausas e mecanismo de interrupção de fala.
+- socio-training-interview.mjs: entrevista guiada por empresa e Markdown de conhecimento sujeito à aprovação.
+- socio-skill-router.mjs: ferramenta administrativa que preserva permissões e confirmações.
+
+**Não copiar diretamente:** as ofertas e condições da Consecom, scripts de abordagem ativa, tabelas SQLite do Prospector, credenciais, memórias pessoais do proprietário, notificações comerciais de prospecção ou comandos que ignoram permissões do Sócio.
+
+### Limitações intencionais
+Este port preserva continuidade no recorte de 80 mensagens persistidas do chat, não uma memória de longo prazo ilimitada. A classificação é heurística e só sugere contexto para a resposta; não interpreta texto como autorização, pagamento confirmado, cliente opt-in, desconto aprovado ou envio confirmado. Memória duradoura com retenção, consentimento e exclusão deve ser implementada e testada em etapa separada. Recursos multimodais não são ativados por esta alteração.
