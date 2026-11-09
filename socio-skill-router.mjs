@@ -58,7 +58,7 @@ export async function speakToSocioSkill(pool,a,request={},opts={}){
  assertApiFeature(a.features,'/api/marketing/tools');
  assertApiFeature(a.features,'/api/agent');
  if(a.tenant_status==='paused')throw fail(403,'Empresa pausada.');
- const {message='',runId=null,imageHash=null}=request;
+ const {message='',runId=null,imageHash=null,videoId=null}=request;
  if(typeof message!=='string'||message.length>1400)throw fail(422,'Pedido inválido.');
  if(runId){
   if(!uuid(runId))throw fail(422,'Conversa inválida.');
@@ -109,7 +109,7 @@ export async function speakToSocioSkill(pool,a,request={},opts={}){
      String(outcome.error||'').slice(0,150)};
  }
  const raw=message.trim();
- if(!raw&&!imageHash)throw fail(422,'Digite um pedido.');
+ if(!raw&&!imageHash&&!videoId)throw fail(422,'Digite um pedido.');
  if(/\b(pixel no whatsapp|instalar pixel no whatsapp)\b/.test(clean(raw)))
   return {runId:null,status:'completed',message:'Não existe Pixel instalado dentro do WhatsApp. Para conversas uso dados de anúncios e sinais do WA-AKG; para sites uso Pixel, CAPI e eventos de compra confirmados.'};
  const expert=selectExpertSkill(raw);
