@@ -43,6 +43,7 @@ import {processLiveInboxSync} from './inbox-live-sync.mjs';
 import {processNextAiReply,buildAiInstructions} from './ai-replies.mjs';
 import {normalizeLabHistory,buildLabInput,polishCustomerReply,reviewReplyStyle} from './socio-intelligence.mjs';
 import {analyzeSocioContinuity} from './socio-prospector-continuity.mjs';
+import {knowledgeV3Enabled,loadTenantApprovedKnowledge,retrieveApprovedKnowledge} from './socio-knowledge-retrieval.mjs';
 import {readConversationMemory,clearConversationMemory,purgeExpiredConversationMemories} from './socio-conversation-memory.mjs';
 import {reconcileConfirmedOutbox} from './socio-outbound.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
@@ -1730,13 +1731,20 @@ async function handle(req,res){
   // Lab history is provided for this simulation only, never used as
   // authorization or stored as customer memory.
   const history=normalizeLabHistory(data.history);
+  // Build continuity BEFORE the prompt; the previous order used an
+  // uninitialized const and broke the real laboratory request.
+  const continuity=analyzeSocioContinuity(history.map(turn=>({direction:turn.role==='assistant'?'outbound':'inbound',body:turn.content})),data.message);
+  let knowledgeRetrieval=null;
+  if(knowledgeV3Enabled()){
+   const approved=await loadTenantApprovedKnowledge(pool,a.active_tenant_id);
+   knowledgeRetrieval=retrieveApprovedKnowledge({markdown:approved.markdown,version:approved.version,question:data.message,maxChars:4800});
+  }
   const system=buildAiInstructions({
    name:config.name,tenantName:a.tenant_name,tone:config.tone,
    instructions:config.instructions,knowledge:config.knowledge_md,
-   catalogText:catalog,question:data.message,simulation:true,continuity
+   catalogText:catalog,question:data.message,simulation:true,continuity,knowledgeRetrieval
   });
   const hasConversation=history.some(turn=>turn.role==='assistant');
-  const continuity=analyzeSocioContinuity(history.map(turn=>({direction:turn.role==='assistant'?'outbound':'inbound',body:turn.content})),data.message);
   const response=await groqResponse({
    instructions:system,input:buildLabInput(history,data.message),maxOutputTokens:550
   });
@@ -1745,6 +1753,7 @@ async function handle(req,res){
   return json(res,200,{
    reply,simulation:true,provider:'groq',model:response.model,
    quality:reviewReplyStyle(response.reply,{hasConversation}),
+   knowledgeEvidence:knowledgeRetrieval?.publicMeta||null,
    productCards:matchCatalogProducts(data.message,catalogProducts)
   });
  }
