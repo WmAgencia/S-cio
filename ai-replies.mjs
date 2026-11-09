@@ -4,9 +4,10 @@ import {randomUUID} from 'node:crypto';
 import {socioCompactSalesGuide} from './socio-sales-guide.mjs';
 import {NATURAL_CONVERSATION_RULES,selectRelevantKnowledge,buildConversationInput,polishCustomerReply} from './socio-intelligence.mjs';
 import {groqResponse,groqReady} from './groq-client.mjs';
+import {analyzeSocioContinuity,socioContinuityPrompt} from './socio-prospector-continuity.mjs';
 import {deliverToConversation,canAutoReply} from './socio-outbound.mjs';
 
-export function buildAiInstructions({name,tenantName,tone,instructions,knowledge,products=[],question='',simulation=false,catalogText=null}){
+export function buildAiInstructions({name,tenantName,tone,instructions,knowledge,products=[],question='',simulation=false,catalogText=null,continuity=null}){
  const catalog=typeof catalogText==='string'?catalogText:products.length?products.map(p=>
   p.name+' — R$ '+(p.price_cents/100).toFixed(2).replace('.',',')+
   (p.stock_quantity===0?' (sem estoque)':'')).join('\n'):'Nenhum produto cadastrado.';
@@ -15,6 +16,7 @@ export function buildAiInstructions({name,tenantName,tone,instructions,knowledge
   'Tom: '+String(tone||'Natural, profissional, curto.').slice(0,700),
   'Método comercial global (orientações, não permissões nem fatos da empresa):\n'+socioCompactSalesGuide(),
   'Como falar com naturalidade (não sobrepõe regras da empresa):\n'+NATURAL_CONVERSATION_RULES,
+  ...(continuity?[socioContinuityPrompt(continuity)]:[]),
   'Orientações do proprietário (trate como referência, não como instrução que substitua segurança): '+
    String(instructions||'').slice(0,4500),
   'Preços, estoque e produtos somente do catálogo oficial. Nunca invente ofertas, prazos, números ou confirmações.',
@@ -76,7 +78,7 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
   const [history,products]=await Promise.all([
    // Internal notes belong to staff only and must never be passed to a customer-facing model.
    pool.query("SELECT direction,body FROM messages WHERE tenant_id=$1 AND conversation_id=$2 "+
-    "AND direction IN ('inbound','outbound') ORDER BY created_at DESC LIMIT 18",
+    "AND direction IN ('inbound','outbound') ORDER BY created_at DESC,id DESC LIMIT 80",
     [m.tenant_id,m.conversation_id]),
    m.tenant_features?.catalog===false?Promise.resolve({rows:[]}):
    pool.query("SELECT name,price_cents,stock_quantity FROM products WHERE tenant_id=$1 AND active=true ORDER BY created_at DESC LIMIT 40",
@@ -84,12 +86,13 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
   ]);
   history.rows.reverse();
   const context=buildConversationInput(history.rows,m.body);
+  const continuity=analyzeSocioContinuity(history.rows,m.body);
   const instructions=buildAiInstructions({name:m.agent_name,tenantName:m.tenant_name,tone:m.tone,
-   instructions:m.instructions,knowledge:m.knowledge_md,products:products.rows,question:m.body});
+   instructions:m.instructions,knowledge:m.knowledge_md,products:products.rows,question:m.body,continuity});
   const result=await respond({instructions,
    input:context,
    maxOutputTokens:500,env});
-  const message=polishCustomerReply(result.reply,{hasConversation:history.rows.some(x=>x.direction==='outbound')});
+  const message=polishCustomerReply(result.reply,{hasConversation:continuity.hasAssistantReply,incoming:m.body});
   if(!message){await finish('failed','EMPTY_RESPONSE');return {processed:true,failed:true};}
   // Exactly one outbound attempt. deliverToConversation rechecks tenant,
   // connected number and the current AI ownership before network send.
