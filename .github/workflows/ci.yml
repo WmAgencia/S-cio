@@ -8,8 +8,11 @@ on:
 permissions:
   contents: read
 jobs:
-  test:
+  validate-application:
+    # Follow the maintained GitHub runner image; fail the workflow if the
+    # PostgreSQL integration suite cannot start, not merely if backup passes.
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -33,9 +36,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      # The restore rehearsal talks to Postgres 16. Newer pg_dump can emit
+      # PG18-only session settings, causing pg_restore to fail on PG16.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-16 && echo '/usr/lib/postgresql/16/bin' >> "$GITHUB_PATH"
+      - run: pg_dump --version | grep -F 'PostgreSQL) 16.' && pg_restore --version | grep -F 'PostgreSQL) 16.'
       - run: npm ci --ignore-scripts --no-audit
       - run: node --check server.mjs && node --check lib.mjs && node --check public/app.js
+      - run: node --check socio-owner-skill-readiness.mjs && node --check operational-readiness.mjs && node --check socio-conversation-memory.mjs && node --check socio-knowledge-retrieval.mjs
       - run: node --check sales-commerce.mjs && node --check sales-intents.mjs && node --check quote-requests.mjs && node --check tenant-features.mjs && node --check ai-replies.mjs && node --check public/sales.js && node --check public/quote.js
       - run: node --check team-permissions.mjs && node --check scripts/socio-encrypted-backup.mjs
       - run: node --check scripts/socio-supabase-migrate.mjs && node --check scripts/socio-provision-master.mjs && node --check scripts/socio-provision-railway-master.mjs
