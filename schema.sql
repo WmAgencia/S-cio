@@ -406,6 +406,27 @@ CREATE TABLE IF NOT EXISTS ai_reply_attempts (
 );
 CREATE INDEX IF NOT EXISTS ai_reply_attempts_recent ON ai_reply_attempts(tenant_id,conversation_id,created_at DESC);
 
+
+-- Sócio Inteligente: private, bounded topic memory adapted from Prospector.
+-- Only enum labels and counters; never duplicate WhatsApp message bodies or PII.
+-- One conversation belongs to one tenant; deletion cascades on conversation delete.
+CREATE TABLE IF NOT EXISTS socio_conversation_memory (
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ conversation_id uuid NOT NULL,
+ state jsonb NOT NULL DEFAULT '{}'::jsonb
+  CHECK(jsonb_typeof(state)='object' AND octet_length(state::text)<=3000),
+ seen_created_at timestamptz,
+ seen_message_id uuid,
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ expires_at timestamptz NOT NULL DEFAULT (now()+interval '30 days'),
+ PRIMARY KEY(tenant_id,conversation_id),
+ FOREIGN KEY(tenant_id,conversation_id)
+  REFERENCES conversations(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS socio_conversation_memory_expiry_idx
+ ON socio_conversation_memory(expires_at);
+
+
 -- Sócio Fase 3: vendas e aprovações; alterações aditivas sem cobranças automáticas.
 CREATE UNIQUE INDEX IF NOT EXISTS conversations_tenant_sales_fk ON conversations(tenant_id,id);
 CREATE TABLE IF NOT EXISTS sales_quotes (
