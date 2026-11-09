@@ -12,7 +12,7 @@ export const MEMORY_MAX_BATCHES=4;
 export const SOCIO_MEMORY_VERSION='socio-tenant-topic-memory-v1';
 const TOPICS=new Set(['stop','human','complaint','refund','payment','delivery',
  'quote','price','product','scheduling','support','proof','contract','sale','explanation']);
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const tag=x=>TOPICS.has(x)?x:'general';
 const clipCount=x=>Number.isSafeInteger(x)&&x>=0?Math.min(x,999999):0;
