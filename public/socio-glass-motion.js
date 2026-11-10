@@ -72,7 +72,7 @@
     nav.prepend(pill);
     movePill(nav,true);
     const observer=new MutationObserver(()=>requestAnimationFrame(()=>movePill(nav,false)));
-    observer.observe(nav,{subtree:true,attributes:true,attributeFilter:['class','style']});
+    observer.observe(nav,{subtree:true,attributes:true,attributeFilter:['class']});
     nav.addEventListener('scroll',()=>{if(reduce.matches)movePill(nav,true);},{passive:true});
   });
   window.addEventListener('resize',()=>navs.forEach(nav=>movePill(nav,true)),{passive:true});
