@@ -16,7 +16,7 @@ test('Glass assets are linked AND publicly served, fixing the previous 404',()=>
 });
 test('Final theme wins the legacy !important palette',()=>{
  for(const selector of ['body #appShell .app-main{','body #appShell .sidebar{','body #appShell .topbar{',
-  'body #appShell #view :is(.card','--socio-accent:#c7f47f','--socio-accent:#a5c5ff',
+  'body #appShell #view :is(.card','--socio-accent:#c9f16d','--socio-bg:#171b1b',
   'background:var(--socio-glass-panel)!important','body #appShell #productionNav.hidden']){
   assert.ok(css.includes(selector),selector);
  }

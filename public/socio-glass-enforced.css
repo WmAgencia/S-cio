@@ -1,286 +1,694 @@
-/* Fixes the cascade: legacy Prospector parity CSS uses !important extensively.
-   This is an OVERRIDE-ONLY final skin: no layout dimensions, grid changes, backend
-   actions or disabled controls. Master and production have separate shells. */
+/*
+ * Sócio / visual refinement 02 — November 2026
+ * Reference: graphite-gray CRM with light glass highlights, quiet surfaces and
+ * acid-lime ONLY for primary actions. Never changes size, order, layout or data.
+ *
+ * The earlier theme mixed lavender/white, espresso-orange, green slate and
+ * multiple gradients. This final scoped palette resolves those conflicts.
+ * Existing legacy styles rely on !important: here it is used only for
+ * appearance properties (not layout geometry or visibility).
+ */
+
+/* ------------------------- Palette / materials ------------------------- */
 #appShell{
- --socio-accent:#c7f47f; --socio-accent-ink:#1b2920;
- --socio-glass-panel:linear-gradient(138deg,rgba(103,122,130,.26),rgba(55,70,75,.37) 52%,rgba(31,43,48,.56));
- --socio-glass-edge:rgba(216,245,231,.16);
- --socio-glass-shadow:0 14px 38px rgba(0,0,0,.25),inset 0 1px rgba(244,255,248,.075);
+ --socio-bg:#171b1b;
+ --socio-sidebar:#1c2325;
+ --socio-top:#293133;
+ --socio-surface:rgba(38,43,43,.89);
+ --socio-surface-raised:rgba(49,55,55,.90);
+ --socio-surface-soft:rgba(255,255,255,.032);
+ --socio-ink:#f1f2ef;
+ --socio-copy:#d2d7d1;
+ --socio-muted:#a3aba7;
+ --socio-soft:#818d89;
+ --socio-line:rgba(226,232,223,.115);
+ --socio-line-strong:rgba(225,234,226,.20);
+ --socio-accent:#c9f16d;
+ --socio-accent-hover:#d6fa85;
+ --socio-accent-ink:#222b18;
+ --socio-sky:#9fc5df;
+ --socio-olive:#b6d177;
+ --socio-clay:#dca18a;
+ --socio-rose:#d69a9b;
+ --socio-glass-panel:linear-gradient(145deg,rgba(56,63,63,.83),rgba(34,40,39,.91) 67%);
+ --socio-glass-edge:rgba(229,237,229,.125);
+ --socio-glass-shadow:0 5px 21px rgba(0,0,0,.14),inset 0 1px 0 rgba(255,255,255,.055);
+ --bg:var(--socio-bg);--surface:var(--socio-surface);--ink:var(--socio-ink);
+ --muted:var(--socio-muted);--line:var(--socio-line);--purple:var(--socio-accent);
+ --purple-light:rgba(201,241,109,.12);--green:var(--socio-olive);
+ --shadow:var(--socio-glass-shadow);
+ color-scheme:dark;
 }
 #appShell[data-workspace="master"]{
- --socio-accent:#a5c5ff; --socio-accent-ink:#152237;
- --socio-glass-panel:linear-gradient(139deg,rgba(89,115,153,.32),rgba(45,60,84,.40) 55%,rgba(26,39,57,.59));
- --socio-glass-edge:rgba(207,224,255,.18);
+ /* Same product language, cooler atmosphere to distinguish administration. */
+ --socio-bg:#171c20;
+ --socio-sidebar:#1c252b;
+ --socio-top:#2b353d;
+ --socio-surface:rgba(42,49,53,.91);
+ --socio-surface-raised:rgba(52,62,68,.92);
+ --socio-glass-panel:linear-gradient(147deg,rgba(58,69,75,.84),rgba(35,44,50,.92) 70%);
+ --socio-glass-edge:rgba(215,230,231,.135);
+ --socio-sky:#b3c7d8;
+ --master-ink:#eff2ed;--master-muted:#a9b6b9;
+ --master-line:rgba(214,227,226,.13);
+ --master-shadow:var(--socio-glass-shadow);
 }
-html:has(#appShell:not(.hidden)),body:has(#appShell:not(.hidden)){
- background:#0e1519!important;color:#ecf4f2!important;color-scheme:dark!important;
+html:has(#appShell:not(.hidden)),
+body:has(#appShell:not(.hidden)){
+ background:#161b1b!important;
+ color:var(--socio-ink,#f1f2ef)!important;
+ color-scheme:dark!important;
 }
-body:has(#appShell:not(.hidden)){font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif!important;}
-body #appShell.app-shell{background:linear-gradient(139deg,#1a252b,#10191e 73%)!important;border-color:rgba(255,255,255,.09)!important;box-shadow:none!important}
-body #appShell .sidebar{
- background:linear-gradient(180deg,rgba(30,42,49,.98),rgba(18,28,34,.98))!important;
- border-color:rgba(207,236,239,.13)!important;color:#c5d4d2!important;
- box-shadow:inset -1px 0 rgba(255,255,255,.04)!important;
+body #appShell.app-shell{
+ background:#192020!important;
+ color:var(--socio-ink)!important;
+ box-shadow:none!important;
 }
 body #appShell .app-main{
- background:radial-gradient(ellipse 66% 53% at 69% -5%,rgba(106,138,153,.19),transparent 80%),
- linear-gradient(146deg,#222d34 0%,#172126 48%,#151d21 100%)!important;
- color:#edf4f0!important;
+ background:
+  radial-gradient(ellipse 75% 42% at 57% -3%,rgba(148,162,164,.135),transparent 80%),
+  radial-gradient(ellipse 65% 67% at 86% 98%,rgba(74,76,50,.055),transparent 75%),
+  linear-gradient(154deg,#293132 0%,#222829 38%,#1c2222 100%)!important;
+ color:var(--socio-ink)!important;
 }
 body #appShell[data-workspace="master"] .app-main{
- background:radial-gradient(ellipse 64% 49% at 62% -5%,rgba(90,122,171,.25),transparent 80%),
- linear-gradient(146deg,#253449,#1b2836 54%,#151f2d)!important;
+ background:
+  radial-gradient(ellipse 72% 37% at 60% -4%,rgba(150,169,181,.15),transparent 77%),
+  linear-gradient(151deg,#2c363b 0%,#242d32 46%,#1c262b 100%)!important;
+}
+body #appShell .sidebar{
+ background:linear-gradient(179deg,#293133,#202828 62%,#1c2423)!important;
+ color:var(--socio-copy)!important;
+ border-color:var(--socio-line)!important;
+ box-shadow:inset -1px 0 0 rgba(255,255,255,.028)!important;
+}
+body #appShell[data-workspace="master"] .sidebar{
+ background:linear-gradient(177deg,#2a353b,#222b30 61%,#1d282e)!important;
 }
 body #appShell .topbar{
- background:linear-gradient(115deg,rgba(63,79,88,.61),rgba(30,42,50,.55))!important;
- border-bottom:1px solid rgba(227,245,245,.12)!important;
- box-shadow:inset 0 1px rgba(255,255,255,.025)!important;
- -webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);
+ background:linear-gradient(113deg,rgba(54,64,67,.67),rgba(42,51,53,.63))!important;
+ border-bottom:1px solid var(--socio-line)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.035)!important;
+ -webkit-backdrop-filter:blur(15px) saturate(108%);
+ backdrop-filter:blur(15px) saturate(108%);
 }
-body #appShell .sidebar-logo strong{color:#f6fbf6!important}
+body #appShell .site-footer{color:#87928d!important}
+body #appShell .site-footer span{color:#66716d!important}
+
+/* ------------------------- Branding + navigation ----------------------- */
+body #appShell .sidebar-logo strong{
+ color:var(--socio-ink)!important;
+ font-weight:650!important;
+ letter-spacing:-.04em!important;
+}
 body #appShell .sidebar-logo small,
-body #appShell .site-footer{color:#a4b4b4!important}
-body #appShell .brand-mark:not(.large){
- background:linear-gradient(135deg,#d3f69f,#91c859)!important;border:1px solid rgba(233,255,215,.36)!important;
- box-shadow:0 5px 20px rgba(167,226,121,.19),inset 0 1px rgba(255,255,255,.39)!important;
-}
-body #appShell[data-workspace="master"] .brand-mark:not(.large){background:linear-gradient(135deg,#d3e4ff,#709de5)!important}
-body #appShell .brand-mark:not(.large)::before{color:#23372b!important}
-body #appShell .workspace-box,body #appShell .quick-search,
-body #appShell .quick-search .shortcut{
- background:linear-gradient(122deg,rgba(232,247,243,.10),rgba(158,186,197,.025))!important;
- color:#dae7e1!important;border-color:rgba(227,248,239,.17)!important;
- box-shadow:inset 0 1px rgba(255,255,255,.06),0 8px 24px rgba(0,0,0,.1)!important;
- -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
-}
 body #appShell .workspace-label small,
-body #appShell .workspace-chevron,
-body #appShell .top-pill,
-body #appShell .topbar .breadcrumb{color:#b3c4bf!important}
+body #appShell .sidebar-label,
+body #appShell .master-nav-title{
+ color:var(--socio-soft)!important;
+}
+body #appShell .brand-mark:not(.large){
+ background:linear-gradient(138deg,#d7f995,#b3df63)!important;
+ color:#25331b!important;
+ border-color:rgba(232,248,204,.27)!important;
+ box-shadow:0 3px 14px rgba(0,0,0,.13),inset 0 1px 0 rgba(255,255,255,.45)!important;
+}
+body #appShell .brand-mark:not(.large)::before{color:#25331b!important}
+body #appShell .workspace-box,
+body #appShell .quick-search,
+body #appShell .quick-search .shortcut{
+ background:rgba(227,236,232,.047)!important;
+ border-color:rgba(235,242,234,.11)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.038)!important;
+ color:var(--socio-copy)!important;
+ -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+}
 body #appShell .workspace-label strong,
 body #appShell .topbar .breadcrumb strong,
-body #appShell .user-profile-copy strong{color:#f3f9f4!important}
+body #appShell .user-profile-copy strong{
+ color:var(--socio-ink)!important;
+}
+body #appShell .workspace-chevron,
+body #appShell .topbar .breadcrumb,
+body #appShell .user-profile-copy small,
+body #appShell .top-pill{color:var(--socio-muted)!important}
 body #appShell .workspace-circle,
 body #appShell .user-chip{
- background:linear-gradient(125deg,rgba(195,249,153,.23),rgba(105,152,103,.23))!important;
- border-color:rgba(207,245,180,.23)!important;color:#d0f2a1!important;
+ background:rgba(219,237,208,.13)!important;
+ color:#d7ecbf!important;
+ border-color:rgba(223,241,211,.20)!important;
+ box-shadow:none!important;
 }
-body #appShell .user-profile-copy small{color:#a9bbba!important}
-body #appShell .sidebar-label{color:#a2b4b1!important}
-body #appShell .nav-item{color:#c3d0ca!important;border-color:transparent!important;background:transparent!important;box-shadow:none!important}
-body #appShell .nav-item:hover:not(.selected){background:rgba(210,241,230,.085)!important;border-color:rgba(225,248,231,.14)!important;color:#fbfff7!important}
+body #appShell .quick-search:hover{
+ background:rgba(244,251,240,.08)!important;
+ border-color:rgba(230,241,230,.24)!important;
+ color:#f4f5f0!important;
+}
+body #appShell .top-pill i{
+ background:#9fc578!important;
+ box-shadow:0 0 0 3px rgba(163,202,127,.095)!important;
+}
+body #appShell[data-workspace="master"] .top-pill i{background:#a8b7c0!important}
+body #appShell .nav-item{
+ background:transparent!important;
+ color:#b5bfba!important;
+ border-color:transparent!important;
+ box-shadow:none!important;
+ text-shadow:none!important;
+ transition:background-color .22s ease,color .22s ease,border-color .22s ease!important;
+}
+body #appShell .nav-item .nav-symbol{color:#a2afa9!important}
+body #appShell .nav-item:hover:not(.selected){
+ background:rgba(245,246,240,.067)!important;
+ color:#f1f4ec!important;
+ border-color:rgba(232,239,228,.10)!important;
+}
 body #appShell .nav-item.selected,
 body.socio-is-master #appShell #masterNav .nav-item.selected{
- background:linear-gradient(115deg,rgba(195,246,163,.24),rgba(175,226,168,.12))!important;
- border-color:rgba(212,247,193,.27)!important;color:#d8ffba!important;
- box-shadow:inset 0 1px rgba(255,255,255,.10),0 5px 18px rgba(0,0,0,.12)!important;
+ background:rgba(240,243,235,.115)!important;
+ color:#f6f7ee!important;
+ border-color:rgba(240,241,232,.105)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.055)!important;
 }
-body #appShell[data-workspace="master"] #masterNav .nav-item.selected{
- background:linear-gradient(115deg,rgba(160,195,252,.27),rgba(111,153,231,.14))!important;
- border-color:rgba(183,212,255,.30)!important;color:#d8e8ff!important;
+body #appShell .nav-item.selected .nav-symbol{color:var(--socio-accent)!important}
+body #appShell[data-workspace="master"] .nav-item.selected .nav-symbol{color:#c0d3d6!important}
+body #appShell .nav>.socio-glass-nav-pill{
+ background:linear-gradient(108deg,rgba(235,241,229,.12),rgba(185,197,191,.075))!important;
+ box-shadow:inset 0 0 0 1px rgba(233,242,230,.10)!important;
+ -webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px);
 }
-body #appShell .nav-item .nav-symbol{color:inherit!important}
-body #appShell #productionNav.hidden,body #appShell #masterNav.hidden,
-body #appShell .nav-item.hidden,body #appShell .sidebar-bottom>.nav-item.hidden,
-body #appShell #adminNav.hidden{display:none!important;visibility:hidden!important;pointer-events:none!important}
-body #appShell #productionNav:not(.hidden),body #appShell #masterNav:not(.hidden){display:flex!important}
+body #appShell #productionNav.hidden,
+body #appShell #masterNav.hidden,
+body #appShell .nav-item.hidden,
+body #appShell #adminNav.hidden{
+ display:none!important;visibility:hidden!important;pointer-events:none!important;
+}
+body #appShell #productionNav:not(.hidden),
+body #appShell #masterNav:not(.hidden){display:flex!important}
 body #appShell .sidebar-bottom #masterProductionSwitch:not(.hidden){
- background:linear-gradient(130deg,rgba(192,243,164,.15),rgba(113,154,139,.07))!important;
- color:#d2f5aa!important;border:1px solid rgba(212,249,185,.26)!important;
- box-shadow:inset 0 1px rgba(255,255,255,.06)!important;
+ background:rgba(214,231,217,.075)!important;
+ color:#e5eee3!important;
+ border-color:rgba(234,244,231,.17)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.045)!important;
 }
-body #appShell[data-workspace="master"] .sidebar-bottom #masterProductionSwitch:not(.hidden){
- background:rgba(150,192,255,.14)!important;color:#cce2ff!important;border-color:rgba(181,215,255,.26)!important;
+body #appShell .sidebar-bottom #masterProductionSwitch:hover:not(:disabled){
+ background:rgba(220,240,221,.135)!important;color:#fff!important;
 }
-body #appShell .sidebar-bottom #masterProductionSwitch .nav-symbol{color:inherit!important}
-body #appShell #view{color:#ebf2ee!important}
+body #appShell .sidebar-bottom #masterProductionSwitch .nav-symbol{color:var(--socio-accent)!important}
+
+/* ------------------------- Main surfaces / hierarchy ------------------ */
+body #appShell #view{color:var(--socio-copy)!important}
 body #appShell #view :is(.view-heading h1,.ai-guide-title h1,.section-title,
- .panel-head h2,.socio-clean-head h2,.ember-dashboard,.ember-card-heading h1,
- .ember-card-heading h2,.ember-recent-heading h2,.ember-qr-head h2,.ember-kpi-value,
- .ember-chart-metrics strong,.px-page-heading h1,.px-kpi-number,.px-panel-head h2,
- .master-hero h1,.master-kpi strong,.master-panel-head h2,
- .master-table td strong,.master-health-list strong){color:#f3faf3!important}
+ .panel-head h2,.socio-clean-head h2,.ember-card-heading h1,.ember-card-heading h2,
+ .ember-recent-heading h2,.ember-qr-head h2,.ember-kpi-value,.ember-chart-metrics strong,
+ .px-page-heading h1,.px-kpi-number,.px-panel-head h2,.px-ads-metric>b,
+ .master-hero h1,.master-kpi strong,.master-panel-head h2,.master-month-value,
+ .master-plan-row-top strong,.master-donut-center strong,.socio-training-center h2,
+ .ps-review-card h4,.wa-chat-name-line strong,.wa-thread-header strong){
+ color:var(--socio-ink)!important;
+}
 body #appShell #view :is(.view-heading p,.ai-guide-title p,.panel-head p,.form-note,
  .ember-kpi-name,.ember-kpi-meta,.ember-chart-labels,.ember-chart-legend,
  .ember-qr-steps,.ember-qr-disclaimer,.ember-ai-row-copy small,
- .px-page-heading p,.px-panel-head p,.px-kpi small,.px-kpi-label,.master-hero p,
- .master-panel-head p,.master-kpi small,.table-detail,.muted){color:#b7c6bd!important}
-body #appShell #view :is(.view-heading .eyebrow,.eyebrow,.px-eyebrow,.master-eyebrow){
- color:var(--socio-accent)!important;
+ .px-page-heading p,.px-panel-head p,.px-kpi small,.px-kpi-label,
+ .master-hero p,.master-panel-head p,.master-kpi small,.px-budget-stat>span,
+ .wa-chat-preview,.wa-chat-meta,.wa-inbox-welcome p,.muted){
+ color:var(--socio-muted)!important;
+}
+body #appShell #view :is(.eyebrow,.px-eyebrow,.master-eyebrow){
+ color:#c1ccc1!important;
+ letter-spacing:.11em!important;
 }
 body #appShell #view :is(.card,.callout,.panel,.lucid-card,.ember-card,.ember-kpi,
- .ember-recent-card,.ember-activity,.ember-ai-card,.ember-qr-card,.px-panel,.px-kpi,
- .px-ads-metric,.px-conn-card,.px-budget-account,.master-panel,.master-kpi,
- .catalog-product,.ps-review-card,.socio-training-center,.socio-clean-section,
- .socio-list-panel,.commerce-summary>div,.commerce-lead-card,.socio-train-result,
- .quote-request-item,.wa-qr-panel,.socio-ops-panel){
- background:var(--socio-glass-panel)!important;border-color:var(--socio-glass-edge)!important;
- box-shadow:var(--socio-glass-shadow)!important;color:#eef7ee!important;
- -webkit-backdrop-filter:blur(22px) saturate(120%);backdrop-filter:blur(22px) saturate(120%);
+ .ember-recent-card,.ember-activity,.ember-ai-card,.ember-qr-card,
+ .px-panel,.px-kpi,.px-ads-metric,.px-conn-card,.px-budget-account,
+ .master-panel,.master-kpi,.catalog-product,.ps-review-card,
+ .socio-training-center,.socio-clean-section,.socio-list-panel,
+ .commerce-summary>div,.commerce-lead-card,.socio-train-result,.quote-request-item,
+ .wa-qr-panel,.socio-ops-panel){
+ background:var(--socio-glass-panel)!important;
+ color:var(--socio-copy)!important;
+ border-color:var(--socio-glass-edge)!important;
+ box-shadow:var(--socio-glass-shadow)!important;
+ -webkit-backdrop-filter:blur(9px) saturate(102%);
+ backdrop-filter:blur(9px) saturate(102%);
 }
-body #appShell #view :is(.ember-kpi,.px-kpi,.master-kpi,.card,.px-panel,.master-panel,.catalog-product):hover{
- border-color:rgba(209,246,199,.30)!important;
- box-shadow:0 18px 46px rgba(0,0,0,.29),inset 0 1px rgba(255,255,255,.09)!important;
+body #appShell #view :is(.card,.ember-card,.ember-kpi,.px-panel,.px-kpi,
+ .master-panel,.master-kpi,.catalog-product):hover{
+ border-color:var(--socio-line-strong)!important;
+ box-shadow:0 8px 24px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.07)!important;
 }
-body #appShell #view :is(.ember-kpi-symbol,.ember-heading-icon,.ember-whatsapp-icon,.px-kpi-icon,.master-kpi-icon){
- background:rgba(204,247,171,.13)!important;border-color:rgba(218,251,192,.18)!important;
- color:var(--socio-accent)!important;
+body #appShell #view :is(.ember-kpi.connected,.ember-kpi-connected){
+ background:linear-gradient(144deg,rgba(65,76,66,.80),rgba(38,49,44,.91))!important;
 }
-body #appShell #view .ember-kpi-connected{background:radial-gradient(ellipse at 96% 0,rgba(199,247,156,.16),transparent 53%),var(--socio-glass-panel)!important}
-body #appShell #view .ember-chart-area{background:transparent!important}
-body #appShell #view .ember-chart-area svg text{fill:#adbbb6!important}
-body #appShell #view .ember-dot{background:var(--socio-accent)!important}
-body #appShell #view .ember-ai-row,body #appShell #view .ember-conversation{
- background:rgba(202,226,220,.035)!important;border-color:rgba(225,245,238,.13)!important;
+body #appShell #view :is(.ember-kpi-symbol,.ember-heading-icon,.ember-whatsapp-icon,
+ .px-kpi-icon,.master-kpi-icon,.ember-ai-row-icon){
+ background:rgba(236,244,235,.065)!important;
+ border-color:rgba(238,247,233,.10)!important;
+ color:#d3ddcf!important;
+ box-shadow:none!important;
 }
-body #appShell #view .ember-ai-row:hover,body #appShell #view .ember-conversation:hover{
- background:rgba(208,236,224,.10)!important;
+body #appShell #view :is(.ember-kpi-symbol.green,.px-kpi-icon.green){color:var(--socio-olive)!important}
+body #appShell #view :is(.px-kpi-icon.blue,.ember-kpi-symbol.blue){color:var(--socio-sky)!important}
+body #appShell #view :is(.ember-ai-row,.ember-conversation){
+ background:rgba(248,250,242,.026)!important;
+ border-color:rgba(236,243,228,.088)!important;
+}
+body #appShell #view :is(.ember-ai-row:hover,.ember-conversation:hover){
+ background:rgba(248,250,242,.058)!important;
 }
 body #appShell #view .ember-ai-row-copy strong,
-body #appShell #view .ember-qr-head strong{color:#edf7ed!important}
-body #appShell #view :is(.info-strip,.help-card,.ps-review,.ps-chat-card,.ps-interview-welcome,
- .ps-optional-training .socio-training-center){
- background:rgba(100,123,125,.16)!important;color:#dce9e0!important;border-color:rgba(208,237,227,.17)!important;
+body #appShell #view .ember-qr-head strong,
+body #appShell #view :is(.master-plan-row-top strong,.master-health-list strong,
+ .master-table td strong,.data-table td strong,.px-ads-metric>div strong,
+ .px-conn-list strong,.px-conn-row strong,.catalog-product-copy strong){
+ color:var(--socio-ink)!important;
 }
-body #appShell #view .ai-guide-tabs,body #appShell #view .ember-filter,
-body #appShell #view .settings-tabs button,
-body #appShell #view .px-range-tabs{
- background:rgba(9,18,21,.28)!important;border-color:rgba(216,241,231,.15)!important;
+body #appShell #view :is(.info-strip,.help-card,.ps-review,.ps-chat-card,
+ .ps-interview-welcome,.px-notice,.socio-train-account){
+ background:rgba(230,240,229,.055)!important;
+ color:var(--socio-copy)!important;
+ border-color:var(--socio-line)!important;
+ box-shadow:none!important;
 }
-body #appShell #view .ai-guide-tabs button{color:#bcd1c2!important}
-body #appShell #view .ai-guide-tabs button.active,
-body #appShell #view .ai-guide-tabs button[aria-selected="true"],
-body #appShell #view .ember-filter button.is-active{
- color:#e5ffce!important;background:rgba(187,232,137,.20)!important;
- box-shadow:inset 0 0 0 1px rgba(218,249,192,.22)!important;
+
+/* ------------------------- Indicators / data visualization ------------ */
+body #appShell #view .ember-chart-area,
+body #appShell #view :is(.px-chart-wrap,.px-graph-counts,.px-funnel>div,
+ .px-rank-track,.px-best-ad,.master-month-track,.master-plan-track,
+ .master-donut-center,.neo-chart-canvas){
+ background:rgba(14,18,18,.17)!important;
+ border-color:var(--socio-line)!important;
 }
-body #appShell #view .px-workspace,body #appShell #view .master-page{color:#edf7ef!important}
-body #appShell #view :is(.px-budget-account,.px-ads-metric) :is(strong,b){color:#e5f4e8!important}
-body #appShell #view .px-budget-stat>span,body #appShell #view .master-kpi-copy>span{color:#b0c0bd!important}
-body #appShell #view .master-table th,body #appShell #view .data-table th{
- background:rgba(210,239,238,.08)!important;color:#c5d5d0!important;border-color:rgba(217,242,234,.14)!important;
+body #appShell #view :is(.px-rank-title,.px-graph-counts strong,
+ .px-funnel strong,.px-best-ad>strong,.px-ads-list strong,
+ .px-budget-brand>strong,.px-budget-top-heading>strong,.px-budget-stat>strong){
+ color:var(--socio-ink)!important;
 }
-body #appShell #view .master-table td,body #appShell #view .data-table td{
- background:rgba(22,33,39,.14)!important;color:#e2ede6!important;border-color:rgba(217,242,234,.105)!important;
+body #appShell #view :is(.px-axis,.px-chart-hit,.px-legend,.px-funnel span,
+ .px-rank-title span,.px-chart-actions,.px-budget-brand>small,
+ .px-provenance,.px-muted,.master-month-col>span,
+ .master-donut-center small,.master-plan-row-top small){
+ color:var(--socio-muted)!important;
 }
-body #appShell #view .data-table tr:hover td,
-body #appShell #view .master-table tr:hover td{background:rgba(216,247,231,.065)!important}
-body #appShell #view .master-month-track,body #appShell #view .master-plan-track{
- background:rgba(13,21,28,.35)!important;border-color:rgba(222,241,236,.14)!important;
+body #appShell #view .ember-chart-area svg text{fill:#a9b2ab!important}
+body #appShell #view .ember-chart-area .chart-orange{stroke:#d2a394!important;filter:none!important}
+body #appShell #view .ember-chart-area .chart-green{stroke:#bfd68b!important;filter:none!important}
+body #appShell #view :is(.px-dot.purple,.ember-dot.orange){background:#d1a292!important}
+body #appShell #view :is(.px-dot.green,.ember-dot.green){background:#b8d67a!important}
+body #appShell #view .px-rank-track i{
+ background:linear-gradient(90deg,#8d9fb0,#b3c7d0)!important;
 }
-body #appShell #view .master-donut-center{
- background:#213039!important;box-shadow:inset 0 0 0 1px rgba(220,244,230,.14)!important;
+body #appShell #view .master-month-bar{background:linear-gradient(180deg,#cbdca3,#9db76e)!important}
+body #appShell #view .master-donut-center{box-shadow:inset 0 0 0 1px var(--socio-line)!important}
+body #appShell #view .master-month-value{color:#e5ebe5!important}
+body #appShell #view .px-live-dot.on{background:#a4ce75!important}
+body #appShell #view .px-status.on{color:#cee8af!important;background:rgba(183,219,128,.115)!important}
+body #appShell #view .px-status.off{color:#b7bfc0!important;background:rgba(229,236,229,.07)!important}
+
+/* ------------------------- Tables / forms / selects -------------------- */
+body #appShell #view :is(.master-table,.data-table,.px-table){
+ color:var(--socio-copy)!important;
 }
-body #appShell #view :is(.master-donut-center small,.master-plan-row-top>span,.master-plan-row-top small,
- .master-month-col>span){color:#b3c7c3!important}
-body #appShell #view :is(.master-plan-row-top strong,.master-donut-center strong,
- .master-month-value){color:#edf8ee!important}
-body #appShell #view .master-month-bar{background:linear-gradient(180deg,#d9fbb0,#92c86c)!important}
-body #appShell #view :is(input:not([type="checkbox"]):not([type="radio"]),textarea,select),
-body #appShell .quick-search{
- background:rgba(13,25,30,.60)!important;border-color:rgba(215,242,232,.22)!important;
- color:#eef8ef!important;box-shadow:inset 0 1px 3px rgba(0,0,0,.14)!important;color-scheme:dark!important;
+body #appShell #view :is(.master-table th,.data-table th,.px-table th){
+ background:rgba(20,25,24,.30)!important;
+ color:#bbc4be!important;
+ border-color:rgba(229,236,226,.095)!important;
 }
-body #appShell #view :is(input,textarea)::placeholder{color:#a1b5ad!important}
-body #appShell :is(.btn,.ember-ai-cta,.ember-qr-cta,.px-budget-billing-link,.socio-full-btn){
- background:linear-gradient(125deg,rgba(208,234,224,.13),rgba(128,162,164,.06))!important;
- color:#e3f3e5!important;border-color:rgba(221,248,230,.21)!important;
- box-shadow:inset 0 1px rgba(255,255,255,.06)!important;
+body #appShell #view :is(.master-table td,.data-table td,.px-table td){
+ background:transparent!important;
+ color:var(--socio-copy)!important;
+ border-color:rgba(229,236,226,.085)!important;
 }
-body #appShell :is(.btn.primary,.ember-ai-cta,.ember-qr-cta,.wa-compose-send,#newProduct){
- background:linear-gradient(110deg,#d8fca7,#bce986 54%,#98d167)!important;
- border-color:rgba(226,255,197,.52)!important;color:#182c1e!important;
- box-shadow:0 8px 22px rgba(180,229,135,.15),inset 0 1px rgba(255,255,255,.48)!important;
+body #appShell #view :is(.master-table tr:hover td,.data-table tr:hover td,.px-table tr:hover td){
+ background:rgba(239,243,230,.04)!important;
 }
-body #appShell[data-workspace="master"] :is(.btn.primary,.ember-ai-cta,.ember-qr-cta,#newProduct){
- background:linear-gradient(110deg,#dceaff,#a8cbff 55%,#86abed)!important;
- border-color:rgba(222,238,255,.57)!important;color:#16263e!important;
+body #appShell #view :is(input:not([type="checkbox"]):not([type="radio"]),
+ textarea,select),body #appShell #commandSearch{
+ background:rgba(19,25,25,.63)!important;
+ color:#ecf0ea!important;
+ border-color:rgba(230,239,226,.14)!important;
+ box-shadow:inset 0 1px 1px rgba(0,0,0,.08)!important;
+ color-scheme:dark!important;
 }
-body #appShell .btn.primary:hover:not(:disabled),
+body #appShell #view :is(input,textarea)::placeholder{color:#83918a!important}
+body #appShell #view :is(input,textarea,select):focus{
+ border-color:rgba(207,241,150,.58)!important;
+ box-shadow:0 0 0 3px rgba(201,241,109,.10)!important;
+}
+body #appShell #view :is(label,.form-label),body #appShell #view .px-account-select{
+ color:#c7d1c6!important;
+}
+
+/* ------------------------- Buttons / controls ------------------------- */
+body #appShell :is(.btn,.ember-ai-cta,.ember-qr-cta,.px-budget-billing-link,
+ .socio-full-btn,.wa-small-action,.wa-round-icon,.wa-mode-btn){
+ background:linear-gradient(160deg,rgba(74,82,81,.60),rgba(49,58,56,.68))!important;
+ color:#e1e8dd!important;
+ border-color:rgba(226,238,222,.13)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.052)!important;
+ text-shadow:none!important;
+}
+body #appShell :is(.btn.primary,.ember-ai-cta,.ember-qr-cta,#newProduct,
+ .wa-compose-send){
+ background:#c9f16d!important;
+ color:var(--socio-accent-ink)!important;
+ border-color:#d5ef9a!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.36),0 3px 13px rgba(0,0,0,.12)!important;
+ font-weight:720!important;
+}
+body #appShell :is(.btn.primary,.ember-ai-cta,.ember-qr-cta,
+ .wa-compose-send):hover:not(:disabled){
+ background:#d6fa85!important;
+ color:#202a16!important;
+ border-color:#e4fcad!important;
+ box-shadow:0 5px 14px rgba(0,0,0,.16)!important;
+ filter:none!important;
+}
 body #appShell .btn:not(.primary):hover:not(:disabled){
- filter:brightness(1.09)!important;box-shadow:0 9px 25px rgba(0,0,0,.20)!important;
+ background:rgba(237,245,231,.12)!important;
+ color:#fcfff8!important;
+ border-color:rgba(234,244,224,.24)!important;
+ filter:none!important;
 }
-body #appShell :is(button,a,input,textarea,select,summary):focus-visible{
- outline:2px solid var(--socio-accent)!important;outline-offset:3px!important;
+body #appShell :is(.btn,.nav-item,.quick-search,.px-marketing-filters button,
+ .ember-filter button,.ai-guide-tabs button){
+ transition:background-color .20s ease,border-color .20s ease,
+ color .20s ease,box-shadow .20s ease,filter .20s ease!important;
 }
-body #appShell #view .wa-inbox,
-body #appShell #view :is(.wa-inbox-side,.wa-inbox-main,.wa-thread-header,.wa-compose,
- .wa-compose-top,.wa-compose-row,.wa-compose-foot,.wa-message-list,.wa-inbox-details,
- .wa-inbox-dialog,.wa-dialog-surface,.wa-message-bubble,.wa-message-row.outgoing .wa-message-bubble){
- background:var(--socio-glass-panel)!important;color:#e7f4ea!important;
- border-color:rgba(210,237,229,.15)!important;box-shadow:none!important;
+body #appShell :is(.btn,.ember-ai-cta,.ember-qr-cta):active:not(:disabled){
+ transform:translateY(0) scale(.992)!important;
 }
-body #appShell #view :is(.wa-list-row,.wa-chat-name-line strong,.wa-thread-header strong,
- .wa-inbox-welcome h2,.wa-inbox-side-head h1,.wa-inbox-details strong){color:#edf7ef!important}
+body #appShell :is(.btn,.nav-item,button,a,input,select,textarea,summary):focus-visible{
+ outline:2px solid var(--socio-accent)!important;outline-offset:2px!important;
+}
+body #appShell :is(.btn,button)[disabled]{opacity:.50!important;filter:saturate(.6)!important}
+body #appShell #view :is(.ai-guide-tabs,.ember-filter,.px-marketing-filters,
+ .px-range-tabs,.settings-tabs button){
+ background:rgba(14,19,19,.26)!important;
+ border-color:rgba(228,236,225,.10)!important;
+}
+body #appShell #view :is(.ai-guide-tabs button,.ember-filter button,
+ .px-marketing-filters button,.settings-tabs button){color:#b7c3ba!important}
+body #appShell #view :is(.ai-guide-tabs button.active,.ai-guide-tabs button[aria-selected="true"],
+ .ember-filter button.is-active,.px-marketing-filters button.selected,
+ .settings-tabs button.active,.px-range-btn.active){
+ background:rgba(242,245,237,.105)!important;
+ color:#f1f5ed!important;
+ border-color:rgba(231,239,228,.16)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.065)!important;
+}
+
+/* ------------------------- Status pills (meaningful color) ------------- */
+body #appShell #view .badge{
+ background:rgba(220,232,225,.09)!important;color:#d5ded6!important;
+ border-color:rgba(223,238,228,.15)!important;
+ box-shadow:none!important;
+}
+body #appShell #view :is(.badge.green,.catalog-status.yes){
+ background:rgba(166,202,121,.14)!important;
+ color:#d2e9ad!important;border-color:rgba(180,218,137,.24)!important;
+}
+body #appShell #view :is(.badge.yellow,.px-budget-warning){
+ background:rgba(219,178,110,.12)!important;
+ color:#f0cb97!important;border-color:rgba(216,169,109,.23)!important;
+}
+body #appShell #view :is(.badge.red,.catalog-status.no){
+ background:rgba(209,134,126,.12)!important;
+ color:#efb8ac!important;border-color:rgba(219,143,135,.23)!important;
+}
+body #appShell #view :is(.badge.blue,.px-status.meta){background:rgba(127,167,195,.12)!important;color:#b7d4e6!important}
+body #appShell #view :is(.info-strip strong,.report-note-grid strong){color:#e2ebe0!important}
+
+/* ------------------------- Specialized content ------------------------ */
+body #appShell #view :is(.wa-inbox,.wa-inbox-side,.wa-inbox-main,
+ .wa-thread-header,.wa-compose,.wa-compose-top,.wa-compose-row,.wa-compose-foot,
+ .wa-message-list,.wa-inbox-details,.wa-dialog-surface,.wa-inbox-search){
+ background:rgba(33,39,39,.92)!important;color:#e6eee6!important;
+ border-color:var(--socio-line)!important;
+ box-shadow:none!important;
+}
+body #appShell #view :is(.wa-message-bubble,.bubble){
+ background:rgba(68,75,71,.67)!important;
+ border-color:rgba(222,236,221,.125)!important;color:#edf1e9!important;
+ box-shadow:0 2px 8px rgba(0,0,0,.10)!important;
+}
+body #appShell #view .wa-message-row.outgoing .wa-message-bubble,
+body #appShell #view .bubble.agent{
+ background:rgba(74,91,70,.82)!important;
+ color:#f0f4e8!important;border-color:rgba(175,211,150,.17)!important;
+}
+body #appShell #view .wa-message-row.internal .wa-message-bubble{
+ background:rgba(107,85,56,.58)!important;color:#f4ddbd!important;
+}
 body #appShell #view :is(.wa-list-row:hover,.wa-list-row.active){
- background:rgba(178,228,187,.14)!important;
+ background:rgba(236,247,230,.061)!important;
 }
-body #appShell #view :is(.wa-chat-preview,.wa-chat-meta,.wa-inbox-welcome p,.wa-inbox-side-bottom,
- .wa-message-meta,.wa-inbox-details small){color:#afc4b6!important}
-body #appShell #view :is(.wa-mode-btn,.wa-round-icon,.wa-small-action,.wa-filters button,
- .wa-inbox-search,.wa-compose-ownership){
- background:rgba(214,244,225,.07)!important;color:#d8ebdd!important;border-color:rgba(210,237,225,.16)!important;
+body #appShell #view .wa-chat-avatar{
+ background:rgba(202,213,204,.15)!important;color:#dde4d8!important;
+ border-color:var(--socio-line)!important;
 }
-body #appShell #view :is(.wa-mode-btn.active,.wa-filters button.active){
- background:rgba(189,241,151,.23)!important;color:#e3ffd3!important;
+body #appShell #view :is(.wa-message-meta,.wa-chat-preview,.wa-chat-meta,
+ .wa-inbox-side-bottom,.wa-inbox-details p,.wa-inbox-details small,
+ .wa-message-quote){color:var(--socio-muted)!important}
+body #appShell #view :is(.socio-knowledge-edit,.code-preview,.ps-review-card details pre,
+ .messages-preview,.message-feed,.catalog-ai-card,.socio-train-result textarea){
+ background:rgba(17,23,23,.50)!important;
+ border-color:rgba(226,239,222,.12)!important;
+ color:#d6e1d6!important;
 }
-body #appShell #view :is(.wa-message-row.internal .wa-message-bubble){
- background:rgba(244,192,116,.14)!important;color:#ffe9c4!important;
+body #appShell #view :is(.catalog-cover,.catalog-placeholder,
+ .catalog-variant-row input,.catalog-gallery-item,.catalog-campaign-list>div,
+ .px-feature-media,.px-feature-no-media){
+ background:rgba(20,27,27,.39)!important;
+ border-color:var(--socio-line)!important;
+ color:#d4ddd3!important;
 }
-body #appShell #view :is(.socio-train-account,.socio-knowledge-edit,.ps-review-card,
- .ps-review-card details pre,.code-preview,.messages-preview,.bubble,
- .catalog-cover,.catalog-placeholder,.catalog-ai-card){
- background:rgba(19,31,35,.51)!important;color:#e7f2e7!important;
- border-color:rgba(215,240,225,.16)!important;
-}
-body #appShell #view :is(.socio-train-account strong,.socio-training-center h2,.socio-clean-head h2,
- .ps-review-card h4){color:#f0f8ef!important}
-body #appShell #view :is(.ps-review-card p,.socio-train-account small,.catalog-product-copy small){
- color:#b7cac0!important;
-}
-body #appShell #view .loading,body #appShell #view .px-loading,
-body #appShell #view .master-loading{
- color:#d6e9da!important;border-color:rgba(214,244,220,.15)!important;
- background:linear-gradient(100deg,rgba(80,104,110,.12),rgba(173,205,189,.19),rgba(80,104,110,.12))!important;
- background-size:220% 100%!important;animation:socio-glass-loading 1.9s linear infinite!important;
+body #appShell #view :is(.px-conn-row,.wa-list-row-wrap,
+ .wa-thread-header,.wa-compose-row,.master-plan-row){border-color:var(--socio-line)!important}
+body #appShell #view .px-conn-icon.wa{background:rgba(124,175,121,.16)!important;color:#b9d9ae!important}
+body #appShell #view .px-conn-icon.meta{background:rgba(118,163,201,.15)!important;color:#afcce8!important}
+body #appShell #view .px-conn-icon.google{background:rgba(216,167,116,.14)!important;color:#ebbf9a!important}
+
+/* ------------------------- Overlays / assistant ------------------------ */
+body:has(#appShell:not(.hidden)) #commandOverlay.command-overlay,
+body:has(#appShell:not(.hidden)) .socio-popup-backdrop{
+ background:rgba(9,12,12,.67)!important;
+ -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
 }
 body:has(#appShell:not(.hidden)) #commandOverlay .command-box,
 body:has(#appShell:not(.hidden)) .socio-popup-surface,
-body:has(#appShell:not(.hidden)) .socio-billing-dialog{
- background:linear-gradient(140deg,#34464f,#17252b)!important;color:#f1f8f1!important;
- border-color:rgba(211,245,232,.19)!important;
- box-shadow:0 24px 75px rgba(0,0,0,.6),inset 0 1px rgba(255,255,255,.075)!important;
+body:has(#appShell:not(.hidden)) .socio-billing-dialog,
+body:has(#appShell:not(.hidden)) .wa-dialog-surface{
+ background:linear-gradient(155deg,#353e3e,#252d2d)!important;
+ color:#eef2ec!important;
+ border-color:rgba(233,244,230,.17)!important;
+ box-shadow:0 18px 60px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05)!important;
 }
-body:has(#appShell:not(.hidden)) #commandOverlay.command-overlay,
-body:has(#appShell:not(.hidden)) .socio-popup-backdrop{
- background:rgba(5,12,17,.72)!important;backdrop-filter:blur(12px)!important;
-}
-body:has(#appShell:not(.hidden)) #commandOverlay :is(.command-item,.command-tip,.command-close,
- .command-search-wrap>svg),body:has(#appShell:not(.hidden)) .socio-popup-header h2{
- color:#eef9ef!important;
+body:has(#appShell:not(.hidden)) #commandOverlay :is(.command-item,.command-tip,.command-close),
+body:has(#appShell:not(.hidden)) .socio-popup-surface :is(h2,h3,strong){
+ color:#e8eee7!important;
 }
 body:has(#appShell:not(.hidden)) #commandOverlay :is(.command-item:hover,.command-close),
 body:has(#appShell:not(.hidden)) .socio-popup-close{
- background:rgba(211,244,228,.11)!important;border-color:rgba(211,244,228,.18)!important;
+ background:rgba(240,248,238,.07)!important;border-color:var(--socio-line,rgba(255,255,255,.15))!important;
 }
-body:has(#appShell:not(.hidden)) .socio-popup-surface :is(input,textarea,select){
- background:rgba(16,28,34,.65)!important;color:#f0f8ee!important;
- border-color:rgba(215,240,229,.20)!important;
+body:has(#appShell:not(.hidden)) #commandOverlay #commandSearch,
+body:has(#appShell:not(.hidden)) .socio-popup-surface :is(input,select,textarea){
+ background:rgba(13,20,20,.57)!important;
+ color:#edf2eb!important;border-color:rgba(236,246,234,.16)!important;
+ color-scheme:dark!important;
 }
-body:has(#appShell:not(.hidden)) .socio-popup-surface label,
-body:has(#appShell:not(.hidden)) .socio-popup-header p{color:#bdcdc5!important}
+body:has(#appShell:not(.hidden)) .socio-popup-surface :is(label,p),
+body:has(#appShell:not(.hidden)) .command-tip{color:#bac6ba!important}
+body:has(#appShell:not(.hidden)) .px-assistant-fab{
+ background:linear-gradient(133deg,#475452,#343f3d)!important;
+ border:1px solid rgba(232,244,224,.20)!important;
+ color:#f0f4ee!important;box-shadow:0 7px 26px rgba(0,0,0,.24)!important;
+}
+body:has(#appShell:not(.hidden)) .px-assistant-window{
+ background:#303a39!important;color:#e7ede5!important;
+ border-color:rgba(228,241,224,.16)!important;
+ box-shadow:0 18px 55px rgba(0,0,0,.34)!important;
+}
+body.socio-is-master .px-assistant-dock{display:none!important}
+
+/* ------------------------- Motion / safe rendering -------------------- */
+body #appShell #view :is(.loading,.px-loading,.master-loading,.master-no-data){
+ background:linear-gradient(101deg,rgba(61,72,71,.46),rgba(101,111,108,.36),rgba(61,72,71,.46))!important;
+ background-size:230% 100%!important;
+ color:#b6c5b8!important;
+ border-color:var(--socio-line)!important;
+ animation:socio-glass-loading 2.2s ease-in-out infinite!important;
+}
+@keyframes socio-glass-loading{
+ from{background-position:100% 0}
+ to{background-position:-100% 0}
+}
 @media(max-width:780px){
- body #appShell .sidebar{border-bottom:1px solid rgba(224,247,235,.17)!important}
+ body #appShell .sidebar{border-bottom:1px solid var(--socio-line)!important}
+ body #appShell #view :is(.card,.ember-card,.px-panel,.px-kpi,.master-panel,.master-kpi){
+  -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
+ }
  body #appShell .sidebar-bottom:has(#masterProductionSwitch:not(.hidden)){
-   display:flex!important;align-items:center;justify-content:flex-end;padding:7px 0 0!important;
+  display:flex!important;align-items:center;justify-content:flex-end;padding:7px 0 0!important;
  }
  body #appShell .sidebar-bottom #masterProductionSwitch:not(.hidden){
-   width:auto!important;min-height:34px!important;padding:7px 13px!important;font-size:11px!important;
+  width:auto!important;min-height:34px!important;padding:7px 13px!important;font-size:11px!important;
  }
- body #appShell .sidebar-bottom>#masterProductionSwitch.hidden{display:none!important}
 }
 @media(prefers-reduced-motion:reduce){
- body #appShell #view .loading,body #appShell #view .px-loading,
- body #appShell #view .master-loading{animation:none!important}
- body #appShell :is(.btn,.nav-item,.ember-kpi,.px-kpi,.master-kpi){transition:none!important;animation:none!important}
+ body #appShell #view :is(.loading,.px-loading,.master-loading,.master-no-data){animation:none!important}
+ body #appShell :is(.btn,.nav-item,.ember-kpi,.px-kpi,.master-kpi,.quick-search){
+  transition:none!important;animation:none!important;
+ }
+}
+/* Contrast and meaning: do not visually hide disabled controls or errors. */
+body #appShell #view :is(.form-error,.error,.px-danger-zone){color:#f1b2a9!important}
+body #appShell #view :is(.px-danger-zone .btn,.ps-delete-action){
+ color:#f0b4af!important;background:rgba(179,82,80,.09)!important;
+ border-color:rgba(227,132,124,.23)!important;
+}
+
+/* ------------------------- Typography / spacing discipline ------------ */
+body #appShell #view :is(.view-heading h1,.px-page-heading h1,.master-hero h1,
+ .ember-card-heading h1,.ai-guide-title h1){
+ font-weight:680!important;letter-spacing:-.043em!important;line-height:1.18!important;
+ text-shadow:none!important;
+}
+body #appShell #view :is(.ember-kpi-value,.px-kpi-number,.master-kpi strong,
+ .px-ads-metric>b){
+ font-weight:670!important;letter-spacing:-.045em!important;
+ font-variant-numeric:tabular-nums!important;
+}
+body #appShell #view :is(.view-heading p,.px-page-heading p,
+ .master-hero p,.panel-head p,.master-panel-head p,.ember-kpi-meta){
+ line-height:1.55!important;
+}
+body #appShell #view :is(.card,.ember-card,.ember-kpi,.px-panel,.px-kpi,
+ .master-panel,.master-kpi,.catalog-product){
+ border-radius:15px!important;
+}
+body #appShell :is(.btn,.px-marketing-filters button,.ember-filter button){
+ border-radius:10px!important;
+}
+body #appShell #view :is(.data-table,.px-table,.master-table){
+ font-variant-numeric:tabular-nums;
+}
+/* The business screens use recognizable, restrained semantic surfaces. */
+body #appShell #view :is(.metric,.thread-item,.ember-qr-placeholder,.ember-qr-live,
+ .socio-qr-live,.socio-qr-current,.socio-connected-item,.commerce-empty,
+ .quote-mentioned-products,.report-note-grid>div,.px-budget-details,
+ .px-budget-child,.px-budget-list,.px-advanced,.px-footnote,
+ .px-featured-item,.px-feature-stats,.px-quick-action){
+ background:rgba(23,30,30,.33)!important;
+ color:var(--socio-copy)!important;
+ border-color:var(--socio-line)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.022)!important;
+}
+body #appShell #view :is(.metric,.thread-item,.ember-qr-placeholder,
+ .socio-qr-current,.socio-connected-item,.quote-mentioned-products) :is(h2,h3,strong){
+ color:var(--socio-ink)!important;
+}
+body #appShell #view :is(.commerce-alert,.socio-qr-live,.socio-connected-item,
+ .px-budget-warning,.px-notice){
+ border-radius:13px!important;
+}
+body #appShell #view .commerce-alert{
+ background:linear-gradient(145deg,#39443f,#2a3331)!important;
+ border-color:rgba(210,239,203,.20)!important;
+ box-shadow:0 12px 36px rgba(0,0,0,.24)!important;
+ color:var(--socio-copy)!important;
+}
+body #appShell #view .commerce-alert :is(strong,h3){color:var(--socio-ink)!important}
+body #appShell #view .commerce-alert :is(small,p){color:var(--socio-muted)!important}
+body #appShell #view .socio-catalog-clean #newProduct{
+ background:var(--socio-accent)!important;color:var(--socio-accent-ink)!important;
+}
+body #appShell #view :is(.master-status.active,.px-live-indicator){
+ background:rgba(180,213,125,.15)!important;
+ color:#d7e9b5!important;border-color:rgba(190,221,139,.23)!important;
+}
+body #appShell #view :is(.master-status.trial,.master-status.paused){
+ background:rgba(215,161,124,.13)!important;color:#ebc3a7!important;
+ border-color:rgba(220,162,125,.22)!important;
+}
+body #appShell #view :is(.px-budget-meter,.master-plan-track,.progress-track,
+ .report-bar-track){
+ background:rgba(232,239,225,.11)!important;
+}
+body #appShell #view :is(.progress-fill,.master-plan-track>span){
+ background:linear-gradient(90deg,#9bb177,#c1da86)!important;
+}
+body #appShell #view .wa-inbox .wa-inbox-search input{
+ background:transparent!important;border:none!important;box-shadow:none!important;
+}
+body #appShell #view :is(.flow-image-card textarea,.quote-draft-form textarea,
+ .quote-draft-form input,.sale-item select,.sale-item input,.sale-links input,
+ .commerce-item-row input,.commerce-item-row select){
+ background:rgba(18,25,25,.6)!important;color:var(--socio-ink)!important;
+ border-color:var(--socio-line-strong)!important;color-scheme:dark!important;
+}
+/* Ensure modal/assistant controls follow the same tone without losing meaning. */
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.socio-billing-dialog)
+ :is(.btn,.socio-popup-close):not(.primary){
+ background:rgba(236,244,231,.095)!important;color:#e3eee0!important;
+ border-color:rgba(233,242,231,.19)!important;
+}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.socio-billing-dialog)
+ .btn.primary{
+ background:#c9f16d!important;color:#202b17!important;
+}
+body:has(#appShell:not(.hidden)) .px-assistant-window :is(input,textarea,select){
+ background:rgba(17,25,25,.75)!important;color:#eaf1e9!important;
+ border-color:rgba(233,242,230,.20)!important;
+}
+body:has(#appShell:not(.hidden)) .px-assistant-window :is(h2,h3,strong){
+ color:#f1f5ef!important;
+}
+body:has(#appShell:not(.hidden)) .px-assistant-window :is(p,small){
+ color:#b5c4b8!important;
+}
+/* Sign-in: same finish as the product, but no hidden-content or layout changes. */
+body:has(#authScreen:not(.hidden)){
+ background:#1a2020!important;color:#e9efe7!important;
+}
+body .auth-screen:not(.hidden){
+ background:linear-gradient(125deg,#1c2323,#272f2e)!important;
+ color:#eaf0e9!important;
+}
+body .auth-screen:not(.hidden) .auth-art{
+ background:radial-gradient(ellipse 95% 70% at 10% 0,rgba(111,131,127,.20),transparent 65%),
+ linear-gradient(154deg,#35403e,#202927 80%)!important;
+ color:#eff3ed!important;
+}
+body .auth-screen:not(.hidden) .auth-art :is(h1,p,.auth-bottom){
+ color:#ecf1e9!important;
+}
+body .auth-screen:not(.hidden) .auth-art :is(.eyebrow,.brand-mark.large){
+ color:#d4edb0!important;
+}
+body .auth-screen:not(.hidden) .auth-panel{
+ background:linear-gradient(145deg,#303838,#242c2c)!important;
+ color:#edf1e9!important;
+}
+body .auth-screen:not(.hidden) :is(.auth-heading h2,.mobile-brand){
+ color:#f4f6ef!important;
+}
+body .auth-screen:not(.hidden) :is(.auth-heading p,.auth-footer){
+ color:#a9b7ad!important;
+}
+body .auth-screen:not(.hidden) .auth-box :is(input,select,textarea){
+ background:rgba(17,24,24,.54)!important;
+ border-color:rgba(230,239,222,.20)!important;
+ color:#f1f4ec!important;
+ color-scheme:dark!important;
+}
+body .auth-screen:not(.hidden) .auth-box input::placeholder{color:#839189!important}
+body .auth-screen:not(.hidden) .auth-box .btn.primary{
+ background:#c9f16d!important;color:#202c16!important;border-color:#d9f5a0!important;
+}
+body .auth-screen:not(.hidden) .auth-box :is(.auth-password-toggle,.help-card){
+ background:rgba(237,246,230,.09)!important;
+ color:#e2ebdd!important;border-color:rgba(235,242,232,.16)!important;
 }
