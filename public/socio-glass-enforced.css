@@ -549,3 +549,146 @@ body #appShell #view :is(.px-danger-zone .btn,.ps-delete-action){
  color:#f0b4af!important;background:rgba(179,82,80,.09)!important;
  border-color:rgba(227,132,124,.23)!important;
 }
+
+/* ------------------------- Typography / spacing discipline ------------ */
+body #appShell #view :is(.view-heading h1,.px-page-heading h1,.master-hero h1,
+ .ember-card-heading h1,.ai-guide-title h1){
+ font-weight:680!important;letter-spacing:-.043em!important;line-height:1.18!important;
+ text-shadow:none!important;
+}
+body #appShell #view :is(.ember-kpi-value,.px-kpi-number,.master-kpi strong,
+ .px-ads-metric>b){
+ font-weight:670!important;letter-spacing:-.045em!important;
+ font-variant-numeric:tabular-nums!important;
+}
+body #appShell #view :is(.view-heading p,.px-page-heading p,
+ .master-hero p,.panel-head p,.master-panel-head p,.ember-kpi-meta){
+ line-height:1.55!important;
+}
+body #appShell #view :is(.card,.ember-card,.ember-kpi,.px-panel,.px-kpi,
+ .master-panel,.master-kpi,.catalog-product){
+ border-radius:15px!important;
+}
+body #appShell :is(.btn,.px-marketing-filters button,.ember-filter button){
+ border-radius:10px!important;
+}
+body #appShell #view :is(.data-table,.px-table,.master-table){
+ font-variant-numeric:tabular-nums;
+}
+/* The business screens use recognizable, restrained semantic surfaces. */
+body #appShell #view :is(.metric,.thread-item,.ember-qr-placeholder,.ember-qr-live,
+ .socio-qr-live,.socio-qr-current,.socio-connected-item,.commerce-empty,
+ .quote-mentioned-products,.report-note-grid>div,.px-budget-details,
+ .px-budget-child,.px-budget-list,.px-advanced,.px-footnote,
+ .px-featured-item,.px-feature-stats,.px-quick-action){
+ background:rgba(23,30,30,.33)!important;
+ color:var(--socio-copy)!important;
+ border-color:var(--socio-line)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.022)!important;
+}
+body #appShell #view :is(.metric,.thread-item,.ember-qr-placeholder,
+ .socio-qr-current,.socio-connected-item,.quote-mentioned-products) :is(h2,h3,strong){
+ color:var(--socio-ink)!important;
+}
+body #appShell #view :is(.commerce-alert,.socio-qr-live,.socio-connected-item,
+ .px-budget-warning,.px-notice){
+ border-radius:13px!important;
+}
+body #appShell #view .commerce-alert{
+ background:linear-gradient(145deg,#39443f,#2a3331)!important;
+ border-color:rgba(210,239,203,.20)!important;
+ box-shadow:0 12px 36px rgba(0,0,0,.24)!important;
+ color:var(--socio-copy)!important;
+}
+body #appShell #view .commerce-alert :is(strong,h3){color:var(--socio-ink)!important}
+body #appShell #view .commerce-alert :is(small,p){color:var(--socio-muted)!important}
+body #appShell #view .socio-catalog-clean #newProduct{
+ background:var(--socio-accent)!important;color:var(--socio-accent-ink)!important;
+}
+body #appShell #view :is(.master-status.active,.px-live-indicator){
+ background:rgba(180,213,125,.15)!important;
+ color:#d7e9b5!important;border-color:rgba(190,221,139,.23)!important;
+}
+body #appShell #view :is(.master-status.trial,.master-status.paused){
+ background:rgba(215,161,124,.13)!important;color:#ebc3a7!important;
+ border-color:rgba(220,162,125,.22)!important;
+}
+body #appShell #view :is(.px-budget-meter,.master-plan-track,.progress-track,
+ .report-bar-track){
+ background:rgba(232,239,225,.11)!important;
+}
+body #appShell #view :is(.progress-fill,.master-plan-track>span){
+ background:linear-gradient(90deg,#9bb177,#c1da86)!important;
+}
+body #appShell #view .wa-inbox .wa-inbox-search input{
+ background:transparent!important;border:none!important;box-shadow:none!important;
+}
+body #appShell #view :is(.flow-image-card textarea,.quote-draft-form textarea,
+ .quote-draft-form input,.sale-item select,.sale-item input,.sale-links input,
+ .commerce-item-row input,.commerce-item-row select){
+ background:rgba(18,25,25,.6)!important;color:var(--socio-ink)!important;
+ border-color:var(--socio-line-strong)!important;color-scheme:dark!important;
+}
+/* Ensure modal/assistant controls follow the same tone without losing meaning. */
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.socio-billing-dialog)
+ :is(.btn,.socio-popup-close):not(.primary){
+ background:rgba(236,244,231,.095)!important;color:#e3eee0!important;
+ border-color:rgba(233,242,231,.19)!important;
+}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.socio-billing-dialog)
+ .btn.primary{
+ background:#c9f16d!important;color:#202b17!important;
+}
+body:has(#appShell:not(.hidden)) .px-assistant-window :is(input,textarea,select){
+ background:rgba(17,25,25,.75)!important;color:#eaf1e9!important;
+ border-color:rgba(233,242,230,.20)!important;
+}
+body:has(#appShell:not(.hidden)) .px-assistant-window :is(h2,h3,strong){
+ color:#f1f5ef!important;
+}
+body:has(#appShell:not(.hidden)) .px-assistant-window :is(p,small){
+ color:#b5c4b8!important;
+}
+/* Sign-in: same finish as the product, but no hidden-content or layout changes. */
+body:has(#authScreen:not(.hidden)){
+ background:#1a2020!important;color:#e9efe7!important;
+}
+body .auth-screen:not(.hidden){
+ background:linear-gradient(125deg,#1c2323,#272f2e)!important;
+ color:#eaf0e9!important;
+}
+body .auth-screen:not(.hidden) .auth-art{
+ background:radial-gradient(ellipse 95% 70% at 10% 0,rgba(111,131,127,.20),transparent 65%),
+ linear-gradient(154deg,#35403e,#202927 80%)!important;
+ color:#eff3ed!important;
+}
+body .auth-screen:not(.hidden) .auth-art :is(h1,p,.auth-bottom){
+ color:#ecf1e9!important;
+}
+body .auth-screen:not(.hidden) .auth-art :is(.eyebrow,.brand-mark.large){
+ color:#d4edb0!important;
+}
+body .auth-screen:not(.hidden) .auth-panel{
+ background:linear-gradient(145deg,#303838,#242c2c)!important;
+ color:#edf1e9!important;
+}
+body .auth-screen:not(.hidden) :is(.auth-heading h2,.mobile-brand){
+ color:#f4f6ef!important;
+}
+body .auth-screen:not(.hidden) :is(.auth-heading p,.auth-footer){
+ color:#a9b7ad!important;
+}
+body .auth-screen:not(.hidden) .auth-box :is(input,select,textarea){
+ background:rgba(17,24,24,.54)!important;
+ border-color:rgba(230,239,222,.20)!important;
+ color:#f1f4ec!important;
+ color-scheme:dark!important;
+}
+body .auth-screen:not(.hidden) .auth-box input::placeholder{color:#839189!important}
+body .auth-screen:not(.hidden) .auth-box .btn.primary{
+ background:#c9f16d!important;color:#202c16!important;border-color:#d9f5a0!important;
+}
+body .auth-screen:not(.hidden) .auth-box :is(.auth-password-toggle,.help-card){
+ background:rgba(237,246,230,.09)!important;
+ color:#e2ebdd!important;border-color:rgba(235,242,232,.16)!important;
+}
