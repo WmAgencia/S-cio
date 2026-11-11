@@ -1717,16 +1717,14 @@ $('#masterProductionSwitch')?.addEventListener('click',()=>action(async()=>{
  if(button.disabled)return;
  button.disabled=true;
  try{
-  if(isMasterView()){
-   // Return to the original tenant of the authenticated platform owner.
-   const homeTenantId=state.me.user.homeTenantId;
-   if(state.me.tenant.id!==homeTenantId){
-    await api('/api/admin/switch','POST',{tenantId:homeTenantId});
-    state.view='overview';
-    await boot();
-   }else await changeView('overview');
-   toast('Seu painel de produção está aberto.');
-  }else await changeView('masterOverview');
+  // Same login; a full page reinitialization separates the two workspaces.
+  // Master always opens on the platform owner's home tenant, not a customer.
+  const nextMode=isMasterView()?'production':'master';
+  const homeTenantId=state.me.user.homeTenantId;
+  if(state.me.tenant.id!==homeTenantId){
+   await api('/api/admin/switch','POST',{tenantId:homeTenantId});
+  }
+  location.assign(workspaceUrl(nextMode));
  }finally{button.disabled=false;syncMasterSwitch();}
 }));
 
