@@ -36,7 +36,7 @@ test('Master and Production routes are distinct, with one login and enforced pri
  };
  const master=simulate('https://socio.test/?workspace=master#/companies',true,'master','admin');
  assert.equal(master.mode,'master');assert.equal(master.initial,'admin');assert.equal(master.isMaster,true);
- assert.equal(master.next,'/?workspace=master#/companies');
+ assert.equal(master.next,'/?workspace=master#/dashboard');
  const production=simulate('https://socio.test/?workspace=production#/marketing',true,'production','marketing');
  assert.equal(production.mode,'production');assert.equal(production.initial,'marketing');assert.equal(production.isMaster,false);
  const denied=simulate('https://socio.test/?workspace=master#/dashboard',false,'production','overview');
