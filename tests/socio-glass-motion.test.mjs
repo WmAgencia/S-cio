@@ -10,8 +10,9 @@ test('glass/motion is the final skin after approved application CSS and JS',()=>
   assert.match(html,/id="productionNav"/);
   assert.match(html,/id="masterNav"/);
   assert.match(html,/id="view"/);
-  assert.match(css,/backdrop-filter:blur\(22px\)/);
-  assert.match(css,/--socio-glass-lime:#bcf36a/);
+  assert.match(css,/socio-glass-nav-pill/);
+  assert.match(css,/will-change:clip-path/);
+  assert.doesNotMatch(css,/--socio-glass-lime|\.px-panel\s*\{|\.master-panel\s*\{/);
   assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
 });
 test('motion is valid JS, respects accessible motion choice and never replaces navigation handlers',()=>{
