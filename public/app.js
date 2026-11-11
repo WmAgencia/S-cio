@@ -14,22 +14,23 @@ const isMasterView=()=>isPrimaryMaster()&&state.workspace==='master';
 const workspaceRoutes={dashboard:'masterOverview',companies:'admin',plans:'masterPlans'};
 const workspaceSections={masterOverview:'dashboard',admin:'companies',masterPlans:'plans'};
 function workspaceUrl(mode,section){
- const url=new URL(location.href);
+ const url=new URL(typeof location==='object'&&location?.href?location.href:'http://localhost/');
  url.searchParams.set('workspace',mode);
  for(const param of ['marketing','provider','google_ads','meta_official'])url.searchParams.delete(param);
  url.hash='/'+(mode==='master'?(workspaceSections[section]||'dashboard'):(section||'overview'));
  return url.pathname+url.search+url.hash;
 }
 function workspaceFromLocation(){
+ if(typeof location!=='object'||!location?.href)return 'production';
  return new URL(location.href).searchParams.get('workspace')==='master'&&isPrimaryMaster()?'master':'production';
 }
 function initialWorkspaceView(){
- const part=String(location.hash||'').replace(/^#\//,'');
+ const part=typeof location==='object'?String(location.hash||'').replace(/^#\//,''):'';
  if(state.workspace==='master')return workspaceRoutes[part]||'masterOverview';
  return ['overview','inbox','connections','marketing','products','training','team','settings'].includes(part)?part:'overview';
 }
 function updateWorkspaceUrl(){
- if(typeof history!=='object'||!state.me)return;
+ if(typeof history!=='object'||typeof location!=='object'||!state.me)return;
  const next=workspaceUrl(state.workspace,state.view);
  if(location.pathname+location.search+location.hash!==next)history.replaceState(null,'',next);
 }
