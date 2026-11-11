@@ -1,7 +1,7 @@
 
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
-const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,aiTab:'training',catalogSearch:'',catalogStock:'all'};
+const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,workspace:'production',aiTab:'training',catalogSearch:'',catalogStock:'all'};
 const featureLabels={whatsapp:'Atendimento WhatsApp',catalog:'Produtos e serviços',quotes:'Orçamentos e pedidos',meta_ads:'Meta Ads',ai:'Inteligência Artificial',team:'Equipe'};
 const featureView={inbox:'whatsapp',products:'catalog',sales:'quotes',quotes:'quotes',marketing:'meta_ads',training:'ai',team:'team'};
 const featureKeys=Object.keys(featureLabels);
@@ -10,22 +10,59 @@ const featureAvailable=key=>featuresEnabled()[key]!==false;
 const ownAccountAvailable=()=>!!state.me?.user?.platformOwner||(state.me?.user?.permissions||[]).includes('account.manage');
 const isPrimaryMaster=()=>!!(state.me?.user?.platformOwner&&state.me?.user?.homeTenantId);
 const masterViews=new Set(['masterOverview','admin','masterPlans']);
-const isMasterView=()=>isPrimaryMaster()&&masterViews.has(state.view);
+const isMasterView=()=>isPrimaryMaster()&&state.workspace==='master';
+const workspaceRoutes={dashboard:'masterOverview',companies:'admin',plans:'masterPlans'};
+const workspaceSections={masterOverview:'dashboard',admin:'companies',masterPlans:'plans'};
+function workspaceUrl(mode,section){
+ const url=new URL(typeof location==='object'&&location?.href?location.href:'http://localhost/');
+ url.searchParams.set('workspace',mode);
+ for(const param of ['marketing','provider','google_ads','meta_official'])url.searchParams.delete(param);
+ url.hash='/'+(mode==='master'?(workspaceSections[section]||'dashboard'):(section||'overview'));
+ return url.pathname+url.search+url.hash;
+}
+function workspaceFromLocation(){
+ if(typeof location!=='object'||!location?.href)return 'production';
+ return new URL(location.href).searchParams.get('workspace')==='master'&&isPrimaryMaster()?'master':'production';
+}
+function initialWorkspaceView(){
+ const part=typeof location==='object'?String(location.hash||'').replace(/^#\//,''):'';
+ if(state.workspace==='master')return workspaceRoutes[part]||'masterOverview';
+ return ['overview','inbox','connections','marketing','products','training','team','settings'].includes(part)?part:'overview';
+}
+function updateWorkspaceUrl(){
+ if(typeof history!=='object'||typeof location!=='object'||!state.me)return;
+ const next=workspaceUrl(state.workspace,state.view);
+ if(location.pathname+location.search+location.hash!==next)history.replaceState(null,'',next);
+}
 function syncMasterSwitch(){
  const button=$('#masterProductionSwitch'),label=$('#masterSwitchLabel');
  if(!button||!label)return;
  const visible=isPrimaryMaster(),master=isMasterView();
- button.classList.toggle('hidden',!visible);
  document.body?.classList?.toggle('socio-is-master',master);
- $('#productionNav')?.classList.toggle('hidden',master);
- $('#masterNav')?.classList.toggle('hidden',!master);
+ document.body?.classList?.toggle('socio-is-production',!master);
+ const shell=$('#appShell');
+ if(shell)shell.dataset.workspace=master?'master':'production';
+ const kind=$('#workspaceKind');
+ if(kind)kind.textContent=master?'ADMINISTRAÇÃO MASTER':'AMBIENTE DE PRODUÇÃO';
+ const pill=document.querySelector('.top-pill');
+ if(pill)pill.innerHTML='<i></i> '+(master?'Painel Master · SaaS':'Ambiente de produção');
+ button.classList.toggle('hidden',!visible);
+ const production=$('#productionNav'),admin=$('#masterNav');
+ for(const [nav,hide] of [[production,master],[admin,!master]]){
+  if(!nav)continue;
+  nav.classList.toggle('hidden',hide);
+  nav.setAttribute('aria-hidden',String(hide));
+  nav.inert=hide;
+ }
  document.querySelector('.sidebar-bottom [data-view="settings"]')?.classList.toggle('hidden',master);
  if(!visible)return;
- label.textContent=master?'Voltar ao meu painel de produção':'Ir para o painel Master';
+ label.textContent=master?'Ir para Produção':'Ir para Master';
  button.title=label.textContent;button.setAttribute('aria-label',label.textContent);
  const workspace=$('#workspaceName'),initial=$('#workspaceInitial');
- if(workspace)workspace.textContent=master?'Administração Master':state.me?.tenant?.name||'Seu espaço';
+ if(workspace)workspace.textContent=master?'Sócio · Plataforma':state.me?.tenant?.name||'Seu espaço';
  if(initial)initial.textContent=master?'M':(state.me?.tenant?.name?.[0]||'S').toUpperCase();
+ const role=$('#userRole');
+ if(role)role.textContent=master?'Administração da plataforma':'Ambiente da empresa';
 }
 
 const viewAvailable=key=>!featureView[key]||featureAvailable(featureView[key])||key==='team'&&ownAccountAvailable();
@@ -57,7 +94,7 @@ async function api(path,method='GET',body,headers={},options={}){
 // Tenant-scoped in-app commerce notifications. Only opaque IDs are stored locally.
 let commerceAlertTimer=null,commerceAlertBusy=false;
 async function pollCommerceAlerts(){
- if(commerceAlertBusy||!state.me||!featureAvailable('quotes')||
+ if(commerceAlertBusy||!state.me||isMasterView()||!featureAvailable('quotes')||
   !(state.me.user.permissions||[]).includes('sales.read'))return;
  commerceAlertBusy=true;
  try{
@@ -106,7 +143,7 @@ async function pollCommerceAlerts(){
 }
 function startCommerceAlerts(){
  clearInterval(commerceAlertTimer);
- if(!state.me||!featureAvailable('quotes')||
+ if(!state.me||isMasterView()||!featureAvailable('quotes')||
   !(state.me.user.permissions||[]).includes('sales.read'))return;
  void pollCommerceAlerts();
  commerceAlertTimer=setInterval(pollCommerceAlerts,12000);
@@ -136,6 +173,8 @@ async function boot(){
   try{
    const me=await api('/api/me');
    state.me=me;state.csrf=me.csrf;
+   state.workspace=workspaceFromLocation();
+   state.view=initialWorkspaceView();
    $('#authScreen').classList.add('hidden');$('#appShell').classList.remove('hidden');
    $('#workspaceName').textContent=me.tenant.name;
    $('#workspaceInitial').textContent=(me.tenant.name[0]||'S').toUpperCase();
@@ -175,7 +214,8 @@ async function boot(){
     state.view='connections';
     if(typeof history==='object')history.replaceState(null,'',location.pathname);
    }
-   globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf});
+   if(isMasterView())globalThis.SocioThalitaUI?.unmount();
+   else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf});
    await changeView(state.view);
    if(googleOAuth==='connected')toast('Conta Google autorizada. Selecione a conta de anúncios em Conexões.');
    if(officialOAuth==='authorized')toast('Meta autorizada. Selecione a conta de anúncios em Conexões.');
@@ -222,7 +262,10 @@ async function changeView(next,conversationId=null){
  if(next==='agent'){state.aiTab='agent';next='training';}
  else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
+ // Workspace boundary: Master tools never render in production and vice versa.
  if(masterViews.has(next)&&!isPrimaryMaster())return;
+ if(isMasterView()&&!masterViews.has(next))return;
+ if(!isMasterView()&&masterViews.has(next))return;
  if(!viewAvailable(next))next='overview';
  const access=new Set(state.me?.user?.permissions||[]);
  if(next==='training'&&!access.has('training.manage'))next='overview';
@@ -239,6 +282,7 @@ async function changeView(next,conversationId=null){
  syncMasterSwitch();
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
  $('#topTitle').textContent=titles[next]||'Sócio';
+ updateWorkspaceUrl();
  setLoading();
  try{
   if(next==='overview')await overview();
@@ -1588,8 +1632,8 @@ async function admin(){
  });
  view.querySelectorAll('[data-switch]').forEach(b=>b.addEventListener('click',()=>action(async()=>{
   await api('/api/admin/switch','POST',{tenantId:b.dataset.switch});
-  toast('Ambiente alterado.');
-  state.view='overview';await boot();
+  // Reload the isolated production environment after selecting a company.
+  location.assign(workspaceUrl('production','overview'));
  })));
 }
 async function action(fn){try{await fn();}catch(err){toast(errMsg(err),true);}}
@@ -1674,16 +1718,14 @@ $('#masterProductionSwitch')?.addEventListener('click',()=>action(async()=>{
  if(button.disabled)return;
  button.disabled=true;
  try{
-  if(isMasterView()){
-   // Return to the original tenant of the authenticated platform owner.
-   const homeTenantId=state.me.user.homeTenantId;
-   if(state.me.tenant.id!==homeTenantId){
-    await api('/api/admin/switch','POST',{tenantId:homeTenantId});
-    state.view='overview';
-    await boot();
-   }else await changeView('overview');
-   toast('Seu painel de produção está aberto.');
-  }else await changeView('masterOverview');
+  // Same login; a full page reinitialization separates the two workspaces.
+  // Master always opens on the platform owner's home tenant, not a customer.
+  const nextMode=isMasterView()?'production':'master';
+  const homeTenantId=state.me.user.homeTenantId;
+  if(state.me.tenant.id!==homeTenantId){
+   await api('/api/admin/switch','POST',{tenantId:homeTenantId});
+  }
+  location.assign(workspaceUrl(nextMode));
  }finally{button.disabled=false;syncMasterSwitch();}
 }));
 
