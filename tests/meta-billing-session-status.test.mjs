@@ -11,7 +11,10 @@ test('dashboard distinguishes Meta OAuth from separate billing browser authentic
  assert.match(overview,/browserBilling\.data\?\.session_present===true/);
  assert.match(overview,/browserBilling\.data\?\.configured===false/);
  assert.match(overview,/Faturamento ainda não conectado/);
- assert.match(overview,/Conectar faturamento e ler saldo/);
+ assert.match(overview,/Abrir recarga na Meta/);
+ assert.match(overview,/A conta de anúncios está conectada\. Consulte o saldo e faça recargas/);
+ assert.doesNotMatch(overview,/Conectar faturamento e ler saldo/);
+ assert.doesNotMatch(overview,/Adicionar saldo por Pix/);
  assert.match(overview,/Aguardando leitura do faturamento/);
  assert.match(overview,/Saldo disponível/);
  assert.match(overview,/Não disponível/);
