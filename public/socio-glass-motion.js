@@ -100,10 +100,13 @@
     requestAnimationFrame(()=>{
       if(token!==revealToken||shell.classList.contains('hidden')||keyOfView()!==key)return;
       pageAnimation?.cancel();
+      // Do not blur or clip a full dashboard with charts, videos and forms.
+      // Compositor-friendly opacity + translation is faster on low-power devices.
+      if(typeof view.animate!=='function')return;
       pageAnimation=view.animate([
-        {opacity:.35,filter:'blur(10px)',clipPath:'inset(0 100% 0 0 round 20px)',transform:'translateY(9px)'},
-        {opacity:1,filter:'blur(0px)',clipPath:'inset(0 0 0 0 round 0px)',transform:'translateY(0px)'}
-      ],{duration:560,easing:'cubic-bezier(.22,.86,.2,1)',fill:'none'});
+        {opacity:.73,transform:'translate3d(0,7px,0)'},
+        {opacity:1,transform:'translate3d(0,0,0)'}
+      ],{duration:280,easing:'cubic-bezier(.22,.86,.2,1)',fill:'none'});
       pageAnimation.addEventListener('finish',()=>{pageAnimation=null;},{once:true});
     });
   }
