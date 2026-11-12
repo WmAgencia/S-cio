@@ -646,3 +646,16 @@ body #appShell #view .wa-compose-row button.wa-compose-send :is(span,b,strong),
 body #appShell #view .wa-filters button.active :is(span,b,strong){
  color:inherit!important;
 }
+
+/* Compact but readable assistant proportions: avoids the tall empty canvas
+   visible in the report, without moving or hiding its interactive controls. */
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window:not(.hidden){
+ width:min(405px,calc(100vw - 28px));
+ max-height:min(645px,calc(100dvh - 95px));
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-feed{
+ min-height:155px;max-height:310px;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaInput{
+ min-height:73px;max-height:130px;
+}
