@@ -487,8 +487,7 @@
 
   root.innerHTML='<div class="px-workspace px-overview">'+
    '<section class="px-budget-top" aria-label="Verba disponível nas contas publicitárias">'+
-    '<div class="px-budget-top-heading"><strong>Controle de verba</strong>'+
-     '<small>Saldo pré-pago e previsão serão exibidos apenas quando confirmados pela plataforma.</small></div>'+
+    '<div class="px-budget-top-heading"><strong>Controle de verba</strong></div>'+
     '<div class="px-budget-top-grid">'+
      budgetHeaderItem('meta_ads','Meta Ads','meta',metaReady,meta?.spend,meta?.currency,metaBillingUrl?{finance,paymentsUrl:metaBillingUrl,alert:metaBilling.data?.balanceAlert}:{finance,alert:metaBilling.data?.balanceAlert})+
      budgetHeaderItem('google_ads','Google Ads','google',googleReady,googleMicros,googleCode)+
