@@ -1,7 +1,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {hashPassword,verifyPassword,hashToken,secureEqual,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier} from '../lib.mjs';
+import {hashPassword,verifyPassword,hashToken,secureEqual,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier,clientIp,isPrivateAddress} from '../lib.mjs';
 test('passwords use salted scrypt, not plaintext',async()=>{
  const a=await hashPassword('UmaSenhaForte@2026');
  const b=await hashPassword('UmaSenhaForte@2026');
@@ -56,4 +56,24 @@ test('Brazilian phone numbers normalize and log in with same identifier regardle
  assert.deepEqual(loginIdentifier('(15) 99999-9999'),{type:'phone',value:'5515999999999'});
  assert.equal(loginIdentifier('invalido'),null);
  assert.equal(loginIdentifier({phone:'5515999999999'}),null);
+});
+
+test('rate limiting sees the real client behind a private proxy and never trusts a public peer',()=>{
+ const request=(peer,forwarded)=>({socket:{remoteAddress:peer},headers:forwarded===undefined?{}:{'x-forwarded-for':forwarded}});
+ assert.equal(isPrivateAddress('10.0.0.5'),true);
+ assert.equal(isPrivateAddress('::ffff:172.18.0.1'),true);
+ assert.equal(isPrivateAddress('100.64.1.9'),true);
+ assert.equal(isPrivateAddress('fd12:3456::1'),true);
+ assert.equal(isPrivateAddress('203.0.113.9'),false);
+ // Railway edge: private peer, real client in X-Forwarded-For.
+ assert.equal(clientIp(request('10.0.0.5','203.0.113.9, 10.0.0.5'),{}),'203.0.113.9');
+ assert.equal(clientIp(request('::ffff:10.0.0.5','203.0.113.9'),{}),'203.0.113.9');
+ // A public peer cannot pick its own address.
+ assert.equal(clientIp(request('203.0.113.9','198.51.100.7'),{}),'203.0.113.9');
+ // Missing or malformed header falls back to the socket peer.
+ assert.equal(clientIp(request('10.0.0.5'),{}),'10.0.0.5');
+ assert.equal(clientIp(request('10.0.0.5','not-an-ip'),{}),'10.0.0.5');
+ // Explicit opt-in and opt-out win over the heuristic.
+ assert.equal(clientIp(request('203.0.113.9','198.51.100.7'),{SOCIO_TRUST_PROXY:'true'}),'198.51.100.7');
+ assert.equal(clientIp(request('10.0.0.5','203.0.113.9'),{SOCIO_TRUST_PROXY:'false'}),'10.0.0.5');
 });

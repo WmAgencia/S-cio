@@ -80,3 +80,26 @@ export function loginIdentifier(value){
 }
 
 export function moneyBRL(cents){return (Number(cents)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+
+// Rate limiting keys must identify the real caller. Behind Railway (or any
+// reverse proxy) the socket peer is the proxy, so every user would share one
+// bucket. X-Forwarded-For is only honoured when the peer is itself a private
+// address or SOCIO_TRUST_PROXY explicitly enables it; a public peer can never
+// pick its own address.
+const privateAddress=/^(?:10\.|127\.|169\.254\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/;
+export function isPrivateAddress(value){
+ const ip=String(value||'').toLowerCase().replace(/^::ffff:/,'');
+ if(ip==='::1'||ip==='::')return true;
+ if(/^f[cd]/.test(ip)||/^fe[89ab]/.test(ip))return true;
+ return privateAddress.test(ip);
+}
+export function clientIp(req,env=process.env){
+ const direct=String(req?.socket?.remoteAddress||'unknown');
+ const setting=String(env.SOCIO_TRUST_PROXY||'').toLowerCase();
+ const trust=setting==='1'||setting==='true'||
+  (setting!=='0'&&setting!=='false'&&isPrivateAddress(direct));
+ if(!trust)return direct;
+ const forwarded=String(req?.headers?.['x-forwarded-for']||'').split(',')[0].trim();
+ return /^[0-9a-f]{1,4}(?::[0-9a-f]{0,4}){2,7}$|^\d{1,3}(?:\.\d{1,3}){3}$/i.test(forwarded)&&forwarded.length<=45
+  ?forwarded:direct;
+}

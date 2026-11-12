@@ -8,6 +8,8 @@ export const instagramReady=(env=process.env)=>Boolean(
  env.INSTAGRAM_APP_ID&&env.INSTAGRAM_APP_SECRET&&env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN&&
  env.CHANNEL_ENCRYPTION_KEY&&env.CHANNEL_ENCRYPTION_KEY.length>=32&&
  /^https:\/\//.test(env.SOCIO_PUBLIC_URL||''));
+// One central kill switch for every external message, WhatsApp or Instagram.
+export const instagramOutboundEnabled=(env=process.env)=>env.SOCIO_OUTBOUND_ENABLED==='true';
 function webOrigin(env){
  const url=new URL(env.SOCIO_PUBLIC_URL);
  if(url.protocol!=='https:'||url.username||url.password||url.pathname!=="/")
@@ -217,6 +219,7 @@ export async function sendInstagramReply(pool,{
  tenantId,conversationId,userId,text,clientRequestId,request=fetch,env=process.env
 }){
  if(!instagramReady(env))throw err(503,'Instagram não configurado.');
+ if(!instagramOutboundEnabled(env))throw err(503,'Envio externo desabilitado neste ambiente.');
  if(!uuid(conversationId)||!uuid(clientRequestId)||typeof text!=='string'||!text.trim()||
     text.length>1000)throw err(422,'Mensagem ou identificador inválido; limite de 1.000 caracteres.');
  const content=text.trim(),textHash=createHash('sha256').update(content).digest('hex');
