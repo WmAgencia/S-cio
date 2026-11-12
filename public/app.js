@@ -855,7 +855,7 @@ async function products(selected=null){
    '<div class="row-actions"><button class="btn soft" id="addVariant" type="button">+ Adicionar variação</button><button class="btn primary" type="submit">Salvar variações</button></div></form></section>'+
   '<section class="card card-pad section-gap"><div class="section-title">Campanhas associadas</div>'+
    '<p class="form-note">Associação manual de referência. A conexão e os resultados da conta de anúncios ainda não foram verificados.</p>'+
-   (current.campaigns.length?'<div class="catalog-campaign-list">'+current.campaigns.map(c=>
+   (current.campaigns.some(c=>googleAdsVisible()||c.provider!=='google_ads')?'<div class="catalog-campaign-list">'+current.campaigns.filter(c=>googleAdsVisible()||c.provider!=='google_ads').map(c=>
      '<div><strong>'+e(c.provider==='google_ads'?'Google Ads':'Meta Ads')+'</strong> · '+e(c.label||c.campaign_id)+
      '<span class="form-note"> '+e(c.campaign_id)+' · Não verificada</span>'+
      '<button class="btn sm ghost" data-delete-campaign="'+e(c.id)+'">Remover</button></div>').join('')+'</div>':'')+
