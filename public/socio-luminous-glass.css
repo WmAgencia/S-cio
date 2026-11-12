@@ -445,3 +445,12 @@ body #appShell #view :is(.master-table tr:hover td,.data-table tr:hover td,.px-t
  body #appShell .nav-item:hover:not(.selected){transform:none!important}
  body #appShell #view :is(.px-kpi,.px-ads-metric,.px-panel):hover{transform:none!important}
 }
+
+
+/* Lighter surfaces require brighter metadata; verified in computed WCAG AA. */
+body #appShell #view .wa-thread-identity small{
+ color:#eaf6e8!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header small{
+ color:#ecf8ea!important;
+}
