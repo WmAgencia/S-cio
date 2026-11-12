@@ -82,7 +82,7 @@ body #appShell #view{
  max-width:1510px;
  padding:31px 40px 60px;
 }
-body #appShell .site-footer{background:transparent!important;color:#8c97a8!important}
+body #appShell .site-footer{background:transparent!important;color:#5e6b7e!important}
 
 /* Navigation: compact, readable and distinctly separated by workspace. */
 body #appShell .sidebar{
@@ -96,9 +96,9 @@ body #appShell .brand-mark{color:#344054!important;font-weight:800}
 body #appShell .brand-mark span{color:var(--stripe-accent)!important}
 body #appShell .sidebar-logo{margin-bottom:29px}
 body #appShell .sidebar-logo strong{color:#222c3d!important;font-weight:750!important;letter-spacing:-.06em!important}
-body #appShell .sidebar-logo small{color:#8791a2!important;letter-spacing:.11em!important}
+body #appShell .sidebar-logo small{color:#5e6b7e!important;letter-spacing:.11em!important}
 body #appShell .sidebar-label{
- color:#8590a3!important;
+ color:#5e6b7e!important;
  font-size:10px!important;
  letter-spacing:.09em!important;
  font-weight:690!important;
@@ -120,9 +120,9 @@ body #appShell .workspace-circle{
  border:1px solid #dfdcff!important;
  border-radius:10px;
 }
-body #appShell .workspace-label small{color:#778398!important;font-weight:690!important}
+body #appShell .workspace-label small{color:#5e6b7e!important;font-weight:690!important}
 body #appShell .workspace-label strong{color:#202735!important;font-weight:720!important}
-body #appShell .workspace-chevron{color:#8690a3!important}
+body #appShell .workspace-chevron{color:#5e6b7e!important}
 body #appShell .nav{gap:3px}
 body #appShell .nav-item,
 body #appShell .sidebar-bottom .nav-item{
@@ -136,7 +136,7 @@ body #appShell .sidebar-bottom .nav-item{
  box-shadow:none!important;
  transition:background-color .17s ease,color .17s ease,border-color .17s ease!important;
 }
-body #appShell .nav-item .nav-symbol{color:#728094!important;opacity:1}
+body #appShell .nav-item .nav-symbol{color:#5e6b7e!important;opacity:1}
 body #appShell .nav-item:hover:not(.selected){
  background:#e9ecf3!important;
  color:#202735!important;
@@ -184,9 +184,9 @@ body #appShell .quick-search{
 }
 body #appShell .quick-search:hover{background:#f3f4f9!important;border-color:#cdd2e1!important}
 body #appShell .quick-search :is(svg,span){color:#667085!important}
-body #appShell .breadcrumb{color:#798396!important}
+body #appShell .breadcrumb{color:#5e6b7e!important}
 body #appShell .breadcrumb strong{color:#263244!important;font-weight:690!important}
-body #appShell .breadcrumb span{color:#b4bbc9!important}
+body #appShell .breadcrumb span{color:#5e6b7e!important}
 body #appShell .top-pill{
  background:#f4f6f9!important;
  border:1px solid #e7eaf0!important;
@@ -197,7 +197,7 @@ body #appShell .top-pill{
 }
 body #appShell .top-pill i{background:#16865d!important;box-shadow:none!important}
 body #appShell .user-profile-copy strong{color:#283246!important}
-body #appShell .user-profile-copy small{color:#7a8799!important}
+body #appShell .user-profile-copy small{color:#5e6b7e!important}
 body #appShell .user-chip{background:#ecebfd!important;color:#5653ce!important;border:1px solid #dddafa!important}
 body #appShell #view :is(.view-heading h1,.px-page-heading h1,.master-hero h1,.socio-clean-head h1,
  .socio-clean-head h2,.auth-heading h2){
@@ -289,7 +289,7 @@ body #appShell #view :is(input:not([type=checkbox]):not([type=radio]),textarea,s
  color-scheme:light!important;
  box-shadow:none!important;
 }
-body #appShell #view :is(input,textarea)::placeholder{color:#8a96a7!important;opacity:1!important}
+body #appShell #view :is(input,textarea)::placeholder{color:#5e6b7e!important;opacity:1!important}
 body #appShell #view :is(input,textarea,select):focus{
  border-color:#7772ed!important;
  outline:none!important;
@@ -361,7 +361,7 @@ body #appShell #view .px-budget-top-heading>strong{
  color:#344054!important;font-size:12px!important;font-weight:720!important;
  letter-spacing:0!important;
 }
-body #appShell #view .px-budget-top-heading>small{color:#7d8798!important;font-size:11px!important}
+body #appShell #view .px-budget-top-heading>small{color:#5e6b7e!important;font-size:11px!important}
 body #appShell #view .px-budget-top-grid{
  display:grid!important;
  grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr))!important;
@@ -528,7 +528,7 @@ body #appShell #view .px-ads-metric:hover{
  border-color:#d8dce8!important;box-shadow:var(--stripe-shadow-hover)!important;
 }
 body #appShell #view .px-ads-metric>div strong{color:#344054!important;font-size:12px!important}
-body #appShell #view .px-ads-metric>div small{color:#8490a2!important;font-size:11px!important}
+body #appShell #view .px-ads-metric>div small{color:#5e6b7e!important;font-size:11px!important}
 body #appShell #view .px-ads-metric>b{
  color:#202735!important;font-size:clamp(20px,2.1vw,26px)!important;
  font-weight:750!important;letter-spacing:-.04em!important;
@@ -683,7 +683,7 @@ body #appShell #view :is(.px-feature-media,.px-ad-creative-media,.px-meta-previe
  border-radius:9px!important;
 }
 body #appShell #view .px-feature-poster{object-fit:cover!important}
-body #appShell #view .px-feature-no-media{color:#8994a4!important}
+body #appShell #view .px-feature-no-media{color:#5e6b7e!important}
 body #appShell #view .px-conn-card{
  display:grid!important;
  background:#fff!important;border:1px solid var(--stripe-line)!important;
@@ -693,7 +693,7 @@ body #appShell #view .px-conn-head h2{color:#273449!important}
 body #appShell #view .px-conn-head p{color:#667085!important}
 body #appShell #view .px-conn-icon.wa{background:#e9f8ef!important;color:#16865d!important}
 body #appShell #view .px-conn-icon.meta{background:#eef4ff!important;color:#2977cb!important}
-body #appShell #view .px-conn-icon.google{background:#fff4e5!important;color:#bd6a2a!important}
+body #appShell #view .px-conn-icon.google{background:#fff4e5!important;color:#a15b21!important}
 body #appShell #view .px-conn-row{border-bottom:1px solid #eef0f4!important}
 body #appShell #view .px-conn-row strong{color:#344054!important}
 body #appShell #view .px-conn-row small{color:#667085!important}
@@ -755,7 +755,7 @@ body #appShell #view .wa-inbox-side-head h1{
  color:#202735!important;
  font-size:23px!important;letter-spacing:-.045em!important;font-weight:755!important;
 }
-body #appShell #view .wa-inbox-side-head h1 span{color:#8290a1!important}
+body #appShell #view .wa-inbox-side-head h1 span{color:#5e6b7e!important}
 body #appShell #view .wa-inbox-connect{
  background:#605dec!important;color:#fff!important;border:1px solid #605dec!important;
  border-radius:9px!important;
@@ -774,7 +774,7 @@ body #appShell #view :is(.wa-round-icon,.wa-small-action):hover{
 }
 body #appShell #view .wa-inbox-search{
  background:#fafbfc!important;border:1px solid #e4e7ed!important;
- color:#8995a5!important;
+ color:#5e6b7e!important;
  box-shadow:none!important;border-radius:9px!important;
  margin:0 14px 12px!important;
 }
@@ -786,7 +786,7 @@ body #appShell #view .wa-inbox-search input{
  color:#273449!important;background:transparent!important;
  border:0!important;box-shadow:none!important;
 }
-body #appShell #view .wa-inbox-search input::placeholder{color:#8d99a9!important}
+body #appShell #view .wa-inbox-search input::placeholder{color:#5e6b7e!important}
 body #appShell #view .wa-filters{
  display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;
  gap:5px!important;padding:0 14px 13px!important;
@@ -826,9 +826,9 @@ body #appShell #view .wa-chat-avatar{
  box-shadow:none!important;
 }
 body #appShell #view .wa-chat-avatar-1{background:#e7f6ef!important;color:#147b55!important;border-color:#d9ebe0!important}
-body #appShell #view .wa-chat-avatar-2{background:#fff1e8!important;color:#b66c40!important;border-color:#f9e4d3!important}
+body #appShell #view .wa-chat-avatar-2{background:#fff1e8!important;color:#9c562e!important;border-color:#f9e4d3!important}
 body #appShell #view .wa-chat-avatar-3{background:#f1ecff!important;color:#7a5ac4!important;border-color:#e9ddfa!important}
-body #appShell #view .wa-chat-avatar-4{background:#f1f5ff!important;color:#5478b2!important;border-color:#e2eaf8!important}
+body #appShell #view .wa-chat-avatar-4{background:#f1f5ff!important;color:#3b679f!important;border-color:#e2eaf8!important}
 body #appShell #view .wa-chat-name-line strong,
 body #appShell #view .wa-thread-identity strong{
  color:#263244!important;font-weight:710!important;
@@ -894,7 +894,7 @@ body #appShell #view .wa-message-bubble:hover{border-color:#cfd3e9!important}
 body #appShell #view .wa-message-bubble.selected{outline:2px solid #7773e8!important}
 body #appShell #view .wa-message-copy{color:inherit!important;line-height:1.58!important}
 body #appShell #view .wa-message-meta,
-body #appShell #view .wa-message-row.outgoing .wa-message-meta{color:#748096!important}
+body #appShell #view .wa-message-row.outgoing .wa-message-meta{color:#5e6b7e!important}
 body #appShell #view .wa-message-more{
  background:#f3f4f8!important;color:#596579!important;border:1px solid #e8ebf1!important;
 }
@@ -929,7 +929,7 @@ body #appShell #view .wa-compose-row textarea{
  border:1px solid #dce0e8!important;border-radius:10px!important;
  box-shadow:none!important;
 }
-body #appShell #view .wa-compose-row textarea::placeholder{color:#8a96a7!important}
+body #appShell #view .wa-compose-row textarea::placeholder{color:#5e6b7e!important}
 body #appShell #view .wa-compose-row textarea:focus{
  border-color:#7874ea!important;box-shadow:0 0 0 3px rgba(96,93,236,.1)!important;
 }
@@ -1082,7 +1082,7 @@ body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaInput{
  font-size:12px!important;min-height:70px!important;
 }
 body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaInput::placeholder{
- color:#8c97a8!important;
+ color:#5e6b7e!important;
 }
 body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaInput:focus{
  border-color:#7975ee!important;box-shadow:0 0 0 3px rgba(96,93,236,.10)!important;
@@ -1102,7 +1102,7 @@ body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-hint{
  color:#5d6a7e!important;
 }
 body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-disclaimer{
- background:#fafbfe!important;color:#768297!important;
+ background:#fafbfe!important;color:#5e6b7e!important;
  border-top:1px solid #eceef4!important;font-size:10px!important;
 }
 body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-approval:not(:empty){
@@ -1133,13 +1133,13 @@ body #appShell #view .master-kpi small{color:#667085!important;font-size:11px!im
 body #appShell #view .master-kpi strong{
  color:#202735!important;font-weight:755!important;letter-spacing:-.04em!important;
 }
-body #appShell #view .master-kpi-copy>span{color:#7b8799!important}
+body #appShell #view .master-kpi-copy>span{color:#5e6b7e!important}
 body #appShell #view .master-kpi-icon{
  background:#f0efff!important;color:#605dec!important;
  border:1px solid #e5e3fb!important;border-radius:10px!important;
 }
 body #appShell #view .master-tone-green .master-kpi-icon{background:#e9f8ef!important;color:#16865d!important;border-color:#d4ecdf!important}
-body #appShell #view .master-tone-amber .master-kpi-icon{background:#fff6e7!important;color:#a66a1e!important;border-color:#f3e3c9!important}
+body #appShell #view .master-tone-amber .master-kpi-icon{background:#fff6e7!important;color:#965c1b!important;border-color:#f3e3c9!important}
 body #appShell #view .master-tone-blue .master-kpi-icon{background:#eef4ff!important;color:#3e74cc!important;border-color:#dce7fb!important}
 body #appShell #view .master-panel{
  background:#fff!important;border:1px solid #e5e7eb!important;
@@ -1154,7 +1154,7 @@ body #appShell #view .master-month-bar{
  background:#7873ec!important;border-radius:5px 5px 0 0!important;
 }
 body #appShell #view .master-month-col,
-body #appShell #view .master-month-col>span{color:#7a8799!important}
+body #appShell #view .master-month-col>span{color:#5e6b7e!important}
 body #appShell #view .master-month-value{color:#475467!important}
 body #appShell #view .master-donut-center{
  background:#fff!important;color:#344054!important;
@@ -1165,11 +1165,11 @@ body #appShell #view .master-donut-center small{color:#667085!important}
 body #appShell #view .master-plan-track{background:#eef0f5!important}
 body #appShell #view .master-plan-row-top>span{color:#667085!important}
 body #appShell #view .master-plan-row-top strong{color:#344054!important}
-body #appShell #view .master-plan-row-top small{color:#7d899b!important}
+body #appShell #view .master-plan-row-top small{color:#5e6b7e!important}
 body #appShell #view .master-health-list>div{border-color:#eceef3!important}
 body #appShell #view .master-health-list span{color:#667085!important}
 body #appShell #view .master-health-list strong{color:#344054!important}
-body #appShell #view :is(.master-disclaimer,.master-updated){color:#758298!important}
+body #appShell #view :is(.master-disclaimer,.master-updated){color:#5e6b7e!important}
 body #appShell #view .master-company-filters :is(input,select){
  background:#fff!important;border:1px solid #dce0e8!important;color:#344054!important;
 }
@@ -1347,7 +1347,7 @@ body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio
  box-shadow:none!important;
 }
 body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog,.command-box)
- :is(input,textarea)::placeholder{color:#8995a6!important}
+ :is(input,textarea)::placeholder{color:#5e6b7e!important}
 body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog,.command-box)
  :is(.btn.primary,button.primary){
  background:#605dec!important;color:#fff!important;
@@ -1552,7 +1552,7 @@ body #authScreen .auth-art h1{
 body #authScreen .auth-art p{
  color:#606f82!important;line-height:1.7!important;
 }
-body #authScreen .auth-bottom{color:#748098!important;letter-spacing:.15em!important}
+body #authScreen .auth-bottom{color:#5e6b7e!important;letter-spacing:.15em!important}
 body #authScreen .auth-panel{background:#fff!important}
 body #authScreen .auth-heading h2{
  color:#202735!important;font-weight:740!important;letter-spacing:-.04em!important;
@@ -1569,7 +1569,7 @@ body #authScreen .form-stack :is(input,textarea,select):focus{
  border-color:#7773ec!important;outline:0!important;
  box-shadow:0 0 0 3px rgba(96,93,236,.12)!important;
 }
-body #authScreen .form-stack input::placeholder{color:#8996a9!important}
+body #authScreen .form-stack input::placeholder{color:#5e6b7e!important}
 body #authScreen .btn.primary{
  background:#605dec!important;color:#fff!important;border:1px solid #605dec!important;
  border-radius:9px!important;box-shadow:none!important;
@@ -1579,7 +1579,7 @@ body #authScreen .btn.primary span{color:inherit!important}
 body #authScreen .auth-password-toggle{
  color:#605dec!important;background:transparent!important;border:0!important;
 }
-body #authScreen .auth-footer{color:#7b8799!important}
+body #authScreen .auth-footer{color:#5e6b7e!important}
 body #authScreen .help-card{
  background:#f1f0ff!important;border:1px solid #dfdef8!important;color:#514fa3!important;
 }
