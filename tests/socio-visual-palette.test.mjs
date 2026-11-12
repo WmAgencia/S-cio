@@ -31,7 +31,7 @@ test('legacy visual effects no longer fight the final style',()=>{
   assert.ok(html.includes('/'+file+'?v=20261111-refined'));
   assert.ok(server.includes("'"+'/'+file+"'"));
  }
- assert.match(html,/meta name="theme-color" content="#202626"/);
+ assert.match(html,/meta name="theme-color" content="#40544e"/);
 });
 test('refined theme protects every product workspace and does not rearrange the dashboard',()=>{
  for(const marker of ['.px-panel','.px-ads-metric','.master-panel','.master-kpi',

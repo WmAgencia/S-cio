@@ -1,0 +1,456 @@
+/*
+ * Sócio | Luminous Glass 2026-11-12
+ * Softer daylight graphite, richer optically separated glass controls.
+ * The data surface stays calm; only floating functional surfaces blur.
+ * Appearance-only. No DOM, routing, permissions or layout rearrangements.
+ */
+#appShell{
+ --socio-bg:#354742;
+ --socio-sidebar:#40544e;
+ --socio-top:#4b6259;
+ --socio-surface:#455650;
+ --socio-surface-raised:#52645b;
+ --socio-surface-soft:rgba(252,255,249,.095);
+ --socio-ink:#f7fbf6;
+ --socio-copy:#e3eee4;
+ --socio-muted:#d7e5d9;
+ --socio-soft:#dae8dd;
+ --socio-line:rgba(246,255,242,.22);
+ --socio-line-strong:rgba(247,255,243,.39);
+ --socio-glass-panel:linear-gradient(155deg,#4c5e56,#40524b);
+ --socio-glass-edge:rgba(244,255,235,.25);
+ --socio-glass-shadow:0 14px 33px rgba(18,35,28,.18),inset 0 1px rgba(255,255,255,.14);
+ --sx-bg:#354742;
+ --sx-panel:#455650;
+ --sx-panel-elev:#506259;
+ --sx-panel-deep:#40534b;
+ --sx-line:rgba(248,255,240,.25);
+ --sx-line-strong:rgba(252,255,247,.42);
+ --sx-fg:#f7fbf6;
+ --sx-fg-soft:#e8f1e7;
+ --sx-fg-muted:#d9e7dc;
+ --sx-shadow:0 14px 32px rgba(17,36,29,.17),inset 0 1px rgba(255,255,255,.14);
+ --polish-panel:#455850;
+ --polish-raised:#52675d;
+ --polish-muted:#d6e6d8;
+ --polish-ink:#f7fbf6;
+ --wa-wall:#354a42;
+ --wa-card:#4b6054;
+ --wa-panel:#3b5147;
+ --wa-muted:#dae8db;
+}
+#appShell[data-workspace="master"]{
+ --socio-bg:#36484f;
+ --socio-sidebar:#415660;
+ --socio-top:#4e626d;
+ --socio-surface:#485c62;
+ --socio-surface-raised:#566a70;
+ --socio-glass-panel:linear-gradient(155deg,#50636b,#42555c);
+ --sx-bg:#36484f;
+ --sx-panel:#485c62;
+ --sx-panel-elev:#54686f;
+ --sx-panel-deep:#40545b;
+ --sx-fg:#f6fbfc;
+ --sx-fg-soft:#e1eff2;
+ --sx-fg-muted:#d5e5e8;
+ --socio-ink:#f6fbfc;
+ --socio-copy:#e1eef0;
+ --socio-muted:#d6e6e9;
+}
+
+/* Room lighting: a lighter background gives the glass something to refract. */
+html:has(#appShell:not(.hidden)),body:has(#appShell:not(.hidden)){
+ background:#30413c!important;
+ color:#f7fbf5!important;
+}
+body #appShell.app-shell{background:#354742!important;color:#f7fbf5!important}
+body #appShell .app-main{
+ background:
+  radial-gradient(ellipse 61% 44% at 88% 2%,rgba(200,229,215,.19),transparent 74%),
+  radial-gradient(ellipse 55% 66% at 4% 84%,rgba(139,184,176,.09),transparent 77%),
+  linear-gradient(154deg,#465b52 0%,#3c5048 53%,#34453f 100%)!important;
+ color:#f7fbf5!important;
+}
+body #appShell[data-workspace="master"] .app-main{
+ background:
+  radial-gradient(ellipse 66% 44% at 84% -5%,rgba(174,212,232,.16),transparent 76%),
+  linear-gradient(155deg,#495d67,#3c525b 57%,#32464e)!important;
+}
+
+/* Structural sidebar is an ordinary calm material; selected nav FLOATS. */
+body #appShell .sidebar{
+ background:
+  radial-gradient(ellipse 130% 43% at 10% 0%,rgba(228,251,230,.13),transparent 75%),
+  linear-gradient(167deg,#496057,#3d514a 62%,#35483f)!important;
+ border-right:1px solid rgba(247,255,243,.24)!important;
+ box-shadow:inset -1px 0 rgba(255,255,255,.095),9px 0 27px rgba(20,36,29,.10)!important;
+ color:#eaf3e9!important;
+}
+body #appShell[data-workspace="master"] .sidebar{
+ background:
+  radial-gradient(ellipse 100% 48% at 5% 0%,rgba(207,233,252,.12),transparent 76%),
+  linear-gradient(168deg,#4a606a,#3b5159 66%,#34474f)!important;
+}
+body #appShell .sidebar :is(.sidebar-label,.sidebar-logo small,.workspace-label small,.master-nav-title){
+ color:#deebe0!important;
+}
+body #appShell :is(.workspace-box,.sidebar-bottom #masterProductionSwitch:not(.hidden)){
+ background:linear-gradient(145deg,rgba(240,255,244,.165),rgba(238,251,242,.07))!important;
+ border:1px solid rgba(250,255,248,.33)!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.20),0 5px 15px rgba(21,38,30,.09)!important;
+ color:#f6faf3!important;
+}
+body #appShell .nav-item{color:#e7f0e8!important}
+body #appShell .nav-item .nav-symbol{color:#dce9df!important}
+body #appShell .nav-item.selected,body.socio-is-master #appShell #masterNav .nav-item.selected{
+ background:rgba(238,255,239,.11)!important;
+ border:1px solid rgba(246,255,244,.28)!important;
+ color:#fff!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.16)!important;
+}
+body #appShell .nav-item.selected .nav-symbol{color:#e2febc!important}
+body #appShell .nav-item:hover:not(.selected){
+ background:rgba(244,255,245,.16)!important;
+ color:#fff!important;
+ border-color:rgba(252,255,250,.18)!important;
+}
+body #appShell .nav>.socio-glass-nav-pill{
+ /* Semi-transparent tinted optical material. Keep composited blur localized. */
+ background:
+  linear-gradient(110deg,rgba(255,255,255,.27),rgba(255,255,255,.065) 47%,rgba(255,255,255,.14)),
+  rgba(228,250,230,.12)!important;
+ border:1px solid rgba(255,255,255,.48)!important;
+ box-shadow:
+  0 11px 25px rgba(15,31,25,.22),
+  inset 0 1px rgba(255,255,255,.50),
+  inset 0 -1px rgba(255,255,255,.10)!important;
+ -webkit-backdrop-filter:blur(17px) saturate(155%) brightness(1.07)!important;
+ backdrop-filter:blur(17px) saturate(155%) brightness(1.07)!important;
+}
+
+/* Floating topbar and quick-search: regular glass, optical top rim. */
+body #appShell .topbar{
+ background:
+  linear-gradient(173deg,rgba(255,255,255,.23),rgba(255,255,255,.065) 44%,rgba(255,255,255,.025)),
+  rgba(76,102,91,.70)!important;
+ border-bottom:1px solid rgba(248,255,242,.37)!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.34),0 11px 25px rgba(21,42,34,.13)!important;
+ -webkit-backdrop-filter:blur(19px) saturate(138%) brightness(1.06)!important;
+ backdrop-filter:blur(19px) saturate(138%) brightness(1.06)!important;
+}
+body #appShell[data-workspace="master"] .topbar{
+ background:
+  linear-gradient(172deg,rgba(255,255,255,.18),rgba(255,255,255,.035) 64%),
+  rgba(75,99,111,.74)!important;
+}
+body #appShell :is(.quick-search,.top-pill){
+ background:linear-gradient(148deg,rgba(255,255,255,.20),rgba(255,255,255,.055))!important;
+ border:1px solid rgba(253,255,251,.32)!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.20),0 6px 13px rgba(19,34,27,.08)!important;
+ color:#f7fcf6!important;
+ -webkit-backdrop-filter:blur(13px) saturate(135%)!important;
+ backdrop-filter:blur(13px) saturate(135%)!important;
+}
+body #appShell .topbar :is(.breadcrumb,.top-pill,.user-profile-copy small){
+ color:#e1eee4!important;
+}
+
+/* STANDARD MATERIAL: panels get brighter and calmer; not a blur-every-card hack. */
+body #appShell #view :is(
+ .card,.panel,.callout,.lucid-card,.ember-card,.ember-kpi,.ember-recent-card,
+ .ember-activity,.ember-ai-card,.ember-qr-card,.px-panel,.px-kpi,
+ .px-ads-metric,.px-conn-card,.master-panel,.master-kpi,
+ .socio-clean-section,.socio-training-center,.catalog-product,
+ .quote-request-item,.commerce-page .card,.px-campaign-dialog){
+ background:
+  linear-gradient(155deg,rgba(255,255,255,.115),rgba(255,255,255,.022) 52%,rgba(255,255,255,.00)),
+  linear-gradient(155deg,#4b5e55,#41544b)!important;
+ color:#f3faf2!important;
+ border:1px solid rgba(246,255,238,.26)!important;
+ box-shadow:0 13px 34px rgba(19,38,30,.15),inset 0 1px rgba(255,255,255,.18)!important;
+ -webkit-backdrop-filter:none!important;
+ backdrop-filter:none!important;
+}
+body #appShell[data-workspace="master"] #view :is(.card,.panel,.px-panel,.px-kpi,.master-panel,.master-kpi,.master-plan-row){
+ background:
+  linear-gradient(160deg,rgba(255,255,255,.105),transparent 60%),
+  linear-gradient(150deg,#50656c,#43565d)!important;
+ border-color:rgba(240,250,253,.27)!important;
+}
+body #appShell #view :is(.card,.panel,.px-panel,.px-kpi,.master-panel,.master-kpi):hover{
+ border-color:rgba(250,255,244,.43)!important;
+ box-shadow:0 18px 34px rgba(21,43,33,.18),inset 0 1px rgba(255,255,255,.21)!important;
+}
+body #appShell #view .px-kpi{
+ background:
+  radial-gradient(ellipse 82% 91% at 100% 0%,rgba(223,255,215,.14),transparent 70%),
+  linear-gradient(151deg,#53665c,#44594d)!important;
+ border-color:rgba(246,255,237,.30)!important;
+}
+body #appShell #view .px-panel{
+ background:
+  linear-gradient(160deg,rgba(255,255,255,.09),transparent 65%),
+  linear-gradient(155deg,#4b5e55,#42554e)!important;
+}
+body #appShell #view .px-ads-metric{
+ background:linear-gradient(154deg,#50635a,#43564d)!important;
+}
+body #appShell #view .px-kpi-number,
+body #appShell #view .px-ads-metric>b,
+body #appShell #view .px-panel-head h2,
+body #appShell #view .px-page-heading h1,
+body #appShell #view :is(.section-title,.view-heading h1,.socio-clean-head h2){
+ color:#fbfff9!important;
+}
+body #appShell #view :is(
+ .px-kpi-label,.px-kpi small,.px-panel-head p,.px-page-heading p,
+ .px-ads-metric small,.px-muted,.px-provenance,.form-note,
+ .ember-kpi-meta,.ember-kpi-name,.master-panel-head p,
+ .px-budget-meta-metric>span:first-child){
+ color:#e0ede2!important;
+}
+body #appShell #view :is(.px-kpi-icon,.master-kpi-icon,.ember-kpi-symbol,.px-conn-icon){
+ background:linear-gradient(145deg,rgba(255,255,255,.17),rgba(255,255,255,.065))!important;
+ border:1px solid rgba(246,255,236,.21)!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.16)!important;
+ color:#eaf6e2!important;
+}
+body #appShell #view .px-kpi-icon.green{color:#e0f9b9!important}
+body #appShell #view .px-kpi-icon.blue{color:#d5efff!important}
+
+/* Compact Meta ribbon must stay THIN: no height, order or CTA changes. */
+body #appShell #view .px-budget-account[data-budget-provider="meta_ads"].px-budget-meta-ribbon{
+ background:
+  linear-gradient(140deg,rgba(255,255,255,.155),rgba(255,255,255,.035) 67%),
+  linear-gradient(148deg,#50675a,#42594e)!important;
+ border-color:rgba(233,255,216,.36)!important;
+ box-shadow:0 12px 27px rgba(24,41,27,.15),inset 0 1px rgba(255,255,255,.25)!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-metric>span:first-child{
+ color:#e4f0e3!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-metric>strong{
+ color:#fff!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action{
+ border-color:rgba(250,255,245,.21)!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta{
+ background-color:#c9f16d!important;
+ color:#243118!important;
+}
+body #appShell #view .px-live-indicator{
+ background:rgba(217,247,192,.12)!important;
+ color:#e2ffce!important;
+ border:1px solid rgba(224,255,207,.30)!important;
+}
+
+/* Charts remain distinct readable data surfaces, no full-page blur. */
+body #appShell #view .px-chart-wrap{
+ background:linear-gradient(154deg,#3e5349,#384d44)!important;
+ border:1px solid rgba(240,255,231,.25)!important;
+}
+body #appShell #view .px-graph-counts{
+ background:rgba(30,53,41,.23)!important;
+ border-color:rgba(241,255,235,.16)!important;
+}
+body #appShell #view .px-chart-actions{
+ background:rgba(52,75,62,.68)!important;
+ border-color:rgba(244,255,233,.23)!important;
+}
+body #appShell #view .px-chart-actions button.px-range-btn:not(.active){
+ color:#e5f1e5!important;
+}
+body #appShell #view .px-chart-actions button.px-range-btn.active,
+body #appShell #view .px-chart-actions button.px-range-btn[aria-pressed="true"]{
+ background:#c9f16d!important;
+ color:#243118!important;
+}
+body #appShell #view .px-axis,body #appShell #view .px-legend,
+body #appShell #view .px-graph-counts>div>span{
+ color:#e2ede1!important;
+}
+
+/* Inbox: remove black tunnels while keeping messages and chat split clear. */
+body #appShell #view .wa-inbox{
+ --wa-wall:#374b43;
+ --wa-card:#4e6255;
+ --wa-panel:#42594d;
+ --wa-ink:#f6fbf3;
+ --wa-muted:#dce9da;
+ --wa-edge:rgba(246,255,236,.23);
+ background:#41564b!important;
+ border-color:rgba(246,255,233,.30)!important;
+ box-shadow:0 22px 52px rgba(15,38,23,.23),inset 0 1px rgba(255,255,255,.17)!important;
+}
+body #appShell #view .wa-inbox-side{
+ background:linear-gradient(168deg,#4a6055,#3e5449)!important;
+ border-right-color:var(--wa-edge)!important;
+}
+body #appShell #view .wa-inbox-main{
+ background:#40544a!important;
+ color:#f7fcf4!important;
+}
+body #appShell #view .wa-thread-header{
+ background:
+  linear-gradient(156deg,rgba(255,255,255,.13),rgba(255,255,255,.025)),
+  rgba(72,92,79,.83)!important;
+ border-bottom-color:rgba(246,255,236,.24)!important;
+}
+body #appShell #view .wa-message-list{
+ background:
+  radial-gradient(ellipse 49% 43% at 87% 3%,rgba(192,234,199,.08),transparent 75%),
+  linear-gradient(163deg,#3d5247,#374b41)!important;
+}
+body #appShell #view .wa-message-bubble{
+ background:linear-gradient(150deg,#516457,#465b4d)!important;
+ border-color:rgba(248,255,239,.26)!important;
+ color:#fbfefa!important;
+}
+body #appShell #view .wa-message-row.outgoing .wa-message-bubble{
+ background:linear-gradient(142deg,#5d775b,#4e6b50)!important;
+ border-color:rgba(218,254,199,.31)!important;
+}
+body #appShell #view .wa-compose{
+ background:linear-gradient(154deg,#4b5e51,#415449)!important;
+ border-top-color:rgba(247,255,236,.27)!important;
+}
+body #appShell #view .wa-compose-row textarea,
+body #appShell #view .wa-inbox-search{
+ background:rgba(37,59,47,.65)!important;
+ color:#fcfff9!important;
+ border-color:rgba(244,255,234,.34)!important;
+}
+body #appShell #view .wa-inbox-search input{background:transparent!important}
+body #appShell #view .wa-list-row.active{
+ background:linear-gradient(90deg,rgba(222,251,195,.21),rgba(240,255,233,.065))!important;
+ border-left-color:#d1f792!important;
+}
+body #appShell #view .wa-list-row:hover:not(.active){
+ background:rgba(246,255,240,.12)!important;
+}
+
+/* Thalita: elevated frosted regular glass with a stable reading plane. */
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-fab{
+ background:
+  linear-gradient(135deg,rgba(255,255,255,.24),rgba(255,255,255,.05)),
+  rgba(77,111,86,.78)!important;
+ color:#fafff7!important;
+ border:1px solid rgba(245,255,229,.53)!important;
+ box-shadow:0 13px 31px rgba(24,47,29,.28),inset 0 1px rgba(255,255,255,.31)!important;
+ -webkit-backdrop-filter:blur(16px) saturate(140%)!important;
+ backdrop-filter:blur(16px) saturate(140%)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window:not(.hidden){
+ background:
+  linear-gradient(166deg,rgba(255,255,255,.16),rgba(255,255,255,.028) 45%,rgba(255,255,255,.035)),
+  rgba(62,83,72,.87)!important;
+ border-color:rgba(246,255,236,.43)!important;
+ color:#f8fcf5!important;
+ box-shadow:0 28px 70px rgba(17,38,25,.38),inset 0 1px rgba(255,255,255,.32),inset 0 -1px rgba(255,255,255,.08)!important;
+ -webkit-backdrop-filter:blur(23px) saturate(148%) brightness(1.07)!important;
+ backdrop-filter:blur(23px) saturate(148%) brightness(1.07)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header{
+ background:
+  linear-gradient(154deg,rgba(255,255,255,.23),rgba(255,255,255,.05)),
+  rgba(77,101,85,.74)!important;
+ border-bottom:1px solid rgba(252,255,238,.30)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-feed{
+ background:rgba(53,75,61,.76)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-line{
+ background:linear-gradient(145deg,#526b57,#496151)!important;
+ border-color:rgba(247,255,233,.27)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-line.user{
+ background:linear-gradient(145deg,#627f60,#4f7255)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-suggestions{
+ background:rgba(65,88,73,.80)!important;
+ border-color:rgba(245,255,234,.20)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-suggestions button{
+ background:rgba(251,255,240,.14)!important;
+ border-color:rgba(250,255,238,.31)!important;
+ color:#f5fff0!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock :is(#thalitaInput,.px-assistant-actions .btn.soft){
+ background:rgba(35,58,45,.53)!important;
+ border-color:rgba(248,255,231,.37)!important;
+ color:#f7fff4!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock :is(.px-assistant-hint,.px-assistant-window small){
+ color:#e3f0e2!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-actions .btn.primary{
+ background-color:#c9f16d!important;color:#243118!important;
+}
+
+/* Controls are clearly separate from their content surfaces. */
+body #appShell #view :is(.btn.soft,.btn.ghost,.px-range-btn:not(.active),
+ .px-marketing-filters button:not(.active),.ai-guide-tabs button:not(.active)){
+ background:linear-gradient(145deg,rgba(255,255,255,.17),rgba(255,255,255,.06))!important;
+ color:#f2fbef!important;
+ border-color:rgba(247,255,238,.31)!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.17)!important;
+}
+body #appShell #view :is(.btn.primary,.wa-compose-send){
+ background-color:#c9f16d!important;
+ color:#243118!important;
+}
+body #appShell #view :is(input:not([type=checkbox]):not([type=radio]),textarea,select){
+ background-color:rgba(42,64,50,.73)!important;
+ color:#f9fff7!important;
+ border-color:rgba(247,255,238,.32)!important;
+ color-scheme:dark!important;
+}
+body #appShell #view :is(input,textarea)::placeholder{
+ color:#e0eadd!important;
+ opacity:1!important;
+}
+body #appShell #view :is(.master-table th,.data-table th,.px-table th){
+ background:rgba(33,60,47,.30)!important;
+ color:#f0f7ed!important;
+}
+body #appShell #view :is(.master-table tr:hover td,.data-table tr:hover td,.px-table tr:hover td){
+ background:rgba(246,255,239,.105)!important;
+}
+
+/* Fallbacks: maintain legibility even without frosted backdrop support. */
+@supports not ((backdrop-filter:blur(10px)) or (-webkit-backdrop-filter:blur(10px))){
+ body #appShell .topbar{background:#566b5f!important}
+ body #appShell .nav>.socio-glass-nav-pill{background:rgba(113,139,120,.92)!important}
+ body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window:not(.hidden){background:#4b6254!important}
+ body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-fab{background:#54705b!important}
+}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+ body #appShell .topbar{background:#4a6054!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+ body #appShell .nav>.socio-glass-nav-pill{background:#577262!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+ body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window:not(.hidden){
+  background:#4b6153!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important
+ }
+ body #appShell #view :is(.card,.px-kpi,.px-panel,.master-kpi,.master-panel){
+  border-color:rgba(250,255,243,.48)!important;
+ }
+}
+@media(max-width:760px){
+ body #appShell .topbar{-webkit-backdrop-filter:blur(10px) saturate(120%)!important;backdrop-filter:blur(10px) saturate(120%)!important}
+ body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window:not(.hidden){
+  -webkit-backdrop-filter:blur(14px) saturate(120%)!important;backdrop-filter:blur(14px) saturate(120%)!important
+ }
+}
+@media(prefers-reduced-motion:reduce){
+ body #appShell .nav-item:hover:not(.selected){transform:none!important}
+ body #appShell #view :is(.px-kpi,.px-ads-metric,.px-panel):hover{transform:none!important}
+}
+
+
+/* Lighter surfaces require brighter metadata; verified in computed WCAG AA. */
+body #appShell #view .wa-thread-identity small{
+ color:#eaf6e8!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header small{
+ color:#ecf8ea!important;
+}
