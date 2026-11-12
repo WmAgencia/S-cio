@@ -659,3 +659,172 @@ body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-feed{
 body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaInput{
  min-height:73px;max-height:130px;
 }
+
+
+/* -------- Budget card v2: one trusted Meta recharge action ------------- */
+body #appShell #view .px-budget-account[data-budget-provider="meta_ads"] {
+ display:flex;flex-direction:column;
+ gap:0!important;
+ min-height:246px;
+ background:
+  radial-gradient(ellipse 72% 110% at 100% 0%,rgba(179,218,149,.075),transparent 64%),
+  linear-gradient(154deg,#343f3b 0%,#293430 55%,#252e2b 100%)!important;
+ border:1px solid rgba(226,246,215,.22)!important;
+ border-radius:19px!important;
+ box-shadow:0 14px 34px rgba(0,0,0,.17),
+  inset 0 1px rgba(255,255,255,.105),
+  inset 0 -1px rgba(0,0,0,.10)!important;
+}
+body #appShell #view .px-budget-account[data-budget-provider="meta_ads"] .px-budget-account-main {
+ gap:16px!important;
+ border-bottom:1px solid rgba(229,243,218,.14)!important;
+ padding-bottom:16px!important;
+ margin-bottom:8px!important;
+}
+body #appShell #view .px-budget-account[data-budget-provider="meta_ads"] .px-budget-brand {
+ gap:7px 9px!important;
+}
+body #appShell #view .px-budget-account[data-budget-provider="meta_ads"] .px-budget-brand>strong {
+ font-size:14px!important;font-weight:760!important;letter-spacing:-.025em!important;
+}
+body #appShell #view .px-budget-account[data-budget-provider="meta_ads"] .px-budget-brand>small {
+ color:#c0d0c1!important;font-size:10.5px!important;line-height:1.45!important;
+}
+body #appShell #view .px-budget-account[data-budget-provider="meta_ads"] .px-budget-stat>span {
+ color:#c2d2c4!important;font-size:10.5px!important;
+}
+body #appShell #view .px-budget-account[data-budget-provider="meta_ads"] .px-budget-stat>strong {
+ color:#f6faf3!important;font-size:14px!important;font-variant-numeric:tabular-nums!important;
+}
+body #appShell #view .px-budget-account[data-budget-provider="meta_ads"] .px-budget-limit {
+ display:block;color:#c7d4c8!important;
+ font-size:11px!important;line-height:1.5!important;
+ margin:7px 0 0!important;
+}
+body #appShell #view .px-budget-account[data-budget-provider="meta_ads"] .px-budget-limit:first-of-type {
+ color:#e4f1de!important;font-weight:640!important;
+}
+body #appShell #view .px-budget-account[data-budget-provider="meta_ads"] .px-budget-warning {
+ border-color:rgba(242,194,121,.26)!important;
+ background:rgba(184,119,58,.10)!important;
+ color:#ffe1b4!important;
+ margin-top:9px!important;
+}
+body #appShell #view .px-budget-recharge-footer {
+ display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+ gap:11px 16px;margin-top:auto;padding-top:17px;
+ border-top:1px solid rgba(226,243,219,.12);
+}
+body #appShell #view .px-budget-recharge-caption {
+ color:#acbfae!important;font-size:10px!important;font-weight:500!important;
+ line-height:1.45!important;
+}
+body #appShell #view a.px-budget-recharge-cta {
+ display:inline-flex;align-items:center;justify-content:center;
+ gap:10px;align-self:center;
+ text-decoration:none!important;white-space:nowrap;
+ border-radius:12px!important;
+ padding:11px 16px!important;min-height:40px;
+ border:1px solid #e0f9ae!important;
+ background:linear-gradient(135deg,#ddf99d,#c9f16d)!important;
+ color:#243118!important;
+ font-size:11.5px!important;font-weight:780!important;
+ letter-spacing:-.01em;
+ box-shadow:inset 0 1px rgba(255,255,255,.42),0 7px 17px rgba(0,0,0,.16)!important;
+ transition:transform .18s ease,background .18s ease,box-shadow .18s ease!important;
+}
+body #appShell #view a.px-budget-recharge-cta :is(span,strong,b) {
+ color:inherit!important;
+}
+body #appShell #view a.px-budget-recharge-cta span[aria-hidden="true"] {
+ font-size:14px!important;font-weight:650!important;line-height:1;
+}
+body #appShell #view a.px-budget-recharge-cta:hover {
+ background:linear-gradient(135deg,#e9ffb3,#d2f782)!important;
+ color:#1f2a16!important;
+ transform:translateY(-1px);
+ box-shadow:inset 0 1px rgba(255,255,255,.45),0 11px 23px rgba(0,0,0,.18)!important;
+}
+body #appShell #view a.px-budget-recharge-cta:focus-visible {
+ outline:3px solid #f2ffdd!important;outline-offset:3px!important;
+}
+
+/* ---------- Loading should look intentional, not like unfinished UI ---- */
+body #appShell #view .px-overview-loading {
+ --px-load-surface:#303b36;
+ --px-load-soft:#415048;
+}
+body #appShell #view .px-overview-loading .px-budget-account.px-load-card,
+body #appShell #view .px-overview-loading .px-kpi.px-load-card,
+body #appShell #view .px-screen-loading .px-initial-grid .px-load-card {
+ background:linear-gradient(150deg,#303b37,#27332e)!important;
+ border:1px solid rgba(230,248,225,.13)!important;
+ border-radius:17px!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.06),0 5px 17px rgba(0,0,0,.08)!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+}
+body #appShell #view .px-overview-loading .px-budget-account.px-load-card {
+ min-height:177px!important;
+ display:flex;flex-direction:column;justify-content:flex-start;
+ gap:19px!important;
+ padding:23px!important;
+}
+body #appShell #view .px-overview-loading .px-kpi.px-load-card {
+ min-height:142px!important;
+ padding:22px!important;
+ justify-content:center;gap:14px;
+ transform:none!important;
+}
+body #appShell #view .px-overview-loading .px-kpi.px-load-card::after {display:none!important;}
+body #appShell #view .px-load-brand,
+body #appShell #view .px-load-metrics {display:flex;align-items:center;gap:12px;}
+body #appShell #view .px-load-brand .px-load-line:nth-child(1) {width:38%;height:16px}
+body #appShell #view .px-load-brand .px-load-line:nth-child(2) {width:23%;height:12px}
+body #appShell #view .px-load-metrics .px-load-line {flex:1;height:33px;}
+body #appShell #view .px-kpi.px-load-card .px-load-line:nth-child(1) {width:65%;height:13px}
+body #appShell #view .px-kpi.px-load-card .px-load-line:nth-child(2) {width:29%;height:36px}
+body #appShell #view .px-kpi.px-load-card .px-load-line:nth-child(3) {width:54%;height:11px}
+body #appShell #view .px-load-line {
+ display:block;height:13px;width:75%;
+ background:linear-gradient(100deg,#465249 0%,#59655a 45%,#465249 90%)!important;
+ background-size:220% 100%!important;
+ border-radius:7px!important;
+ animation:socio-polish-loader 2.3s linear infinite;
+ opacity:.63;
+}
+@keyframes socio-polish-loader {
+ 0%{background-position:100% 0}
+ 100%{background-position:-100% 0}
+}
+body #appShell #view .px-load-status {
+ color:#bbcdbd!important;font-size:11px!important;line-height:1.5!important;
+ display:flex;align-items:center;gap:9px;
+ padding:4px 0 8px;
+}
+body #appShell #view .px-load-status::before {
+ content:"";width:7px;height:7px;flex:none;
+ background:#b7e580;border-radius:50%;
+ box-shadow:0 0 0 4px rgba(197,235,153,.11);
+}
+body #appShell #view .px-screen-loading .px-initial-grid .px-load-card {
+ min-height:120px;
+ padding:25px;
+ display:flex;flex-direction:column;gap:17px;
+}
+body #appShell #view .px-screen-loading .px-load-card .px-load-line:nth-child(1) {width:62%}
+body #appShell #view .px-screen-loading .px-load-card .px-load-line:nth-child(2) {width:34%;height:27px}
+body #appShell #view .px-overview-loading .px-page-heading p,
+body #appShell #view .px-screen-loading .px-page-heading p {
+ color:#bfcebf!important;
+}
+@media(max-width:850px) {
+ body #appShell #view .px-budget-recharge-footer{
+  align-items:stretch;flex-direction:column;
+ }
+ body #appShell #view a.px-budget-recharge-cta {align-self:stretch;}
+ body #appShell #view .px-overview-loading .px-load-metrics{gap:7px}
+}
+@media(prefers-reduced-motion:reduce) {
+ body #appShell #view .px-load-line {animation:none!important;}
+ body #appShell #view a.px-budget-recharge-cta:hover{transform:none!important}
+}
