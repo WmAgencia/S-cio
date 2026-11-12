@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const load=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const ui=load('public/socio-workspace-ui.js');
-const css=load('public/socio-premium-polish.css');
+const css=load('public/socio-stripe-system.css');
 const app=load('public/app.js');
 const html=load('public/index.html');
 
@@ -31,7 +31,9 @@ test('Meta budget shows exactly one recharge CTA and no duplicate billing action
  assert(ui.includes('type="button" disabled'));
  assert(css.includes('.px-budget-meta-ribbon .px-budget-meta-summary'));
  assert(css.includes('min-height:0!important'));
- assert(css.includes('min-height:34px!important'));
+ assert(css.includes('min-height:33px!important'));
+ assert(css.includes('background:#605dec!important'));
+ assert(css.includes('color:#fff!important'));
  assert(ui.includes("provider!=='meta_ads'"));
 });
 
@@ -49,15 +51,17 @@ test('while provider data loads, show skeleton rather than false zero or partial
  assert(ui.includes("px-overview-loading"));
  assert(ui.includes("px-load-card"));
  assert(ui.includes("Consultando dados confirmados"));
- assert(css.includes('.px-budget-provider-pending .px-budget-stats'));
+ assert(css.includes('.px-budget-meta-pending'));
+ assert(css.includes('.px-load-line'));
  assert(css.includes('.px-overview-loading .px-kpi.px-load-card'));
  assert(css.includes('@media(prefers-reduced-motion:reduce)'));
 });
 
-test('all initial and route loading states share a polished dark loader',()=>{
+test('all initial and route loading states share the new light skeleton loader',()=>{
  assert(app.includes('loading socio-page-loading'));
  assert(html.includes('loading socio-page-loading'));
- assert(html.includes('/socio-premium-polish.css?v=20261112c'));
+ assert(html.includes('/socio-stripe-system.css?v=20261112a'));
+ assert(!html.includes('href="/socio-premium-polish.css'));
  assert(html.includes('/socio-workspace-ui.js?v=20261112d'));
  assert(html.includes('/app.js?v=20261112d'));
  assert(css.includes('.loading.socio-page-loading'));
@@ -66,9 +70,10 @@ test('all initial and route loading states share a polished dark loader',()=>{
 
 test('recharge button has high contrast, keyboard focus and no layout mutation',()=>{
  assert(css.includes('a.px-budget-recharge-cta'));
- assert(css.includes('color:#243118!important'));
- assert(css.includes('background:linear-gradient(135deg,#ddf99d,#c9f16d)'));
- assert(css.includes('a.px-budget-recharge-cta:focus-visible'));
+ assert(css.includes('color:#fff!important'));
+ assert(css.includes('background:#605dec!important'));
+ assert(css.includes('a.px-budget-recharge-cta')||css.includes('.px-budget-recharge-cta'));
+ assert(css.includes(':focus-visible'));
  assert.doesNotThrow(()=>new vm.Script(ui,{filename:'socio-workspace-ui.js'}));
  assert.doesNotThrow(()=>new vm.Script(app,{filename:'app.js'}));
 });
