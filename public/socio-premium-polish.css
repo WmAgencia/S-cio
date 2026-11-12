@@ -828,3 +828,71 @@ body #appShell #view .px-screen-loading .px-page-heading p {
  body #appShell #view .px-load-line {animation:none!important;}
  body #appShell #view a.px-budget-recharge-cta:hover{transform:none!important}
 }
+
+
+/* On the fast first dashboard paint, real company KPIs can render while the
+   provider modules are still loading. Provider panels must not briefly claim
+   "Não disponível" or show a partially initialized set of action buttons. */
+body #appShell #view .px-budget-account.px-budget-provider-pending {
+ display:flex;flex-direction:column;justify-content:space-between;
+ min-height:246px;
+ background:linear-gradient(153deg,#303a35,#27322d)!important;
+ border:1px solid rgba(230,246,225,.15)!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.065),0 5px 17px rgba(0,0,0,.08)!important;
+}
+body #appShell #view .px-budget-provider-pending .px-budget-account-main {
+ border-bottom:1px solid rgba(239,247,232,.11)!important;
+ padding-bottom:17px!important;
+ flex-wrap:wrap;
+}
+body #appShell #view .px-budget-provider-pending .px-budget-brand>strong {
+ color:#eaf3e6!important;
+}
+body #appShell #view .px-budget-provider-pending .px-budget-brand>small {
+ color:#b5c7b9!important;
+}
+body #appShell #view .px-budget-provider-pending .px-budget-stats {
+ display:grid;align-items:center;grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:13px;flex:1;
+}
+body #appShell #view .px-budget-provider-pending .px-budget-stats .px-load-line {
+ width:100%;height:29px;min-width:0;
+ opacity:.48;
+}
+body #appShell #view .px-budget-provider-pending .px-load-status {
+ margin-top:19px;color:#bfd0be!important;
+}
+body #appShell #view .loading.socio-page-loading {
+ width:min(440px,100%);padding:26px!important;
+ margin:48px auto!important;
+ border-radius:17px!important;
+ display:flex;flex-direction:column;align-items:center;
+ gap:12px;text-align:center;
+ background:linear-gradient(150deg,#303a35,#252f2b)!important;
+ border:1px solid rgba(232,246,228,.18)!important;
+ color:#e5f1e2!important;
+ box-shadow:0 9px 28px rgba(0,0,0,.14),inset 0 1px rgba(255,255,255,.075)!important;
+}
+body #appShell #view .socio-page-loading .socio-loading-sigil {
+ display:grid;place-items:center;
+ border:1px solid rgba(214,247,184,.28);
+ border-radius:14px;width:46px;height:46px;
+ background:linear-gradient(145deg,#3d5340,#314638);
+ font-size:24px;color:#d7f5a4!important;
+}
+body #appShell #view .socio-page-loading .socio-loading-title {
+ font-size:14px;font-weight:740;color:#f4faf2!important;
+ letter-spacing:-.018em;
+}
+body #appShell #view .socio-page-loading .socio-loading-copy {
+ font-size:11px;color:#becfbf!important;
+ line-height:1.5;
+}
+@media(max-width:540px){
+ body #appShell #view .px-budget-provider-pending .px-budget-stats {
+  flex-basis:100%;
+ }
+ body #appShell #view .loading.socio-page-loading {
+  margin:24px auto!important;padding:22px!important;
+ }
+}
