@@ -74,13 +74,13 @@
    // Final-geometry placeholders: no white default cards, wrong balances or
    // empty rectangles while ad providers and company KPIs are loading.
    root.innerHTML='<div class="px-workspace px-overview px-overview-loading" aria-busy="true">'+
+    '<div class="px-page-heading"><div><span class="px-eyebrow">CENTRAL DE INTELIGÊNCIA</span>'+
+    '<h1>Visão geral</h1><p>Preparando os indicadores da sua empresa</p></div></div>'+
     '<section class="px-budget-top"><div class="px-budget-top-heading"><strong>Controle de verba</strong></div>'+
     '<div class="px-budget-top-grid">'+Array.from({length:googleAdsVisible()?2:1},()=>'<article class="px-budget-account px-load-card" aria-hidden="true">'+
       '<div class="px-load-brand">'+skeleton+skeleton+'</div>'+
       '<div class="px-load-metrics">'+skeleton+skeleton+skeleton+'</div>'+
       '</article>').join('')+'</div></section>'+
-    '<div class="px-page-heading"><div><span class="px-eyebrow">CENTRAL DE INTELIGÊNCIA</span>'+
-    '<h1>Visão geral</h1><p>Preparando os indicadores da sua empresa</p></div></div>'+
     '<div class="px-kpi-grid">'+Array.from({length:6},()=>'<article class="px-kpi px-load-card" aria-hidden="true">'+
       skeleton+skeleton+skeleton+'</article>').join('')+'</div>'+
     '<p class="px-load-status" role="status">Consultando dados confirmados da empresa…</p>'+
@@ -487,6 +487,8 @@
   };
 
   root.innerHTML='<div class="px-workspace px-overview">'+
+   '<div class="px-page-heading"><div><span class="px-eyebrow">CENTRAL DE INTELIGÊNCIA</span><h1>Visão geral</h1><p>Operação, atendimento e publicidade da sua empresa em um único painel.</p></div>'+
+    '<button class="btn soft" data-px-reload type="button">↻ Atualizar indicadores</button></div>'+
    '<section class="px-budget-top" aria-label="Verba disponível nas contas publicitárias">'+
     '<div class="px-budget-top-heading"><strong>Controle de verba</strong></div>'+
     '<div class="px-budget-top-grid">'+
@@ -494,8 +496,6 @@
      (googleAdsVisible()?budgetHeaderItem('google_ads','Google Ads','google',googleReady,googleMicros,googleCode):'')+
     '</div>'+
    '</section>'+
-   '<div class="px-page-heading"><div><span class="px-eyebrow">CENTRAL DE INTELIGÊNCIA</span><h1>Visão geral</h1><p>Operação, atendimento e publicidade da sua empresa em um único painel.</p></div>'+
-    '<button class="btn soft" data-px-reload type="button">↻ Atualizar indicadores</button></div>'+
    '<div class="px-kpi-grid">'+
     kpi('Conversas em aberto',number(d.openConversations),'Atendimento da empresa','▤')+
     kpi('WhatsApps conectados',number(realWa),'Sessões vinculadas','◉','green')+
@@ -505,16 +505,20 @@
     kpi('Vendas pagas', '—','Sem conciliação financeira de produção','◈','muted')+
    '</div>'+
    '<p class="px-live-indicator"><span class="px-live-dot"></span>'+(progressive?'Indicadores da empresa disponíveis · consultando anúncios em segundo plano':'Atualização automática a cada 60 segundos · indicadores retornados pelos provedores')+'</p>'+
+   '<section class="px-ad-performance" aria-label="Desempenho da Meta Ads">'+
+    '<div class="px-section-heading"><div><h2>Publicidade</h2><p>Indicadores dos anúncios da Meta, quando disponíveis</p></div></div>'+
    '<div class="px-ads-strip">'+
-    '<article class="px-ads-metric"><div><span class="px-brand-dot meta"></span><strong>Meta Ads</strong><small>Gasto hoje</small></div><b>'+ (metaReady?money(meta.spend,meta.currency):progressive?'Consultando…':'Não disponível')+'</b>'+
-     '<small>'+(metaReady?'Retornado pela conta autorizada':'Conecte ou valide a conta para consultar')+'</small></article>'+
-    (googleAdsVisible()?
+    '<article class="px-ads-metric"><div><span class="px-brand-dot meta"></span><strong>Cliques</strong><small>Meta Ads · hoje</small></div><b>'+
+     (metaReady?number(meta.clicks):progressive?'Consultando…':'Não disponível')+'</b>'+
+     '<small>'+(metaReady?'Cliques confirmados pela conta autorizada':'Aguardando acesso à conta da Meta')+'</small></article>'+
+       (googleAdsVisible()?
    '<article class="px-ads-metric"><div><span class="px-brand-dot google"></span><strong>Google Ads</strong><small>Gasto hoje</small></div><b>'+(googleReady?money(googleMicros,googleCode):'Não disponível')+'</b>'+
      '<small>'+(googleReady?'Moeda da conta: '+(googleCode||'não identificada'):'Requer OAuth, conta selecionada e API autorizada')+'</small></article>'
    :'')+
-   '<article class="px-ads-metric"><div><span class="px-brand-dot purple"></span><strong>Resultado de anúncios</strong><small>Hoje · Meta</small></div><b>'+(metaReady?number(meta.clicks)+' cliques':'Não disponível')+'</b>'+
-     '<small>'+(metaReady&&meta.clicks?'CPC: '+money(meta.spend/meta.clicks,meta.currency):'Sem CPC verificável')+'</small></article>'+
-   '</div>'+
+   '<article class="px-ads-metric"><div><span class="px-brand-dot purple"></span><strong>Custo por clique</strong><small>Meta Ads · hoje</small></div><b>'+
+     (metaReady&&meta.clicks?money(meta.spend/meta.clicks,meta.currency):progressive?'Consultando…':'Não disponível')+'</b>'+
+     '<small>'+(metaReady&&meta.clicks?'Valor calculado a partir de gasto e cliques confirmados':'Sem CPC verificável neste período')+'</small></article>'+
+   '</div></section>'+
    '<div class="px-dual">'+
     section('Atividade de conversas','Mensagens recebidas e enviadas, conforme o período selecionado',
      '<div class="px-graph-counts"><div><span>Recebidas</span><strong>'+number(received)+'</strong></div><div><span>Enviadas</span><strong>'+number(sent)+'</strong></div><div><span>Volume total</span><strong>'+number(received+sent)+'</strong></div></div>'+
