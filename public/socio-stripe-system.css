@@ -321,3 +321,404 @@ body #appShell #view .px-brand-dot.meta{background:#1778d4!important}
 body #appShell #view .px-brand-dot.green{background:#16865d!important}
 body #appShell #view .px-brand-dot.purple{background:#605dec!important}
 body #appShell #view .px-brand-dot.google{background:#e4aa31!important}
+
+
+/* Visão geral: headline -> compact Meta budget -> KPIs -> ad performance -> reports. */
+body #appShell #view .px-workspace{
+ --px-ink:#202735;
+ max-width:1450px!important;
+ margin:0 auto!important;
+ display:grid!important;
+ gap:24px!important;
+ padding:0 0 44px!important;
+ color:#263244!important;
+}
+body #appShell #view .px-page-heading{
+ align-items:center!important;
+ gap:18px!important;
+ margin:0!important;
+ padding:3px 0 0!important;
+}
+body #appShell #view .px-page-heading h1{
+ font-size:clamp(27px,2.8vw,35px)!important;
+ font-weight:755!important;
+ color:#202735!important;
+ line-height:1.14!important;
+ margin:5px 0 6px!important;
+}
+body #appShell #view .px-page-heading p{
+ color:#667085!important;font-size:13px!important;line-height:1.55!important;
+ max-width:680px!important;
+}
+body #appShell #view .px-page-heading .btn{white-space:nowrap!important}
+body #appShell #view .px-budget-top{display:grid;gap:9px!important;min-width:0}
+body #appShell #view .px-budget-top-heading{
+ display:flex;align-items:center;justify-content:space-between!important;
+ padding:0 1px!important;margin:0!important;
+ border:0!important;
+}
+body #appShell #view .px-budget-top-heading>strong{
+ color:#344054!important;font-size:12px!important;font-weight:720!important;
+ letter-spacing:0!important;
+}
+body #appShell #view .px-budget-top-heading>small{color:#7d8798!important;font-size:11px!important}
+body #appShell #view .px-budget-top-grid{
+ display:grid!important;
+ grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr))!important;
+ gap:12px!important;align-items:start!important;
+}
+body #appShell #view .px-budget-account[data-budget-provider="meta_ads"].px-budget-meta-ribbon{
+ background:#fff!important;
+ border:1px solid #e3e5ec!important;
+ border-radius:12px!important;
+ box-shadow:var(--stripe-shadow)!important;
+ min-height:0!important;
+ padding:12px 16px 11px!important;
+ align-self:start!important;
+ display:block!important;
+ margin:0!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-summary{
+ display:grid!important;
+ grid-template-columns:minmax(105px,.86fr) minmax(144px,1fr) minmax(118px,.85fr)!important;
+ align-items:center!important;gap:12px!important;
+ min-height:43px!important;padding:0!important;margin:0!important;
+ border:0!important;background:transparent!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-brand{
+ display:flex!important;align-items:center!important;gap:9px!important;
+ min-width:0;white-space:nowrap!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-brand strong{
+ color:#263247!important;font-weight:750!important;
+ font-size:12px!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-metric{
+ min-width:0!important;
+ display:flex!important;flex-direction:column!important;
+ justify-content:center!important;gap:3px!important;
+ padding:0 0 0 16px!important;
+ border-left:1px solid #e7e9ee!important;
+ background:transparent!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-metric>span:first-child{
+ color:#667085!important;font-size:11px!important;font-weight:590!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-metric>strong{
+ color:#273449!important;font-size:16px!important;font-weight:750!important;
+ line-height:1.2!important;font-variant-numeric:tabular-nums!important;
+ letter-spacing:-.025em!important;
+ overflow-wrap:anywhere!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action{
+ display:flex!important;justify-content:flex-end!important;
+ align-items:center!important;
+ margin-top:10px!important;padding-top:9px!important;
+ border-top:1px solid #ecedf1!important;
+ background:transparent!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta{
+ background:#605dec!important;background-color:#605dec!important;
+ color:#fff!important;
+ border:1px solid #605dec!important;
+ border-radius:8px!important;
+ padding:7px 12px!important;min-height:33px!important;
+ display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:7px!important;
+ font-size:11px!important;font-weight:730!important;
+ white-space:nowrap!important;text-decoration:none!important;
+ box-shadow:none!important;
+ transform:none!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta:hover:not(:disabled){
+ background:#514ed5!important;border-color:#514ed5!important;color:#fff!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta:disabled{
+ opacity:.57!important;background:#e9e9f3!important;border-color:#e3e5ee!important;color:#596578!important;cursor:not-allowed!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta span{
+ color:inherit!important;
+}
+body #appShell #view .px-budget-account.px-budget-meta-pending .px-budget-meta-metric .px-load-line{
+ width:80%!important;height:16px!important;background:#e8ebf4!important;
+}
+body #appShell #view .px-kpi-grid{
+ display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;
+ gap:13px!important;
+}
+body #appShell #view .px-kpi{
+ background:#fff!important;
+ border:1px solid #e5e7eb!important;
+ border-radius:12px!important;
+ box-shadow:var(--stripe-shadow)!important;
+ min-height:135px!important;
+ padding:18px 20px!important;
+ display:flex!important;flex-direction:column!important;gap:8px!important;
+ transition:border-color .17s ease,box-shadow .17s ease!important;
+ transform:none!important;
+}
+body #appShell #view .px-kpi::after{display:none!important}
+body #appShell #view .px-kpi:hover{
+ background:#fff!important;
+ border-color:#d9ddea!important;
+ box-shadow:var(--stripe-shadow-hover)!important;
+ transform:none!important;
+}
+body #appShell #view .px-kpi-top{align-items:center!important;gap:12px!important}
+body #appShell #view .px-kpi-label{
+ color:#667085!important;font-size:12px!important;font-weight:630!important;
+ line-height:1.35!important;
+}
+body #appShell #view .px-kpi-number{
+ color:#202735!important;font-size:clamp(27px,3vw,34px)!important;
+ font-weight:760!important;letter-spacing:-.047em!important;
+ line-height:1.12!important;
+}
+body #appShell #view .px-kpi small{
+ color:#7b8697!important;font-size:11px!important;line-height:1.45!important;
+}
+body #appShell #view .px-kpi-icon{
+ background:#f1f0ff!important;border:1px solid #e9e8fd!important;
+ color:#645fe4!important;box-shadow:none!important;
+ width:37px!important;height:37px!important;min-width:37px!important;
+ border-radius:10px!important;font-size:17px!important;
+}
+body #appShell #view .px-kpi-icon.green{
+ background:#e9f8ef!important;border-color:#d4ecdf!important;color:#16865d!important;
+}
+body #appShell #view .px-kpi-icon.blue{
+ background:#eef4ff!important;border-color:#dce7fb!important;color:#3e74cc!important;
+}
+body #appShell #view .px-kpi-icon.muted{
+ background:#f3f5f8!important;border-color:#e9ebef!important;color:#69788b!important;
+}
+body #appShell #view .px-live-indicator{
+ background:#f4f6fa!important;border:1px solid #edf0f5!important;
+ border-radius:999px!important;padding:9px 12px!important;
+ font-size:11px!important;color:#667085!important;
+ margin:0!important;
+}
+body #appShell #view :is(.px-live-indicator .px-live-dot,.px-live-dot.on,.wa-live-dot){
+ background:#21a271!important;
+ box-shadow:0 0 0 3px #e9f8ef!important;
+}
+body #appShell #view .px-ad-performance{display:grid!important;gap:11px!important}
+body #appShell #view .px-section-heading{
+ display:flex;align-items:center;justify-content:space-between;gap:12px;
+ padding:0 1px!important;
+}
+body #appShell #view .px-section-heading h2{
+ color:#344054!important;font-size:15px!important;font-weight:735!important;
+ margin:0 0 4px!important;
+}
+body #appShell #view .px-section-heading p{
+ color:#667085!important;font-size:11px!important;margin:0!important;
+}
+body #appShell #view .px-ads-strip{
+ display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;
+ gap:13px!important;
+}
+body #appShell #view .px-ads-metric{
+ background:#fff!important;border:1px solid var(--stripe-line)!important;
+ box-shadow:var(--stripe-shadow)!important;
+ border-radius:12px!important;padding:17px 20px!important;
+ min-height:112px!important;gap:7px!important;transform:none!important;
+}
+body #appShell #view .px-ads-metric:hover{
+ border-color:#d8dce8!important;box-shadow:var(--stripe-shadow-hover)!important;
+}
+body #appShell #view .px-ads-metric>div strong{color:#344054!important;font-size:12px!important}
+body #appShell #view .px-ads-metric>div small{color:#8490a2!important;font-size:11px!important}
+body #appShell #view .px-ads-metric>b{
+ color:#202735!important;font-size:clamp(20px,2.1vw,26px)!important;
+ font-weight:750!important;letter-spacing:-.04em!important;
+}
+body #appShell #view .px-ads-metric>small{color:#667085!important;line-height:1.4!important}
+
+/* Reports and charts: restrained, meaningful hue and fewer visual distractions. */
+body #appShell #view .px-dual{
+ grid-template-columns:minmax(0,1.45fr) minmax(0,1fr)!important;
+ gap:14px!important;align-items:stretch!important;
+}
+body #appShell #view .px-panel{
+ background:#fff!important;border:1px solid var(--stripe-line)!important;
+ border-radius:12px!important;box-shadow:var(--stripe-shadow)!important;
+ padding:22px!important;
+}
+body #appShell #view .px-panel:hover{background:#fff!important;border-color:#d9dde8!important}
+body #appShell #view .px-panel-head{
+ display:flex!important;align-items:flex-start!important;
+ gap:14px!important;margin-bottom:18px!important;
+}
+body #appShell #view .px-panel-head h2{
+ color:#273449!important;font-size:16px!important;
+ font-weight:740!important;letter-spacing:-.022em!important;
+}
+body #appShell #view .px-panel-head p{color:#738094!important;font-size:11px!important}
+body #appShell #view .px-chart-wrap{
+ background:#fbfcff!important;border:1px solid #f0f1f5!important;
+ border-radius:10px!important;
+}
+body #appShell #view .px-chart-actions{
+ background:#f4f5f9!important;border:1px solid #ebedf4!important;
+ border-radius:9px!important;box-shadow:none!important;
+ gap:3px!important;
+}
+body #appShell #view .px-chart-actions button.px-range-btn{
+ background:transparent!important;color:#657186!important;
+ border:1px solid transparent!important;
+ box-shadow:none!important;border-radius:7px!important;
+ font-size:11px!important;font-weight:665!important;
+ opacity:1!important;text-shadow:none!important;
+}
+body #appShell #view .px-chart-actions button.px-range-btn:hover:not(.active){
+ background:#e9ebf4!important;color:#344054!important;
+}
+body #appShell #view .px-chart-actions button.px-range-btn.active,
+body #appShell #view .px-chart-actions button.px-range-btn[aria-pressed="true"]{
+ background:#fff!important;border:1px solid #e3e5ec!important;
+ color:#514ed5!important;
+ box-shadow:0 1px 3px rgba(25,35,55,.055)!important;
+}
+body #appShell #view .px-graph-counts{
+ background:#f8f9fc!important;border:1px solid #eff0f5!important;
+ border-radius:9px!important;padding:11px 14px!important;
+ color:#344054!important;
+}
+body #appShell #view .px-graph-counts>div>span{color:#667085!important;font-size:11px!important}
+body #appShell #view .px-graph-counts>div>strong{color:#263247!important}
+body #appShell #view :is(.px-axis,.px-legend,.px-axis>span,.px-legend>span){
+ color:#68768a!important;font-size:11px!important;
+}
+body #appShell #view .px-svg path[stroke="#7650ed"]{stroke:#7773e8!important}
+body #appShell #view .px-svg path[stroke="#16a778"]{stroke:#34a67c!important}
+body #appShell #view .px-legend .px-dot.purple{background:#7773e8!important}
+body #appShell #view .px-legend .px-dot.green{background:#34a67c!important}
+body #appShell #view .px-rank-track{
+ background:#eef0f6!important;border-radius:99px!important;
+}
+body #appShell #view .px-rank-track i{
+ background:#7975ec!important;border-radius:99px!important;
+}
+body #appShell #view .px-rank-title,
+body #appShell #view .px-rank-title>span{color:#475467!important}
+body #appShell #view .px-rank-title strong{color:#344054!important}
+body #appShell #view .px-funnel>div{
+ background:#fbfcff!important;border:1px solid #eef0f5!important;
+ border-radius:10px!important;color:#475467!important;
+}
+body #appShell #view .px-funnel>div strong{color:#202735!important}
+body #appShell #view .px-wa-overview-list>div{
+ background:#fbfcff!important;border:1px solid #eceef4!important;border-radius:9px!important;
+}
+body #appShell #view .px-wa-overview-list strong{color:#344054!important}
+body #appShell #view .px-wa-overview-list small{color:#667085!important}
+
+/* Meta Ads table, controls, campaign drilldown and creative previews. */
+body #appShell #view .px-marketing-filters{
+ background:#f4f5f9!important;
+ border:1px solid #e9ebf2!important;
+ border-radius:10px!important;
+ box-shadow:none!important;
+ padding:4px!important;
+}
+body #appShell #view .px-marketing-filters button{
+ background:transparent!important;
+ color:#667085!important;
+ border:1px solid transparent!important;
+ border-radius:7px!important;font-weight:660!important;
+}
+body #appShell #view .px-marketing-filters button:hover:not(.selected){
+ background:#eaebf4!important;color:#344054!important;
+}
+body #appShell #view .px-marketing-filters button.selected,
+body #appShell #view .px-marketing-filters button[aria-pressed="true"]{
+ background:#fff!important;color:#514ed5!important;
+ border:1px solid #e4e5ed!important;
+ box-shadow:0 1px 3px rgba(25,35,55,.05)!important;
+}
+body #appShell #view .px-table-scroll{
+ background:#fff!important;border:1px solid #eaecf1!important;
+ border-radius:10px!important;box-shadow:none!important;
+}
+body #appShell #view :is(.px-table,.px-campaign-table,.px-adset-table,.master-table){
+ color:#344054!important;
+ background:#fff!important;
+ border-collapse:separate;border-spacing:0;
+}
+body #appShell #view :is(.px-table,.px-campaign-table,.px-adset-table,.master-table) th{
+ color:#657286!important;background:#fafbfe!important;
+ border-bottom:1px solid #eaecf1!important;
+ font-weight:680!important;font-size:11px!important;
+}
+body #appShell #view :is(.px-table,.px-campaign-table,.px-adset-table,.master-table) td{
+ color:#344054!important;border-bottom:1px solid #eef0f4!important;
+}
+body #appShell #view :is(.px-table,.px-campaign-table,.px-adset-table,.master-table) tr:hover td{
+ background:#fafbff!important;
+}
+body #appShell #view :is(.px-campaign-open,.px-campaign-back,.px-media-external,
+ .px-quick-action,.px-campaign-crumbs strong){
+ color:#514ed5!important;
+}
+body #appShell #view :is(.px-campaign-open,.px-campaign-back):hover{
+ color:#3f3ac0!important;
+}
+body #appShell #view .px-featured-item,
+body #appShell #view .px-advanced,
+body #appShell #view .px-feature-details,
+body #appShell #view .px-ad-creative-info{
+ background:#fafbfe!important;
+ color:#344054!important;border-color:#e9ebf1!important;
+}
+body #appShell #view :is(.px-feature-label,.px-conn-row small,.px-advanced small){
+ color:#667085!important;
+}
+body #appShell #view :is(.px-feature-stats strong,.px-feature-details strong,.px-ad-creative-info strong){
+ color:#202735!important;
+}
+body #appShell #view :is(.px-feature-media,.px-ad-creative-media,.px-meta-preview-frame,
+ .px-facebook-video-frame){
+ background:#f3f5f9!important;border:1px solid #e9ecf1!important;
+ border-radius:9px!important;
+}
+body #appShell #view .px-feature-poster{object-fit:cover!important}
+body #appShell #view .px-feature-no-media{color:#8994a4!important}
+body #appShell #view .px-conn-card{
+ display:grid!important;
+ background:#fff!important;border:1px solid var(--stripe-line)!important;
+ border-radius:12px!important;box-shadow:var(--stripe-shadow)!important;
+}
+body #appShell #view .px-conn-head h2{color:#273449!important}
+body #appShell #view .px-conn-head p{color:#667085!important}
+body #appShell #view .px-conn-icon.wa{background:#e9f8ef!important;color:#16865d!important}
+body #appShell #view .px-conn-icon.meta{background:#eef4ff!important;color:#2977cb!important}
+body #appShell #view .px-conn-icon.google{background:#fff4e5!important;color:#bd6a2a!important}
+body #appShell #view .px-conn-row{border-bottom:1px solid #eef0f4!important}
+body #appShell #view .px-conn-row strong{color:#344054!important}
+body #appShell #view .px-conn-row small{color:#667085!important}
+body #appShell #view .px-status.on{
+ background:#e9f8ef!important;color:#137147!important;
+ border-color:#cce9d8!important;
+}
+body #appShell #view .px-notice,
+body #appShell #view .px-footnote,
+body #appShell #view .px-dialog-help,
+body #appShell #view .px-preview-text{
+ background:#f6f7fb!important;color:#526074!important;
+ border:1px solid #e7eaf2!important;
+ border-radius:9px!important;
+}
+body #appShell #view .px-campaign-dialog{
+ background:#fff!important;color:#273449!important;
+ border:1px solid var(--stripe-line)!important;
+ box-shadow:0 24px 64px rgba(26,37,57,.17)!important;
+ border-radius:14px!important;
+}
+body #appShell #view .px-campaign-dialog :is(h2,h3,strong,p,small,label){
+ color:#344054!important;
+}
+body #appShell #view .px-campaign-dialog .px-action-heading h2{color:#202735!important}
+body #appShell #view .px-dialog-close{background:#f3f4f8!important;border:1px solid #e6e8ee!important;color:#526074!important}
+body #appShell #view .px-campaign-dialog .btn.primary,
+body #appShell #view .px-campaign-dialog .btn.primary :is(span,strong){color:#fff!important}
