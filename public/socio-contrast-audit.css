@@ -429,3 +429,10 @@ body #appShell #view :is(.px-budget-recharge-cta,.wa-compose-send) :is(span,smal
 body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-actions .btn.primary :is(span,small,strong,b) {
  color:inherit!important;
 }
+
+/* Same selector specificity as the existing Meta gradient shorthand, so
+   the opaque fallback cannot be canceled by an older !important shorthand. */
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta {
+ background-color:#c9f16d!important;
+ color:#243118!important;
+}
