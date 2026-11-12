@@ -58,8 +58,8 @@ test('all initial and route loading states share a polished dark loader',()=>{
  assert(app.includes('loading socio-page-loading'));
  assert(html.includes('loading socio-page-loading'));
  assert(html.includes('/socio-premium-polish.css?v=20261112c'));
- assert(html.includes('/socio-workspace-ui.js?v=20261112c'));
- assert(html.includes('/app.js?v=20261112b'));
+ assert(html.includes('/socio-workspace-ui.js?v=20261112d'));
+ assert(html.includes('/app.js?v=20261112d'));
  assert(css.includes('.loading.socio-page-loading'));
  assert(css.includes('.socio-loading-title'));
 });

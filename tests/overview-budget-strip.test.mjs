@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 const ui=readFileSync(new URL('../public/socio-workspace-ui.js',import.meta.url),'utf8');
 const css=readFileSync(new URL('../public/socio-executive.css',import.meta.url),'utf8');
 
-test('ad funds summary is the first section of the company overview',()=>{
+test('dashboard shows the headline first, then compact advertising budget and business KPIs',()=>{
  const start=ui.indexOf("async function overview(");
  const end=ui.indexOf("async function marketing(",start);
  const screen=ui.slice(start,end);
@@ -13,9 +13,11 @@ test('ad funds summary is the first section of the company overview',()=>{
  assert(header>0);
  const body=screen.slice(header,header+4000);
  assert(body.indexOf("px-budget-top")>=0);
- assert(body.indexOf("px-budget-top")<body.indexOf("px-page-heading"));
+ assert(body.indexOf("px-page-heading")<body.indexOf("px-budget-top"));
+ assert(body.indexOf("px-budget-top")<body.indexOf("px-kpi-grid"));
  assert(body.includes("budgetHeaderItem('meta_ads'"));
  assert(body.includes("budgetHeaderItem('google_ads'"));
+ assert(body.includes("googleAdsVisible()?budgetHeaderItem('google_ads'"));
  assert(screen.includes("px-budget-meter"));
 });
 test('no unverified balance or exhaustion date is presented as financial fact',()=>{

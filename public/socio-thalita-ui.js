@@ -254,7 +254,7 @@
      '<button type="button" data-thalita-suggest="Quais produtos e estoques temos cadastrados?">Produtos</button>'+
      '<button type="button" data-thalita-suggest="Quantos WhatsApps conectados e conversas em aberto temos?">WhatsApp</button>'+
      '<button type="button" data-thalita-suggest="Qual foi o gasto e CPC da Meta Ads hoje?">Meta Ads</button>'+
-     '<button type="button" data-thalita-suggest="Como estão as campanhas Google Ads hoje?">Google Ads</button>'+
+     (globalThis.SocioProductFeatures?.googleAdsVisible===true?'<button type="button" data-thalita-suggest="Como estão as campanhas Google Ads hoje?">Google Ads</button>':'')+
     '</div>'+
     '<div class="px-assistant-approval" id="thalitaConfirm"></div>'+
     '<form id="thalitaForm"><label for="thalitaInput" class="ps-sr-only">Fale com Thalita</label>'+

@@ -1,0 +1,464 @@
+/*
+ * Sócio · Premium Motion + Hierarchy · November 2026
+ * Final visual polish layer. Does not change permissions, API data or controls.
+ * Data surfaces are opaque enough for legibility; glass is reserved for
+ * navigation, elevated controls and the Thalita window.
+ */
+#appShell{
+ --sx-bg:#1a2220;
+ --sx-panel:#2a3530;
+ --sx-panel-elev:#323e37;
+ --sx-panel-deep:#222d28;
+ --sx-line:rgba(237,251,230,.145);
+ --sx-line-strong:rgba(233,249,222,.26);
+ --sx-fg:#f2f7ef;
+ --sx-fg-soft:#d4e0d2;
+ --sx-fg-muted:#bfcdbf;
+ --sx-lime:#c9f16d;
+ --sx-focus:#dafa9e;
+ --sx-lime-ink:#243219;
+ --sx-jade:#65d6ab;
+ --sx-blue:#88c8ee;
+ --sx-violet:#b3a4ff;
+ --sx-amber:#f2c991;
+ --sx-shadow:0 11px 34px rgba(0,0,0,.17),inset 0 1px 0 rgba(255,255,255,.055);
+}
+#appShell[data-workspace="master"]{
+ --sx-bg:#1c2528;
+ --sx-panel:#2c383c;
+ --sx-panel-elev:#344248;
+ --sx-panel-deep:#263137;
+ --sx-line:rgba(222,241,247,.155);
+ --sx-line-strong:rgba(220,238,245,.28);
+ --sx-fg-soft:#d5e3e5;
+ --sx-fg-muted:#bfced2;
+ --sx-shadow:0 11px 34px rgba(0,0,0,.20),inset 0 1px 0 rgba(255,255,255,.06);
+}
+
+/* Foundation: restrained color and depth across both login workspaces. */
+body #appShell .app-main{
+ background:
+  radial-gradient(ellipse 65% 55% at 80% -10%,rgba(168,198,167,.09),transparent 78%),
+  linear-gradient(165deg,#222c29 0%,#1b2422 55%,#171f1e 100%)!important;
+ color:var(--sx-fg)!important;
+}
+body #appShell[data-workspace="master"] .app-main{
+ background:
+  radial-gradient(ellipse 74% 55% at 83% -5%,rgba(143,181,196,.10),transparent 75%),
+  linear-gradient(167deg,#253137 0%,#1d292f 60%,#182226 100%)!important;
+}
+body #appShell .sidebar{
+ background:linear-gradient(174deg,#293530 0%,#202a27 49%,#1a2422 100%)!important;
+ border-right:1px solid var(--sx-line)!important;
+ box-shadow:inset -1px 0 rgba(244,255,238,.045)!important;
+}
+body #appShell[data-workspace="master"] .sidebar{
+ background:linear-gradient(174deg,#2e3a40,#222d33 56%,#1c282e)!important;
+}
+body #appShell .topbar{
+ background:
+  linear-gradient(155deg,rgba(255,255,255,.11),rgba(250,255,246,.028) 43%),
+  rgba(38,51,46,.82)!important;
+ border-bottom:1px solid rgba(229,245,220,.16)!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.09),0 4px 19px rgba(0,0,0,.11)!important;
+ -webkit-backdrop-filter:blur(16px) saturate(113%)!important;
+ backdrop-filter:blur(16px) saturate(113%)!important;
+}
+body #appShell[data-workspace="master"] .topbar{background:rgba(39,52,58,.83)!important}
+body #appShell .sidebar-logo strong{font-weight:720!important;letter-spacing:-.04em!important}
+body #appShell .nav-item{
+ border-radius:12px!important;
+ transition:background-color .22s ease,border-color .22s ease,color .22s ease,transform .22s ease!important;
+}
+body #appShell .nav-item:hover:not(.selected){
+ color:#f1f8e9!important;
+ background:rgba(222,245,208,.085)!important;
+ transform:translateX(2px)!important;
+}
+body #appShell .nav-item.selected{
+ color:#effbdc!important;
+ font-weight:720!important;
+}
+body #appShell .nav-symbol{
+ color:#d3e4d0!important;
+ opacity:.86;
+}
+body #appShell .nav-item.selected .nav-symbol{color:#def9b3!important;opacity:1}
+body #appShell .socio-glass-nav-pill{
+ border:1px solid rgba(232,250,219,.24)!important;
+ box-shadow:0 6px 17px rgba(0,0,0,.15),inset 0 1px rgba(255,255,255,.16)!important;
+}
+
+/* A clear document hierarchy: title -> budget -> company KPIs -> ads -> reports. */
+body #appShell #view .px-workspace{
+ max-width:1470px!important;
+ gap:24px!important;
+ padding:6px 0 38px!important;
+}
+body #appShell #view .px-page-heading{
+ align-items:flex-end!important;
+ padding:4px 2px 2px!important;
+ margin-bottom:1px!important;
+ gap:18px!important;
+}
+body #appShell #view .px-page-heading h1{
+ color:var(--sx-fg)!important;
+ font-size:clamp(29px,3.1vw,39px)!important;
+ font-weight:760!important;
+ letter-spacing:-.055em!important;
+ line-height:1.11!important;
+}
+body #appShell #view .px-page-heading p{
+ color:var(--sx-fg-muted)!important;
+ font-size:12.5px!important;
+ line-height:1.57!important;
+ max-width:650px;
+}
+body #appShell #view .px-eyebrow{
+ color:#d0ee9c!important;
+ letter-spacing:.15em!important;
+ font-size:10px!important;
+ font-weight:760!important;
+}
+body #appShell #view .px-budget-top-heading,
+body #appShell #view .px-section-heading {
+ display:flex;align-items:center;justify-content:space-between;
+ gap:12px;min-width:0;
+}
+body #appShell #view .px-budget-top-heading{
+ padding:0 2px 10px!important;
+}
+body #appShell #view .px-budget-top-heading>strong{
+ font-size:12px!important;
+ color:#e0eadf!important;
+ font-weight:735!important;
+ letter-spacing:-.01em!important;
+}
+body #appShell #view .px-budget-top-grid{
+ display:grid!important;
+ grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))!important;
+ gap:14px!important;
+ align-items:start!important;
+}
+body #appShell #view .px-budget-account.px-budget-meta-ribbon{
+ background:linear-gradient(138deg,#334239,#2a382f)!important;
+ border-color:rgba(217,244,195,.26)!important;
+ box-shadow:0 7px 25px rgba(0,0,0,.14),inset 0 1px rgba(255,255,255,.12)!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-metric>strong{
+ font-variant-numeric:tabular-nums!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta{
+ background-color:var(--sx-lime)!important;
+ color:var(--sx-lime-ink)!important;
+ transition:transform .18s ease,box-shadow .18s ease,background .18s ease!important;
+}
+
+/* Company health KPI cards: purposeful, calmer rhythm. */
+body #appShell #view .px-kpi-grid{
+ display:grid!important;
+ grid-template-columns:repeat(3,minmax(0,1fr))!important;
+ gap:15px!important;
+}
+body #appShell #view .px-kpi{
+ min-height:152px!important;
+ padding:20px 22px!important;
+ border-radius:17px!important;
+ background:
+  radial-gradient(ellipse 100% 120% at 100% 0%,rgba(223,248,206,.045),transparent 62%),
+  linear-gradient(151deg,#323e37,#29352e 75%)!important;
+ border:1px solid var(--sx-line)!important;
+ box-shadow:var(--sx-shadow)!important;
+ transition:transform .22s ease,border-color .22s ease,box-shadow .22s ease!important;
+}
+body #appShell #view .px-kpi:hover{
+ transform:translateY(-3px)!important;
+ border-color:var(--sx-line-strong)!important;
+ box-shadow:0 18px 33px rgba(0,0,0,.19),inset 0 1px rgba(255,255,255,.09)!important;
+}
+body #appShell #view .px-kpi-top{align-items:center!important;gap:12px!important}
+body #appShell #view .px-kpi-label{
+ color:var(--sx-fg-soft)!important;font-size:12px!important;
+ font-weight:670!important;
+}
+body #appShell #view .px-kpi-number{
+ color:#f8fbf5!important;
+ font-size:clamp(27px,2.9vw,36px)!important;
+ font-weight:770!important;letter-spacing:-.047em!important;
+}
+body #appShell #view .px-kpi small{
+ color:var(--sx-fg-muted)!important;
+ font-size:11px!important;line-height:1.5!important;
+}
+body #appShell #view .px-kpi-icon{
+ width:39px!important;height:39px!important;min-width:39px!important;
+ border-radius:12px!important;
+ border:1px solid rgba(227,246,215,.15)!important;
+ background:rgba(212,235,196,.08)!important;
+ color:#e0f0d9!important;
+}
+body #appShell #view .px-kpi-icon.green{color:#bfe88b!important}
+body #appShell #view .px-kpi-icon.blue{color:var(--sx-blue)!important}
+body #appShell #view .px-kpi-icon.muted{color:#c7d0c7!important}
+
+/* Publicidade: keep Meta numbers together, separate from operational KPIs. */
+body #appShell #view .px-ad-performance{
+ display:grid;gap:12px;min-width:0;
+}
+body #appShell #view .px-section-heading{
+ padding:0 2px!important;
+}
+body #appShell #view .px-section-heading>div{
+ display:flex;flex-direction:column;gap:4px;
+}
+body #appShell #view .px-section-heading h2{
+ font-size:15px!important;letter-spacing:-.025em!important;
+ font-weight:750!important;color:var(--sx-fg)!important;
+ margin:0!important;
+}
+body #appShell #view .px-section-heading p{
+ color:var(--sx-fg-muted)!important;
+ font-size:11px!important;margin:0!important;
+}
+body #appShell #view .px-ads-strip{
+ display:grid!important;
+ grid-template-columns:repeat(2,minmax(0,1fr))!important;
+ gap:14px!important;
+}
+body #appShell #view .px-ads-metric{
+ padding:17px 20px!important;
+ border-radius:16px!important;
+ min-height:107px!important;
+ gap:7px!important;
+ background:linear-gradient(153deg,#2e3934,#26312b)!important;
+ border:1px solid var(--sx-line)!important;
+ box-shadow:0 7px 21px rgba(0,0,0,.12),inset 0 1px rgba(255,255,255,.065)!important;
+ transition:border-color .2s ease,transform .2s ease!important;
+}
+body #appShell #view .px-ads-metric:hover{
+ border-color:var(--sx-line-strong)!important;
+ transform:translateY(-2px)!important;
+}
+body #appShell #view .px-ads-metric>div strong{
+ color:#eff7e9!important;
+ font-size:12px!important;
+}
+body #appShell #view .px-ads-metric b{
+ color:#f6faf2!important;
+ font-size:clamp(20px,2.1vw,27px)!important;
+ font-weight:770!important;
+}
+body #appShell #view .px-ads-metric small{
+ color:#bdcdbd!important;font-size:10.5px!important;
+}
+
+/* Reports: coherent panels and restrained chart neon colors. */
+body #appShell #view .px-dual{
+ grid-template-columns:minmax(0,1.45fr) minmax(0,1fr)!important;
+ gap:16px!important;
+ align-items:stretch!important;
+}
+body #appShell #view .px-panel{
+ border-radius:18px!important;
+ padding:22px!important;
+ background:linear-gradient(158deg,#2d3933,#26312b)!important;
+ border:1px solid var(--sx-line)!important;
+ box-shadow:var(--sx-shadow)!important;
+ transition:border-color .21s ease,box-shadow .21s ease!important;
+}
+body #appShell #view .px-panel:hover{
+ border-color:rgba(234,250,225,.23)!important;
+ box-shadow:0 13px 32px rgba(0,0,0,.17),inset 0 1px rgba(255,255,255,.085)!important;
+}
+body #appShell #view .px-panel-head{
+ margin-bottom:16px!important;
+ gap:12px!important;
+}
+body #appShell #view .px-panel-head h2{
+ color:var(--sx-fg)!important;
+ font-size:17px!important;
+ font-weight:740!important;
+ letter-spacing:-.026em!important;
+}
+body #appShell #view .px-panel-head p{
+ color:var(--sx-fg-muted)!important;
+ font-size:11px!important;
+ line-height:1.53!important;
+}
+body #appShell #view .px-chart-wrap{
+ background:linear-gradient(153deg,#25322c,#212d27)!important;
+ border-color:rgba(227,248,214,.17)!important;
+ border-radius:12px!important;
+}
+body #appShell #view .px-chart-actions{
+ background:#26352c!important;
+ border-color:rgba(227,248,214,.17)!important;
+}
+body #appShell #view .px-chart-actions button.px-range-btn.active{
+ background:var(--sx-lime)!important;color:var(--sx-lime-ink)!important;
+}
+body #appShell #view .px-legend .px-dot.purple{background:var(--sx-violet)!important}
+body #appShell #view .px-legend .px-dot.green{background:var(--sx-jade)!important}
+body #appShell #view .px-graph-counts{
+ border-radius:12px!important;
+ padding:12px 14px!important;
+}
+body #appShell #view .px-rank-track{
+ background:rgba(227,245,213,.14)!important;
+ border-radius:100px!important;
+}
+body #appShell #view .px-rank-track i{
+ background:linear-gradient(95deg,#85c78e,#bbed81)!important;
+ border-radius:100px!important;
+}
+body #appShell #view .px-live-indicator{
+ color:#c6e8b2!important;
+ border-color:rgba(203,246,173,.19)!important;
+ background:rgba(188,224,156,.07)!important;
+}
+
+/* Connections, catalog, training and Master: shared rhythm with product branding. */
+body #appShell #view :is(.px-conn-card,.socio-training-center,.socio-clean-section,
+ .master-panel,.master-kpi,.lucid-card,.commerce-summary>div){
+ border-radius:17px!important;
+ border-color:var(--sx-line)!important;
+ background:linear-gradient(158deg,var(--sx-panel-elev),var(--sx-panel-deep))!important;
+ box-shadow:var(--sx-shadow)!important;
+}
+body #appShell #view .px-connection-grid{
+ gap:15px!important;
+ max-width:1450px!important;
+}
+body #appShell #view .px-conn-card{
+ padding:20px 22px!important;
+ gap:20px!important;
+}
+body #appShell #view .px-conn-head h2{
+ color:var(--sx-fg)!important;
+ font-weight:740!important;
+}
+body #appShell #view :is(.px-conn-head p,.px-conn-row small,.px-provenance){
+ color:var(--sx-fg-muted)!important;
+}
+body #appShell #view :is(.px-conn-row,.master-table tr){
+ border-color:rgba(234,247,227,.11)!important;
+}
+body #appShell #view :is(.master-kpi,.master-panel){
+ box-shadow:var(--sx-shadow)!important;
+}
+body #appShell .workspace-box{
+ border-radius:13px!important;
+ border-color:var(--sx-line-strong)!important;
+}
+
+/* Elevated controls, deliberate interaction, comfortable focus. */
+body #appShell #view :is(.btn,.px-range-btn,.px-quick-action){
+ transition:transform .19s ease,background-color .19s ease,
+  border-color .19s ease,box-shadow .19s ease!important;
+}
+body #appShell #view :is(.btn,.px-quick-action):hover:not(:disabled){
+ transform:translateY(-1px)!important;
+}
+body #appShell #view :is(.btn.primary,.wa-compose-send){
+ background-color:var(--sx-lime)!important;
+ color:var(--sx-lime-ink)!important;
+}
+body #appShell #view :is(.btn,.px-range-btn,.px-quick-action,
+ a.px-budget-recharge-cta, input, select, textarea):focus-visible,
+body:has(#appShell:not(.hidden)) #socioThalitaDock :is(button,textarea):focus-visible{
+ outline:2px solid var(--sx-focus)!important;
+ outline-offset:3px!important;
+}
+body #appShell #view :is(input:not([type=checkbox]):not([type=radio]),textarea,select){
+ border-radius:11px!important;
+ border-color:rgba(231,248,220,.19)!important;
+ transition:border-color .2s ease,box-shadow .2s ease!important;
+}
+body #appShell #view :is(input:not([type=checkbox]):not([type=radio]),textarea,select):focus{
+ border-color:rgba(204,244,155,.6)!important;
+ box-shadow:0 0 0 3px rgba(201,241,109,.12)!important;
+}
+
+/* Thalita: translucent elevation and compact, polished suggestions. */
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window:not(.hidden){
+ animation:sx-modal-enter .3s cubic-bezier(.18,.84,.22,1) both;
+ transform-origin:90% 100%;
+ border-radius:19px!important;
+ border-color:rgba(233,247,220,.29)!important;
+ box-shadow:0 28px 85px rgba(0,0,0,.55),inset 0 1px rgba(255,255,255,.12)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-suggestions button,
+body #appShell #view .wa-filters button{
+ transition:transform .18s ease,background-color .18s ease,border-color .18s ease!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-suggestions button:hover{
+ transform:translateY(-1px)!important;
+}
+body #appShell #view .wa-inbox{
+ border-color:rgba(234,247,225,.21)!important;
+ box-shadow:0 19px 54px rgba(0,0,0,.24),inset 0 1px rgba(255,255,255,.07)!important;
+}
+body #appShell #view .wa-list-row.active{
+ background:linear-gradient(105deg,rgba(199,241,109,.14),rgba(230,246,215,.06))!important;
+}
+body #appShell #view .wa-inbox-search:focus-within{
+ border-color:rgba(203,247,167,.55)!important;
+ box-shadow:0 0 0 3px rgba(201,241,109,.09)!important;
+}
+
+/* Only animatable properties on entrance; avoid global blur, filters and
+   box-shadow animations on dashboard reloads. */
+@keyframes sx-modal-enter{
+ from{opacity:.30;transform:translate3d(0,11px,0) scale(.975)}
+ to{opacity:1;transform:translate3d(0,0,0) scale(1)}
+}
+@media(max-width:1150px){
+ body #appShell #view .px-dual{grid-template-columns:minmax(0,1fr)!important}
+ body #appShell #view .px-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:720px){
+ body #appShell #view .px-workspace{gap:17px!important;padding-top:0!important}
+ body #appShell #view .px-kpi-grid{grid-template-columns:minmax(0,1fr)!important;gap:11px!important}
+ body #appShell #view .px-ads-strip{grid-template-columns:minmax(0,1fr)!important}
+ body #appShell #view .px-kpi{min-height:133px!important;padding:17px 18px!important}
+ body #appShell #view .px-panel{padding:17px!important}
+ body #appShell #view .px-conn-card{padding:17px!important}
+ body #appShell #view .px-page-heading{align-items:flex-start!important}
+ body #appShell .nav-item:hover:not(.selected){transform:none!important}
+}
+@media(prefers-reduced-motion:reduce){
+ body #appShell .nav-item,
+ body #appShell #view :is(.px-kpi,.px-ads-metric,.px-panel,.btn,.px-quick-action,
+  .px-range-btn,.px-assistant-suggestions button,.wa-filters button) {
+  transition:none!important;
+  transform:none!important;
+ }
+ body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window:not(.hidden){
+  animation:none!important;
+ }
+}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+ body #appShell .topbar{background:var(--sx-panel-deep)!important;backdrop-filter:none!important}
+ body #appShell #view :is(.px-kpi,.px-panel,.px-ads-metric,.px-conn-card){
+  background:var(--sx-panel)!important;
+  border-color:rgba(235,250,226,.31)!important;
+ }
+}
+
+
+/* The catalog only offers Meta while Google Ads is paused. Avoid a fake
+   platform selector with exactly one option. */
+body #appShell #view .px-campaign-provider-meta{
+ display:flex;align-items:center;flex-wrap:wrap;gap:8px;
+ padding:10px 12px;margin:0;
+ border-radius:11px;
+ background:rgba(49,67,56,.9)!important;
+ border:1px solid rgba(230,249,219,.17)!important;
+ color:#eaf5e4!important;
+}
+body #appShell #view .px-campaign-provider-meta strong{
+ color:#f4fbef!important;font-size:12px!important;font-weight:740!important;
+}
+body #appShell #view .px-campaign-provider-meta small{
+ color:#baccb7!important;font-size:10px!important;
+}
