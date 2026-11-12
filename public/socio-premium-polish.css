@@ -633,3 +633,16 @@ body:has(#appShell:not(.hidden)) #socioThalitaDock :is(button,textarea):focus-vi
   background:#222d27!important;
  }
 }
+
+/* Ensure the generic legacy button:not(.primary) color rule cannot erase
+   the dark-on-lime accessible button labels. */
+body #appShell #view .wa-inbox-side button.wa-inbox-connect,
+body #appShell #view .wa-compose-row button.wa-compose-send,
+body #appShell #view .wa-filters button.active{
+ color:#243116!important;
+}
+body #appShell #view .wa-inbox-side button.wa-inbox-connect :is(span,b,strong),
+body #appShell #view .wa-compose-row button.wa-compose-send :is(span,b,strong),
+body #appShell #view .wa-filters button.active :is(span,b,strong){
+ color:inherit!important;
+}
