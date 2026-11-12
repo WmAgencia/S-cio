@@ -1518,3 +1518,87 @@ body #appShell #view .px-loading{
   border-color:#b8bfce!important;box-shadow:0 10px 26px rgba(25,35,55,.15)!important;
  }
 }
+
+
+/* Login and initial setup share the new visual language, without touching auth. */
+body #authScreen.auth-screen{
+ background:#f7f8fa!important;
+ color:#202735!important;
+}
+body #authScreen .auth-art{
+ background:
+  radial-gradient(ellipse 61% 46% at 87% 19%,rgba(118,112,235,.14),transparent 75%),
+  radial-gradient(ellipse 70% 56% at 4% 90%,rgba(184,198,242,.18),transparent 72%),
+  linear-gradient(145deg,#f0f2fe,#e6eaf8)!important;
+ color:#263247!important;
+ border-right:1px solid #e1e4f1!important;
+}
+body #authScreen .auth-art:after{
+ opacity:.19!important;
+ border-color:#c1bce9!important;
+ box-shadow:0 0 0 95px rgba(166,161,229,.14),0 0 0 185px rgba(166,161,229,.09)!important;
+}
+body #authScreen .auth-art .brand-mark,
+body #authScreen .auth-art .brand-mark span{
+ color:#605dec!important;
+}
+body #authScreen .auth-art .eyebrow{
+ color:#605dec!important;letter-spacing:.15em!important;
+}
+body #authScreen .auth-art h1{
+ color:#202735!important;font-weight:665!important;
+ letter-spacing:-.045em!important;
+}
+body #authScreen .auth-art p{
+ color:#606f82!important;line-height:1.7!important;
+}
+body #authScreen .auth-bottom{color:#748098!important;letter-spacing:.15em!important}
+body #authScreen .auth-panel{background:#fff!important}
+body #authScreen .auth-heading h2{
+ color:#202735!important;font-weight:740!important;letter-spacing:-.04em!important;
+}
+body #authScreen .auth-heading p{color:#667085!important}
+body #authScreen .auth-heading .eyebrow{color:#605dec!important}
+body #authScreen .form-stack label{color:#344054!important;font-size:12px!important;font-weight:665!important}
+body #authScreen .form-stack :is(input,textarea,select){
+ background:#fff!important;color:#344054!important;
+ border:1px solid #d8dce5!important;border-radius:9px!important;
+ box-shadow:none!important;
+}
+body #authScreen .form-stack :is(input,textarea,select):focus{
+ border-color:#7773ec!important;outline:0!important;
+ box-shadow:0 0 0 3px rgba(96,93,236,.12)!important;
+}
+body #authScreen .form-stack input::placeholder{color:#8996a9!important}
+body #authScreen .btn.primary{
+ background:#605dec!important;color:#fff!important;border:1px solid #605dec!important;
+ border-radius:9px!important;box-shadow:none!important;
+}
+body #authScreen .btn.primary:hover{background:#514ed5!important;border-color:#514ed5!important}
+body #authScreen .btn.primary span{color:inherit!important}
+body #authScreen .auth-password-toggle{
+ color:#605dec!important;background:transparent!important;border:0!important;
+}
+body #authScreen .auth-footer{color:#7b8799!important}
+body #authScreen .help-card{
+ background:#f1f0ff!important;border:1px solid #dfdef8!important;color:#514fa3!important;
+}
+body #authScreen .form-error{color:#b73b4b!important}
+body #authScreen .mobile-brand{color:#273449!important}
+body #authScreen .mobile-brand span{color:#605dec!important}
+
+/* Optional summary and recommendation modals are intentionally neutral. */
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog)
+ :is(.socio-clean-section,.catalog-variant-row,.report-note-grid>div){
+ background:#fafbfe!important;color:#344054!important;border-color:#e7eaf0!important;
+}
+body:has(#appShell:not(.hidden)) .socio-popup-surface .section-title{color:#344054!important}
+body:has(#appShell:not(.hidden)) .socio-popup-surface .socio-full-btn.btn.primary{
+ background:#605dec!important;color:#fff!important;
+}
+
+/* Do not repaint media pixels; preserve readable white QR quiet zones. */
+body #appShell #view :is(.wa-qr-image,.socio-qr-image-wrap img),
+body:has(#appShell:not(.hidden)) :is(.socio-qr-image-wrap img,.wa-qr-image){
+ background:#fff!important;image-rendering:pixelated;
+}
