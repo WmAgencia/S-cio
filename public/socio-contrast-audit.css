@@ -414,3 +414,18 @@ body #appShell #view :is(.lucid-check-row,.ps-mode,.ps-choices button,
 
 /* H. QR codes and verified brand images are intentionally not recolored.
       A QR's white field is a machine readability requirement. */
+
+
+/* I. Gradients must always have an opaque color fallback.
+   Chromium computed-contrast tests found 3 bright-gradient controls that
+   otherwise report transparent background-color beneath dark button text.
+   Explicit background-color also covers disabled gradients / print modes. */
+body #appShell #view :is(.px-budget-recharge-cta,.wa-compose-send),
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-actions .btn.primary {
+ background-color:#c9f16d!important;
+ color:#243118!important;
+}
+body #appShell #view :is(.px-budget-recharge-cta,.wa-compose-send) :is(span,small,strong,b),
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-actions .btn.primary :is(span,small,strong,b) {
+ color:inherit!important;
+}
