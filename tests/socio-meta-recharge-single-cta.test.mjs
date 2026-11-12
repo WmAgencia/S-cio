@@ -12,7 +12,9 @@ const html=load('public/index.html');
 test('Meta budget shows exactly one recharge CTA and no duplicate billing actions',()=>{
  assert(ui.includes('px-budget-recharge-cta'));
  assert(ui.includes('Abrir recarga na Meta <span'));
- assert(ui.includes('px-budget-recharge-footer'));
+ assert(ui.includes('px-budget-meta-ribbon'));
+ assert(ui.includes('px-budget-meta-summary'));
+ assert(ui.includes('px-budget-meta-action'));
  assert(ui.includes('href="'+ "'+esc(paymentUrl)+'" + '" target="_blank" rel="noopener noreferrer"'));
  assert(ui.includes("url.protocol==='https:'&&url.hostname==='adsmanager.facebook.com'"));
  assert(!ui.includes('Adicionar saldo por Pix'));
@@ -20,7 +22,16 @@ test('Meta budget shows exactly one recharge CTA and no duplicate billing action
  assert(!ui.includes('data-px-billing="pix"'));
  assert(!ui.includes('data-px-billing="balance"'));
  assert(!ui.includes("querySelectorAll('[data-px-billing]')"));
- assert(ui.includes("provider==='meta_ads'&&paymentUrl"));
+ assert(ui.includes("if(provider==='meta_ads'){"));
+ assert(ui.includes('Limite disponível'));
+ assert(ui.includes('spendCapRemainingMinor'));
+ assert(ui.includes('Gasto hoje'));
+ assert(ui.includes('Não representa saldo pré-pago.'));
+ assert(ui.includes('Link oficial de recarga indisponível nesta conta'));
+ assert(ui.includes('type="button" disabled'));
+ assert(css.includes('.px-budget-meta-ribbon .px-budget-meta-summary'));
+ assert(css.includes('min-height:0!important'));
+ assert(css.includes('min-height:34px!important'));
  assert(ui.includes("provider!=='meta_ads'"));
 });
 
@@ -46,8 +57,8 @@ test('while provider data loads, show skeleton rather than false zero or partial
 test('all initial and route loading states share a polished dark loader',()=>{
  assert(app.includes('loading socio-page-loading'));
  assert(html.includes('loading socio-page-loading'));
- assert(html.includes('/socio-premium-polish.css?v=20261112b'));
- assert(html.includes('/socio-workspace-ui.js?v=20261112b'));
+ assert(html.includes('/socio-premium-polish.css?v=20261112c'));
+ assert(html.includes('/socio-workspace-ui.js?v=20261112c'));
  assert(html.includes('/app.js?v=20261112b'));
  assert(css.includes('.loading.socio-page-loading'));
  assert(css.includes('.socio-loading-title'));
