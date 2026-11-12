@@ -475,7 +475,7 @@ body #appShell #view .px-kpi-number{
  line-height:1.12!important;
 }
 body #appShell #view .px-kpi small{
- color:#7b8697!important;font-size:11px!important;line-height:1.45!important;
+ color:#5d6a7e!important;font-size:11px!important;line-height:1.45!important;
 }
 body #appShell #view .px-kpi-icon{
  background:#f1f0ff!important;border:1px solid #e9e8fd!important;
@@ -554,7 +554,7 @@ body #appShell #view .px-panel-head h2{
  color:#273449!important;font-size:16px!important;
  font-weight:740!important;letter-spacing:-.022em!important;
 }
-body #appShell #view .px-panel-head p{color:#738094!important;font-size:11px!important}
+body #appShell #view .px-panel-head p{color:#5d6a7e!important;font-size:11px!important}
 body #appShell #view .px-chart-wrap{
  background:#fbfcff!important;border:1px solid #f0f1f5!important;
  border-radius:10px!important;
@@ -835,7 +835,7 @@ body #appShell #view .wa-thread-identity strong{
 }
 body #appShell #view :is(.wa-chat-name-line small,.wa-chat-preview,.wa-chat-meta,
  .wa-thread-identity small,.wa-inbox-side-bottom,.wa-history-load span){
- color:#748195!important;
+ color:#5d6a7e!important;
 }
 body #appShell #view .wa-chat-preview em{color:#5351ca!important}
 body #appShell #view .wa-unread-dot,
@@ -922,7 +922,7 @@ body #appShell #view .wa-mode-btn.active{
  border:1px solid #d9d7fa!important;
 }
 body #appShell #view :is(.wa-compose-disclaimer,.wa-compose-foot,.wa-inline-link,.wa-unsupported){
- color:#748195!important;
+ color:#5d6a7e!important;
 }
 body #appShell #view .wa-compose-row textarea{
  background:#fff!important;color:#273449!important;
@@ -972,7 +972,7 @@ body #appShell #view .wa-inbox-dialog{
 }
 body #appShell #view .wa-dialog-surface :is(h2,h3,strong,p,small,label){color:#344054!important}
 body #appShell #view :is(.wa-inbox-empty-list,.wa-empty-messages,.wa-history-load){
- color:#748195!important;
+ color:#5d6a7e!important;
 }
 
 /* Thalita: right-hand white assistant panel, not a dark floating box. */
@@ -1025,7 +1025,7 @@ body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header s
  color:#202735!important;font-weight:755!important;font-size:13px!important;
 }
 body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header small{
- color:#748195!important;font-size:10.5px!important;
+ color:#5d6a7e!important;font-size:10.5px!important;
 }
 body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-close{
  background:#f3f4f8!important;color:#667085!important;
@@ -1099,7 +1099,7 @@ body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-actions .btn.pr
  background:#514ed5!important;color:#fff!important;
 }
 body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-hint{
- color:#748195!important;
+ color:#5d6a7e!important;
 }
 body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-disclaimer{
  background:#fafbfe!important;color:#768297!important;
@@ -1602,3 +1602,35 @@ body #appShell #view :is(.wa-qr-image,.socio-qr-image-wrap img),
 body:has(#appShell:not(.hidden)) :is(.socio-qr-image-wrap img,.wa-qr-image){
  background:#fff!important;image-rendering:pixelated;
 }
+
+
+/* Contrast verification 1: normal metadata must be >= WCAG AA 4.5:1
+   on white/pale lilac. Fix older light-theme components still in the DOM. */
+body #appShell #view :is(.lucid-filter,.ai-guide-tabs,.settings-tabs,
+ .ember-filter,.px-range-tabs){
+ background:#f3f4f9!important;
+ border:1px solid #e4e7ee!important;
+ color:#344054!important;
+ box-shadow:none!important;
+}
+body #appShell #view :is(.lucid-filter,.ai-guide-tabs,.settings-tabs,
+ .ember-filter,.px-range-tabs) button:not(.active):not(.is-active):not([aria-selected="true"]){
+ background:transparent!important;color:#526074!important;
+ border:1px solid transparent!important;
+}
+body #appShell #view :is(.lucid-filter,.ai-guide-tabs,.settings-tabs,
+ .ember-filter,.px-range-tabs) button:is(.active,.is-active,[aria-selected="true"]){
+ background:#605dec!important;border:1px solid #605dec!important;
+ color:#fff!important;box-shadow:none!important;
+}
+body #appShell #view :is(.lucid-intelligence-panel p,.lucid-whatsapp-panel p,
+ .lucid-stat-lilac p,.lucid-stat-peach p,.lucid-stat-silver p,
+ .lucid-kpi-detail,.lucid-card p,.ember-qr-disclaimer){
+ color:#5b687c!important;
+}
+body #appShell #view .wa-chat-preview,
+body #appShell #view .wa-thread-identity small,
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header small{
+ color:#5b687c!important;
+}
+body #appShell #view .wa-chat-preview em{color:#4540b2!important}
