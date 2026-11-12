@@ -145,7 +145,7 @@ async function authorize(pool,req,res,ctx,env){
  let a=await ctx.sessionFor(req);
  if(!userCanAuthorize(a)){
   const ip=String(req.socket?.remoteAddress||'unknown');
-  if(!ctx.limiter(ctx.authAttempts,'oauth-login:'+ip,600000,12))throw error(429,'Too many login attempts');
+  if(!(await ctx.limiter('auth','oauth-login:'+ip,600000,12)))throw error(429,'Too many login attempts');
   a=await userByLogin(pool,values.identity,values.password);
  }
  if(!userCanAuthorize(a))return html(res,401,pageHtml(v,values.time,values.nonce,values.sig,false,env,true));
