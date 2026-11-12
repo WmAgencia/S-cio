@@ -51,7 +51,38 @@ test('computed, rendered CSS has AA-contrast text across representative real com
      '<div class="master-company-filters"><select><option>Empresas</option></select></div>'+
      '<div class="master-company-edit-note">Alterações de clientes</div>'+
      '<div class="ps-error">Não foi possível carregar</div>'+
+     '<div class="lucid-stat-lilac"><strong>Indicadores</strong><small>Hoje</small></div>'+
+     '<div class="lucid-whatsapp-panel"><h2>WhatsApp</h2><p>Conexão ativa</p></div>'+
+     '<div class="feature-choice"><span><strong>Função ativa</strong><small>Descrição</small></span></div>'+
+     '<div class="socio-training-center"><h2>Treinamento da IA</h2><p>Conversas reais</p></div>'+
+     '<div class="ps-optional-training"><summary>Conhecimento extra</summary><p>Importar material</p></div>'+
+     '<div class="px-wa-overview-list"><div><strong>Cliente teste</strong><small>WhatsApp</small></div></div>'+
+     '<div class="px-preview-text">Criativo validado</div>'+
+     '<div class="px-budget-meta-ribbon px-budget-account" data-budget-provider="meta_ads">'+
+       '<div class="px-budget-meta-summary"><div class="px-budget-meta-brand"><strong>Meta Ads</strong></div>'+
+       '<div class="px-budget-meta-metric"><span>Limite disponível</span><strong>R$ 13,17</strong></div></div>'+
+       '<div class="px-budget-meta-action"><a class="px-budget-recharge-cta">Abrir recarga na Meta</a></div></div>'+
+     '<div class="wa-inbox"><div class="wa-inbox-side">'+
+       '<div class="wa-filters"><button>IA respondendo</button><button class="active">Todas</button></div>'+
+       '<div class="wa-list-row active"><div class="wa-chat-name-line"><strong>Cliente</strong></div>'+
+         '<div class="wa-chat-preview">Proposta recebida</div></div></div>'+
+       '<div class="wa-inbox-main"><div class="wa-thread-header">'+
+         '<div class="wa-thread-identity"><strong>Contato</strong><small>Humano respondendo</small></div></div>'+
+         '<div class="wa-message-list"><div class="wa-message-row outgoing">'+
+           '<div class="wa-message-bubble"><span class="wa-message-copy">Boa tarde!</span></div></div></div>'+
+         '<div class="wa-compose"><div class="wa-compose-row">'+
+           '<textarea placeholder="Sua mensagem"></textarea><button class="wa-compose-send">Enviar</button>'+
+         '</div></div></div></div>'+
+
     '</div></main></div></div>'+
+   '<div id="socioThalitaDock"><div class="px-assistant-window">'+
+      '<header><strong>Thalita</strong><small>Assistente da sua empresa</small></header>'+
+      '<div class="px-assistant-feed"><div class="px-assistant-line">'+
+        '<small>Thalita</small><p>Oi! Como posso ajudar?</p></div></div>'+
+      '<div class="px-assistant-suggestions"><button>Resumo de hoje</button></div>'+
+      '<form id="thalitaForm"><textarea id="thalitaInput" placeholder="Faça uma pergunta"></textarea>'+
+       '<div class="px-assistant-actions"><button class="btn primary">Enviar</button></div></form>'+
+      '</div></div>'+
    '<dialog class="ps-card-dialog" open><form><header><h4>Editar conversa</h4></header>'+
     '<label for="edit">Mensagem</label><textarea id="edit">Texto de exemplo</textarea></form></dialog>'+
   '</body></html>',{waitUntil:'domcontentloaded'});
@@ -69,7 +100,27 @@ test('computed, rendered CSS has AA-contrast text across representative real com
    '.px-campaign-picker label','.px-campaign-picker select',
    '.px-dialog-help','.master-company-filters select',
    '.master-company-edit-note','.ps-error',
-   '.ps-card-dialog h4','.ps-card-dialog label','.ps-card-dialog textarea'
+   '.ps-card-dialog h4','.ps-card-dialog label','.ps-card-dialog textarea',
+   '.lucid-stat-lilac strong','.lucid-stat-lilac small',
+   '.lucid-whatsapp-panel h2','.lucid-whatsapp-panel p',
+   '.feature-choice strong','.feature-choice small',
+   '.socio-training-center h2','.socio-training-center p',
+   '.ps-optional-training summary','.ps-optional-training p',
+   '.px-wa-overview-list strong','.px-wa-overview-list small',
+   '.px-preview-text','.px-budget-meta-metric span','.px-budget-meta-metric strong',
+   '.px-budget-recharge-cta',
+   '.wa-filters button:not(.active)','.wa-filters button.active',
+   '.wa-chat-name-line strong','.wa-chat-preview',
+   '.wa-thread-identity strong','.wa-thread-identity small',
+   '.wa-message-row.outgoing .wa-message-copy',
+   '.wa-compose-row textarea','.wa-compose-send',
+   '#socioThalitaDock .px-assistant-window header strong',
+   '#socioThalitaDock .px-assistant-window header small',
+   '#socioThalitaDock .px-assistant-line small',
+   '#socioThalitaDock .px-assistant-line p',
+   '#socioThalitaDock .px-assistant-suggestions button',
+   '#socioThalitaDock #thalitaInput',
+   '#socioThalitaDock .px-assistant-actions .btn.primary'
   ];
   const results=await page.evaluate(selectors=>{
    const rgba=s=>{
