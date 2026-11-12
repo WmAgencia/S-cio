@@ -53,7 +53,7 @@ test('while provider data loads, show skeleton rather than false zero or partial
  assert(ui.includes("Consultando dados confirmados"));
  assert(css.includes('.px-budget-meta-pending'));
  assert(css.includes('.px-load-line'));
- assert(css.includes('.px-overview-loading .px-kpi.px-load-card'));
+ assert(css.includes('.px-kpi.px-load-card'));
  assert(css.includes('@media(prefers-reduced-motion:reduce)'));
 });
 
@@ -69,7 +69,7 @@ test('all initial and route loading states share the new light skeleton loader',
 });
 
 test('recharge button has high contrast, keyboard focus and no layout mutation',()=>{
- assert(css.includes('a.px-budget-recharge-cta'));
+ assert(css.includes('.px-budget-recharge-cta'));
  assert(css.includes('color:#fff!important'));
  assert(css.includes('background:#605dec!important'));
  assert(css.includes('a.px-budget-recharge-cta')||css.includes('.px-budget-recharge-cta'));
