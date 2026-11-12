@@ -1,3 +1,4 @@
+import {createBackupWatchdog} from './watchdog.mjs';
 // WA-AKG MySQL logical backup: a separate private encrypted archive.
 // MySQL credentials never appear in args/logs; plain SQL is not saved to disk.
 import {spawn} from 'node:child_process';
@@ -33,6 +34,7 @@ const digest=async file=>{
 };
 const stageSafe=code=>String(code||'BACKUP_FAILED').slice(0,70);
 let stage='start';
+const watchdog=createBackupWatchdog({scope:'mysql',getStage:()=>stage});
 async function upload(path,key,bytes){
  if(bytes<=5*1024*1024){
   await s3.send(new PutObjectCommand({Bucket:bucket,Key:key,Body:await readFile(path),
@@ -79,7 +81,7 @@ async function main(){
  let proc;
  try{
   const env={...process.env,MYSQL_PWD:decodeURIComponent(mysql.password)};
-  stage='mysqldump';
+  stage='mysqldump';watchdog.progress(stage);
   proc=spawn('mariadb-dump',args,{env,stdio:['ignore','pipe','pipe']});
   let errorTail='';proc.stderr.on('data',x=>{errorTail+=x.toString();errorTail=errorTail.slice(-300)});
   const done=new Promise((resolve,reject)=>{
@@ -98,23 +100,23 @@ async function main(){
   try{await Promise.all([pipeline(proc.stdout,meter,createGzip({level:6}),cipher,
    createWriteStream(local,{flags:'wx',mode:0o600})),done]);}
   catch(err){proc.kill('SIGTERM');throw err;}
-  stage='verify-local';
+  stage='verify-local';watchdog.progress(stage);
   const size=(await stat(local)).size;
   const meta={format:'socio-disaster-v1',scope:'mysql',algorithm:'aes-256-gcm',
    createdAt:date,salt,iv,tag:cipher.getAuthTag().toString('hex'),
    bytes:size,sha256:await digest(local),compressed:'gzip',
    uncompressedBytes:uncompressed};
   await verify(local,meta);
-  stage='upload';
+  stage='upload';watchdog.progress(stage);
   await upload(local,key,size);
   const head=await s3.send(new HeadObjectCommand({Bucket:bucket,Key:key}));
   if(Number(head.ContentLength)!==size)throw new Error('Remote MySQL backup size mismatch');
-  stage='verify-remote';
+  stage='verify-remote';watchdog.progress(stage);
   const result=await s3.send(new GetObjectCommand({Bucket:bucket,Key:key}));
   await pipeline(result.Body,createWriteStream(remote,{flags:'wx',mode:0o600}));
   if((await digest(remote))!==meta.sha256)throw new Error('Remote MySQL backup hash mismatch');
   await verify(remote,meta);
-  stage='manifest';
+  stage='manifest';watchdog.progress(stage);
   const manifest=Buffer.from(JSON.stringify({...meta,archiveKey:key,verifiedRemote:true})+'\n');
   await s3.send(new PutObjectCommand({Bucket:bucket,Key:key+'.json',
    Body:manifest,ContentLength:manifest.length,ContentType:'application/json'}));
@@ -130,4 +132,4 @@ main().catch(e=>{
  console.error(JSON.stringify({ok:false,code:'MYSQL_BACKUP_FAILED',stage,
   reason:stageSafe(e?.code||e?.name||'unknown')}));
  process.exitCode=1;
-});
+}).finally(()=>watchdog.stop());
