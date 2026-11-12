@@ -1,0 +1,438 @@
+/*
+ * Sócio · Full contrast audit / 2026-11-12
+ * Final cascade layer, after legacy and premium-polish sheets.
+ * Changes colors, borders and readability only. The backend, view structure,
+ * permissions and placement of controls are unchanged.
+ * WCAG AA target: >= 4.5:1 for normal text and >= 3:1 for UI indicators.
+ *
+ * Intentionally WHITE: real QR codes and uploaded images/creative thumbnails.
+ * Do not force dark backgrounds on those: QR scanners require a light field.
+ */
+
+/* A. Conversations chart: old executive CSS supplied #f8f6fd on the tabs,
+      and the dark skin supplied almost-white text, causing the screenshot bug. */
+body #appShell #view .px-chart-actions {
+ background:linear-gradient(143deg,#28332d,#242e29)!important;
+ border:1px solid rgba(228,242,224,.20)!important;
+ border-radius:12px!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.07)!important;
+ color:#e3eee2!important;
+}
+body #appShell #view .px-chart-actions button.px-range-btn {
+ background:transparent!important;
+ border:1px solid transparent!important;
+ color:#d8e6d7!important;
+ opacity:1!important;
+ text-shadow:none!important;
+ font-size:11px!important;font-weight:700!important;
+ box-shadow:none!important;
+}
+body #appShell #view .px-chart-actions button.px-range-btn:not(.active):hover {
+ background:rgba(223,243,210,.12)!important;
+ color:#f5fff1!important;
+ border-color:rgba(230,248,218,.16)!important;
+}
+body #appShell #view .px-chart-actions button.px-range-btn.active,
+body #appShell #view .px-chart-actions button.px-range-btn[aria-pressed="true"] {
+ background:#c9f16d!important;
+ color:#233119!important;
+ border-color:#dbf7a1!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.31),0 2px 7px rgba(0,0,0,.14)!important;
+}
+body #appShell #view .px-chart-actions button.px-range-btn:focus-visible {
+ outline:2px solid #e5ffb2!important;outline-offset:3px!important;
+}
+body #appShell #view .px-graph-counts {
+ background:rgba(17,24,21,.20)!important;
+ border:1px solid rgba(230,244,220,.10)!important;
+ border-radius:11px!important;
+ padding:11px 14px!important;
+ color:#e9f3e7!important;
+}
+body #appShell #view .px-graph-counts>div>span {
+ color:#c4d4c5!important;
+ font-size:11px!important;
+}
+body #appShell #view .px-graph-counts>div>strong {
+ color:#f4faf0!important;
+}
+body #appShell #view .px-chart-wrap {
+ background:#202c26!important;
+ border:1px solid rgba(227,247,221,.20)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.045)!important;
+ color:#dce8dc!important;
+}
+body #appShell #view .px-axis,
+body #appShell #view .px-axis>span,
+body #appShell #view .px-legend,
+body #appShell #view .px-legend>span {
+ color:#c5d2c6!important;
+}
+body #appShell #view .px-svg line[stroke="#e8e4f3"] {
+ stroke:rgba(222,238,222,.25)!important;
+}
+body #appShell #view .px-svg path[stroke="#7650ed"] {
+ stroke:#aa9bff!important;
+}
+body #appShell #view .px-svg path[stroke="#16a778"] {
+ stroke:#58d7a3!important;
+}
+body #appShell #view .px-legend .px-dot.purple {
+ background:#aa9bff!important;
+}
+body #appShell #view .px-legend .px-dot.green {
+ background:#58d7a3!important;
+}
+body #appShell #view .px-chart-hit:focus-visible {
+ outline:2px solid #d6faaa!important;outline-offset:2px!important;
+}
+
+/* B. Shared legacy segmented controls, periods, settings and AI tabs.
+      Explicit active/background and foreground pairs prevent pale-on-pale. */
+body #appShell #view :is(.lucid-filter,.ember-filter,.ai-guide-tabs,
+ .settings-tabs,.px-marketing-filters,.px-range-tabs,.px-campaign-picker) {
+ background:#26322d!important;
+ border:1px solid rgba(234,246,227,.19)!important;
+ color:#e4f0e1!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.065)!important;
+}
+body #appShell #view :is(.lucid-filter,.ember-filter,.ai-guide-tabs,
+ .settings-tabs,.px-marketing-filters,.px-range-tabs,.px-campaign-picker)
+ button:not(.primary) {
+ background:transparent!important;
+ border-color:transparent!important;
+ color:#d9e7d7!important;
+ text-shadow:none!important;
+}
+body #appShell #view :is(.lucid-filter,.ember-filter,.ai-guide-tabs,
+ .settings-tabs,.px-marketing-filters,.px-range-tabs)
+ button:not(.primary):hover:not(.active):not(.is-active):not([aria-selected="true"]) {
+ background:rgba(222,246,212,.115)!important;
+ color:#f5fff0!important;
+}
+body #appShell #view :is(.lucid-filter,.ember-filter,.ai-guide-tabs,
+ .settings-tabs,.px-marketing-filters,.px-range-tabs)
+ button:is(.active,.is-active,[aria-selected="true"]):not(.primary) {
+ background:#c9f16d!important;
+ border:1px solid #d9f8a5!important;
+ color:#253118!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.30),0 2px 8px rgba(0,0,0,.12)!important;
+}
+body #appShell #view :is(.lucid-filter,.ember-filter,.ai-guide-tabs,
+ .settings-tabs,.px-marketing-filters,.px-range-tabs) button:disabled {
+ opacity:.68!important;
+}
+body #appShell #view .settings-tabs button.active :is(span,strong,b),
+body #appShell #view .ai-guide-tabs button.active :is(span,strong,b) {
+ color:inherit!important;
+}
+
+/* C. White or pastel cards left by earlier dashboard generations. */
+body #appShell #view :is(.lucid-stat-lilac,.lucid-stat-peach,.lucid-stat-silver,
+ .lucid-intelligence-panel,.lucid-whatsapp-panel,.lucid-setup-panel,
+ .lucid-card,.lucid-check-row:hover,.lucid-conversation:hover,
+ .wa-status-strip>div,.wa-legacy,.support-block,.info-strip,
+ .step-num,.metric-icon,.empty-icon,.callout-icon,
+ .file-drop,.file-drop:hover,.ps-optional-training,
+ .ps-markdown-advanced,.ps-feed,.ps-composer,
+ .ps-mode,.ps-mode:hover,.ps-choices button,.ps-choices button:hover,
+ .px-wa-overview-list>div,.px-campaign-picker,.master-company-edit-note,
+ .feature-choice,.meta-browser-operations) {
+ background:#2c3831!important;
+ border-color:rgba(230,247,222,.18)!important;
+ color:#eaf4e6!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.045)!important;
+}
+body #appShell #view :is(.lucid-stat-lilac,.lucid-stat-peach,.lucid-stat-silver,
+ .lucid-intelligence-panel,.lucid-whatsapp-panel,.lucid-setup-panel,
+ .ps-optional-training,.ps-mode,.px-wa-overview-list>div,
+ .master-company-edit-note,.px-campaign-picker) :is(h2,h3,h4,strong,b) {
+ color:#f4f9f1!important;
+}
+body #appShell #view :is(.lucid-stat-lilac,.lucid-stat-peach,.lucid-stat-silver,
+ .lucid-intelligence-panel,.lucid-whatsapp-panel,.lucid-setup-panel,
+ .ps-optional-training,.ps-mode,.px-wa-overview-list>div,
+ .master-company-edit-note,.px-campaign-picker) :is(p,small,label) {
+ color:#c2d0c2!important;
+}
+body #appShell #view :is(.lucid-ai-stats span,.lucid-check-number,
+ .lucid-progress-label,.ps-mode-icon,.ps-choices span,
+ .wa-steps b,.ps-pill,.ps-pill.approved,.ember-status) {
+ background:rgba(222,241,214,.12)!important;
+ color:#e3f2dc!important;
+ border-color:rgba(226,247,217,.20)!important;
+}
+body #appShell #view :is(.lucid-check-number.done,.ps-pill.approved) {
+ background:rgba(161,218,125,.18)!important;
+ color:#d2f1ad!important;
+}
+body #appShell #view :is(.lucid-check-row strong,.lucid-whatsapp-panel h2,
+ .lucid-intelligence-panel h2,.lucid-ai-stats b,
+ .ps-choices strong,.ps-mode strong,.ps-bubble p,.ps-mode b) {
+ color:#f3f9ef!important;
+}
+body #appShell #view :is(.lucid-check-row small,.lucid-intelligence-panel p,
+ .lucid-whatsapp-panel p,.ps-choices small,.ps-mode small,
+ .ps-composer-hint,.ps-voice-status,.ps-optional-training>p,
+ .feature-choice small) {
+ color:#c0d0c1!important;
+}
+body #appShell #view :is(.lucid-progress,.ps-progress) {
+ background:rgba(221,239,212,.13)!important;
+}
+body #appShell #view :is(.lucid-check-row,.ps-mode,.ps-choices button,
+ .feature-choice) {
+ border-color:rgba(235,248,227,.17)!important;
+}
+body #appShell #view :is(.ps-mode,.ps-choices button):hover {
+ background:#344337!important;
+ border-color:rgba(203,241,173,.40)!important;
+}
+body #appShell #view .ps-bubble {
+ background:#35433b!important;
+ color:#f0f8ed!important;
+ border-color:rgba(229,249,221,.19)!important;
+}
+body #appShell #view .ps-line.mine .ps-bubble {
+ background:#405b47!important;
+ color:#f5fff0!important;
+ border-color:rgba(216,246,193,.27)!important;
+}
+body #appShell #view .ps-bubble :is(p,small,strong,b) {
+ color:#eff9eb!important;
+}
+body #appShell #view .ps-choices button {
+ color:#f2f8ed!important;
+}
+body #appShell #view .ps-choices button :is(span,strong,small) {
+ color:inherit!important;
+}
+body #appShell #view .ps-error {
+ background:#4c2f35!important;
+ border:1px solid rgba(239,170,176,.32)!important;
+ color:#ffe1de!important;
+}
+body #appShell #view .ps-error :is(p,strong,small,span) {
+ color:#ffe1de!important;
+}
+body #appShell #view .bubble.note {
+ background:#4c4533!important;
+ border-color:rgba(245,218,150,.27)!important;
+ color:#f7e9be!important;
+}
+body #appShell #view .bubble.note :is(p,span,small) {
+ color:#f5e9c6!important;
+}
+body #appShell #view .file-drop {
+ border:1px dashed rgba(220,244,196,.40)!important;
+ color:#e9f3e2!important;
+}
+body #appShell #view .file-drop small,
+body #appShell #view .file-icon {
+ color:#c0d4b4!important;
+}
+body #appShell #view .file-drop:hover {
+ background:#36443a!important;
+}
+
+/* D. Training, tenant settings, catalog, commerce and reports. */
+body #appShell #view :is(.socio-clean-section,.socio-product-popup .card,
+ .commerce-page .card,.quote-request-item,.socio-knowledge-edit,
+ .socio-team-controls,.ps-optional-training .socio-training-center,
+ .socio-training-center,.feature-choice:has(input:checked),
+ .px-campaign-picker,.px-campaign-dialog,
+ .report-note-grid>div,.master-panel,.master-kpi) {
+ background:#2c3932!important;
+ color:#edf7e9!important;
+ border-color:rgba(233,247,225,.18)!important;
+}
+body #appShell #view :is(.socio-training-center,.socio-clean-section,
+ .commerce-page,.ps-optional-training,.feature-choice,
+ .px-campaign-picker,.quote-request-item,.master-page) :is(
+ h1,h2,h3,h4,strong,b,legend) {
+ color:#f3f8f0!important;
+}
+body #appShell #view :is(.socio-training-center,.socio-clean-section,
+ .commerce-page,.ps-optional-training,.feature-choice,
+ .px-campaign-picker,.quote-request-item,.master-page) :is(
+ p,small,label,span,li) {
+ color:#c5d2c5!important;
+}
+body #appShell #view :is(.feature-choice input:checked,
+ .ps-mode input:checked) {
+ accent-color:#c9f16d!important;
+}
+body #appShell #view .feature-choice:has(input:checked) {
+ border-color:rgba(214,249,183,.46)!important;
+ background:#354639!important;
+}
+body #appShell #view :is(.socio-team-controls select,
+ .master-company-filters input,.master-company-filters select,
+ .px-campaign-picker select,.ps-markdown-advanced textarea,
+ .socio-knowledge-edit textarea,.ps-composer textarea) {
+ background:#1b2821!important;
+ color:#f2f8ec!important;
+ border:1px solid rgba(227,247,211,.24)!important;
+ color-scheme:dark!important;
+}
+body #appShell #view :is(.socio-team-controls select,
+ .master-company-filters input,.master-company-filters select,
+ .px-campaign-picker select,.ps-markdown-advanced textarea,
+ .socio-knowledge-edit textarea,.ps-composer textarea)::placeholder {
+ color:#bfcebf!important;
+ opacity:1!important;
+}
+body #appShell #view .master-status-trial {
+ background:rgba(225,185,115,.18)!important;
+ color:#f5d5a4!important;
+ border-color:rgba(231,192,126,.31)!important;
+}
+body #appShell #view :is(.master-tone-amber .master-kpi-icon,
+ .master-tone-neutral .master-kpi-icon) {
+ background:rgba(235,244,222,.10)!important;
+ color:#e4efd8!important;
+}
+body #appShell #view .px-wa-overview-list small {
+ color:#bfccbf!important;
+}
+
+/* E. Ad previews, dialogs and popovers. Avoid pale on pale behind media. */
+body #appShell #view :is(.px-media-play>span,.px-media-external,
+ .px-preview-text,.px-dialog-help,.px-dialog-close,
+ .px-campaign-picker,.px-ad-creative-row .px-ad-creative-media,
+ .px-feature-media.px-media-lowres) {
+ background:#344038!important;
+ border-color:rgba(228,247,217,.20)!important;
+ color:#edf6e8!important;
+}
+body #appShell #view .px-dialog-help,
+body #appShell #view .px-preview-text {
+ color:#deecdd!important;
+}
+body #appShell #view :is(.px-media-play,.px-media-external) {
+ color:#f1f9ec!important;
+}
+body #appShell #view :is(.px-media-play,.px-media-external):hover:not(:disabled) {
+ background:#445e47!important;
+ color:#fafff1!important;
+}
+body #appShell #view .px-meta-preview-frame,
+body #appShell #view .px-facebook-video-frame,
+body #appShell #view .px-feature-media:has(.px-facebook-video-frame) {
+ background:#17201b!important;
+ border-color:rgba(223,241,220,.15)!important;
+}
+body:has(#appShell:not(.hidden)) :is(.ps-card-dialog,.px-campaign-dialog) {
+ background:#2a3730!important;
+ color:#f1f8ee!important;
+ border:1px solid rgba(230,246,224,.22)!important;
+ box-shadow:0 20px 65px rgba(0,0,0,.55)!important;
+}
+body:has(#appShell:not(.hidden)) :is(.ps-card-dialog,.px-campaign-dialog)
+ :is(h2,h3,h4,strong,legend) {
+ color:#f5fbf0!important;
+}
+body:has(#appShell:not(.hidden)) :is(.ps-card-dialog,.px-campaign-dialog)
+ :is(label,small,p,span) {
+ color:#d2e0d1!important;
+}
+body:has(#appShell:not(.hidden)) :is(.ps-card-dialog,.px-campaign-dialog)
+ :is(input,textarea,select) {
+ background:#1c2822!important;
+ color:#f5faf0!important;
+ border-color:rgba(229,247,216,.25)!important;
+ color-scheme:dark!important;
+}
+body:has(#appShell:not(.hidden)) :is(.ps-card-dialog,.px-campaign-dialog)
+ :is(.px-dialog-close,.ps-card-dialog header button) {
+ background:rgba(230,245,214,.12)!important;
+ color:#f0f9e8!important;
+ border-color:rgba(234,247,222,.18)!important;
+}
+body:has(#appShell:not(.hidden)) .socio-billing-head button {
+ background:#38463c!important;
+ color:#f0f8e8!important;
+ border:1px solid rgba(225,246,215,.18)!important;
+}
+body:has(#appShell:not(.hidden)) :is(.socio-billing-dialog,.ps-card-dialog,
+ .px-campaign-dialog) :is(.btn.primary,button.primary) {
+ background:#c9f16d!important;color:#243219!important;
+ border-color:#ddf9a7!important;
+}
+body:has(#appShell:not(.hidden)) :is(.socio-billing-dialog,.ps-card-dialog,
+ .px-campaign-dialog) :is(.btn.primary,button.primary)
+ :is(span,strong,b) {color:inherit!important;}
+
+/* F. Status and icon surfaces: pair icon inks with their own fills. */
+body #appShell #view :is(.ps-pill.approved,.catalog-status.yes,
+ .master-status.active,.badge.green) {
+ background:rgba(169,222,123,.16)!important;
+ color:#d9f5be!important;
+ border-color:rgba(193,231,154,.27)!important;
+}
+body #appShell #view :is(.ps-pill.approved,.catalog-status.yes,
+ .master-status.active,.badge.green) :is(span,strong,b) {
+ color:inherit!important;
+}
+body #appShell #view :is(.master-status-trial,.catalog-status.no,.badge.yellow,
+ .px-budget-warning) :is(span,strong,b) {
+ color:inherit!important;
+}
+body #appShell #view :is(.lucid-stat-lilac,.lucid-stat-peach,.lucid-stat-silver)
+ :is(.lucid-kpi-number,.lucid-kpi-value,.lucid-kpi-label,.lucid-kpi-icon) {
+ color:#eff7e9!important;
+}
+
+/* G. Accessible text, focus, selected state and high-contrast preferences. */
+body #appShell #view :is(.px-chart-actions,.lucid-filter,.ember-filter,
+ .ai-guide-tabs,.settings-tabs,.px-marketing-filters,.px-range-tabs)
+ :is(button,a):focus-visible {
+ outline:2px solid #defaa6!important;
+ outline-offset:2px!important;
+}
+body #appShell #view :is(.lucid-check-row,.ps-mode,.ps-choices button,
+ .feature-choice,.file-drop):focus-visible {
+ outline:2px solid #dafa9b!important;
+ outline-offset:3px!important;
+}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more) {
+ body #appShell #view :is(.px-chart-actions,.lucid-filter,.ember-filter,
+  .ai-guide-tabs,.settings-tabs,.ps-bubble,.lucid-intelligence-panel,
+  .lucid-whatsapp-panel,.ps-choices button,.px-campaign-picker) {
+  background:#253129!important;
+  color:#f7fcf2!important;
+  border-color:rgba(240,255,229,.34)!important;
+ }
+}
+@media(prefers-reduced-motion:reduce) {
+ body #appShell #view :is(.px-range-btn,.lucid-filter button,
+  .ps-mode,.ps-choices button) {
+  transition:none!important;
+  animation:none!important;
+ }
+}
+
+/* H. QR codes and verified brand images are intentionally not recolored.
+      A QR's white field is a machine readability requirement. */
+
+
+/* I. Gradients must always have an opaque color fallback.
+   Chromium computed-contrast tests found 3 bright-gradient controls that
+   otherwise report transparent background-color beneath dark button text.
+   Explicit background-color also covers disabled gradients / print modes. */
+body #appShell #view :is(.px-budget-recharge-cta,.wa-compose-send),
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-actions .btn.primary {
+ background-color:#c9f16d!important;
+ color:#243118!important;
+}
+body #appShell #view :is(.px-budget-recharge-cta,.wa-compose-send) :is(span,small,strong,b),
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-actions .btn.primary :is(span,small,strong,b) {
+ color:inherit!important;
+}
+
+/* Same selector specificity as the existing Meta gradient shorthand, so
+   the opaque fallback cannot be canceled by an older !important shorthand. */
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta {
+ background-color:#c9f16d!important;
+ color:#243118!important;
+}
