@@ -896,3 +896,158 @@ body #appShell #view .socio-page-loading .socio-loading-copy {
   margin:24px auto!important;padding:22px!important;
  }
 }
+
+
+/* -------- Meta Ads · compact financial ribbon (v3) -----------------------
+ * Slim horizontal bar with only the verified spending-cap remainder
+ * and today's Meta spend. The one official recharge action sits underneath.
+ * Specificity intentionally overrides the old 246px tall budget card skin.
+ */
+body #appShell #view .px-budget-account[data-budget-provider="meta_ads"].px-budget-meta-ribbon{
+ display:block!important;
+ align-self:start!important;
+ min-height:0!important;
+ padding:12px 16px 11px!important;
+ margin:0!important;
+ border:1px solid rgba(228,247,218,.22)!important;
+ border-radius:13px!important;
+ background:linear-gradient(145deg,#303c35 0%,#26332c 100%)!important;
+ color:#eff8ed!important;
+ box-shadow:0 5px 17px rgba(0,0,0,.12),inset 0 1px rgba(255,255,255,.075)!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-summary{
+ display:grid!important;
+ grid-template-columns:minmax(128px,1.05fr) minmax(150px,1fr) minmax(120px,.85fr);
+ align-items:center!important;
+ column-gap:19px!important;
+ row-gap:8px!important;
+ min-height:43px!important;
+ padding:0!important;
+ margin:0!important;
+ background:transparent!important;
+ border:0!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-brand{
+ display:flex!important;align-items:center!important;
+ gap:10px!important;min-width:0;
+ color:#f4f9f1!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-brand>strong{
+ color:#f7fcf3!important;font-size:13px!important;
+ font-weight:760!important;letter-spacing:-.023em!important;
+ white-space:nowrap;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-brand>.px-brand-dot{
+ width:11px!important;height:11px!important;flex:none!important;
+ border-radius:4px!important;
+ box-shadow:0 0 0 4px rgba(42,142,237,.10)!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-metric{
+ display:flex!important;flex-direction:column!important;
+ justify-content:center!important;
+ gap:3px!important;min-width:0!important;
+ padding:0 0 0 17px!important;
+ border-left:1px solid rgba(232,247,223,.14)!important;
+ text-align:left!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-metric>span:first-child{
+ color:#bdcec0!important;
+ font-size:10px!important;line-height:1.25!important;
+ font-weight:610!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-metric>strong{
+ color:#f6faf2!important;
+ font-size:15px!important;font-weight:760!important;
+ font-variant-numeric:tabular-nums!important;
+ letter-spacing:-.015em!important;
+ line-height:1.22!important;
+ overflow-wrap:anywhere!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action{
+ display:flex!important;justify-content:flex-end!important;align-items:center!important;
+ padding-top:9px!important;
+ margin-top:9px!important;
+ border-top:1px solid rgba(231,248,221,.12)!important;
+ min-height:0!important;
+ background:transparent!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta{
+ display:inline-flex!important;align-items:center!important;justify-content:center!important;
+ gap:7px!important;
+ align-self:auto!important;
+ min-height:34px!important;
+ padding:7px 12px!important;
+ margin:0!important;
+ border:1px solid #def6a6!important;
+ border-radius:9px!important;
+ background:linear-gradient(125deg,#dff9a7,#c9f16d)!important;
+ color:#253219!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.36),0 3px 10px rgba(0,0,0,.10)!important;
+ font-size:11px!important;font-weight:770!important;
+ white-space:nowrap!important;text-decoration:none!important;
+ line-height:1.2!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta :is(span,b,strong){
+ color:inherit!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta:hover:not(:disabled){
+ background:#e3fba9!important;
+ color:#1f2e16!important;
+ transform:translateY(-1px)!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta:disabled{
+ opacity:.57!important;
+ cursor:not-allowed!important;
+ filter:saturate(.5)!important;
+ box-shadow:none!important;
+}
+body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta:focus-visible{
+ outline:2px solid #f2ffda!important;outline-offset:3px!important;
+}
+
+/* Pending Meta results use the exact same narrow ribbon geometry. */
+body #appShell #view .px-budget-meta-ribbon.px-budget-meta-pending{
+ background:linear-gradient(145deg,#2c3731,#25312b)!important;
+}
+body #appShell #view .px-budget-meta-pending .px-budget-meta-metric>.px-load-line{
+ display:block!important;
+ width:min(115px,85%)!important;
+ height:15px!important;
+ margin:2px 0 0!important;
+ border-radius:5px!important;
+ opacity:.48!important;
+}
+body #appShell #view .px-budget-meta-pending .px-budget-meta-action-placeholder{
+ width:166px!important;height:32px!important;
+ border-radius:9px!important;opacity:.42!important;
+}
+@media(max-width:1000px){
+ body #appShell #view .px-budget-meta-ribbon .px-budget-meta-summary{
+  grid-template-columns:1fr 1fr!important;gap:10px 12px!important;
+ }
+ body #appShell #view .px-budget-meta-ribbon .px-budget-meta-brand{grid-column:1/-1}
+ body #appShell #view .px-budget-meta-ribbon .px-budget-meta-metric{
+  padding-left:11px!important;
+ }
+}
+@media(max-width:540px){
+ body #appShell #view .px-budget-account[data-budget-provider="meta_ads"].px-budget-meta-ribbon{
+  padding:11px 12px!important;
+ }
+ body #appShell #view .px-budget-meta-ribbon .px-budget-meta-summary{
+  column-gap:6px!important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+ }
+ body #appShell #view .px-budget-meta-ribbon .px-budget-meta-metric>strong{
+  font-size:13px!important;
+ }
+ body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta{
+  width:100%!important;
+ }
+}
+@media(prefers-reduced-motion:reduce){
+ body #appShell #view .px-budget-meta-ribbon .px-budget-meta-action .px-budget-recharge-cta:hover{
+  transform:none!important;
+ }
+}
