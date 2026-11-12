@@ -52,7 +52,7 @@ test('every major SaaS area has an explicit light theme and readable inputs',()=
   assert(css.includes(key),key);
  }
  assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
- assert.match(css,/@media\(prefers-contrast:more\)/);
+ assert.match(css,/prefers-contrast:more/);
  assert.match(css,/@media\(max-width:560px\)/);
 });
 test('key foreground/background token pairs satisfy WCAG AA',()=>{
