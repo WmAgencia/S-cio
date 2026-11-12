@@ -11,7 +11,7 @@ const server=load('server.mjs');
 test('visual palette follows the reference: quiet graphite, neutral glass, one accent',()=>{
  for(const marker of ['--socio-bg:#171b1b','--socio-sidebar:#1c2325','--socio-top:#293133',
   '--socio-accent:#c9f16d','--socio-ink:#f1f2ef','--socio-muted:#a3aba7',
-  '--socio-glass-panel:linear-gradient','--socio-glass-shadow:0 5px 21px']){
+  '--socio-glass-panel:linear-gradient','--socio-glass-shadow:0 4px 14px']){
   assert.ok(css.includes(marker),marker);
  }
  assert.match(css,/#appShell\[data-workspace="master"\]/);
