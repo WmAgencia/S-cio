@@ -11,7 +11,7 @@ const workspace=read('public/socio-workspace-ui.js');
 const app=read('public/app.js');
 const thalita=read('public/socio-thalita-ui.js');
 const integrations=read('public/socio-integrations-ui.js');
-const css=read('public/socio-motion-refined.css');
+const css=read('public/socio-stripe-system.css');
 const motion=read('public/socio-entry-motion.js');
 
 test('Google Ads remains stored but is disabled in every user-facing entry point',()=>{
@@ -31,17 +31,17 @@ test('Google Ads remains stored but is disabled in every user-facing entry point
  assert.match(app,/current\.campaigns\.filter\(c=>googleAdsVisible\(\)\|\|c\.provider!=='google_ads'\)/);
 });
 
-test('new visual assets load after legacy styles, with flags before all application modules',()=>{
- for(const asset of ['socio-product-features.js','socio-entry-motion.js','socio-motion-refined.css']){
+test('Google UI flag and unified visual assets load in correct order',()=>{
+ for(const asset of ['socio-product-features.js','socio-entry-motion.js','socio-stripe-system.css']){
   assert(existsSync(new URL('../public/'+asset,import.meta.url)),asset);
-  assert(html.includes('/'+asset+'?v=20261112a'));
   assert(server.includes("'/"+asset+"'"));
+  assert(html.includes('/'+asset+'?v='),asset);
  }
  assert(html.indexOf('/socio-product-features.js')<html.indexOf('/socio-workspace-ui.js'));
  assert(html.indexOf('/socio-product-features.js')<html.indexOf('/app.js'));
  assert(html.indexOf('/socio-product-features.js')<html.indexOf('/socio-thalita-ui.js'));
- assert(html.indexOf('/socio-motion-refined.css')>html.indexOf('/socio-contrast-audit.css'));
- assert(html.indexOf('/socio-entry-motion.js')>html.indexOf('/socio-glass-motion.js'));
+ assert(html.indexOf('/socio-stripe-system.css')>html.indexOf('/socio-master.css'));
+ assert(!html.includes('<script src="/socio-glass-motion.js'));
  assert.match(html,/\/socio-workspace-ui\.js\?v=20261112d/);
  assert.match(html,/\/app\.js\?v=20261112d/);
 });
@@ -73,29 +73,23 @@ test('entrances use route-aware one-shot compositor animations, not refresh jitt
  assert.match(motion,/\.px-screen-loading/);
  assert.match(motion,/IntersectionObserver/);
  assert.match(motion,/reduced\?\.matches/);
- assert.match(motion,/opacity:\.44/);
+ assert.match(motion,/opacity:\.86/);
  assert.match(motion,/translate3d/);
  assert.doesNotMatch(motion,/filter\s*:|blur\(|clip-path|clipPath/);
 });
 
-test('polish uses coherent tokens, separates Master, responds to mobile and reduced motion',()=>{
- for(const token of ['--sx-fg:#f2f7ef','--sx-lime:#c9f16d',
-  '--sx-jade:#65d6ab','--sx-violet:#b3a4ff',
-  '--sx-fg-muted:#bfcdbf','[data-workspace="master"]',
-  '.px-kpi-grid','.px-ad-performance','.px-ads-strip',
-  '.px-budget-meta-ribbon','.px-dual','.px-conn-card',
-  '.px-campaign-provider-meta','.px-assistant-window:not(.hidden)',
-  '@keyframes sx-modal-enter','@media(max-width:720px)',
-  '@media(prefers-reduced-motion:reduce)',
-  '@media(prefers-reduced-transparency:reduce)']){
+test('visual polish uses one light design and preserves Master isolation',()=>{
+ for(const token of ['--stripe-canvas:#f7f8fa','--stripe-accent:#605dec',
+  '--stripe-ink:#202735','--stripe-muted:#667085',
+  '#appShell[data-workspace="master"]',
+  '.px-kpi-grid','.px-ads-strip','.px-budget-meta-ribbon',
+  '.px-dual','.px-conn-card','#socioThalitaDock',
+  '@keyframes stripe-assistant-in','@media(max-width:780px)',
+  '@media(prefers-reduced-motion:reduce)']){
   assert(css.includes(token),token);
  }
- assert.match(css,/color:var\(--sx-lime-ink\)!important/);
- let nesting=0;
- for(const char of css.replace(/\/\*[\s\S]*?\*\//g,'')){
-  if(char==='{')nesting++;
-  if(char==='}')nesting--;
-  assert(nesting>=0);
+ let nesting=0;for(const char of css.replace(/\/\*[\s\S]*?\*\//g,'')){
+  nesting+=(char==='{')-(char==='}');assert(nesting>=0);
  }
  assert.equal(nesting,0);
 });

@@ -3,25 +3,26 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
-const html=read('public/index.html'),css=read('public/socio-glass-enforced.css'),app=read('public/app.js'),server=read('server.mjs');
+const html=read('public/index.html'),css=read('public/socio-stripe-system.css'),app=read('public/app.js'),server=read('server.mjs');
 
-test('Glass assets are linked AND publicly served, fixing the previous 404',()=>{
- for(const file of ['socio-glass-motion.css','socio-glass-motion.js','socio-glass-enforced.css']){
-  assert.ok(server.includes("'"+'/'+file+"'"),file+' must be on the static allowlist');
-  assert.ok(html.includes('/'+file+'?v='),file+' must be loaded');
+test('One canonical light stylesheet is loaded last and served with no 404',()=>{
+ assert(html.includes('/socio-stripe-system.css?v=20261112a'));
+ assert(server.includes("'/socio-stripe-system.css'"));
+ assert(html.indexOf('/socio-stripe-system.css')>html.indexOf('/socio-master.css'));
+ assert(!html.includes('<script src="/socio-glass-motion.js'));
+ for(const old of ['socio-glass-motion.css','socio-glass-enforced.css','socio-luminous-glass.css']){
+  assert(!html.includes('href="/'+old),old+' should not load');
  }
- assert.ok(html.indexOf('/socio-glass-enforced.css')>html.indexOf('/socio-master.css'));
- assert.ok(html.indexOf('/socio-glass-enforced.css')>html.indexOf('/socio-glass-motion.css'));
- assert.ok(html.indexOf('/socio-glass-motion.js')>html.indexOf('/app.js'));
 });
-test('Final theme wins the legacy !important palette',()=>{
- for(const selector of ['body #appShell .app-main{','body #appShell .sidebar{','body #appShell .topbar{',
-  'body #appShell #view :is(.card','--socio-accent:#c9f16d','--socio-bg:#171b1b',
-  'background:var(--socio-glass-panel)!important','body #appShell #productionNav.hidden']){
-  assert.ok(css.includes(selector),selector);
+test('Master and Production share components but use separate light workspace skins',()=>{
+ for(const selector of ['body #appShell .app-main','body #appShell .sidebar',
+  'body #appShell .topbar','#appShell[data-workspace="master"]',
+  '--stripe-canvas:#f7f8fa','--stripe-accent:#605dec',
+  'body #appShell #view :is(.card']){
+  assert(css.includes(selector),selector);
  }
- assert.match(css,/display:none!important;visibility:hidden!important;pointer-events:none!important/);
  assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
+ assert.match(css,/--stripe-nav-active:#eeefff/);
 });
 test('Master and Production routes are distinct, with one login and enforced privileges',()=>{
  const start=app.indexOf('const isMasterView='),end=app.indexOf('function syncMasterSwitch()',start);
@@ -52,5 +53,5 @@ test('Workspace navigation cannot mix production menus, AI and SaaS administrati
 });
 test('Application and animations parse',()=>{
  assert.doesNotThrow(()=>new vm.Script(app,{filename:'public/app.js'}));
- assert.doesNotThrow(()=>new vm.Script(read('public/socio-glass-motion.js'),{filename:'public/socio-glass-motion.js'}));
+ assert.doesNotThrow(()=>new vm.Script(read('public/socio-entry-motion.js'),{filename:'public/socio-entry-motion.js'}));
 });

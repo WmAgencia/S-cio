@@ -20,12 +20,12 @@
   if(!node?.isConnected||reduced?.matches||document.hidden||typeof node.animate!=='function')return;
   if(node.hasAttribute('data-socio-entered'))return;
   node.setAttribute('data-socio-entered','');
-  const duration=cheapMotion?.matches?240:360;
+  const duration=cheapMotion?.matches?165:215;
   // Only opacity and transform: no layout, page-sized blur or heavy filters.
   node.animate([
-   {opacity:.44,transform:'translate3d(0,10px,0)'},
+   {opacity:.86,transform:'translate3d(0,7px,0)'},
    {opacity:1,transform:'translate3d(0,0,0)'}
-  ],{duration,delay:Math.min(index,5)*(cheapMotion?.matches?24:39),
+  ],{duration,delay:Math.min(index,4)*(cheapMotion?.matches?12:22),
     easing:'cubic-bezier(.22,.82,.23,1)',fill:'backwards'});
  }
  function start(){

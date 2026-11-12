@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const load=p=>readFileSync(new URL('../public/'+p,import.meta.url),'utf8');
 
-test('Legacy Prospector dashboard structure remains while refined graphite style is final',()=>{
+test('Legacy dashboard business components remain while canonical Stripe light system is final',()=>{
  const html=load('index.html'),legacy=load('ember-theme.css'),css=load('prospector-socio.css');
- assert.match(html,/meta name="theme-color" content="#40544e"/);
- assert.ok(html.indexOf('/socio-glass-enforced.css')>html.indexOf('/prospector-socio.css'));
- assert.match(load('socio-glass-enforced.css'),/--socio-accent:#c9f16d/);
+ assert.match(html,/meta name="theme-color" content="#f7f8fa"/);
+ assert.ok(html.indexOf('/socio-stripe-system.css')>html.indexOf('/prospector-socio.css'));
+ assert.doesNotMatch(html,/href="\/socio-glass-enforced\.css/);
+ assert.match(load('socio-stripe-system.css'),/--stripe-accent:#605dec/);
  assert.ok(html.indexOf('/ember-theme.css')>html.indexOf('/cloud-theme.css'));
  assert.ok(html.indexOf('/prospector-socio.css')>html.indexOf('/meta-browser.css'));
  assert.match(css,/--bg:#f7f6ff/);
