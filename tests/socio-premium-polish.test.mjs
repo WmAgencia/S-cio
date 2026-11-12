@@ -13,7 +13,7 @@ const workspace=read('public/socio-workspace-ui.js');
 
 test('polish CSS exists, is last, is cache-busted, and the server returns it',()=>{
  assert(existsSync(new URL('../public/socio-premium-polish.css',import.meta.url)));
- assert.match(html,/\/socio-premium-polish\.css\?v=20261112a/);
+ assert.match(html,/\/socio-premium-polish\.css\?v=20261112b/);
  assert(html.indexOf('socio-premium-polish.css')>html.indexOf('socio-glass-enforced.css'));
  assert(server.includes("'/socio-premium-polish.css'"));
 });
