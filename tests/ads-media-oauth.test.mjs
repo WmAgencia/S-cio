@@ -63,7 +63,7 @@ function request(method,path,payload,headers={}){
   ...headers};
  req.socket={remoteAddress:'198.51.100.25'};return req;
 }
-const ctx={sessionFor:async()=>actor,limiter:()=>true,authAttempts:new Map()};
+const ctx={sessionFor:async()=>actor,limiter:()=>true};
 async function oauth(db,method,path,payload,headers){
  const res=response(),req=request(method,path,payload,headers);
  await handleMediaOAuth(db,req,res,ctx,env);return res;

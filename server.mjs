@@ -29,7 +29,7 @@ import {connectPipeboard,listMarketing,disconnectMarketing} from './marketing-in
 import {instagramReady,beginInstagramOAuth,completeInstagramOAuth,ingestInstagramWebhook,revokeInstagramAccount} from './instagram-integration.mjs';
 import {maintenanceEnabled,writesBlocked,workersBlocked} from './migration-guard.mjs';
 import {TABLES as MIGRATION_TABLES} from './scripts/socio-supabase-migrate.mjs';
-import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier,clientIp} from './lib.mjs';
+import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier,clientIp,createLimiter} from './lib.mjs';
 import {permissionsFor,requirePermission,allowedNewMemberRole,validateMemberPatch} from './team-permissions.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
 import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
@@ -111,18 +111,9 @@ const validText=(v,max=500)=>typeof v==='string'&&v.trim().length>0&&v.length<=m
 const trimmed=(v,max=500)=>typeof v==='string'?v.trim().slice(0,max):'';
 const money=v=>Number.isInteger(v)&&v>=0&&v<100000000;
 const safeDetail=e=>[400,401,403,404,409,413,422,429,503].includes(e.status)?e.message:'Erro interno. Tente novamente.';
-const authAttempts=new Map(),simulationAttempts=new Map(),cnpjCache=new Map();
-function limiter(map,key,windowMs,max){
- const ts=Date.now(),value=map.get(key);
- if(!value||ts-value.since>windowMs){
-  if(map.size>=10000){
-   for(const [oldKey,entry] of map)if(ts-entry.since>windowMs)map.delete(oldKey);
-   if(map.size>=10000)map.delete(map.keys().next().value);
-  }
-  map.set(key,{since:ts,count:1});return true;
- }
- value.count++;return value.count<=max;
-}
+const cnpjCache=new Map();
+const limiter=createLimiter(query);
+const resetLimit=(bucket,key)=>query('DELETE FROM rate_limits WHERE bucket=$1 AND key=$2',[bucket,key]).catch(()=>{});
 function sessionCookie(token,clear=false){
  return 'socio_session='+(clear?'':encodeURIComponent(token))+'; Path=/; HttpOnly; SameSite=Strict'+(process.env.NODE_ENV==='production'?'; Secure':'')+(clear?'; Max-Age=0':'; Max-Age=604800');
 }
@@ -261,7 +252,7 @@ async function handle(req,res){
     pathname==='/.well-known/oauth-protected-resource/mcp/ads-media'||
     pathname==='/.well-known/oauth-authorization-server'||
     pathname==='/oauth/register'||pathname==='/oauth/authorize'||pathname==='/oauth/token'){
-   return handleMediaOAuth(pool,req,res,{sessionFor,limiter,authAttempts});
+   return handleMediaOAuth(pool,req,res,{sessionFor,limiter});
  }
  if(method==='GET'&&pathname==='/api/bootstrap'){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
@@ -325,13 +316,13 @@ async function handle(req,res){
  // Stripe server-to-server webhook validates its raw signature before using JSON.
  if(pathname==='/webhooks/site-events'&&method==='POST'){
   const {raw}=await body(req,10000);
-  if(!limiter(authAttempts,'site-events:'+clientIp(req),60000,120))
+  if(!await limiter('auth','site-events:'+clientIp(req),60000,120))
    throw fail(429,'Limite de eventos temporariamente atingido.');
   return json(res,200,await receiveSignedSiteEvent(pool,raw,req.headers));
  }
  if(pathname==='/webhooks/stripe-saas'&&method==='POST'){
   const {raw}=await body(req,200000);
-  if(!limiter(authAttempts,'stripe-billing:'+clientIp(req),60000,250))
+  if(!await limiter('auth','stripe-billing:'+clientIp(req),60000,250))
    throw fail(429,'Limite de eventos do Stripe atingido.');
   return json(res,200,await processSubscriptionWebhook(pool,raw,req.headers['stripe-signature']));
  }
@@ -349,11 +340,11 @@ async function handle(req,res){
  if(pathname.startsWith('/api/meta-connector/')){
   if(method!=='POST')throw fail(405,'Método não permitido.');
   if(pathname==='/api/meta-connector/pair'){
-   if(!limiter(authAttempts,'local-pair:'+clientIp(req),600000,40))throw fail(429,'Aguarde para conectar novamente.');
+   if(!await limiter('auth','local-pair:'+clientIp(req),600000,40))throw fail(429,'Aguarde para conectar novamente.');
    const {data}=await body(req,2000);return json(res,200,await claimLocalPairing(pool,data));
   }
   const connection=await authorizeLocalConnector(pool,req.headers.authorization);
-  if(!limiter(authAttempts,'connector:'+connection.id,60000,90))throw fail(429,'Aguarde antes de consultar novamente.');
+  if(!await limiter('auth','connector:'+connection.id,60000,90))throw fail(429,'Aguarde antes de consultar novamente.');
   if(pathname==='/api/meta-connector/heartbeat'){
    const {data}=await body(req,2000);return json(res,200,await localHeartbeat(pool,connection,data));
   }
@@ -371,7 +362,7 @@ async function handle(req,res){
  const publicQuoteAction=pathname.match(/^\/api\/public\/quotes\/([a-f0-9]{64})\/(accept|decline|checkout)$/);
  if(publicQuoteAction&&method==='POST'){
   const [,token,action]=publicQuoteAction;
-  if(!limiter(simulationAttempts,'buyer:'+token.slice(0,20),60000,12))
+  if(!await limiter('sim','buyer:'+token.slice(0,20),60000,12))
    throw fail(429,'Muitas solicitações neste orçamento.');
   if(action==='accept'){
    const {data}=await body(req,8000);
@@ -381,7 +372,7 @@ async function handle(req,res){
   return json(res,200,await createTestCheckout(pool,token));
  }
  if(method==='POST'&&pathname==='/api/setup'){
-  if(!limiter(authAttempts,'setup:'+clientIp(req),600000,8))throw fail(429,'Muitas tentativas.');
+  if(!await limiter('auth','setup:'+clientIp(req),600000,8))throw fail(429,'Muitas tentativas.');
   const {data}=await body(req);
   if(!process.env.SETUP_TOKEN||process.env.SETUP_TOKEN.length<32)throw fail(503,'Configure SETUP_TOKEN com pelo menos 32 caracteres no Railway.');
   if(!secureEqual(String(data.setupToken||''),process.env.SETUP_TOKEN))throw fail(403,'Token de instalação incorreto.');
@@ -408,8 +399,8 @@ async function handle(req,res){
   const {data}=await body(req);
   const identity=loginIdentifier(data.identifier??data.email);
   const key='login:'+hashToken(identity?identity.type+':'+identity.value:'invalid');
-  if(!limiter(authAttempts,'login-source:'+clientIp(req),600000,300)||
-     !limiter(authAttempts,key,600000,15))throw fail(429,'Muitas tentativas de login. Tente mais tarde.');
+  if(!await limiter('auth','login-source:'+clientIp(req),600000,300)||
+     !await limiter('auth',key,600000,15))throw fail(429,'Muitas tentativas de login. Tente mais tarde.');
   const result=identity?await query(
    identity.type==='email'
     ?'SELECT id,tenant_id,password_hash FROM users WHERE email=$1 AND active=true'
@@ -417,7 +408,7 @@ async function handle(req,res){
   ):{rows:[]};
   const u=result.rows[0];
   if(!u||!(await verifyPassword(data.password||'',u.password_hash)))throw fail(401,'E-mail, número ou senha incorretos.');
-  authAttempts.delete(key);
+  await resetLimit('auth',key);
   const csrf=await createSession(u.id,u.tenant_id,res);
   return json(res,200,{ok:true,csrf});
  }
@@ -453,7 +444,7 @@ async function handle(req,res){
   const kind=flowBrowser[1],read=['status','screen'].includes(kind);
   if(method!==(read?'GET':'POST'))throw fail(405,'Método inválido.');
   if(a.platform_owner!==true)throw fail(403,'Somente o administrador master pode conectar a conta Google compartilhada.');
-  if(!limiter(authAttempts,'flow-browser:'+a.user_id,60000,180))throw fail(429,'Aguarde antes de tentar novamente.');
+  if(!await limiter('auth','flow-browser:'+a.user_id,60000,180))throw fail(429,'Aguarde antes de tentar novamente.');
   const data=read?{}:(await body(req,12000)).data;
   const result=await flowImages.browser(a,kind,data);
   if(kind==='screen'){
@@ -463,7 +454,7 @@ async function handle(req,res){
   return json(res,200,result);
  }
  if(pathname==='/api/flow/images'&&method==='POST'){
-  if(!limiter(simulationAttempts,'flow-images:'+a.user_id,60000,12))throw fail(429,'Aguarde antes de gerar novamente.');
+  if(!await limiter('sim','flow-images:'+a.user_id,60000,12))throw fail(429,'Aguarde antes de gerar novamente.');
   const {data}=await body(req,32768);
   const result=await flowImages.create(pool,a,data,req.headers['idempotency-key']);
   await audit(a,'flow.image.requested',{jobId:result.id});
@@ -486,7 +477,7 @@ async function handle(req,res){
  if(pathname==='/api/marketing/attribution/funnel'&&method==='GET')
   return json(res,200,await readWhatsAppFunnel(pool,a));
  if(pathname==='/api/marketing/attribution/links'&&method==='POST'){
-  if(!limiter(simulationAttempts,'tracking-link:'+a.user_id,60000,12))throw fail(429,'Aguarde antes de gerar outro link.');
+  if(!await limiter('sim','tracking-link:'+a.user_id,60000,12))throw fail(429,'Aguarde antes de gerar outro link.');
   const {data}=await body(req,3000);
   const result=await createTrackingLink(pool,a,data);
   await audit(a,'marketing.attribution.link.created',{id:result.id,channelId:result.channelId});
@@ -501,7 +492,7 @@ async function handle(req,res){
  if(pathname==='/api/marketing/report-schedule'&&method==='GET')
   return json(res,200,await listMetaReportSchedule(pool,a));
  if(pathname==='/api/marketing/report-schedule'&&method==='PUT'){
-  if(!limiter(simulationAttempts,'meta-schedule:'+a.user_id,60000,8))
+  if(!await limiter('sim','meta-schedule:'+a.user_id,60000,8))
    throw fail(429,'Aguarde para alterar o agendamento.');
   const {data}=await body(req,1500);
   const result=await saveMetaReportSchedule(pool,a,data);
@@ -509,7 +500,7 @@ async function handle(req,res){
   return json(res,200,result);
  }
  if(pathname==='/api/marketing/skills/whatsapp-readiness'&&method==='GET'){
-  if(!limiter(simulationAttempts,'wa-owner-readiness:'+a.user_id,60000,6))
+  if(!await limiter('sim','wa-owner-readiness:'+a.user_id,60000,6))
    throw fail(429,'Aguarde antes de repetir o diagnóstico.');
   return json(res,200,await ownerWhatsAppReadiness(pool,a));
  }
@@ -526,7 +517,7 @@ async function handle(req,res){
  }
  if(pathname==='/api/marketing/skills/chat'&&method==='POST'){
   requirePermission(a,'marketing.manage');
-  if(!limiter(simulationAttempts,'marketing-skill:'+a.user_id,60000,12))
+  if(!await limiter('sim','marketing-skill:'+a.user_id,60000,12))
    throw fail(429,'Muitas solicitações. Tente novamente em um minuto.');
   const {data}=await body(req,3500);
   const answer=await speakToSocioSkill(pool,a,{message:data.message,runId:data.runId,imageHash:data.imageHash,videoId:data.videoId});
@@ -534,7 +525,7 @@ async function handle(req,res){
   return json(res,200,answer);
  }
  if(pathname==='/api/marketing/commands/preview'&&method==='POST'){
-  if(!limiter(simulationAttempts,'marketing-command:'+a.user_id,60000,15))
+  if(!await limiter('sim','marketing-command:'+a.user_id,60000,15))
    throw fail(429,'Aguarde antes de preparar outra consulta.');
   const {data}=await body(req,3000);
   return json(res,200,await previewMetaCommand(pool,a,data.text));
@@ -544,7 +535,7 @@ async function handle(req,res){
  const advancedRoute=pathname.match(/^\/api\/marketing\/advanced\/(account|creatives|videos|audiences|pixels|conversions|reports|diagnosis|activity|labels|rules|delivery|video_report|conversion_report|budget_report|creative_report)$/);
  if(advancedRoute&&method==='GET'){
   requirePermission(a,'marketing.read');
-  if(!limiter(simulationAttempts,'meta-advanced:'+a.user_id+':'+a.active_tenant_id,60000,90))
+  if(!await limiter('sim','meta-advanced:'+a.user_id+':'+a.active_tenant_id,60000,90))
    throw fail(429,'Muitas consultas Meta. Aguarde antes de consultar novamente.');
   const qs=new URL(req.url,'http://local').searchParams;
   return json(res,200,await readAdvancedMetaTool(pool,a,advancedRoute[1],
@@ -554,7 +545,7 @@ async function handle(req,res){
  if(method==='GET'&&pathname==='/api/marketing/tools/ad-media'){
   const params=new URL(req.url,'http://local').searchParams;
   const adId=params.get('adId'),posterOnly=params.get('posterOnly')==='1';
-  if(!limiter(simulationAttempts,(posterOnly?'ad-poster:':'ad-preview:')+a.user_id,60000,posterOnly?120:36))
+  if(!await limiter('sim',(posterOnly?'ad-poster:':'ad-preview:')+a.user_id,60000,posterOnly?120:36))
    throw fail(429,'Muitas consultas de criativos. Tente novamente.');
   return json(res,200,await readSelectedAdMedia(pool,a,adId,{posterOnly}));
  }
@@ -581,7 +572,7 @@ async function handle(req,res){
  if(pathname==='/api/marketing/tools/history'&&method==='GET')return json(res,200,await adsToolHistory(pool,a));
  if(pathname==='/api/marketing/tools/image'&&method==='POST'){
   requirePermission(a,'marketing.manage');
-  if(!limiter(simulationAttempts,'meta-image:'+a.user_id,60000,8))throw fail(429,'Aguarde antes de enviar outra imagem.');
+  if(!await limiter('sim','meta-image:'+a.user_id,60000,8))throw fail(429,'Aguarde antes de enviar outra imagem.');
   const {data}=await body(req,4500000);const result=await uploadAdImage(pool,a,data.contentBase64);
   await audit(a,'marketing.official.image.uploaded',{hash:result.hash,accountId:result.accountId});return json(res,201,result);
  }
@@ -591,7 +582,7 @@ async function handle(req,res){
  }
  if(pathname==='/api/marketing/tools/whatsapp-video/last'&&method==='GET'){
   requirePermission(a,'marketing.manage');
-  if(!limiter(simulationAttempts,'wa-video-last:'+a.user_id,60000,8))
+  if(!await limiter('sim','wa-video-last:'+a.user_id,60000,8))
    throw fail(429,'Aguarde antes de consultar outro vídeo.');
   const qs=new URL(req.url,'http://local').searchParams;
   return json(res,200,await findLastOutgoingVideo(pool,a,{
@@ -601,7 +592,7 @@ async function handle(req,res){
  }
  if(pathname==='/api/marketing/tools/whatsapp-video/import'&&method==='POST'){
   requirePermission(a,'marketing.manage');
-  if(!limiter(simulationAttempts,'wa-video-import:'+a.user_id,60000,2))
+  if(!await limiter('sim','wa-video-import:'+a.user_id,60000,2))
    throw fail(429,'Aguarde antes de importar outro vídeo.');
   const {data}=await body(req,3000);
   const result=await importLastOutgoingVideo(pool,a,{
@@ -626,12 +617,12 @@ async function handle(req,res){
  if(pathname==='/api/marketing/official/status'&&method==='GET')return json(res,200,await officialStatus(pool,a));
  const campaignAuditRoute=pathname.match(/^\/api\/marketing\/official\/campaign\/([0-9]{4,30})\/audit$/);
  if(campaignAuditRoute&&method==='GET'){
-  if(!limiter(simulationAttempts,'meta-campaign-audit:'+a.user_id,60000,6))
+  if(!await limiter('sim','meta-campaign-audit:'+a.user_id,60000,6))
    throw fail(429,'Aguarde antes de repetir o diagnóstico.');
   return json(res,200,await inspectOfficialCampaign(pool,a,campaignAuditRoute[1]));
  }
  if(pathname==='/api/marketing/official/preflight'&&method==='GET'){
-  if(!limiter(simulationAttempts,'meta-official-preflight:'+a.user_id,60000,4))
+  if(!await limiter('sim','meta-official-preflight:'+a.user_id,60000,4))
    throw fail(429,'Aguarde um minuto antes de repetir o diagnóstico.');
   return json(res,200,await metaConnectionPreflight(pool,a));
  }
@@ -645,18 +636,18 @@ async function handle(req,res){
   return json(res,200,result);
  }
  if(pathname==='/api/marketing/official/connect'&&method==='POST'){
-  if(!limiter(authAttempts,'meta-official:'+a.user_id,600000,10))throw fail(429,'Aguarde antes de tentar novamente.');
+  if(!await limiter('auth','meta-official:'+a.user_id,600000,10))throw fail(429,'Aguarde antes de tentar novamente.');
   return json(res,200,await startOfficial(pool,a));
  }
  if(pathname==='/api/marketing/official/disconnect'&&method==='POST')return json(res,200,await disconnectOfficial(pool,a));
  if(pathname==='/api/marketing/local/status'&&method==='GET')return json(res,200,await localConnectionStatus(pool,a));
  if(pathname==='/api/marketing/local/pairing'&&method==='POST'){
-  if(!limiter(authAttempts,'local-pairing:'+a.user_id,600000,10))throw fail(429,'Muitas tentativas. Aguarde antes de conectar novamente.');
+  if(!await limiter('auth','local-pairing:'+a.user_id,600000,10))throw fail(429,'Muitas tentativas. Aguarde antes de conectar novamente.');
   const result=await startLocalPairing(pool,a);await audit(a,'marketing.local.pairing',{});return json(res,200,result);
  }
  if(pathname==='/api/marketing/local/disconnect'&&method==='POST')return json(res,200,await disconnectLocalConnector(pool,a));
  if(pathname==='/api/marketing/local/jobs'&&method==='POST'){
-  if(!limiter(authAttempts,'local-job:'+a.user_id,60000,12))throw fail(429,'Aguarde a operação atual.');
+  if(!await limiter('auth','local-job:'+a.user_id,60000,12))throw fail(429,'Aguarde a operação atual.');
   const {data}=await body(req,250000);return json(res,200,await enqueueLocalJob(pool,a,data.kind,data.input,req.headers['idempotency-key']));
  }
  const localJob=pathname.match(/^\/api\/marketing\/local\/jobs\/([0-9a-f-]{36})$/i);
@@ -668,7 +659,7 @@ async function handle(req,res){
  const billingRoute=pathname.match(/^\/api\/marketing\/billing\/(refresh|prepare|pix)$/);
  if(billingRoute&&method==='POST'){
   requirePermission(a,'marketing.manage');
-  if(!limiter(simulationAttempts,'meta-billing:'+a.user_id+':'+a.active_tenant_id,60000,6))
+  if(!await limiter('sim','meta-billing:'+a.user_id+':'+a.active_tenant_id,60000,6))
    throw fail(429,'Aguarde antes de atualizar o faturamento novamente.');
   const {data}=await body(req,2000);
   if(billingRoute[1]==='prepare'&&data.confirmed!==true)
@@ -706,7 +697,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/ads-media/reserve'){
   requirePermission(a,'marketing.manage');
-  if(!limiter(simulationAttempts,'ads-reserve:'+a.active_tenant_id,3600000,40))throw fail(429,'Limite de mídia atingido.');
+  if(!await limiter('sim','ads-reserve:'+a.active_tenant_id,3600000,40))throw fail(429,'Limite de mídia atingido.');
   const {data}=await body(req,2000);
   return json(res,201,await reserveAdVideo(pool,a,String(data.filename||''),'chat'));
  }
@@ -723,7 +714,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/ads-media/import-whatsapp'){
   requirePermission(a,'marketing.manage');
-  if(!limiter(simulationAttempts,'ads-wa:'+a.user_id,60000,4))throw fail(429,'Muitas importações.');
+  if(!await limiter('sim','ads-wa:'+a.user_id,60000,4))throw fail(429,'Muitas importações.');
   const {data}=await body(req,2000);
   const imported=await importWhatsAppAdVideo(pool,a,{channelId:data.channelId,jid:data.jid,messageId:data.messageId,filename:data.filename});
   await audit(a,'ads.media.whatsapp_imported',{mediaId:imported.id});
@@ -731,7 +722,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/ads-media/mcp-token'){
   requirePermission(a,'marketing.manage');
-  if(!limiter(authAttempts,'mcp-token:'+a.user_id,3600000,5))throw fail(429,'Muitas chaves.');
+  if(!await limiter('auth','mcp-token:'+a.user_id,3600000,5))throw fail(429,'Muitas chaves.');
   const token=await createMediaMcpToken(pool,a);
   await audit(a,'ads.media.mcp_token_rotated',{});
   return json(res,201,token);
@@ -749,7 +740,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/marketing/oauth/start'){
   requirePermission(a,'marketing.manage');
-  if(!limiter(authAttempts,'marketing-oauth:'+a.user_id,600000,6))
+  if(!await limiter('auth','marketing-oauth:'+a.user_id,600000,6))
    throw fail(429,'Muitas tentativas de conexão. Tente novamente.');
   const {data}=await body(req,2500);
   const result=await startPipeboardOAuth(pool,a,String(data.provider||''));
@@ -759,7 +750,7 @@ async function handle(req,res){
  const oauthTest=pathname.match(/^\/api\/marketing\/oauth\/(meta)\/test$/);
  if(oauthTest&&method==='POST'){
   requirePermission(a,'marketing.manage');
-  if(!limiter(authAttempts,'marketing-test:'+a.user_id,60000,6))throw fail(429,'Aguarde um minuto para testar novamente.');
+  if(!await limiter('auth','marketing-test:'+a.user_id,60000,6))throw fail(429,'Aguarde um minuto para testar novamente.');
   const result=await testPipeboardConnection(pool,a,oauthTest[1]);
   await audit(a,'marketing.connection_test',{provider:oauthTest[1],status:result.status,accounts:result.accounts.length});
   return json(res,200,result);
@@ -779,7 +770,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/instagram/hosted/connect'){
   requirePermission(a,'channels.manage');
-  if(!limiter(authAttempts,'hosted-instagram:'+a.user_id,600000,5))
+  if(!await limiter('auth','hosted-instagram:'+a.user_id,600000,5))
    throw fail(429,'Muitas tentativas de conectar Instagram.');
   const result=await beginInstagramHosted(pool,a,a.tenant_name);
   await audit(a,'instagram.hosted_link_started',{provider:result.provider});
@@ -811,7 +802,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/marketing/meta/connect'){
   requirePermission(a,'marketing.manage');
-  if(!limiter(authAttempts,'pipeboard:'+a.user_id,600000,5))
+  if(!await limiter('auth','pipeboard:'+a.user_id,600000,5))
    throw fail(429,'Muitas tentativas de autenticação Pipeboard.');
   const {data}=await body(req,23000);
   const connection=await connectPipeboard(pool,a,data);
@@ -844,7 +835,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/instagram/connect'){
   requirePermission(a,'channels.manage');
-  if(!limiter(authAttempts,'instagram-oauth:'+a.user_id,600000,5))
+  if(!await limiter('auth','instagram-oauth:'+a.user_id,600000,5))
    throw fail(429,'Muitas tentativas de conexão Instagram.');
   const result=await beginInstagramOAuth(pool,a.active_tenant_id,a.user_id);
   await audit(a,'instagram.oauth_initiated');
@@ -858,7 +849,7 @@ async function handle(req,res){
  // Changing a phone login identifier requires the signed-in user's current password.
  // Never infer this from the company's connected WhatsApp number.
  if(method==='POST'&&pathname==='/api/me/phone'){
-  if(!limiter(authAttempts,'phone-update:'+a.user_id,600000,8))throw fail(429,'Muitas tentativas. Tente novamente.');
+  if(!await limiter('auth','phone-update:'+a.user_id,600000,8))throw fail(429,'Muitas tentativas. Tente novamente.');
   const {data}=await body(req);
   const raw=typeof data.phone==='string'?data.phone.trim():'';
   if(raw.length>32)throw fail(422,'Número de telefone inválido.');
@@ -868,12 +859,12 @@ async function handle(req,res){
   if(!record.rowCount||!(await verifyPassword(data.currentPassword||'',record.rows[0].password_hash)))
    throw fail(401,'Senha atual incorreta.');
   const updated=await query('UPDATE users SET phone=$2 WHERE id=$1 RETURNING phone',[a.user_id,normalized]);
-  authAttempts.delete('phone-update:'+a.user_id);
+  await resetLimit('auth','phone-update:'+a.user_id);
   await audit(a,'auth.login_phone_updated',{configured:!!normalized});
   return json(res,200,{ok:true,phone:updated.rows[0].phone});
  }
  if(method==='POST'&&pathname==='/api/me/password'){
-  if(!limiter(authAttempts,'password-change:'+a.user_id,600000,7))
+  if(!await limiter('auth','password-change:'+a.user_id,600000,7))
    throw fail(429,'Muitas tentativas. Tente mais tarde.');
   const {data}=await body(req,1200);
   if(typeof data?.currentPassword!=='string'||typeof data?.newPassword!=='string'||
@@ -892,7 +883,7 @@ async function handle(req,res){
    await c.query('INSERT INTO audit(id,tenant_id,actor_id,action,metadata) VALUES($1,$2,$3,$4,$5)',[
     id(),a.active_tenant_id,a.user_id,'auth.password_changed',JSON.stringify({otherSessionsRevoked:true})]);
    await c.query('COMMIT');
-   authAttempts.delete('password-change:'+a.user_id);
+   await resetLimit('auth','password-change:'+a.user_id);
    return json(res,200,{ok:true,otherSessionsRevoked:true});
   }catch(e){await c.query('ROLLBACK').catch(()=>{});throw e;}finally{c.release();}
  }
@@ -925,7 +916,7 @@ async function handle(req,res){
  // Floating Thalita: read tools for the active company; all writes need one-use approval.
  if(method==='POST'&&pathname==='/api/thalita/ask'){
   assertApiFeature(a.features,'/api/agent');
-  if(!limiter(simulationAttempts,'thalita-chat:'+a.user_id,60000,16))throw fail(429,'Aguarde antes de consultar novamente.');
+  if(!await limiter('sim','thalita-chat:'+a.user_id,60000,16))throw fail(429,'Aguarde antes de consultar novamente.');
   const {data}=await body(req,2400);
   const result=await askThalita(pool,a,{message:data.message,runId:data.runId});
   await audit(a,'thalita.chat',{status:result.status,readOnly:result.readOnly===true,executed:result.executed===true});
@@ -934,7 +925,7 @@ async function handle(req,res){
  if(method==='POST'&&pathname==='/api/thalita/confirm'){
   assertApiFeature(a.features,'/api/agent');
   needRole(a,['owner','admin']);
-  if(!limiter(simulationAttempts,'thalita-confirm:'+a.user_id,60000,6))throw fail(429,'Aguarde antes de executar novamente.');
+  if(!await limiter('sim','thalita-confirm:'+a.user_id,60000,6))throw fail(429,'Aguarde antes de executar novamente.');
   const {data}=await body(req,1200);
   const result=await confirmThalita(pool,a,data);
   await audit(a,'thalita.approved_action',result.audit||{});
@@ -942,7 +933,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/thalita/tts'){
   assertApiFeature(a.features,'/api/agent');
-  if(!limiter(simulationAttempts,'thalita-tts:'+a.active_tenant_id,60000,14))throw fail(429,'Limite temporário de voz.');
+  if(!await limiter('sim','thalita-tts:'+a.active_tenant_id,60000,14))throw fail(429,'Limite temporário de voz.');
   const {data}=await body(req,1200);
   const audio=await synthesizeCachedThalitaVoice(data.text);
   res.writeHead(200,{'Content-Type':audio.mime,'Cache-Control':'private, no-store',
@@ -951,7 +942,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/thalita/transcribe'){
   assertApiFeature(a.features,'/api/agent');sameOrigin(req);
-  if(!limiter(simulationAttempts,'thalita-transcribe:'+a.active_tenant_id,60000,12))throw fail(429,'Limite de áudio atingido.');
+  if(!await limiter('sim','thalita-transcribe:'+a.active_tenant_id,60000,12))throw fail(429,'Limite de áudio atingido.');
   const mime=String(req.headers['content-type']||'').split(';')[0].toLowerCase();
   if(!['audio/webm','audio/ogg','audio/mp4','audio/mpeg','audio/wav'].includes(mime))throw fail(422,'Formato de áudio inválido.');
   if(Number(req.headers['content-length']||0)>3*1024*1024)throw fail(413,'Máximo de 3 MB por áudio.');
@@ -995,7 +986,7 @@ async function handle(req,res){
  if(method==='POST'&&pathname==='/api/waakg/channels/connect'){
   needRole(a,['owner','admin']);
   if(!gatewayConfigured())throw fail(503,'O gateway exclusivo do Sócio ainda não está configurado.');
-  if(!limiter(simulationAttempts,'waakg-connect:'+a.active_tenant_id,3600000,12))throw fail(429,'Limite de solicitações de conexão.');
+  if(!await limiter('sim','waakg-connect:'+a.active_tenant_id,3600000,12))throw fail(429,'Limite de solicitações de conexão.');
   const {data}=await body(req);
   if(!validText(data.label,90))throw fail(422,'Informe um nome para o WhatsApp.');
   const counter=await query('SELECT COUNT(*)::int AS n FROM waakg_links WHERE tenant_id=$1',[a.active_tenant_id]);
@@ -1099,7 +1090,7 @@ async function handle(req,res){
  if(method==='POST'&&pathname==='/api/waakg/scans'){
   needRole(a,['owner','admin']);
   if(!gatewayConfigured())throw fail(503,'WA-AKG ainda não configurado no servidor Sócio.');
-  if(!limiter(simulationAttempts,'waakg-start:'+a.active_tenant_id,60000,12))throw fail(429,'Muitas análises solicitadas.');
+  if(!await limiter('sim','waakg-start:'+a.active_tenant_id,60000,12))throw fail(429,'Muitas análises solicitadas.');
   const {data}=await body(req);
   const channelId=String(data.channelId||'');
   if(!/^[0-9a-f-]{36}$/.test(channelId))throw fail(422,'Selecione um canal WA-AKG válido.');
@@ -1148,7 +1139,7 @@ async function handle(req,res){
  if(method==='GET'&&pathname==='/api/tracking/sites')
   return json(res,200,await listTrackingSites(pool,a));
  if(method==='POST'&&pathname==='/api/tracking/sites'){
-  if(!limiter(simulationAttempts,'tracking-sites:'+a.active_tenant_id,3600000,10))
+  if(!await limiter('sim','tracking-sites:'+a.active_tenant_id,3600000,10))
    throw fail(429,'Aguarde antes de cadastrar outro site.');
   const {data}=await body(req,1400);
   return json(res,201,await createTrackingSite(pool,a,{origin:data.origin,pixelId:data.pixelId}));
@@ -1178,12 +1169,12 @@ async function handle(req,res){
   return json(res,200,await readSubscriptionStatus(pool,a));
  }
  if(method==='POST'&&pathname==='/api/billing/checkout'){
-  if(!limiter(simulationAttempts,'billing-checkout:'+a.active_tenant_id,3600000,8))
+  if(!await limiter('sim','billing-checkout:'+a.active_tenant_id,3600000,8))
    throw fail(429,'Aguarde antes de abrir um novo Checkout.');
   return json(res,200,await createSubscriptionCheckout(pool,a));
  }
  if(method==='POST'&&pathname==='/api/billing/portal'){
-  if(!limiter(simulationAttempts,'billing-portal:'+a.active_tenant_id,60000,6))
+  if(!await limiter('sim','billing-portal:'+a.active_tenant_id,60000,6))
    throw fail(429,'Aguarde antes de abrir o portal de cobrança.');
   return json(res,200,await createBillingPortal(pool,a));
  }
@@ -1214,7 +1205,7 @@ async function handle(req,res){
  if(method==='POST'&&pathname==='/api/sales/assistant/chat'){
   requirePermission(a,'sales.read');
   assertApiFeature(a.features,'/api/agent');
-  if(!limiter(simulationAttempts,'sales-assistant:'+a.user_id,60000,12))
+  if(!await limiter('sim','sales-assistant:'+a.user_id,60000,12))
    throw fail(429,'Aguarde antes de fazer outra pergunta comercial.');
   const {data}=await body(req,2500);
   const result=await askSalesAssistant(pool,a,{message:data.message,requestId:data.requestId??null});
@@ -1247,7 +1238,7 @@ async function handle(req,res){
  if(quoteDraftRoute&&method==='POST'){
   requirePermission(a,'sales.manage');
   const [,requestId,action]=quoteDraftRoute;
-  if(action==='send'&&!limiter(simulationAttempts,'quote-send:'+a.user_id,60000,10))
+  if(action==='send'&&!await limiter('sim','quote-send:'+a.user_id,60000,10))
    throw fail(429,'Limite de envios por minuto atingido.');
   const data=action==='draft'?(await body(req,6000)).data:{};
   const result=action==='draft'?await saveQuoteDraft(pool,a.active_tenant_id,requestId,data):
@@ -1361,7 +1352,7 @@ async function handle(req,res){
  if(productMedia&&method==='POST'){
   needRole(a,['owner','admin']);
   if(!mediaConfigured())throw fail(503,'Armazenamento de imagens indisponível.');
-  if(!limiter(simulationAttempts,'media:'+a.active_tenant_id,60000,16))throw fail(429,'Muitos envios de imagem. Tente novamente.');
+  if(!await limiter('sim','media:'+a.active_tenant_id,60000,16))throw fail(429,'Muitos envios de imagem. Tente novamente.');
   const {data}=await body(req,4300000);
   const alt=typeof data.alt==='string'?data.alt.trim():'';
   if(alt.length>200)throw fail(422,'Texto alternativo muito longo.');
@@ -1439,7 +1430,7 @@ async function handle(req,res){
  // tenant-constrained cascading foreign keys. Payment/order snapshots stay intact.
  if(prodMatch&&method==='DELETE'){
   needRole(a,['owner','admin']);
-  if(!limiter(simulationAttempts,'catalog-delete:'+a.active_tenant_id,60000,10))
+  if(!await limiter('sim','catalog-delete:'+a.active_tenant_id,60000,10))
    throw fail(429,'Muitas exclusões; aguarde.');
   const {data}=await body(req,1000);
   if(data.confirm!==true)throw fail(422,'Confirme a exclusão permanente do produto.');
@@ -1494,7 +1485,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/ops/groq/test'){
   needRole(a,['owner','admin']);
-  if(!limiter(simulationAttempts,'groq-health:'+a.active_tenant_id,600000,3))
+  if(!await limiter('sim','groq-health:'+a.active_tenant_id,600000,3))
    throw fail(429,'Limite de testes Groq atingido. Tente novamente.');
   if(!groqReady())throw fail(503,'GROQ_API_KEY ausente no servidor.');
   const start=Date.now();
@@ -1527,7 +1518,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/training/interview/start'){
   needRole(a,['owner','admin']);
-  if(!limiter(simulationAttempts,'interview-start:'+a.active_tenant_id,60000,12))
+  if(!await limiter('sim','interview-start:'+a.active_tenant_id,60000,12))
    throw fail(429,'Muitas solicitações de treinamento.');
   const {data}=await body(req,1600);
   const interview=await startSocioInterview(pool,a.active_tenant_id,data.mode);
@@ -1536,7 +1527,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/training/interview/turn'){
   needRole(a,['owner','admin']);
-  if(!limiter(simulationAttempts,'interview-turn:'+a.active_tenant_id,60000,45))
+  if(!await limiter('sim','interview-turn:'+a.active_tenant_id,60000,45))
    throw fail(429,'Aguarde antes de responder novamente.');
   const {data}=await body(req,2200);
   const interview=await advanceSocioInterview(pool,a.active_tenant_id,data.text);
@@ -1551,7 +1542,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/training/interview/audio'){
   needRole(a,['owner','admin']);sameOrigin(req);
-  if(!limiter(simulationAttempts,'interview-audio:'+a.active_tenant_id,60000,12))
+  if(!await limiter('sim','interview-audio:'+a.active_tenant_id,60000,12))
    throw fail(429,'Limite temporário de gravações atingido.');
   const mime=String(req.headers['content-type']||'').split(';')[0].toLowerCase();
   if(!['audio/webm','audio/ogg','audio/mp4','audio/mpeg','audio/wav'].includes(mime))
@@ -1565,7 +1556,7 @@ async function handle(req,res){
  // Access is authenticated, tenant-scoped, CSRF guarded, rate limited; no audio is stored.
  if(method==='POST'&&pathname==='/api/training/interview/tts'){
   needRole(a,['owner','admin']);
-  if(!limiter(simulationAttempts,'interview-tts:'+a.active_tenant_id,60000,20))
+  if(!await limiter('sim','interview-tts:'+a.active_tenant_id,60000,20))
    throw fail(429,'Muitas solicitações de voz. Aguarde um instante.');
   const current=await getSocioInterview(pool,a.active_tenant_id);
   if(!current||current.mode!=='voice'||current.phase!=='active')
@@ -1582,7 +1573,7 @@ async function handle(req,res){
  }
  if(method==='POST'&&pathname==='/api/training/auto'){
   needRole(a,['owner','admin']);
-  if(!limiter(simulationAttempts,'auto-train:'+a.active_tenant_id,600000,4))
+  if(!await limiter('sim','auto-train:'+a.active_tenant_id,600000,4))
    throw fail(429,'Muitas solicitações de treinamento.');
   const run=await startAutoTraining(pool,a.active_tenant_id);
   await audit(a,'training.auto.started',{runId:run.id,connectedChannels:run.connectedChannels});
@@ -1748,7 +1739,7 @@ async function handle(req,res){
  if(method==='POST'&&pathname==='/api/simulate'){
   requirePermission(a,'training.manage');
   const key='simulate:'+a.user_id;
-  if(!limiter(simulationAttempts,key,60000,12))throw fail(429,'Limite de testes por minuto atingido.');
+  if(!await limiter('sim',key,60000,12))throw fail(429,'Limite de testes por minuto atingido.');
   const {data}=await body(req);
   if(!validText(data.message,1200))throw fail(422,'Digite uma mensagem de até 1200 caracteres.');
   const [agent,catalogProducts]=await Promise.all([
@@ -1938,7 +1929,7 @@ async function handle(req,res){
  }
  if(method==='GET'&&pathname==='/api/admin/cnpj'){
   needPlatform(a);
-  if(!limiter(authAttempts,'cnpj:'+a.user_id,600000,12))
+  if(!await limiter('auth','cnpj:'+a.user_id,600000,12))
    throw fail(429,'Muitas consultas CNPJ. Tente novamente.');
   const cnpj=normalizeCnpj(new URL(req.url,'http://local').searchParams.get('number'));
   if(!validCnpj(cnpj))throw fail(422,'Informe um CNPJ válido de 14 dígitos.');
@@ -2103,6 +2094,12 @@ async function main(){
    .catch(error=>console.warn('[socio gateway private]',JSON.stringify({reachable:false,
      code:Number(error?.status||503)})));
  }
+ // Expired windows are useless; drop them so the table stays proportional to
+ // recent traffic instead of growing forever.
+ const rateLimitCleanup=setInterval(()=>{
+  void query("DELETE FROM rate_limits WHERE window_start<now()-interval '2 days'").catch(()=>{});
+ },600000);
+ rateLimitCleanup.unref();
  // Refresh only wallets that the owner explicitly connected and observed.
  let metaBillingBusy=false;
  const metaBillingWorker=setInterval(async()=>{

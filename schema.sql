@@ -1165,6 +1165,17 @@ CREATE TABLE IF NOT EXISTS meta_billing_alerts (
  PRIMARY KEY(tenant_id,user_id,account_id)
 );
 
+-- Rate limit counters shared by every instance. Keys carry no tenant data:
+-- they are bucket namespace plus ip, user id or token prefix.
+CREATE TABLE IF NOT EXISTS rate_limits (
+ bucket text NOT NULL,
+ key text NOT NULL,
+ window_start timestamptz NOT NULL,
+ count integer NOT NULL DEFAULT 0,
+ PRIMARY KEY (bucket, key, window_start)
+);
+CREATE INDEX IF NOT EXISTS rate_limits_window_idx ON rate_limits(window_start);
+
 -- Defense in depth, applied on every boot (idempotent and non-fatal).
 -- The runtime connects as the table owner, which bypasses row security; any
 -- other role — a leaked credential, a future worker, an admin tool — gets no

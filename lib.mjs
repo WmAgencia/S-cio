@@ -103,3 +103,35 @@ export function clientIp(req,env=process.env){
  return /^[0-9a-f]{1,4}(?::[0-9a-f]{0,4}){2,7}$|^\d{1,3}(?:\.\d{1,3}){3}$/i.test(forwarded)&&forwarded.length<=45
   ?forwarded:direct;
 }
+
+// Shared rate limit counters. Postgres holds the authoritative count so that
+// every instance sees the same bucket and a deploy does not reset it; a local
+// map in front rejects floods before they can occupy the pool's connections.
+export function createLimiter(query){
+ const local=new Map();
+ function localCount(key,windowMs,max){
+  const ts=Date.now(),value=local.get(key);
+  if(!value||ts-value.since>windowMs){
+   if(local.size>=10000){
+    for(const [oldKey,entry] of local)if(ts-entry.since>windowMs)local.delete(oldKey);
+    if(local.size>=10000)local.delete(local.keys().next().value);
+   }
+   local.set(key,{since:ts,count:1});return true;
+  }
+  value.count++;return value.count<=max;
+ }
+ return async function limiter(bucket,key,windowMs,max){
+  const ts=Date.now();
+  if(!localCount(bucket+':'+key,windowMs,max*4))return false;
+  try{
+   const counted=await query(
+    'INSERT INTO rate_limits(bucket,key,window_start,count) VALUES($1,$2,$3,1) '+
+    'ON CONFLICT(bucket,key,window_start) DO UPDATE SET count=rate_limits.count+1 RETURNING count',
+    [bucket,key,new Date(Math.floor(ts/windowMs)*windowMs)]);
+   return Number(counted.rows[0].count)<=max;
+  }catch{
+   // Database unavailable: the local gate already applied this attempt.
+   return true;
+  }
+ };
+}
