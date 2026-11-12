@@ -722,3 +722,464 @@ body #appShell #view .px-campaign-dialog .px-action-heading h2{color:#202735!imp
 body #appShell #view .px-dialog-close{background:#f3f4f8!important;border:1px solid #e6e8ee!important;color:#526074!important}
 body #appShell #view .px-campaign-dialog .btn.primary,
 body #appShell #view .px-campaign-dialog .btn.primary :is(span,strong){color:#fff!important}
+
+
+/* Inbox: crisp list, stable chat canvas and violet action controls. */
+body #appShell #view:has(.wa-inbox){
+ max-width:none!important;
+ padding:17px 21px 15px!important;
+ min-height:0!important;
+ display:flex!important;
+}
+body #appShell #view .wa-inbox{
+ --wa-wall:#f7f8fb;--wa-card:#fff;--wa-panel:#fff;
+ --wa-ink:#202735;--wa-muted:#667085;--wa-edge:#e8ebf1;
+ --wa-accent:#605dec;--wa-green:#16865d;
+ background:#fff!important;
+ color:#263244!important;
+ border:1px solid #e2e5ec!important;
+ border-radius:13px!important;
+ box-shadow:0 6px 24px rgba(30,40,60,.06)!important;
+ min-height:620px;
+}
+body #appShell #view .wa-inbox-side{
+ background:#fff!important;
+ border-right:1px solid #e7eaf1!important;
+}
+body #appShell #view .wa-inbox-side-head{
+ border-color:#edf0f5!important;
+ padding:22px 19px 14px!important;
+}
+body #appShell #view .wa-inbox-eyebrow{color:#605dec!important;font-size:10px!important}
+body #appShell #view .wa-inbox-side-head h1{
+ color:#202735!important;
+ font-size:23px!important;letter-spacing:-.045em!important;font-weight:755!important;
+}
+body #appShell #view .wa-inbox-side-head h1 span{color:#8290a1!important}
+body #appShell #view .wa-inbox-connect{
+ background:#605dec!important;color:#fff!important;border:1px solid #605dec!important;
+ border-radius:9px!important;
+ box-shadow:none!important;
+ font-weight:710!important;
+}
+body #appShell #view .wa-inbox-connect:hover{background:#514ed5!important;color:#fff!important}
+body #appShell #view .wa-round-icon,
+body #appShell #view .wa-small-action{
+ border:1px solid #e1e4eb!important;background:#fff!important;
+ color:#59677b!important;border-radius:9px!important;
+ box-shadow:none!important;
+}
+body #appShell #view :is(.wa-round-icon,.wa-small-action):hover{
+ background:#f3f4fb!important;color:#514ed5!important;border-color:#d4d5ee!important;
+}
+body #appShell #view .wa-inbox-search{
+ background:#fafbfc!important;border:1px solid #e4e7ed!important;
+ color:#8995a5!important;
+ box-shadow:none!important;border-radius:9px!important;
+ margin:0 14px 12px!important;
+}
+body #appShell #view .wa-inbox-search:focus-within{
+ border-color:#8c87ef!important;
+ box-shadow:0 0 0 3px rgba(96,93,236,.1)!important;
+}
+body #appShell #view .wa-inbox-search input{
+ color:#273449!important;background:transparent!important;
+ border:0!important;box-shadow:none!important;
+}
+body #appShell #view .wa-inbox-search input::placeholder{color:#8d99a9!important}
+body #appShell #view .wa-filters{
+ display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;
+ gap:5px!important;padding:0 14px 13px!important;
+}
+body #appShell #view .wa-filters button{
+ background:#f5f6fa!important;color:#647187!important;
+ border:1px solid #eaecf2!important;
+ border-radius:8px!important;
+ font-size:10px!important;line-height:1.3!important;font-weight:635!important;
+ box-shadow:none!important;
+}
+body #appShell #view .wa-filters button:hover:not(.active){
+ background:#edecff!important;color:#514ed5!important;border-color:#dddafa!important;
+}
+body #appShell #view .wa-filters button.active{
+ background:#605dec!important;color:#fff!important;border-color:#605dec!important;
+ font-weight:735!important;
+}
+body #appShell #view .wa-inbox-items{
+ background:#fff!important;
+ scrollbar-color:#c8cddd transparent!important;
+}
+body #appShell #view .wa-list-row-wrap{border-top:1px solid #edf0f5!important}
+body #appShell #view .wa-list-row{
+ background:transparent!important;color:#344054!important;
+ border:0!important;
+ transition:background-color .13s ease!important;
+}
+body #appShell #view .wa-list-row:hover{background:#f7f8fc!important}
+body #appShell #view .wa-list-row.active{
+ background:#f0efff!important;
+ box-shadow:inset 3px 0 #605dec!important;
+}
+body #appShell #view .wa-chat-avatar{
+ background:#eceafd!important;color:#5856c8!important;
+ border:1px solid #e1dffa!important;
+ box-shadow:none!important;
+}
+body #appShell #view .wa-chat-avatar-1{background:#e7f6ef!important;color:#147b55!important;border-color:#d9ebe0!important}
+body #appShell #view .wa-chat-avatar-2{background:#fff1e8!important;color:#b66c40!important;border-color:#f9e4d3!important}
+body #appShell #view .wa-chat-avatar-3{background:#f1ecff!important;color:#7a5ac4!important;border-color:#e9ddfa!important}
+body #appShell #view .wa-chat-avatar-4{background:#f1f5ff!important;color:#5478b2!important;border-color:#e2eaf8!important}
+body #appShell #view .wa-chat-name-line strong,
+body #appShell #view .wa-thread-identity strong{
+ color:#263244!important;font-weight:710!important;
+}
+body #appShell #view :is(.wa-chat-name-line small,.wa-chat-preview,.wa-chat-meta,
+ .wa-thread-identity small,.wa-inbox-side-bottom,.wa-history-load span){
+ color:#748195!important;
+}
+body #appShell #view .wa-chat-preview em{color:#5351ca!important}
+body #appShell #view .wa-unread-dot,
+body #appShell #view .wa-live-dot{background:#22a472!important;box-shadow:0 0 0 3px #e9f8ef!important}
+body #appShell #view .wa-inbox-side-bottom{
+ background:#fafbfc!important;border-top:1px solid #e9ebf1!important;
+}
+body #appShell #view .wa-inbox-main{
+ background:#f8f9fc!important;color:#273449!important;
+}
+body #appShell #view .wa-inbox-welcome{
+ color:#344054!important;background:transparent!important;
+}
+body #appShell #view .wa-inbox-welcome h2{color:#263247!important}
+body #appShell #view .wa-inbox-welcome p,
+body #appShell #view .wa-inbox-welcome small{color:#667085!important}
+body #appShell #view .wa-inbox-welcome-mark{color:#605dec!important;filter:none!important}
+body #appShell #view .wa-thread-header{
+ background:#fff!important;
+ border-bottom:1px solid #e6e9ef!important;
+ box-shadow:none!important;
+}
+body #appShell #view .wa-thread-identity{
+ color:#344054!important;
+}
+body #appShell #view .wa-thread-identity:hover{background:#f3f4fa!important}
+body #appShell #view .wa-thread-search{
+ background:#fff!important;border-bottom:1px solid #e9ebf0!important;
+}
+body #appShell #view .wa-thread-search button{color:#667085!important}
+body #appShell #view .wa-message-list{
+ background:
+  radial-gradient(circle at 8% 86%,rgba(227,230,250,.29),transparent 35%),
+  #f8f9fc!important;
+}
+body #appShell #view .wa-date-marker{
+ background:#e9ecf3!important;color:#667085!important;
+ border:1px solid #e0e4ec!important;border-radius:999px!important;
+}
+body #appShell #view .wa-message-bubble{
+ background:#fff!important;color:#344054!important;
+ border:1px solid #e7eaf0!important;
+ box-shadow:0 2px 8px rgba(28,38,56,.045)!important;
+ border-radius:12px 12px 12px 4px!important;
+}
+body #appShell #view .wa-message-row.outgoing .wa-message-bubble{
+ background:#eeeefe!important;color:#32345d!important;
+ border:1px solid #dfdffa!important;
+ border-radius:12px 12px 4px 12px!important;
+}
+body #appShell #view .wa-message-row.internal .wa-message-bubble{
+ background:#fff8e9!important;color:#85591e!important;
+ border:1px dashed #ead3a8!important;
+}
+body #appShell #view .wa-message-bubble:hover{border-color:#cfd3e9!important}
+body #appShell #view .wa-message-bubble.selected{outline:2px solid #7773e8!important}
+body #appShell #view .wa-message-copy{color:inherit!important;line-height:1.58!important}
+body #appShell #view .wa-message-meta,
+body #appShell #view .wa-message-row.outgoing .wa-message-meta{color:#748096!important}
+body #appShell #view .wa-message-more{
+ background:#f3f4f8!important;color:#596579!important;border:1px solid #e8ebf1!important;
+}
+body #appShell #view .wa-message-quote{
+ background:#f6f6fe!important;border-left-color:#605dec!important;color:#59617b!important;
+}
+body #appShell #view .wa-msg-reaction{
+ background:#fff!important;border:1px solid #e2e5ec!important;
+}
+body #appShell #view .wa-compose{
+ background:#fff!important;
+ border-top:1px solid #e5e8ef!important;
+ box-shadow:0 -3px 12px rgba(28,38,56,.025)!important;
+}
+body #appShell #view :is(.wa-compose-top,.wa-compose-row,.wa-compose-foot){
+ background:transparent!important;color:#667085!important;
+}
+body #appShell #view .wa-mode-btn{
+ background:#f4f5f9!important;color:#596579!important;
+ border:1px solid #e7eaf1!important;border-radius:8px!important;
+}
+body #appShell #view .wa-mode-btn:hover{border-color:#d6d3f5!important;background:#f0efff!important}
+body #appShell #view .wa-mode-btn.active{
+ background:#eeedff!important;color:#514ed5!important;
+ border:1px solid #d9d7fa!important;
+}
+body #appShell #view :is(.wa-compose-disclaimer,.wa-compose-foot,.wa-inline-link,.wa-unsupported){
+ color:#748195!important;
+}
+body #appShell #view .wa-compose-row textarea{
+ background:#fff!important;color:#273449!important;
+ border:1px solid #dce0e8!important;border-radius:10px!important;
+ box-shadow:none!important;
+}
+body #appShell #view .wa-compose-row textarea::placeholder{color:#8a96a7!important}
+body #appShell #view .wa-compose-row textarea:focus{
+ border-color:#7874ea!important;box-shadow:0 0 0 3px rgba(96,93,236,.1)!important;
+}
+body #appShell #view .wa-compose-send{
+ background:#605dec!important;border:1px solid #605dec!important;
+ color:#fff!important;
+ box-shadow:none!important;
+ border-radius:10px!important;
+}
+body #appShell #view .wa-compose-send:hover{background:#514ed5!important;color:#fff!important}
+body #appShell #view .wa-reply-banner{
+ background:#f3f1ff!important;border-left-color:#605dec!important;color:#344054!important;
+}
+body #appShell #view .wa-reply-banner strong{color:#344054!important}
+body #appShell #view .wa-reply-banner small{color:#667085!important}
+body #appShell #view .wa-inbox-details{
+ background:#fff!important;color:#344054!important;
+ border-left:1px solid #e8eaf1!important;
+}
+body #appShell #view .wa-inbox-details :is(h2,h3,strong,b){color:#263247!important}
+body #appShell #view .wa-inbox-details :is(p,small,label){color:#667085!important}
+body #appShell #view .wa-details-section,
+body #appShell #view .wa-details-top{
+ background:#fff!important;border-color:#eaecf1!important;
+}
+body #appShell #view .wa-context-menu{
+ background:#fff!important;color:#344054!important;
+ border:1px solid #e3e5ec!important;
+ box-shadow:0 9px 22px rgba(25,35,55,.13)!important;
+}
+body #appShell #view .wa-context-menu button{
+ background:transparent!important;color:#344054!important;
+}
+body #appShell #view .wa-context-menu button:hover{background:#f3f2ff!important;color:#514ed5!important}
+body #appShell #view .wa-dialog-surface,
+body #appShell #view .wa-inbox-dialog{
+ background:#fff!important;color:#344054!important;
+ border:1px solid #e7e9ef!important;
+ box-shadow:0 18px 50px rgba(25,35,55,.15)!important;
+}
+body #appShell #view .wa-dialog-surface :is(h2,h3,strong,p,small,label){color:#344054!important}
+body #appShell #view :is(.wa-inbox-empty-list,.wa-empty-messages,.wa-history-load){
+ color:#748195!important;
+}
+
+/* Thalita: right-hand white assistant panel, not a dark floating box. */
+body:has(#appShell:not(.hidden)) #socioThalitaDock{
+ color:#273449!important;
+ font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-fab{
+ background:#605dec!important;color:#fff!important;
+ border:1px solid #605dec!important;
+ box-shadow:0 7px 23px rgba(80,76,196,.21)!important;
+ border-radius:999px!important;
+ padding:7px 14px 7px 7px!important;
+ font-size:12px!important;font-weight:735!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-fab:hover{
+ background:#514ed5!important;border-color:#514ed5!important;color:#fff!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-sigil{
+ background:rgba(255,255,255,.15)!important;
+ border:1px solid rgba(255,255,255,.25)!important;
+ color:#fff!important;
+ box-shadow:none!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window:not(.hidden){
+ position:fixed!important;
+ top:82px!important;right:22px!important;bottom:19px!important;
+ width:min(408px,calc(100vw - 36px))!important;
+ height:calc(100dvh - 101px)!important;
+ max-height:none!important;
+ background:#fff!important;color:#344054!important;
+ border:1px solid #e0e4ec!important;border-radius:14px!important;
+ box-shadow:0 15px 50px rgba(28,37,55,.14),0 3px 10px rgba(28,37,55,.035)!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+ transform-origin:100% 100%;
+ animation:stripe-assistant-in .2s cubic-bezier(.21,.86,.3,1) both;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header{
+ background:#fff!important;
+ border-bottom:1px solid #e8eaf0!important;
+ padding:15px 17px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-avatar{
+ background:#f0efff!important;color:#5c58d4!important;
+ border:1px solid #e6e3ff!important;border-radius:10px!important;
+ box-shadow:none!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header strong{
+ color:#202735!important;font-weight:755!important;font-size:13px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header small{
+ color:#748195!important;font-size:10.5px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-close{
+ background:#f3f4f8!important;color:#667085!important;
+ border:1px solid #e7e9ee!important;border-radius:9px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-close:hover{
+ background:#edecff!important;color:#514ed5!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-feed{
+ background:#fafbfe!important;
+ color:#344054!important;
+ min-height:180px!important;max-height:none!important;
+ flex:1!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-line{
+ background:#fff!important;color:#344054!important;
+ border:1px solid #e7e9ef!important;
+ box-shadow:0 1px 4px rgba(25,35,55,.03)!important;
+ border-radius:11px 11px 11px 4px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-line.user{
+ background:#eeedff!important;color:#36355d!important;
+ border:1px solid #dcdafa!important;
+ border-radius:11px 11px 4px 11px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-line small{
+ color:#605dec!important;font-weight:730!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-line p{
+ color:#344054!important;line-height:1.58!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-suggestions{
+ background:#fff!important;border-bottom:1px solid #eceef4!important;
+ border-top:1px solid #eceef4!important;
+ padding:11px 13px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-suggestions button{
+ background:#f5f5fc!important;color:#5754c5!important;
+ border:1px solid #e5e3f6!important;
+ border-radius:999px!important;font-size:10px!important;
+ box-shadow:none!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-suggestions button:hover{
+ background:#edecff!important;border-color:#d6d3f5!important;color:#4340b7!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaForm{
+ background:#fff!important;border-top:1px solid #eaecf1!important;
+ padding:13px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaInput{
+ background:#fff!important;border:1px solid #d8dce5!important;
+ color:#273449!important;caret-color:#605dec!important;
+ border-radius:10px!important;box-shadow:none!important;
+ font-size:12px!important;min-height:70px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaInput::placeholder{
+ color:#8c97a8!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaInput:focus{
+ border-color:#7975ee!important;box-shadow:0 0 0 3px rgba(96,93,236,.10)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-actions .btn.soft{
+ background:#fff!important;color:#344054!important;border:1px solid #dde0e9!important;
+ box-shadow:none!important;border-radius:9px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-actions .btn.primary{
+ background:#605dec!important;color:#fff!important;border:1px solid #605dec!important;
+ border-radius:9px!important;box-shadow:none!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-actions .btn.primary:hover{
+ background:#514ed5!important;color:#fff!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-hint{
+ color:#748195!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-disclaimer{
+ background:#fafbfe!important;color:#768297!important;
+ border-top:1px solid #eceef4!important;font-size:10px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-approval:not(:empty){
+ background:#fff8eb!important;border:1px solid #f2dba8!important;
+ color:#83581d!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-approval p{color:#83581d!important}
+
+/* Master: same design system, dedicated workspace identity. */
+body #appShell #view .master-page{
+ color:#344054!important;
+ max-width:1450px!important;
+ gap:20px!important;
+}
+body #appShell #view .master-hero{padding:4px 0 10px!important}
+body #appShell #view .master-hero h1{
+ color:#202735!important;font-size:clamp(27px,2.7vw,35px)!important;
+ letter-spacing:-.045em!important;font-weight:755!important;
+}
+body #appShell #view .master-hero p{color:#667085!important}
+body #appShell #view .master-kpis{gap:12px!important}
+body #appShell #view .master-kpi{
+ background:#fff!important;border:1px solid #e5e7ed!important;
+ border-radius:12px!important;
+ padding:18px 16px!important;box-shadow:var(--stripe-shadow)!important;
+}
+body #appShell #view .master-kpi small{color:#667085!important;font-size:11px!important}
+body #appShell #view .master-kpi strong{
+ color:#202735!important;font-weight:755!important;letter-spacing:-.04em!important;
+}
+body #appShell #view .master-kpi-copy>span{color:#7b8799!important}
+body #appShell #view .master-kpi-icon{
+ background:#f0efff!important;color:#605dec!important;
+ border:1px solid #e5e3fb!important;border-radius:10px!important;
+}
+body #appShell #view .master-tone-green .master-kpi-icon{background:#e9f8ef!important;color:#16865d!important;border-color:#d4ecdf!important}
+body #appShell #view .master-tone-amber .master-kpi-icon{background:#fff6e7!important;color:#a66a1e!important;border-color:#f3e3c9!important}
+body #appShell #view .master-tone-blue .master-kpi-icon{background:#eef4ff!important;color:#3e74cc!important;border-color:#dce7fb!important}
+body #appShell #view .master-panel{
+ background:#fff!important;border:1px solid #e5e7eb!important;
+ border-radius:12px!important;padding:21px!important;box-shadow:var(--stripe-shadow)!important;
+}
+body #appShell #view .master-panel-head h2{color:#273449!important;font-weight:735!important}
+body #appShell #view .master-panel-head p{color:#667085!important}
+body #appShell #view .master-month-track{
+ background:#f8f9fc!important;border-color:#e4e7ee!important;
+}
+body #appShell #view .master-month-bar{
+ background:#7873ec!important;border-radius:5px 5px 0 0!important;
+}
+body #appShell #view .master-month-col,
+body #appShell #view .master-month-col>span{color:#7a8799!important}
+body #appShell #view .master-month-value{color:#475467!important}
+body #appShell #view .master-donut-center{
+ background:#fff!important;color:#344054!important;
+ box-shadow:inset 0 0 0 1px #edeef4!important;
+}
+body #appShell #view .master-donut-center strong{color:#202735!important}
+body #appShell #view .master-donut-center small{color:#667085!important}
+body #appShell #view .master-plan-track{background:#eef0f5!important}
+body #appShell #view .master-plan-row-top>span{color:#667085!important}
+body #appShell #view .master-plan-row-top strong{color:#344054!important}
+body #appShell #view .master-plan-row-top small{color:#7d899b!important}
+body #appShell #view .master-health-list>div{border-color:#eceef3!important}
+body #appShell #view .master-health-list span{color:#667085!important}
+body #appShell #view .master-health-list strong{color:#344054!important}
+body #appShell #view :is(.master-disclaimer,.master-updated){color:#758298!important}
+body #appShell #view .master-company-filters :is(input,select){
+ background:#fff!important;border:1px solid #dce0e8!important;color:#344054!important;
+}
+body #appShell #view .master-company-edit-note,
+body #appShell #view .master-no-data,
+body #appShell #view .master-loading{
+ background:#fafbff!important;border:1px solid #e8eaf2!important;
+ color:#667085!important;border-radius:10px!important;
+}
+body #appShell #view .master-status-active{background:#e9f8ef!important;color:#137147!important}
+body #appShell #view .master-status-trial{background:#fff5e6!important;color:#98611c!important}
+body #appShell #view .master-status-paused{background:#f2f3f7!important;color:#667085!important}
+body #appShell #view .master-text-action{background:transparent!important;color:#5350ce!important;border:0!important}
