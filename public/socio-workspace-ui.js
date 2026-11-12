@@ -405,6 +405,13 @@
   // A prepaid balance is not the Meta account's "balance" (often payable),
   // nor the daily campaign budget. Do not infer prepaid credit from spend.
   const budgetHeaderItem=(provider,label,brand,connected,spent,currency,billing)=>{
+   if(progressive&&ads){
+    return '<article class="px-budget-account px-load-card px-budget-provider-pending" data-budget-provider="'+provider+'" aria-busy="true">'+
+     '<div class="px-budget-account-main"><div class="px-budget-brand"><span class="px-brand-dot '+brand+'"></span>'+
+     '<strong>'+esc(label)+'</strong><small>Consultando informações da conta…</small></div>'+
+     '<div class="px-budget-stats" aria-hidden="true"><span class="px-load-line"></span><span class="px-load-line"></span><span class="px-load-line"></span></div></div>'+
+     '<p class="px-load-status" role="status">Consultando dados confirmados…</p></article>';
+   }
    const spending=connected?money(spent,currency):'—';
    const funds=billing?.finance?.availableFundsMinor;
    const fundsAvailable=Number.isSafeInteger(funds)&&funds>=0;
