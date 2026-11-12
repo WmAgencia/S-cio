@@ -793,8 +793,11 @@ async function products(selected=null){
   google_ads:googleChoices.map(x=>({id:String(x.id),name:String(x.name||x.id),status:String(x.status||'') }))
  };
  const campaignSelect=(scope)=>!featureAvailable('meta_ads')?'':'<div class="px-campaign-picker">'+
-  '<label>Plataforma<select data-campaign-provider aria-label="Plataforma de anúncios"'+(scope==='create'?' name="newCampaignProvider"':' name="provider"')+'>'+
-   '<option value="meta_ads">Meta Ads</option>'+(googleAdsVisible()?'<option value="google_ads">Google Ads</option>':'')+'</select></label>'+
+  (googleAdsVisible()?
+    '<label>Plataforma<select data-campaign-provider aria-label="Plataforma de anúncios"'+(scope==='create'?' name="newCampaignProvider"':' name="provider"')+'>'+
+     '<option value="meta_ads">Meta Ads</option><option value="google_ads">Google Ads</option></select></label>':
+    '<input type="hidden" data-campaign-provider value="meta_ads"'+(scope==='create'?' name="newCampaignProvider"':' name="provider"')+'>'+
+    '<div class="px-campaign-provider-meta"><span class="px-brand-dot meta"></span><strong>Meta Ads</strong><small>Campanhas da conta autorizada</small></div>')+
   '<label>Campanha cadastrada<select data-campaign-target aria-label="Campanha existente"'+(scope==='create'?' name="newCampaignId"':' name="campaignId"')+'>'+
    '<option value="">Selecione uma campanha na sua conta</option></select></label>'+
   '<small>Selecione pelo nome. Campanhas ativas ou pausadas aparecem quando retornadas pela conta autorizada; resultados dependem do rastreamento.</small>'+
