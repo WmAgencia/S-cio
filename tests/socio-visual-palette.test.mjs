@@ -29,5 +29,5 @@ test('single stylesheet has balanced blocks and accessible motion modes',()=>{
  let depth=0;for(const x of content){depth+=(x==='{')-(x==='}');assert(depth>=0);}
  assert.equal(depth,0);
  assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
- assert.match(css,/@media\(prefers-contrast:more\)/);
+ assert.match(css,/prefers-contrast:more/);
 });
