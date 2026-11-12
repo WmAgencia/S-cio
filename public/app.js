@@ -165,7 +165,7 @@ function empty(icon,title,description,action=''){
 function badge(text,color='gray'){return '<span class="badge '+color+'">'+e(text)+'</span>';}
 function panel(title,description,body){return '<div class="card"><div class="panel-head"><div><h2>'+e(title)+'</h2>'+ (description?'<p>'+e(description)+'</p>':'')+'</div></div>'+body+'</div>';}
 function formValues(form){return Object.fromEntries(new FormData(form).entries());}
-function setLoading(){view.innerHTML='<div class="loading">Preparando seu espaço...</div>';}
+function setLoading(){view.innerHTML='<div class="loading socio-page-loading" role="status" aria-live="polite"><span class="socio-loading-sigil" aria-hidden="true">✳</span><span class="socio-loading-title">Preparando seu espaço</span><span class="socio-loading-copy">Carregando as informações da sua empresa…</span></div>';}
 function setupAuth(initialized){
  $('#authScreen').classList.remove('hidden');$('#appShell').classList.add('hidden');
  $('#loginForm').classList.toggle('hidden',!initialized);
