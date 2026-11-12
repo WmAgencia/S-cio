@@ -1634,3 +1634,21 @@ body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header s
  color:#5b687c!important;
 }
 body #appShell #view .wa-chat-preview em{color:#4540b2!important}
+
+
+/* Meta-only campaign association control: not a fake one-option selector. */
+body #appShell #view .px-campaign-picker{
+ display:flex!important;flex-direction:column!important;gap:10px!important;
+ background:#fafbfe!important;border:1px solid #e7eaf1!important;
+ border-radius:10px!important;padding:13px!important;
+ color:#344054!important;
+ box-shadow:none!important;
+}
+body #appShell #view .px-campaign-picker label{
+ color:#344054!important;font-weight:660!important;font-size:12px!important;
+}
+body #appShell #view .px-campaign-picker select{
+ background:#fff!important;color:#273449!important;
+ border:1px solid #d8dce5!important;
+}
+body #appShell #view .px-campaign-picker small{color:#667085!important}
