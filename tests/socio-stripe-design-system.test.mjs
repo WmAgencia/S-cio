@@ -175,3 +175,41 @@ test('computed colors are legible on production, Master, inbox, Meta and Thalita
   console.log('Stripe visual contract: '+metrics.length+' computed text pairs; minimum '+Math.min(...metrics.map(x=>x.ratio))+':1');
  }finally{await browser.close();}
 });
+
+
+test('mobile: cards are single-column and assistant occupies a usable screen-height panel', {timeout:40000},async t=>{
+ if(!chrome){t.skip('Chromium unavailable');return;}
+ let browser;
+ try{browser=await chromium.launch({executablePath:chrome,headless:true,args:['--no-sandbox']});}
+ catch(err){t.skip('Browser unavailable: '+String(err).slice(0,90));return;}
+ try{
+  const p=await browser.newPage({viewport:{width:390,height:844},isMobile:true,deviceScaleFactor:1});
+  const styles=cssImports.map(x=>read('public'+x)).join('\n');
+  await p.setContent('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">'+
+   '<style>'+styles+'</style></head><body><div id="appShell" class="app-shell">'+
+   '<aside class="sidebar"><div class="sidebar-logo">Sócio</div></aside>'+
+   '<div class="app-main"><header class="topbar">Visão geral</header><main id="view">'+
+   '<div class="px-workspace"><div class="px-kpi-grid">'+
+   '<article class="px-kpi">Conversas</article><article class="px-kpi">Mensagens</article></div></div>'+
+   '</main></div></div><div id="socioThalitaDock"><div class="px-assistant-window">'+
+   '<header><strong>Thalita</strong></header><div class="px-assistant-feed">Oi!</div></div></div></body></html>');
+  const x=await p.evaluate(()=>{
+   const kpi=document.querySelector('.px-kpi-grid');
+   const assistant=document.querySelector('.px-assistant-window');
+   const gridStyle=getComputedStyle(kpi);
+   const assistantStyle=getComputedStyle(assistant);
+   const cardOne=kpi.children[0].getBoundingClientRect();
+   const cardTwo=kpi.children[1].getBoundingClientRect();
+   const box=assistant.getBoundingClientRect();
+   return {grid:gridStyle.gridTemplateColumns,
+    first:cardOne,second:cardTwo,
+    assistant:box,
+    assistantPosition:assistantStyle.position,
+    viewportWidth:document.documentElement.clientWidth};
+  });
+  assert(x.second.top>x.first.top,'KPI cards should stack on narrow screens');
+  assert.equal(x.assistantPosition,'fixed');
+  assert(x.assistant.width<=x.viewportWidth,'Thalita must not exceed the viewport');
+  assert(x.assistant.height>=600,'Thalita must remain usable on 844px phones');
+ }finally{await browser.close();}
+});
