@@ -100,7 +100,7 @@ test('inline Facebook player remains inside Sócio and realtime refresh never te
  const ui=load('public/socio-workspace-ui.js'),css=load('public/socio-executive.css');
  for(const marker of ['/plugins/video.php','trustedVideoEmbed','createInlineFacebookVideo',
   'placeholder.replaceChildren(frame)','holder.replaceChildren(frame)',
-  'startLiveRefresh','},30000)','const playing=!!root.querySelector',
+  'startLiveRefresh','},60000)','const playing=!!root.querySelector',
   'if(playing){await updateWhilePlaying','getCache.clear()'])
   assert(ui.includes(marker),marker);
  assert(!ui.includes('Abrir vídeo na Meta'));
