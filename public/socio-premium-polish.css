@@ -852,11 +852,11 @@ body #appShell #view .px-budget-provider-pending .px-budget-brand>small {
  color:#b5c7b9!important;
 }
 body #appShell #view .px-budget-provider-pending .px-budget-stats {
- display:grid;align-items:center;grid-template-columns:repeat(3,minmax(0,1fr));
- gap:13px;flex:1;
+ display:flex;align-items:center;
+ gap:13px;flex:1;min-width:0;
 }
 body #appShell #view .px-budget-provider-pending .px-budget-stats .px-load-line {
- width:100%;height:29px;min-width:0;
+ width:auto;flex:1;height:29px;min-width:0;
  opacity:.48;
 }
 body #appShell #view .px-budget-provider-pending .px-load-status {
