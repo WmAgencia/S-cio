@@ -1,6 +1,7 @@
 // Sócio executive dashboard, connected-account directory and dedicated Meta Ads analytics.
 // Everything is read-only except explicit OAuth/selection/QR actions owned by existing APIs.
 (()=>{
+ const googleAdsVisible=()=>globalThis.SocioProductFeatures?.googleAdsVisible===true;
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const number=x=>Number(x||0).toLocaleString('pt-BR',{maximumFractionDigits:0});
  const money=(value,currency)=>{
@@ -74,7 +75,7 @@
    // empty rectangles while ad providers and company KPIs are loading.
    root.innerHTML='<div class="px-workspace px-overview px-overview-loading" aria-busy="true">'+
     '<section class="px-budget-top"><div class="px-budget-top-heading"><strong>Controle de verba</strong></div>'+
-    '<div class="px-budget-top-grid">'+Array.from({length:2},()=>'<article class="px-budget-account px-load-card" aria-hidden="true">'+
+    '<div class="px-budget-top-grid">'+Array.from({length:googleAdsVisible()?2:1},()=>'<article class="px-budget-account px-load-card" aria-hidden="true">'+
       '<div class="px-load-brand">'+skeleton+skeleton+'</div>'+
       '<div class="px-load-metrics">'+skeleton+skeleton+skeleton+'</div>'+
       '</article>').join('')+'</div></section>'+
@@ -353,7 +354,7 @@
    cached(api,'/api/waakg/channels',12000),
    authorized?cached(api,'/api/reports/monitor',16000):Promise.resolve({data:null,ok:false}),
    ads?loadMeta(api,'today').catch(()=>null):Promise.resolve(null),
-   ads?googleOverview():Promise.resolve({ok:false}),
+   ads&&googleAdsVisible()?googleOverview():Promise.resolve({ok:false}),
    ads?cached(api,'/api/marketing/tools/finance',45000):Promise.resolve({ok:false}),
    ads?cached(api,'/api/marketing/browser/status',30000):Promise.resolve({ok:false}),
   ];
@@ -490,7 +491,7 @@
     '<div class="px-budget-top-heading"><strong>Controle de verba</strong></div>'+
     '<div class="px-budget-top-grid">'+
      budgetHeaderItem('meta_ads','Meta Ads','meta',metaReady,meta?.spend,meta?.currency,metaBillingUrl?{finance,paymentsUrl:metaBillingUrl,alert:metaBilling.data?.balanceAlert}:{finance,alert:metaBilling.data?.balanceAlert})+
-     budgetHeaderItem('google_ads','Google Ads','google',googleReady,googleMicros,googleCode)+
+     (googleAdsVisible()?budgetHeaderItem('google_ads','Google Ads','google',googleReady,googleMicros,googleCode):'')+
     '</div>'+
    '</section>'+
    '<div class="px-page-heading"><div><span class="px-eyebrow">CENTRAL DE INTELIGÊNCIA</span><h1>Visão geral</h1><p>Operação, atendimento e publicidade da sua empresa em um único painel.</p></div>'+
@@ -507,9 +508,11 @@
    '<div class="px-ads-strip">'+
     '<article class="px-ads-metric"><div><span class="px-brand-dot meta"></span><strong>Meta Ads</strong><small>Gasto hoje</small></div><b>'+ (metaReady?money(meta.spend,meta.currency):progressive?'Consultando…':'Não disponível')+'</b>'+
      '<small>'+(metaReady?'Retornado pela conta autorizada':'Conecte ou valide a conta para consultar')+'</small></article>'+
-    '<article class="px-ads-metric"><div><span class="px-brand-dot google"></span><strong>Google Ads</strong><small>Gasto hoje</small></div><b>'+(googleReady?money(googleMicros,googleCode):'Não disponível')+'</b>'+
-     '<small>'+(googleReady?'Moeda da conta: '+(googleCode||'não identificada'):'Requer OAuth, conta selecionada e API autorizada')+'</small></article>'+
-    '<article class="px-ads-metric"><div><span class="px-brand-dot purple"></span><strong>Resultado de anúncios</strong><small>Hoje · Meta</small></div><b>'+(metaReady?number(meta.clicks)+' cliques':'Não disponível')+'</b>'+
+    (googleAdsVisible()?
+   '<article class="px-ads-metric"><div><span class="px-brand-dot google"></span><strong>Google Ads</strong><small>Gasto hoje</small></div><b>'+(googleReady?money(googleMicros,googleCode):'Não disponível')+'</b>'+
+     '<small>'+(googleReady?'Moeda da conta: '+(googleCode||'não identificada'):'Requer OAuth, conta selecionada e API autorizada')+'</small></article>'
+   :'')+
+   '<article class="px-ads-metric"><div><span class="px-brand-dot purple"></span><strong>Resultado de anúncios</strong><small>Hoje · Meta</small></div><b>'+(metaReady?number(meta.clicks)+' cliques':'Não disponível')+'</b>'+
      '<small>'+(metaReady&&meta.clicks?'CPC: '+money(meta.spend/meta.clicks,meta.currency):'Sem CPC verificável')+'</small></article>'+
    '</div>'+
    '<div class="px-dual">'+
@@ -553,7 +556,7 @@
      (connectedWa.length>8?'<small>Mais '+number(connectedWa.length-8)+' número(s).</small>':'')+'</div>':
      empty('Nenhum WhatsApp conectado no momento.'),
      '<button type="button" class="btn sm soft" data-px-connections>+ Conectar WhatsApp</button>')+
-   '<p class="px-provenance">Indicadores consolidados por empresa. Métricas publicitárias dependem das permissões Meta/Google; conversões atribuídas por anúncios não são comprovantes de pagamento. Nenhum número indisponível é substituído por uma estimativa.</p>'+
+   '<p class="px-provenance">Indicadores consolidados por empresa. Métricas publicitárias dependem das permissões das contas autorizadas; conversões atribuídas por anúncios não são comprovantes de pagamento. Nenhum número indisponível é substituído por uma estimativa.</p>'+
   '</div>';
   snapshots.set('overview',root.innerHTML);
   if(featuredAd){
@@ -1010,7 +1013,7 @@
   const [whatsapp,meta,google]=await Promise.all([
    cached(api,'/api/waakg/channels',12000),
    can(me,'marketing.read')?cached(api,'/api/marketing/official/status',20000):Promise.resolve({ok:false,data:null}),
-   can(me,'marketing.read')?cached(api,'/api/google-ads/status',20000):Promise.resolve({ok:false,data:null}),
+   can(me,'marketing.read')&&googleAdsVisible()?cached(api,'/api/google-ads/status',20000):Promise.resolve({ok:false,data:null}),
   ]);
   if(renderId!==renderSerial)return;
   const manageWa=can(me,'channels.manage'),manageAds=can(me,'marketing.manage');
@@ -1031,13 +1034,13 @@
     (metaConnected?'<label class="px-account-select">Conta de anúncios<select id="pxMetaAccount"><option value="">Carregando contas…</option></select></label>':'')+'</div>'+
     '<div class="px-conn-actions">'+connectBtn(metaConnected?'Reconectar Facebook':'Conectar com Facebook','data-px-meta',manageAds&&meta.data?.configured!==false)+
       (metaConnected?connectBtn('Usar conta selecionada','data-px-meta-select',manageAds):'')+'</div></section>'+
-   '<section class="px-conn-card"><div class="px-conn-head"><span class="px-conn-icon google">G</span><div><h2>Google Ads</h2><p>Autorização pela conta Google</p></div><span class="px-status '+(googleConnected?'on':'off')+'">'+(googleConnected?'Autorizado':'Pendente')+'</span></div>'+
+   (googleAdsVisible()?'<section class="px-conn-card"><div class="px-conn-head"><span class="px-conn-icon google">G</span><div><h2>Google Ads</h2><p>Autorização pela conta Google</p></div><span class="px-status '+(googleConnected?'on':'off')+'">'+(googleConnected?'Autorizado':'Pendente')+'</span></div>'+
     '<div class="px-conn-list"><p class="px-muted">'+(googleSelected?'Conta Google Ads: <strong>'+esc(googleSelected)+'</strong>':
        googleConnected?'Autorizada, aguardando seleção da conta.':'Nenhuma conta Google Ads conectada.')+'</p>'+
       (googleConnected?'<label class="px-account-select">Conta Google Ads<select id="pxGoogleAccount"><option value="">Carregando contas…</option></select></label>':'')+
       '<p class="px-muted">Leitura de campanhas; criação de anúncios Google ainda não habilitada.</p></div>'+
     '<div class="px-conn-actions">'+connectBtn(googleConnected?'Reconectar Google':'Conectar com Google','data-px-google',manageAds&&google.data?.configured!==false)+
-      (googleConnected?connectBtn('Usar conta selecionada','data-px-google-select',manageAds):'')+'</div></section>'+
+      (googleConnected?connectBtn('Usar conta selecionada','data-px-google-select',manageAds):'')+'</div></section>':'')+
    '</div><p class="px-provenance">Nenhuma senha, token ou chave de aplicativo é solicitada nesta página. As permissões são concedidas nas telas oficiais dos provedores. WhatsApp exige leitura do QR Code.</p>'+
    '</div>';
   snapshots.set('connections',root.innerHTML);
@@ -1052,7 +1055,7 @@
    ev.currentTarget.disabled=true;try{const r=await api('/api/marketing/official/connect','POST',{});safeLocation(r.authorizationUrl,'facebook.com');}
    catch(e){root.querySelector('.px-provenance').textContent=e.message;ev.currentTarget.disabled=false;}
   });
-  root.querySelector('[data-px-google]')?.addEventListener('click',async ev=>{
+  if(googleAdsVisible())root.querySelector('[data-px-google]')?.addEventListener('click',async ev=>{
    ev.currentTarget.disabled=true;try{const r=await api('/api/google-ads/connect','POST',{});safeLocation(r.authorizationUrl,'accounts.google.com');}
    catch(e){root.querySelector('.px-provenance').textContent=e.message;ev.currentTarget.disabled=false;}
   });
@@ -1070,7 +1073,7 @@
     catch(e){root.querySelector('.px-provenance').textContent=e.message;ev.currentTarget.disabled=false;}
    });
   }
-  if(googleConnected){
+  if(googleAdsVisible()&&googleConnected){
    const select=root.querySelector('#pxGoogleAccount');
    optional(api,'/api/google-ads/accounts').then(result=>{
     if(!select?.isConnected)return;select.replaceChildren(new Option('Escolha uma conta…',''));
