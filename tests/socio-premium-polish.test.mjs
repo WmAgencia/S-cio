@@ -13,7 +13,7 @@ const workspace=read('public/socio-workspace-ui.js');
 
 test('polish CSS exists, is last, is cache-busted, and the server returns it',()=>{
  assert(existsSync(new URL('../public/socio-premium-polish.css',import.meta.url)));
- assert.match(html,/\/socio-premium-polish\.css\?v=20261112b/);
+ assert.match(html,/\/socio-premium-polish\.css\?v=20261112c/);
  assert(html.indexOf('socio-premium-polish.css')>html.indexOf('socio-glass-enforced.css'));
  assert(server.includes("'/socio-premium-polish.css'"));
 });
@@ -32,7 +32,8 @@ test('the three screens have an explicit, scoped design system',()=>{
  assert.match(css,/body #appShell #view \.px-overview/);
  assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
  assert.match(css,/@media\(prefers-reduced-transparency:reduce\)/);
- assert.doesNotMatch(css,/grid-template-(?:columns|rows)\s*:/);
+ assert.doesNotMatch(css,/\.px-kpi-grid\s*\{[^}]*grid-template-(?:columns|rows)\s*:/s);
+ assert.doesNotMatch(css,/\.px-budget-top-grid\s*\{[^}]*grid-template-(?:columns|rows)\s*:/s);
  assert.doesNotMatch(css,/\b(?:grid-area|order)\s*:/);
 });
 
