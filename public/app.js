@@ -2,6 +2,7 @@
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,workspace:'production',aiTab:'training',catalogSearch:'',catalogStock:'all'};
+const googleAdsVisible=()=>globalThis.SocioProductFeatures?.googleAdsVisible===true;
 const featureLabels={whatsapp:'Atendimento WhatsApp',catalog:'Produtos e serviços',quotes:'Orçamentos e pedidos',meta_ads:'Meta Ads',ai:'Inteligência Artificial',team:'Equipe'};
 const featureView={inbox:'whatsapp',products:'catalog',sales:'quotes',quotes:'quotes',marketing:'meta_ads',training:'ai',team:'team'};
 const featureKeys=Object.keys(featureLabels);
@@ -785,7 +786,7 @@ async function products(selected=null){
  const showDetails=selected==='new'||Boolean(selected);
  const [metaChoices,googleChoices]=canReadCampaigns&&showDetails?await Promise.all([
   api('/api/marketing/tools/campaigns').then(d=>d.items||[]).catch(()=>[]),
-  api('/api/google-ads/campaigns').then(d=>d.campaigns||[]).catch(()=>[])
+  googleAdsVisible()?api('/api/google-ads/campaigns').then(d=>d.campaigns||[]).catch(()=>[]):Promise.resolve([])
  ]):[[],[]];
  const campaignOptions={
   meta_ads:metaChoices.map(x=>({id:String(x.id),name:String(x.name||x.id),status:String(x.effective_status||x.status||'') })),
@@ -793,7 +794,7 @@ async function products(selected=null){
  };
  const campaignSelect=(scope)=>!featureAvailable('meta_ads')?'':'<div class="px-campaign-picker">'+
   '<label>Plataforma<select data-campaign-provider aria-label="Plataforma de anúncios"'+(scope==='create'?' name="newCampaignProvider"':' name="provider"')+'>'+
-   '<option value="meta_ads">Meta Ads</option><option value="google_ads">Google Ads</option></select></label>'+
+   '<option value="meta_ads">Meta Ads</option>'+(googleAdsVisible()?'<option value="google_ads">Google Ads</option>':'')+'</select></label>'+
   '<label>Campanha cadastrada<select data-campaign-target aria-label="Campanha existente"'+(scope==='create'?' name="newCampaignId"':' name="campaignId"')+'>'+
    '<option value="">Selecione uma campanha na sua conta</option></select></label>'+
   '<small>Selecione pelo nome. Campanhas ativas ou pausadas aparecem quando retornadas pela conta autorizada; resultados dependem do rastreamento.</small>'+
