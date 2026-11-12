@@ -1,0 +1,323 @@
+/*
+ * Sócio · Stripe-inspired Design System (2026-11-12)
+ * Canonical LIGHT layer: intentionally replaces the six incremental glass/dark
+ * overrides that had accumulated over the previous design explorations.
+ * Keeps original module CSS for layout and functional behavior.
+ * Stripe is a visual reference, not a copied brand or proprietary stylesheet.
+ *
+ * Tokens: paper canvas, white cards, ink-first typography, restrained violet,
+ * semantic statuses, 1px borders, low elevation and no backdrop blur.
+ */
+:root {
+ --bg:#f7f8fa; --surface:#ffffff; --ink:#202735; --muted:#667085;
+ --line:#e5e7eb; --purple:#605dec; --purple-light:#f0efff;
+ --sidebar:#f5f6f9; --green:#16865d; --shadow:0 3px 16px rgba(27,39,60,.035);
+ --px-violet:#605dec;--px-navy:#202735;--px-muted:#667085;
+ --px-border:#e5e7eb;--px-pale:#fafbfc;--px-green:#16865d;--px-blue:#4369c9;
+ color-scheme:light;
+}
+#appShell{
+ --stripe-canvas:#f7f8fa;
+ --stripe-card:#fff;
+ --stripe-card-soft:#fbfcff;
+ --stripe-sidebar:#f5f6f9;
+ --stripe-nav-active:#eeefff;
+ --stripe-ink:#202735;
+ --stripe-copy:#344054;
+ --stripe-muted:#667085;
+ --stripe-subtle:#8390a2;
+ --stripe-line:#e5e7eb;
+ --stripe-line-soft:#eff1f5;
+ --stripe-accent:#605dec;
+ --stripe-accent-hover:#514ed5;
+ --stripe-accent-soft:#f0efff;
+ --stripe-accent-ink:#fff;
+ --stripe-success:#16865d;
+ --stripe-success-soft:#e9f8ef;
+ --stripe-warning:#a66a1e;
+ --stripe-warning-soft:#fff5e6;
+ --stripe-danger:#ba3c49;
+ --stripe-danger-soft:#fff0f2;
+ --stripe-blue:#3e74cc;
+ --stripe-blue-soft:#eef4ff;
+ --stripe-shadow:0 1px 3px rgba(25,35,55,.035),0 7px 20px rgba(25,35,55,.035);
+ --stripe-shadow-hover:0 3px 9px rgba(25,35,55,.04),0 13px 26px rgba(25,35,55,.065);
+ --stripe-radius:13px;
+ --sx-bg:#f7f8fa;--sx-panel:#fff;--sx-panel-elev:#fff;--sx-panel-deep:#f8f9fb;
+ --sx-line:#e5e7eb;--sx-line-strong:#d6dbe5;
+ --sx-fg:#202735;--sx-fg-soft:#344054;--sx-fg-muted:#667085;
+ --sx-shadow:var(--stripe-shadow);
+ --socio-bg:#f7f8fa;--socio-sidebar:#f5f6f9;--socio-top:#fff;
+ --socio-surface:#fff;--socio-surface-raised:#fff;--socio-ink:#202735;
+ --socio-copy:#344054;--socio-muted:#667085;--socio-soft:#718097;
+ --socio-line:#e5e7eb;--socio-glass-panel:#fff;
+ --polish-panel:#fff;--polish-raised:#fafbfc;--polish-muted:#667085;
+ --polish-ink:#202735;
+ background:var(--stripe-canvas)!important;
+ color:var(--stripe-ink)!important;
+ color-scheme:light;
+ font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+}
+#appShell[data-workspace="master"]{
+ --stripe-sidebar:#f1f2fa;
+ --stripe-nav-active:#ebeaff;
+ --stripe-canvas:#f6f7fb;
+ --stripe-card-soft:#fbfbff;
+}
+html:has(#appShell:not(.hidden)),body:has(#appShell:not(.hidden)){
+ background:#f7f8fa!important;
+ color:#202735!important;
+ color-scheme:light!important;
+}
+body #appShell.app-shell{background:var(--stripe-canvas)!important;color:#202735!important;}
+body #appShell .app-main{
+ background:var(--stripe-canvas)!important;
+ color:#202735!important;
+ min-width:0;
+}
+body #appShell[data-workspace="master"] .app-main{background:#f6f7fb!important}
+body #appShell #view{
+ background:transparent!important;
+ color:#202735!important;
+ max-width:1510px;
+ padding:31px 40px 60px;
+}
+body #appShell .site-footer{background:transparent!important;color:#8c97a8!important}
+
+/* Navigation: compact, readable and distinctly separated by workspace. */
+body #appShell .sidebar{
+ background:var(--stripe-sidebar)!important;
+ border-right:1px solid var(--stripe-line)!important;
+ color:#344054!important;
+ box-shadow:none!important;
+ padding:26px 14px 17px;
+}
+body #appShell .brand-mark{color:#344054!important;font-weight:800}
+body #appShell .brand-mark span{color:var(--stripe-accent)!important}
+body #appShell .sidebar-logo{margin-bottom:29px}
+body #appShell .sidebar-logo strong{color:#222c3d!important;font-weight:750!important;letter-spacing:-.06em!important}
+body #appShell .sidebar-logo small{color:#8791a2!important;letter-spacing:.11em!important}
+body #appShell .sidebar-label{
+ color:#8590a3!important;
+ font-size:10px!important;
+ letter-spacing:.09em!important;
+ font-weight:690!important;
+ margin:14px 12px 9px;
+}
+body #appShell .sidebar-label.inner{margin-top:23px}
+body #appShell .workspace-box{
+ background:#fff!important;
+ border:1px solid var(--stripe-line)!important;
+ box-shadow:0 1px 3px rgba(25,35,55,.035)!important;
+ color:#202735!important;
+ border-radius:12px!important;
+ margin:0 5px 22px!important;
+ padding:11px!important;
+}
+body #appShell .workspace-circle{
+ background:#ebeaff!important;
+ color:#514cd6!important;
+ border:1px solid #dfdcff!important;
+ border-radius:10px;
+}
+body #appShell .workspace-label small{color:#778398!important;font-weight:690!important}
+body #appShell .workspace-label strong{color:#202735!important;font-weight:720!important}
+body #appShell .workspace-chevron{color:#8690a3!important}
+body #appShell .nav{gap:3px}
+body #appShell .nav-item,
+body #appShell .sidebar-bottom .nav-item{
+ background:transparent!important;
+ border:1px solid transparent!important;
+ border-radius:10px!important;
+ color:#526072!important;
+ font-weight:575!important;
+ min-height:40px;
+ text-shadow:none!important;
+ box-shadow:none!important;
+ transition:background-color .17s ease,color .17s ease,border-color .17s ease!important;
+}
+body #appShell .nav-item .nav-symbol{color:#728094!important;opacity:1}
+body #appShell .nav-item:hover:not(.selected){
+ background:#e9ecf3!important;
+ color:#202735!important;
+ border-color:transparent!important;
+ transform:none!important;
+}
+body #appShell .nav-item.selected,
+body #appShell #masterNav .nav-item.selected{
+ background:#eeefff!important;
+ color:#4a49c4!important;
+ border:1px solid #e1e1fa!important;
+ box-shadow:none!important;
+ font-weight:730!important;
+}
+body #appShell .nav-item.selected .nav-symbol{color:#605dec!important}
+body #appShell .nav>.socio-glass-nav-pill{display:none!important}
+body #appShell .sidebar-bottom{
+ border-color:var(--stripe-line)!important;
+}
+body #appShell .sidebar-bottom .nav-item.logout{color:#8a5a63!important}
+body #appShell .sidebar-bottom .nav-item.logout:hover{background:#ffedf0!important;color:#a63448!important}
+body #appShell[data-workspace="master"] .workspace-box{
+ border-color:#dadbfa!important;background:#fff!important;
+}
+body #appShell[data-workspace="master"] .workspace-circle{background:#e8e6ff!important;color:#4c49b5!important}
+body #appShell[data-workspace="master"] .sidebar{background:#f1f2fa!important}
+body #appShell[data-workspace="master"] .nav-item.selected{background:#e9e8ff!important}
+
+/* Toolbar: no decorative glass, no blurred page background. */
+body #appShell .topbar{
+ height:70px;
+ background:#fff!important;
+ border-bottom:1px solid var(--stripe-line)!important;
+ color:#344054!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+ box-shadow:none!important;
+ padding:0 40px;
+}
+body #appShell[data-workspace="master"] .topbar{background:#fff!important}
+body #appShell .quick-search{
+ background:#fafbfc!important;border:1px solid #e7e9ef!important;
+ color:#667085!important;border-radius:10px!important;
+ box-shadow:none!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+}
+body #appShell .quick-search:hover{background:#f3f4f9!important;border-color:#cdd2e1!important}
+body #appShell .quick-search :is(svg,span){color:#667085!important}
+body #appShell .breadcrumb{color:#798396!important}
+body #appShell .breadcrumb strong{color:#263244!important;font-weight:690!important}
+body #appShell .breadcrumb span{color:#b4bbc9!important}
+body #appShell .top-pill{
+ background:#f4f6f9!important;
+ border:1px solid #e7eaf0!important;
+ color:#556477!important;
+ box-shadow:none!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+ border-radius:99px!important;
+}
+body #appShell .top-pill i{background:#16865d!important;box-shadow:none!important}
+body #appShell .user-profile-copy strong{color:#283246!important}
+body #appShell .user-profile-copy small{color:#7a8799!important}
+body #appShell .user-chip{background:#ecebfd!important;color:#5653ce!important;border:1px solid #dddafa!important}
+body #appShell #view :is(.view-heading h1,.px-page-heading h1,.master-hero h1,.socio-clean-head h1,
+ .socio-clean-head h2,.auth-heading h2){
+ color:#202735!important;letter-spacing:-.045em!important;font-weight:755!important;
+}
+body #appShell #view :is(.view-heading p,.px-page-heading p,.master-hero p,.socio-clean-head p){
+ color:#667085!important;
+}
+body #appShell #view :is(.eyebrow,.px-eyebrow,.master-eyebrow,.lucid-overline,.wa-inbox-eyebrow){
+ color:#605dec!important;letter-spacing:.12em!important;font-weight:745!important;
+}
+body #appShell #view :is(.section-title,.px-section-heading h2,.panel-head h2,.master-panel-head h2,
+ .px-panel-head h2,.card-heading h2){
+ color:#273449!important;font-weight:735!important;
+}
+body #appShell #view :is(p,small,label,legend,summary,li,dt,dd,th,td,blockquote){
+ text-shadow:none!important;
+}
+body #appShell #view :is(.muted,.px-muted,.px-provenance,.form-note,.ember-kpi-meta,
+ .px-panel-head p,.master-panel-head p,.wa-chat-preview,.wa-chat-meta,
+ .wa-message-meta,.px-budget-meta-metric>span,.px-conn-row small){
+ color:#667085!important;
+}
+body #appShell #view :is(.px-kpi-number,.master-kpi strong,.ember-kpi-value,
+ .lucid-kpi-number,.px-ads-metric>b,.px-budget-meta-metric>strong){
+ color:#202735!important;
+}
+
+/* Universal components. Inputs and actions get both foreground and background. */
+body #appShell #view :is(.card,.panel,.callout,.lucid-card,.ember-card,.ember-kpi,
+ .ember-activity,.ember-recent-card,.ember-ai-card,.ember-qr-card,
+ .px-kpi,.px-panel,.px-ads-metric,.px-conn-card,.master-panel,.master-kpi,
+ .socio-clean-section,.socio-training-center,.socio-list-panel,
+ .catalog-product,.quote-request-item,.commerce-lead-card,.commerce-summary>div){
+ background:#fff!important;
+ border:1px solid var(--stripe-line)!important;
+ border-radius:var(--stripe-radius)!important;
+ box-shadow:var(--stripe-shadow)!important;
+ color:#344054!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+}
+body #appShell #view :is(.card,.panel,.px-panel,.px-kpi,.master-panel,.master-kpi):hover{
+ border-color:#d4d9e5!important;
+ box-shadow:var(--stripe-shadow-hover)!important;
+}
+body #appShell #view :is(.btn,button.primary,button.soft,.px-quick-action,.wa-small-action,
+ .wa-round-icon,.px-range-btn,.master-text-action){
+ border-radius:9px!important;
+ font-weight:675!important;
+ transition:background-color .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease!important;
+ transform:none!important;
+}
+body #appShell #view :is(.btn:not(.primary),.px-quick-action,.wa-small-action,.wa-round-icon,
+ button.soft,.px-campaign-back,.master-text-action){
+ background:#fff!important;
+ border:1px solid #dce0e8!important;
+ color:#344054!important;
+ box-shadow:0 1px 2px rgba(25,40,60,.025)!important;
+}
+body #appShell #view :is(.btn:not(.primary),.px-quick-action,.wa-small-action,
+ .wa-round-icon,button.soft,.master-text-action):hover:not(:disabled){
+ background:#f7f8fc!important;
+ border-color:#cbd2df!important;color:#263244!important;
+}
+body #appShell #view :is(.btn.primary,button.primary,.wa-compose-send,.ember-ai-cta,.ember-qr-cta,
+ #newProduct,.px-campaign-confirm){
+ background:#605dec!important;
+ border:1px solid #605dec!important;
+ color:#fff!important;
+ box-shadow:0 1px 2px rgba(64,61,200,.10)!important;
+ text-shadow:none!important;
+}
+body #appShell #view :is(.btn.primary,button.primary,.wa-compose-send,.ember-ai-cta,.ember-qr-cta,
+ #newProduct,.px-campaign-confirm):hover:not(:disabled){
+ background:#514ed5!important;border-color:#514ed5!important;color:#fff!important;
+}
+body #appShell #view :is(.btn.primary,button.primary,.wa-compose-send,.ember-ai-cta,.ember-qr-cta,
+ #newProduct,.px-campaign-confirm) :is(span,small,strong,b,em,svg){
+ color:inherit!important;
+}
+body #appShell #view :is(button,.btn):disabled{opacity:.58!important;cursor:not-allowed!important;filter:none!important}
+body #appShell #view :is(input:not([type=checkbox]):not([type=radio]),textarea,select,option){
+ background:#fff!important;
+ border:1px solid #d8dce5!important;
+ border-radius:9px!important;
+ color:#273449!important;
+ caret-color:#605dec!important;
+ -webkit-text-fill-color:initial!important;
+ color-scheme:light!important;
+ box-shadow:none!important;
+}
+body #appShell #view :is(input,textarea)::placeholder{color:#8a96a7!important;opacity:1!important}
+body #appShell #view :is(input,textarea,select):focus{
+ border-color:#7772ed!important;
+ outline:none!important;
+ box-shadow:0 0 0 3px rgba(96,93,236,.115)!important;
+}
+body #appShell #view :is(button,.btn,input,select,textarea,a,[tabindex]):focus-visible{
+ outline:2px solid #605dec!important;outline-offset:3px!important;
+}
+body #appShell #view input[type=checkbox],
+body #appShell #view input[type=radio]{accent-color:#605dec!important}
+body #appShell #view :is(.badge,.px-status,.catalog-status,.master-status,.ember-status,.ps-pill){
+ background:#f4f6f8!important;border:1px solid #e2e6ed!important;
+ color:#47566a!important;
+ box-shadow:none!important;
+}
+body #appShell #view :is(.badge.green,.px-status.on,.master-status-active,.catalog-status.yes,
+ .ps-pill.approved,.master-status.active){
+ background:#e9f8ef!important;color:#137147!important;border-color:#c9e8d5!important;
+}
+body #appShell #view :is(.badge.yellow,.master-status-trial,.px-budget-warning){
+ background:#fff5e6!important;color:#98611c!important;border-color:#f2d8a9!important;
+}
+body #appShell #view :is(.badge.red,.master-status-paused,.catalog-status.no,.ps-error){
+ background:#fff0f2!important;color:#ab3244!important;border-color:#f1cdd4!important;
+}
+body #appShell #view :is(.badge,.px-status,.catalog-status,.master-status,.ps-pill)
+ :is(span,small,strong,b){color:inherit!important}
+body #appShell #view .px-brand-dot.meta{background:#1778d4!important}
+body #appShell #view .px-brand-dot.green{background:#16865d!important}
+body #appShell #view .px-brand-dot.purple{background:#605dec!important}
+body #appShell #view .px-brand-dot.google{background:#e4aa31!important}
