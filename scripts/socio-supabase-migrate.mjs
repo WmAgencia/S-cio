@@ -62,7 +62,10 @@ async function tablePk(db,schema,table){
  return r.rows.map(x=>x.attname);
 }
 export function compareTableShape(table,origin,destination,originPk,targetPk){
- if(!origin.length||JSON.stringify(origin)!==JSON.stringify(destination))
+ // Physical column order drifts as ALTER TABLE ... ADD COLUMN accumulates in
+ // production; it carries no meaning for a copy that names every column.
+ const canonical=rows=>JSON.stringify([...rows].sort((a,b)=>a.column_name<b.column_name?-1:a.column_name>b.column_name?1:0));
+ if(!origin.length||canonical(origin)!==canonical(destination))
   throw new Error('Column schema drift: '+table);
  if(!originPk.length||JSON.stringify(originPk)!==JSON.stringify(targetPk))
   throw new Error('Primary key schema drift: '+table);
