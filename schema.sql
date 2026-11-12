@@ -1164,3 +1164,34 @@ CREATE TABLE IF NOT EXISTS meta_billing_alerts (
  resolved_at timestamptz,
  PRIMARY KEY(tenant_id,user_id,account_id)
 );
+
+-- Defense in depth, applied on every boot (idempotent and non-fatal).
+-- The runtime connects as the table owner, which bypasses row security; any
+-- other role — a leaked credential, a future worker, an admin tool — gets no
+-- implicit access to tenant data. Owner queries are unaffected.
+DO $$
+DECLARE schema_name text := current_schema(); table_name text;
+BEGIN
+ BEGIN
+  EXECUTE format('REVOKE ALL ON SCHEMA %I FROM PUBLIC', schema_name);
+  EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA %I REVOKE ALL ON TABLES FROM PUBLIC', schema_name);
+  EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA %I REVOKE ALL ON SEQUENCES FROM PUBLIC', schema_name);
+ EXCEPTION WHEN insufficient_privilege THEN
+  RAISE WARNING 'socio: could not revoke default privileges on schema %', schema_name;
+ END;
+ FOR table_name IN SELECT tablename FROM pg_tables WHERE schemaname=schema_name LOOP
+  BEGIN
+   EXECUTE format('ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY', schema_name, table_name);
+   EXECUTE format('REVOKE ALL ON TABLE %I.%I FROM PUBLIC', schema_name, table_name);
+  EXCEPTION WHEN insufficient_privilege THEN
+   RAISE WARNING 'socio: could not protect table %', table_name;
+  END;
+ END LOOP;
+ FOR table_name IN SELECT sequencename FROM pg_sequences WHERE schemaname=schema_name LOOP
+  BEGIN
+   EXECUTE format('REVOKE ALL ON SEQUENCE %I.%I FROM PUBLIC', schema_name, table_name);
+  EXCEPTION WHEN insufficient_privilege THEN
+   RAISE WARNING 'socio: could not protect sequence %', table_name;
+  END;
+ END LOOP;
+END $$;

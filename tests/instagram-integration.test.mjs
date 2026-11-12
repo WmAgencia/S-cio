@@ -13,7 +13,8 @@ const env={
  INSTAGRAM_APP_ID:'12345678',INSTAGRAM_APP_SECRET:'not-a-real-app-secret-fixture',
  INSTAGRAM_WEBHOOK_VERIFY_TOKEN:'fixture-only-verification',
  CHANNEL_ENCRYPTION_KEY:'integration-test-only-long-encryption-key-2026-2026',
- SOCIO_PUBLIC_URL:'https://socio.example.test',INSTAGRAM_GRAPH_VERSION:'v26.0'
+ SOCIO_PUBLIC_URL:'https://socio.example.test',INSTAGRAM_GRAPH_VERSION:'v26.0',
+ SOCIO_OUTBOUND_ENABLED:'true'
 };
 const sign=raw=>'sha256='+createHmac('sha256',env.INSTAGRAM_APP_SECRET).update(raw).digest('hex');
 const rawEvent=(mid='fixture-1',recipient='9988776655',sender='1234512345',when=Date.now())=>Buffer.from(JSON.stringify({
@@ -121,6 +122,9 @@ test('real ephemeral PostgreSQL: OAuth, isolation, HMAC, idempotency, 23h manual
  assert.equal(conversation.customer_phone,'ig:1234512345');
  await assert.rejects(sendInstagramReply(pool,{tenantId:beta,conversationId:conversation.id,
   userId:userB,text:'Não permitido',clientRequestId:randomUUID(),env,request}),e=>e.status===403);
+ await assert.rejects(sendInstagramReply(pool,{tenantId:alpha,conversationId:conversation.id,
+  userId:userA,text:'Desligado',clientRequestId:randomUUID(),
+  env:{...env,SOCIO_OUTBOUND_ENABLED:'false'},request}),e=>e.status===503);
  const messageId=randomUUID();
  const outbound=await sendInstagramReply(pool,{tenantId:alpha,conversationId:conversation.id,
   userId:userA,text:'Olá! Vamos ajudar.',clientRequestId:messageId,env,request});

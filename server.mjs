@@ -29,7 +29,7 @@ import {connectPipeboard,listMarketing,disconnectMarketing} from './marketing-in
 import {instagramReady,beginInstagramOAuth,completeInstagramOAuth,ingestInstagramWebhook,revokeInstagramAccount} from './instagram-integration.mjs';
 import {maintenanceEnabled,writesBlocked,workersBlocked} from './migration-guard.mjs';
 import {TABLES as MIGRATION_TABLES} from './scripts/socio-supabase-migrate.mjs';
-import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier} from './lib.mjs';
+import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier,clientIp} from './lib.mjs';
 import {permissionsFor,requirePermission,allowedNewMemberRole,validateMemberPatch} from './team-permissions.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
 import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
@@ -123,7 +123,6 @@ function limiter(map,key,windowMs,max){
  }
  value.count++;return value.count<=max;
 }
-function clientIp(req){return String(req.socket.remoteAddress||'unknown');}
 function sessionCookie(token,clear=false){
  return 'socio_session='+(clear?'':encodeURIComponent(token))+'; Path=/; HttpOnly; SameSite=Strict'+(process.env.NODE_ENV==='production'?'; Secure':'')+(clear?'; Max-Age=0':'; Max-Age=604800');
 }
