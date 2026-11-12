@@ -10,16 +10,17 @@
   let report;
   try{report=await api('/api/integrations/readiness');}
   catch(e){state.textContent='Não foi possível verificar as integrações: '+e.message;return;}
-  state.textContent=report.readyChecks+' de '+report.totalChecks+
+  const visibleTasks=(report.tasks||[]).filter(item=>globalThis.SocioProductFeatures?.googleAdsVisible===true||item.id!=='google');
+  state.textContent=visibleTasks.filter(item=>item.verified).length+' de '+visibleTasks.length+
    ' integrações com evidência de conexão. Configurar não é o mesmo que homologar.';
-  for(const item of report.tasks){
+  for(const item of visibleTasks){
    const block=el('section');block.className='panel';body.append(block);
    block.append(el('strong',item.name+' — '+(item.verified?'conexão verificada':item.configured?'configurada, aguardando teste':'pendente')));
    block.append(el('p',item.action));
    for(const reason of (item.blockers||[]).slice(0,5))block.append(el('p','Pendente: '+reason));
   }
   const google=report.tasks.find(x=>x.id==='google');
-  if(!google?.configured)return;
+  if(globalThis.SocioProductFeatures?.googleAdsVisible!==true||!google?.configured)return;
   const group=el('section');group.className='panel';body.append(group);
   group.append(el('h3','Google Ads'));
   const feedback=el('p','A conta deve autorizar o acesso pelo Google. Nenhuma campanha será criada.');feedback.setAttribute('role','status');group.append(feedback);
