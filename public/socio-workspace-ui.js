@@ -67,10 +67,32 @@
  const setPreview=(root,kind)=>{
   const html=snapshots.get(kind);
   if(html){root.innerHTML=html;return;}
-  // Render real section chrome immediately, not a full-page loading message.
-  root.innerHTML='<div class="px-workspace px-initial-view"><div class="px-page-heading"><div><h1>'+
-   ({overview:'Visão geral',marketing:'Meta Ads',connections:'Conexões'}[kind]||'Sócio')+
-   '</h1></div></div><div class="px-initial-grid"><div></div><div></div><div></div></div></div>';
+  const title=({overview:'Visão geral',marketing:'Meta Ads',connections:'Conexões'}[kind]||'Sócio');
+  const skeleton='<span class="px-load-line" aria-hidden="true"></span>';
+  if(kind==='overview'){
+   // Final-geometry placeholders: no white default cards, wrong balances or
+   // empty rectangles while ad providers and company KPIs are loading.
+   root.innerHTML='<div class="px-workspace px-overview px-overview-loading" aria-busy="true">'+
+    '<section class="px-budget-top"><div class="px-budget-top-heading"><strong>Controle de verba</strong></div>'+
+    '<div class="px-budget-top-grid">'+Array.from({length:2},()=>'<article class="px-budget-account px-load-card" aria-hidden="true">'+
+      '<div class="px-load-brand">'+skeleton+skeleton+'</div>'+
+      '<div class="px-load-metrics">'+skeleton+skeleton+skeleton+'</div>'+
+      '</article>').join('')+'</div></section>'+
+    '<div class="px-page-heading"><div><span class="px-eyebrow">CENTRAL DE INTELIGÊNCIA</span>'+
+    '<h1>Visão geral</h1><p>Preparando os indicadores da sua empresa</p></div></div>'+
+    '<div class="px-kpi-grid">'+Array.from({length:6},()=>'<article class="px-kpi px-load-card" aria-hidden="true">'+
+      skeleton+skeleton+skeleton+'</article>').join('')+'</div>'+
+    '<p class="px-load-status" role="status">Consultando dados confirmados da empresa…</p>'+
+    '</div>';
+   return;
+  }
+  root.innerHTML='<div class="px-workspace px-initial-view px-screen-loading" aria-busy="true">'+
+   '<div class="px-page-heading"><div><h1>'+esc(title)+'</h1>'+
+   '<p>Carregando informações da empresa…</p></div></div>'+
+   '<div class="px-initial-grid" aria-hidden="true">'+
+   '<div class="px-load-card">'+skeleton+skeleton+'</div>'+
+   '<div class="px-load-card">'+skeleton+skeleton+'</div>'+
+   '<div class="px-load-card">'+skeleton+skeleton+'</div></div></div>';
  };
  const mediaUrl=(value)=>{
   if(typeof value!=='string'||value.length>2600)return null;
@@ -394,8 +416,8 @@
    const browserObserved=billing?.finance?.availableFundsSource==='meta_billing_browser';
    const billingStatus=billing?.finance?.availableFundsStatus;
    const billingExplanation=provider==='meta_ads'&&!fundsAvailable&&connected?
-    billingSession==='disconnected'?'Sua conta de anúncios está conectada, mas falta entrar no faturamento uma vez dentro do Sócio. Use Conectar faturamento e ler saldo.':
-    billingSession==='connected'?'Sessão de faturamento salva. O valor ainda não foi identificado; use Atualizar saldo para verificar a tela.':
+    billingSession==='disconnected'?'A conta de anúncios está conectada. Consulte o saldo e faça recargas no faturamento oficial da Meta.':
+    billingSession==='connected'?'O saldo ainda não foi confirmado. Consulte o faturamento da Meta para verificar os valores.':
     billingSession==='unconfigured'?'O navegador de faturamento está desativado no servidor.':
     billingStatus==='field_restricted'?'A Meta restringiu a consulta do saldo pela API. É necessária uma leitura do faturamento.':
     prepay?'A conta é pré-paga, mas a Meta não retornou o saldo pela API. Consulte o faturamento.':
@@ -426,9 +448,8 @@
     (billingExplanation?'<small class="px-budget-limit">'+esc(billingExplanation)+'</small>':'')+
     (checkedLabel?'<small class="px-budget-limit">'+esc(checkedLabel)+'</small>':'')+
     (balanceAlert&&['low','critical'].includes(balanceAlert.state)?'<p class="px-budget-warning" role="status">'+esc(balanceAlert.reason)+'</p>':'')+
-    (provider==='meta_ads'&&connected&&can(me,'marketing.manage')?'<div class="px-budget-billing-actions"><button type="button" class="px-budget-billing-link" data-px-billing="pix">Adicionar saldo por Pix</button><button type="button" class="px-budget-billing-link" data-px-billing="balance">'+(billingSession==='disconnected'?'Conectar faturamento e ler saldo':'Atualizar saldo')+'</button></div>':'')+
-    (paymentUrl?'<a class="px-budget-billing-link" href="'+esc(paymentUrl)+'" target="_blank" rel="noopener noreferrer" title="Gerar recarga Pix no faturamento oficial da Meta, se disponível">Abrir recarga na Meta</a>':'')+
-    '<div class="px-budget-meter" role="img" aria-label="Percentual restante não verificado"></div>'+
+    (provider==='meta_ads'&&paymentUrl?'<div class="px-budget-recharge-footer"><span class="px-budget-recharge-caption">Recargas e pagamentos pela plataforma oficial</span><a class="px-budget-recharge-cta" href="'+esc(paymentUrl)+'" target="_blank" rel="noopener noreferrer" title="Abrir a recarga oficial da Meta em uma nova aba">Abrir recarga na Meta <span aria-hidden="true">↗</span></a></div>':'')+
+    (provider!=='meta_ads'?'<div class="px-budget-meter" role="img" aria-label="Percentual restante não verificado"></div>':'')+
     '</article>';
   };
 
@@ -517,12 +538,7 @@
     if(result.data?.quality==='thumbnail_only')placeholder?.classList.add('px-media-lowres');
    }).catch(()=>{});
   }
-  root.querySelectorAll('[data-px-billing]').forEach(button=>button.addEventListener('click',()=>{
-   window.SocioMetaBilling?.open({api,mode:button.dataset.pxBilling,onUpdated:()=>{
-    getCache.clear();
-    if(root.isConnected&&root.querySelector('.px-overview'))void overview({root,api,me,navigate,activityRange:range});
-   }});
-  }));
+
   root.querySelector('[data-px-reload]')?.addEventListener('click',()=>{
    getCache.clear();overview({root,api,me,navigate,activityRange:range});
   });
