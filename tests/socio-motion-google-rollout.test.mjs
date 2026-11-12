@@ -25,7 +25,8 @@ test('Google Ads remains stored but is disabled in every user-facing entry point
  assert.match(integrations,/visibleTasks=.*?\.filter\(item=>globalThis\.SocioProductFeatures/);
  assert.match(integrations,/googleAdsVisible!==true\|\|!google\?\.configured/);
  assert.match(app,/googleAdsVisible\(\)\?api\('\/api\/google-ads\/campaigns'/);
- assert.match(app,/googleAdsVisible\(\)\?'<option value="google_ads"/);
+ assert.match(app,/<option value="google_ads">Google Ads<\/option>/);
+ assert.match(app,/googleAdsVisible\(\)\?/);
  assert.match(app,/data-campaign-provider value="meta_ads"/);
  assert.match(app,/current\.campaigns\.filter\(c=>googleAdsVisible\(\)\|\|c\.provider!=='google_ads'\)/);
 });
