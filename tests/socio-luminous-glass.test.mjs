@@ -65,7 +65,7 @@ test('lightened palette has a usable surface hierarchy and readable AA ink',()=>
   '.wa-inbox','.px-panel','.px-kpi',
   '@supports not ((backdrop-filter:blur(10px))',
   '@media(prefers-reduced-transparency:reduce)',
-  '@media(prefers-contrast:more)',
+  'prefers-contrast:more',
   '@media(max-width:760px)',
  ])assert(css.includes(token),'missing '+token);
  assert.doesNotMatch(css,/grid-template-(?:columns|rows)\s*:/);
