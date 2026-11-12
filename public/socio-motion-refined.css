@@ -444,3 +444,21 @@ body #appShell #view .wa-inbox-search:focus-within{
   border-color:rgba(235,250,226,.31)!important;
  }
 }
+
+
+/* The catalog only offers Meta while Google Ads is paused. Avoid a fake
+   platform selector with exactly one option. */
+body #appShell #view .px-campaign-provider-meta{
+ display:flex;align-items:center;flex-wrap:wrap;gap:8px;
+ padding:10px 12px;margin:0;
+ border-radius:11px;
+ background:rgba(49,67,56,.9)!important;
+ border:1px solid rgba(230,249,219,.17)!important;
+ color:#eaf5e4!important;
+}
+body #appShell #view .px-campaign-provider-meta strong{
+ color:#f4fbef!important;font-size:12px!important;font-weight:740!important;
+}
+body #appShell #view .px-campaign-provider-meta small{
+ color:#baccb7!important;font-size:10px!important;
+}
