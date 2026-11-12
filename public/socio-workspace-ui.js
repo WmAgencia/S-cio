@@ -405,6 +405,13 @@
   // A prepaid balance is not the Meta account's "balance" (often payable),
   // nor the daily campaign budget. Do not infer prepaid credit from spend.
   const budgetHeaderItem=(provider,label,brand,connected,spent,currency,billing)=>{
+   if(progressive&&ads&&provider==='meta_ads'){
+    return '<article class="px-budget-account px-budget-meta-ribbon px-budget-meta-pending" data-budget-provider="meta_ads" aria-busy="true" aria-label="Consultando limite de gastos e gasto de hoje da Meta">'+
+     '<div class="px-budget-meta-summary"><div class="px-budget-meta-brand"><span class="px-brand-dot meta"></span><strong>Meta Ads</strong></div>'+
+     '<div class="px-budget-meta-metric"><span>Limite disponível</span><span class="px-load-line" aria-hidden="true"></span></div>'+
+     '<div class="px-budget-meta-metric"><span>Gasto hoje</span><span class="px-load-line" aria-hidden="true"></span></div></div>'+
+     '<div class="px-budget-meta-action" aria-hidden="true"><span class="px-load-line px-budget-meta-action-placeholder"></span></div></article>';
+   }
    if(progressive&&ads){
     return '<article class="px-budget-account px-load-card px-budget-provider-pending" data-budget-provider="'+provider+'" aria-busy="true">'+
      '<div class="px-budget-account-main"><div class="px-budget-brand"><span class="px-brand-dot '+brand+'"></span>'+
@@ -443,6 +450,24 @@
     billing?.finance?.isPrepaid===false?'Cobrança automática / faturamento':'Tipo de cobrança não identificado';
    const limitText=capAvailable?'Limite de gastos restante: '+moneyMinor(cap,currencyCode):'';
    const paymentUrl=billing?.paymentsUrl||null;
+   if(provider==='meta_ads'){
+    // Meta's spendCapRemainingMinor is the remaining ACCOUNT SPENDING LIMIT.
+    // It is not necessarily a verified prepaid wallet balance.
+    const availableLimit=capAvailable?moneyMinor(cap,currencyCode):'Não disponível';
+    const todaySpend=connected&&Number.isFinite(Number(spent))&&Number(spent)>=0?
+     money(spent,currency):'Não disponível';
+    return '<article class="px-budget-account px-budget-meta-ribbon" data-budget-provider="meta_ads">'+
+     '<div class="px-budget-meta-summary">'+
+      '<div class="px-budget-meta-brand"><span class="px-brand-dot meta"></span><strong>Meta Ads</strong></div>'+
+      '<div class="px-budget-meta-metric" title="Limite de gastos restante na conta de anúncios. Não representa saldo pré-pago.">'+
+       '<span>Limite disponível</span><strong>'+esc(availableLimit)+'</strong></div>'+
+      '<div class="px-budget-meta-metric"><span>Gasto hoje</span><strong>'+esc(todaySpend)+'</strong></div>'+
+     '</div>'+
+     '<div class="px-budget-meta-action">'+
+      (paymentUrl?'<a class="px-budget-recharge-cta" href="'+esc(paymentUrl)+'" target="_blank" rel="noopener noreferrer" title="Abrir o faturamento oficial da Meta em uma nova aba">Abrir recarga na Meta <span aria-hidden="true">↗</span></a>':
+      '<button class="px-budget-recharge-cta" type="button" disabled title="Link oficial de recarga indisponível nesta conta">Abrir recarga na Meta <span aria-hidden="true">↗</span></button>')+
+     '</div></article>';
+   }
    return '<article class="px-budget-account" data-budget-provider="'+provider+'">'+
     '<div class="px-budget-account-main"><div class="px-budget-brand"><span class="px-brand-dot '+brand+'"></span>'+
       '<strong>'+label+'</strong><small>'+esc(status)+'</small></div>'+
