@@ -5,7 +5,7 @@ const load=p=>readFileSync(new URL('../public/'+p,import.meta.url),'utf8');
 
 test('Legacy Prospector dashboard structure remains while refined graphite style is final',()=>{
  const html=load('index.html'),legacy=load('ember-theme.css'),css=load('prospector-socio.css');
- assert.match(html,/meta name="theme-color" content="#202626"/);
+ assert.match(html,/meta name="theme-color" content="#40544e"/);
  assert.ok(html.indexOf('/socio-glass-enforced.css')>html.indexOf('/prospector-socio.css'));
  assert.match(load('socio-glass-enforced.css'),/--socio-accent:#c9f16d/);
  assert.ok(html.indexOf('/ember-theme.css')>html.indexOf('/cloud-theme.css'));
