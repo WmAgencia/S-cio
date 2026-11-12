@@ -1,0 +1,661 @@
+/* Sócio Premium Polish v4 · 12 Nov 2026
+   Three user-reviewed screens: Visão geral, Mensagens and Thalita.
+   All styles are scoped to live application surfaces. No handler, grid track,
+   permission, view routing or network code is changed.
+   Liquid glass stays on functional controls; data panels remain legible. */
+
+#appShell {
+ --polish-canvas:#171e1e;
+ --polish-panel:#252e2d;
+ --polish-raised:#2f3937;
+ --polish-muted:#b5c4b9;
+ --polish-ink:#f4f7f2;
+ --polish-edge:rgba(234,247,232,.155);
+ --polish-edge-strong:rgba(237,249,234,.26);
+ --polish-lime:#c9f16d;
+ --polish-lime-ink:#222d16;
+ --polish-panel-shadow:0 12px 32px rgba(0,0,0,.14),inset 0 1px 0 rgba(255,255,255,.07);
+}
+/* ----- Visão geral: design-system polish, without moving sections ----- */
+body #appShell #view .px-overview {
+ color:var(--polish-ink)!important;
+ gap:23px;
+}
+body #appShell #view .px-budget-top {
+ gap:14px;
+}
+body #appShell #view .px-budget-top-heading>strong {
+ color:#f1f5ef!important;font-size:14px;font-weight:740!important;
+ letter-spacing:-.025em!important;
+}
+body #appShell #view .px-budget-top-heading>small {
+ color:#bfcac0!important;font-size:11px!important;
+}
+body #appShell #view .px-budget-top-grid {gap:14px}
+body #appShell #view .px-budget-account {
+ background:
+  linear-gradient(155deg,rgba(244,255,248,.085),transparent 29%),
+  linear-gradient(147deg,#323d39 0%,#27312e 55%,#222b29 100%)!important;
+ border:1px solid rgba(228,246,222,.20)!important;
+ border-radius:18px!important;
+ padding:18px 19px 16px!important;
+ box-shadow:0 13px 38px rgba(0,0,0,.15),
+   inset 0 1px 0 rgba(255,255,255,.11),
+   inset 0 -1px 0 rgba(0,0,0,.10)!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+}
+body #appShell #view .px-budget-account:hover {
+ border-color:rgba(223,245,218,.35)!important;
+ box-shadow:0 16px 42px rgba(0,0,0,.21),
+  inset 0 1px rgba(255,255,255,.14)!important;
+}
+body #appShell #view .px-budget-account-main {
+ padding-bottom:11px;
+ border-bottom:1px solid rgba(238,249,231,.115);
+}
+body #appShell #view .px-budget-brand {
+ column-gap:9px;
+}
+body #appShell #view .px-budget-brand>strong {
+ color:#f6f9f2!important;font-size:13px!important;font-weight:750!important;
+ letter-spacing:-.025em!important;
+}
+body #appShell #view .px-budget-brand>small {
+ color:#bfcbc0!important;font-size:10.5px!important;line-height:1.45!important;
+}
+body #appShell #view .px-brand-dot {
+ width:12px;height:12px;
+ box-shadow:0 0 0 4px rgba(255,255,255,.055),0 2px 7px rgba(0,0,0,.14)!important;
+ border-radius:5px;
+}
+body #appShell #view .px-budget-stats {gap:17px}
+body #appShell #view .px-budget-stat>span {
+ color:#c0ccc1!important;font-size:10.5px!important;font-weight:550!important;
+}
+body #appShell #view .px-budget-stat>strong {
+ color:#f6f9f3!important;font-size:14px!important;font-weight:740!important;
+ letter-spacing:-.025em!important;
+}
+body #appShell #view .px-budget-balance>strong {color:#f5f8f2!important}
+body #appShell #view .px-budget-limit {
+ color:#c8d3c8!important;
+ font-size:11px!important;line-height:1.55!important;margin-top:9px;
+}
+body #appShell #view .px-budget-billing-actions {gap:8px;margin:13px 0 6px}
+body #appShell #view .px-budget-billing-link {
+ background:linear-gradient(148deg,rgba(255,255,255,.11),rgba(224,243,221,.045))!important;
+ border:1px solid rgba(234,250,224,.20)!important;
+ color:#eff6eb!important;
+ font-size:11px!important;font-weight:660!important;
+ padding:9px 12px!important;line-height:1.25!important;
+ border-radius:11px!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.10),0 3px 10px rgba(0,0,0,.10)!important;
+}
+body #appShell #view .px-budget-billing-link:hover {
+ border-color:rgba(201,241,109,.52)!important;
+ background:rgba(201,241,109,.12)!important;
+ color:#f5ffe6!important;
+}
+body #appShell #view .px-budget-meter{
+ height:4px!important;margin-top:14px!important;
+ background:rgba(226,239,224,.14)!important;border-radius:99px!important;
+}
+body #appShell #view .px-page-heading h1 {
+ font-weight:750!important;font-size:clamp(28px,3.2vw,39px)!important;
+ line-height:1.14!important;letter-spacing:-.055em!important;
+ color:#f4f8f3!important;
+}
+body #appShell #view .px-page-heading p {
+ font-size:13px!important;color:#c0cbc1!important;
+ line-height:1.55!important;
+}
+body #appShell #view .px-eyebrow {
+ color:#cfe9a0!important;font-size:10px!important;letter-spacing:.16em!important;
+ font-weight:770!important;
+}
+body #appShell #view .px-page-heading .btn {
+ border-radius:12px!important;
+ padding:11px 15px!important;
+ border-color:rgba(239,248,231,.24)!important;
+ background:linear-gradient(150deg,rgba(250,255,248,.13),rgba(218,233,213,.04))!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.13),0 7px 21px rgba(0,0,0,.12)!important;
+ color:#f2f8ee!important;
+}
+body #appShell #view .px-page-heading .btn:hover {
+ border-color:rgba(207,246,162,.43)!important;
+ background:linear-gradient(140deg,rgba(212,245,173,.18),rgba(241,252,234,.08))!important;
+}
+body #appShell #view .px-kpi-grid {gap:14px}
+body #appShell #view .px-kpi {
+ position:relative;isolation:isolate;overflow:hidden;
+ border:1px solid rgba(230,245,226,.175)!important;
+ border-radius:18px!important;
+ padding:22px 23px 20px!important;
+ background:
+  radial-gradient(ellipse 84% 70% at 99% 103%,rgba(175,216,148,.085),transparent 75%),
+  linear-gradient(148deg,#35403c 0%,#28322f 62%,#25302c 100%)!important;
+ box-shadow:var(--polish-panel-shadow)!important;
+ transition:border-color .22s,box-shadow .22s,transform .22s!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+}
+body #appShell #view .px-kpi::after {
+ content:"";position:absolute;inset:auto -17% -135% 35%;
+ height:190%;border-radius:50%;
+ border:1px solid rgba(220,242,218,.085);
+ background:radial-gradient(ellipse at 76% 15%,rgba(201,241,109,.046),transparent 56%);
+ pointer-events:none;z-index:-1;
+ transform:rotate(-15deg);
+}
+body #appShell #view .px-kpi:hover {
+ transform:translateY(-2px)!important;
+ border-color:rgba(222,248,203,.31)!important;
+ box-shadow:0 18px 37px rgba(0,0,0,.19),inset 0 1px rgba(255,255,255,.13)!important;
+}
+body #appShell #view .px-kpi-label {
+ color:#d4ddd2!important;font-size:12px!important;font-weight:690!important;
+ letter-spacing:-.015em;
+}
+body #appShell #view .px-kpi-number {
+ font-size:clamp(31px,3vw,39px)!important;font-weight:760!important;
+ color:#f8fbf5!important;letter-spacing:-.045em!important;
+}
+body #appShell #view .px-kpi small {
+ color:#bccac0!important;font-size:11.5px!important;line-height:1.52!important;
+}
+body #appShell #view .px-kpi-icon {
+ border-radius:13px!important;height:41px!important;min-width:41px!important;
+ background:linear-gradient(138deg,rgba(234,245,230,.14),rgba(211,232,214,.045))!important;
+ border:1px solid rgba(235,250,230,.14)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.12)!important;
+ color:#e3f3dc!important;
+}
+body #appShell #view .px-kpi-icon.green{color:#d0f49d!important}
+body #appShell #view .px-kpi-icon.blue{color:#b8d9ea!important}
+body #appShell #view .px-kpi-icon.muted{color:#e0e9dd!important}
+body #appShell #view .px-live-indicator {
+ margin-top:2px!important;
+ padding:11px 14px!important;
+ border-radius:999px!important;
+ background:linear-gradient(100deg,rgba(218,245,186,.095),rgba(239,248,232,.025))!important;
+ border:1px solid rgba(226,246,208,.16)!important;
+ font-size:11px!important;color:#c9e5aa!important;
+}
+body #appShell #view .px-live-indicator .px-live-dot {
+ background:#b3e477!important;
+ box-shadow:0 0 0 4px rgba(189,238,142,.10)!important;
+}
+body #appShell #view .px-ads-metric,
+body #appShell #view .px-panel{
+ background:linear-gradient(153deg,#303a38,#242f2c)!important;
+ border:1px solid var(--polish-edge)!important;
+ border-radius:17px!important;
+ box-shadow:var(--polish-panel-shadow)!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+}
+/* ----- Mensagens: coherent dark conversations and visible filter controls ----- */
+body #appShell #view .wa-inbox{
+ --wa-wall:#1d2523;--wa-card:#303a35;--wa-panel:#232c29;
+ --wa-ink:#f5f8f2;--wa-muted:#b9c7bc;--wa-edge:rgba(225,242,226,.135);
+ --wa-accent:#c9f16d;--wa-green:#b6e89e;
+ background:#1c2523!important;
+ border:1px solid rgba(227,243,225,.16)!important;
+ border-radius:19px!important;
+ box-shadow:0 18px 50px rgba(0,0,0,.20),inset 0 1px rgba(255,255,255,.06)!important;
+ color:var(--wa-ink)!important;
+}
+body #appShell #view .wa-inbox-side{
+ background:linear-gradient(177deg,#28322f,#222b28 75%)!important;
+ border-right:1px solid var(--wa-edge)!important;
+}
+body #appShell #view .wa-inbox-main{
+ background:#1d2623!important;color:#f4f9f2!important;
+}
+body #appShell #view .wa-inbox-side-head{
+ padding-top:24px!important;padding-bottom:15px!important;
+}
+body #appShell #view .wa-inbox-eyebrow{
+ color:#b7d58d!important;letter-spacing:.17em!important;
+ font-size:10px!important;
+}
+body #appShell #view .wa-inbox-side-head h1{
+ color:#f6faf4!important;font-size:25px!important;
+ font-weight:750!important;letter-spacing:-.045em!important;
+}
+body #appShell #view .wa-inbox-side-head h1 span{
+ color:#b4c2b7!important;font-size:11px!important;
+}
+body #appShell #view .wa-inbox-connect{
+ background:#c9f16d!important;border:1px solid #d4f59e!important;
+ color:#263119!important;
+ border-radius:12px!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.38),0 6px 19px rgba(0,0,0,.14)!important;
+ font-size:12px!important;font-weight:770!important;
+}
+body #appShell #view .wa-inbox-connect:hover{
+ background:#d9fb93!important;color:#243017!important;
+}
+body #appShell #view .wa-inbox-search{
+ background:rgba(10,20,17,.30)!important;
+ border-color:rgba(232,244,231,.16)!important;
+ color:#d5e2d4!important;
+ border-radius:12px!important;
+ box-shadow:inset 0 1px 1px rgba(0,0,0,.11)!important;
+}
+body #appShell #view .wa-inbox-search input{
+ color:#f1f7ef!important;font-size:12px!important;
+ background:transparent!important;
+}
+body #appShell #view .wa-inbox-search input::placeholder{color:#b8c6bc!important}
+body #appShell #view .wa-filters{
+ gap:7px!important;
+}
+body #appShell #view .wa-filters button{
+ background:rgba(223,240,225,.075)!important;
+ border:1px solid rgba(232,245,226,.16)!important;
+ border-radius:999px!important;
+ color:#e0eade!important;
+ font-size:10.5px!important;font-weight:680!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.045)!important;
+ transition:background .18s,border-color .18s,color .18s!important;
+}
+body #appShell #view .wa-filters button.active{
+ background:#c9f16d!important;color:#213017!important;
+ border-color:#d8f5a7!important;
+ box-shadow:0 5px 15px rgba(0,0,0,.14),inset 0 1px rgba(255,255,255,.34)!important;
+}
+body #appShell #view .wa-filters button:hover:not(.active){
+ background:rgba(231,244,227,.15)!important;
+ border-color:rgba(235,247,232,.31)!important;
+ color:#fff!important;
+}
+body #appShell #view .wa-inbox-items{
+ scrollbar-color:rgba(190,224,166,.39) transparent!important;
+}
+body #appShell #view .wa-list-row-wrap{
+ border-color:rgba(231,246,226,.095)!important;
+}
+body #appShell #view .wa-list-row{
+ background:transparent!important;
+ border-radius:0!important;
+ color:#ecf5e9!important;
+ transition:background .16s!important;
+}
+body #appShell #view .wa-list-row:hover {
+ background:rgba(243,250,239,.058)!important;
+}
+body #appShell #view .wa-list-row.active{
+ background:linear-gradient(95deg,rgba(208,237,186,.16),rgba(229,242,218,.065))!important;
+ box-shadow:inset 3px 0 #c9f16d!important;
+}
+body #appShell #view .wa-chat-avatar{
+ background:linear-gradient(143deg,#53635a,#384841)!important;
+ color:#edf9e6!important;
+ border:1px solid rgba(231,246,222,.20)!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.13)!important;
+}
+body #appShell #view .wa-chat-name-line strong{
+ color:#f4f7f1!important;
+ font-size:12px!important;font-weight:700!important;
+}
+body #appShell #view .wa-chat-name-line small{
+ color:#bccbbe!important;
+}
+body #appShell #view .wa-chat-preview{
+ color:#d2dfd1!important;font-size:11px!important;
+}
+body #appShell #view .wa-chat-preview em{color:#def4b8!important}
+body #appShell #view .wa-chat-meta,
+body #appShell #view .wa-inbox-side-bottom{
+ color:#adc0b2!important;
+}
+body #appShell #view .wa-inbox-side-bottom{
+ border-top:1px solid var(--wa-edge)!important;
+ background:rgba(20,30,26,.18)!important;
+}
+body #appShell #view .wa-live-dot,
+body #appShell #view .wa-unread-dot{background:#8ee4b0!important}
+body #appShell #view .wa-thread-header{
+ background:linear-gradient(110deg,#2c3633,#252f2c)!important;
+ border-bottom:1px solid var(--wa-edge)!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.035)!important;
+}
+body #appShell #view .wa-thread-identity strong{
+ color:#f6faf5!important;font-weight:720!important;
+}
+body #appShell #view .wa-thread-identity small{
+ color:#c0cbc1!important;font-size:11px!important;
+}
+body #appShell #view .wa-thread-identity:hover {
+ background:rgba(243,250,236,.065)!important;
+}
+body #appShell #view .wa-thread-actions .wa-small-action,
+body #appShell #view .wa-round-icon{
+ background:linear-gradient(145deg,rgba(248,255,245,.095),rgba(216,232,211,.04))!important;
+ border:1px solid rgba(234,249,225,.18)!important;
+ color:#e8f1e5!important;
+ border-radius:11px!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.11)!important;
+}
+body #appShell #view .wa-thread-actions .wa-small-action:hover,
+body #appShell #view .wa-round-icon:hover{
+ background:rgba(211,243,181,.16)!important;
+ border-color:rgba(217,248,194,.31)!important;
+}
+body #appShell #view .wa-message-list{
+ background:
+  radial-gradient(ellipse 36% 45% at 83% 14%,rgba(95,131,101,.038),transparent 75%),
+  radial-gradient(ellipse 33% 47% at 12% 85%,rgba(142,177,126,.030),transparent 85%),
+  #1e2825!important;
+}
+body #appShell #view .wa-history-load span,
+body #appShell #view .wa-empty-messages{color:#b6c7b8!important}
+body #appShell #view .wa-date-marker{
+ background:rgba(222,235,210,.095)!important;
+ border:1px solid rgba(239,246,231,.16)!important;
+ color:#d4dfd0!important;
+ border-radius:999px!important;
+ padding:8px 15px!important;
+ font-size:10.5px!important;
+}
+body #appShell #view .wa-message-bubble{
+ background:linear-gradient(145deg,#343e38,#2b3630)!important;
+ color:#f2f8ef!important;border:1px solid rgba(234,249,226,.14)!important;
+ border-radius:14px 14px 14px 5px!important;
+ box-shadow:0 5px 16px rgba(0,0,0,.13),inset 0 1px rgba(255,255,255,.05)!important;
+ padding:12px 15px 10px!important;
+ line-height:1.58!important;
+}
+body #appShell #view .wa-message-row.outgoing .wa-message-bubble{
+ background:linear-gradient(142deg,#4a604a,#3d5341)!important;
+ color:#f7fff0!important;border-color:rgba(207,240,190,.18)!important;
+ border-radius:14px 14px 5px 14px!important;
+}
+body #appShell #view .wa-message-row.internal .wa-message-bubble{
+ background:#534636!important;color:#ffe5bd!important;
+ border:1px dashed rgba(245,201,140,.36)!important;
+}
+body #appShell #view .wa-message-copy{color:inherit!important;font-size:12px!important}
+body #appShell #view .wa-message-meta{color:#ccd9cd!important}
+body #appShell #view .wa-compose{
+ background:linear-gradient(164deg,#29322e,#252e2b)!important;
+ border-top:1px solid rgba(232,247,221,.15)!important;
+ box-shadow:0 -8px 26px rgba(0,0,0,.10)!important;
+}
+body #appShell #view :is(.wa-compose-top,.wa-compose-row,.wa-compose-foot){
+ background:transparent!important;border-color:transparent!important;
+}
+body #appShell #view .wa-mode-btn{
+ background:rgba(241,252,239,.08)!important;
+ border:1px solid rgba(230,246,224,.17)!important;
+ color:#e3eee0!important;border-radius:10px!important;
+ font-size:11px!important;
+ padding:9px 12px!important;
+}
+body #appShell #view .wa-mode-btn.active{
+ background:rgba(199,241,109,.16)!important;
+ border-color:rgba(207,246,163,.45)!important;
+ color:#e5ffbe!important;
+}
+body #appShell #view .wa-mode-btn:hover{
+ border-color:rgba(212,248,189,.40)!important;
+ color:#f6fff1!important;
+}
+body #appShell #view .wa-compose-row textarea{
+ background:#1c2622!important;
+ border:1px solid rgba(231,248,222,.21)!important;
+ border-radius:13px!important;
+ color:#f4f8f1!important;
+ box-shadow:inset 0 2px 6px rgba(0,0,0,.12)!important;
+ font-size:12px!important;
+}
+body #appShell #view .wa-compose-row textarea:focus{
+ outline:none!important;
+ border-color:#c9f16d!important;
+ box-shadow:0 0 0 3px rgba(201,241,109,.15),inset 0 1px rgba(0,0,0,.11)!important;
+}
+body #appShell #view .wa-compose-row textarea::placeholder{color:#b5c6b7!important}
+body #appShell #view .wa-compose-send{
+ background:linear-gradient(125deg,#dcf99e,#c9f16d)!important;
+ border:1px solid #e5ffb6!important;
+ color:#253119!important;
+ border-radius:13px!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.45),0 5px 15px rgba(0,0,0,.14)!important;
+}
+body #appShell #view .wa-compose-disclaimer,
+body #appShell #view .wa-compose-foot,
+body #appShell #view .wa-inline-link{
+ color:#bfcabd!important;
+}
+body #appShell #view :is(.wa-details-section,.wa-inbox-details,.wa-dialog-surface){
+ background-color:#28312e!important;
+ border-color:var(--wa-edge)!important;color:#eaf5e7!important;
+}
+body #appShell #view .wa-inbox-details :is(h2,h3,strong,p,small,label){
+ color:#dce8db!important;
+}
+body #appShell #view .wa-context-menu{
+ background:#2b3430!important;color:#f3f9ee!important;
+ border-color:rgba(226,249,215,.23)!important;
+}
+body #appShell #view .wa-context-menu :is(button,span){color:#eaf5e9!important}
+body #appShell #view .wa-context-menu button:hover{background:rgba(200,240,178,.12)!important}
+
+/* ----- Thalita: remove the white/lilac island in the dark application ----- */
+body:has(#appShell:not(.hidden)) #socioThalitaDock {
+ color:#f0f6ed!important;
+ font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-fab{
+ background:linear-gradient(145deg,#475c45,#2e3b33)!important;
+ border:1px solid rgba(217,247,189,.43)!important;
+ color:#f6ffef!important;
+ border-radius:999px!important;
+ box-shadow:0 9px 27px rgba(0,0,0,.30),
+   inset 0 1px rgba(255,255,255,.15),
+   0 0 21px rgba(181,235,124,.09)!important;
+ font-size:13px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-fab:hover{
+ background:linear-gradient(140deg,#526c4c,#34463c)!important;
+ border-color:rgba(211,250,177,.65)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-sigil{
+ background:radial-gradient(circle at 32% 24%,rgba(244,255,231,.27),rgba(171,226,124,.12) 63%)!important;
+ border:1px solid rgba(223,253,201,.28)!important;
+ color:#ecffd7!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.20)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window:not(.hidden){
+ background:#202a27!important;
+ border:1px solid rgba(232,249,224,.24)!important;
+ color:#f0f7ed!important;
+ border-radius:20px!important;
+ box-shadow:0 25px 75px rgba(0,0,0,.53),
+  inset 0 1px rgba(255,255,255,.09)!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header{
+ background:
+  linear-gradient(160deg,rgba(246,255,240,.10),transparent 50%),
+  linear-gradient(115deg,#34473b,#2a3732)!important;
+ border-bottom:1px solid rgba(229,248,217,.16)!important;
+ padding:16px 17px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-avatar{
+ background:linear-gradient(145deg,rgba(207,247,165,.24),rgba(181,231,151,.09))!important;
+ border:1px solid rgba(225,249,200,.22)!important;
+ color:#e4ffcb!important;
+ border-radius:12px!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.11)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header strong{
+ color:#f7fcf4!important;font-size:14px!important;font-weight:750!important;
+ letter-spacing:-.025em!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header small{
+ color:#c4d3c4!important;font-size:10.5px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-close{
+ background:rgba(240,252,234,.075)!important;
+ border:1px solid rgba(240,251,236,.11)!important;
+ border-radius:10px!important;
+ width:31px;height:31px;
+ color:#e5f1e1!important;
+ font-size:21px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-close:hover{
+ background:rgba(239,250,227,.16)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-feed{
+ background:linear-gradient(180deg,#222e29,#202a27)!important;
+ padding:17px!important;
+ color:#eff6ec!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-line{
+ background:linear-gradient(145deg,#37443b,#303d35)!important;
+ border:1px solid rgba(220,243,212,.17)!important;
+ border-radius:15px 15px 15px 5px!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.065)!important;
+ color:#f0f8ee!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-line.user{
+ background:linear-gradient(145deg,#4a6144,#3c5441)!important;
+ border-color:rgba(210,244,177,.25)!important;
+ border-radius:15px 15px 5px 15px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-line small{
+ color:#d4f4aa!important;font-size:10.5px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-line p{
+ color:#eef6e9!important;line-height:1.62!important;
+ font-size:12px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-suggestions{
+ background:#26312c!important;
+ border-bottom:1px solid rgba(227,244,217,.13)!important;
+ padding:12px 14px!important;
+ gap:7px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-suggestions button{
+ background:rgba(229,248,213,.075)!important;
+ color:#e3f2dd!important;
+ border:1px solid rgba(225,247,208,.19)!important;
+ font-size:10.5px!important;
+ font-weight:690!important;
+ border-radius:999px!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.055)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-suggestions button:hover{
+ background:rgba(207,243,174,.15)!important;
+ border-color:rgba(214,248,180,.42)!important;
+ color:#f6ffe9!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaForm{
+ background:#27312c!important;
+ border-top:1px solid rgba(226,247,209,.15)!important;
+ padding:13px 14px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaInput{
+ background:#1a2621!important;
+ border:1px solid rgba(231,247,219,.22)!important;
+ border-radius:13px!important;
+ color:#f1f8eb!important;
+ caret-color:#dbffab!important;
+ box-shadow:inset 0 2px 7px rgba(0,0,0,.13)!important;
+ font-size:12px!important;
+ line-height:1.55!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaInput::placeholder{
+ color:#b6c8b9!important;opacity:1!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaInput:focus{
+ outline:none!important;
+ border-color:rgba(201,241,109,.85)!important;
+ box-shadow:0 0 0 3px rgba(201,241,109,.13),
+  inset 0 2px 7px rgba(0,0,0,.13)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-actions .btn.soft{
+ background:rgba(227,245,210,.095)!important;
+ border:1px solid rgba(229,247,220,.18)!important;
+ color:#eaf4e5!important;
+ border-radius:11px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-actions .btn.soft:hover{
+ background:rgba(229,249,205,.16)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-actions .btn.primary{
+ background:linear-gradient(140deg,#ddfba1,#c9f16d)!important;
+ color:#243118!important;
+ border:1px solid #e2ffb3!important;
+ border-radius:11px!important;
+ font-weight:790!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.37),0 5px 12px rgba(0,0,0,.15)!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-hint{
+ color:#c0cfc0!important;line-height:1.55!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-disclaimer{
+ background:#222b27!important;
+ border-top:1px solid rgba(222,246,213,.09)!important;
+ color:#b6c6b8!important;
+ font-size:10px!important;line-height:1.55!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-approval:not(:empty){
+ background:#353c2f!important;
+ color:#f1f6df!important;
+ border:1px solid rgba(249,221,133,.28)!important;
+ border-radius:12px!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-approval p{
+ color:#f4e7c1!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock :is(button,textarea):focus-visible{
+ outline:2px solid #d6fa9f!important;outline-offset:2px!important;
+}
+/* Leave accessible zoom/reduced motion and the existing mobile navigation alone. */
+@media(max-width:780px){
+ body #appShell #view .px-kpi{padding:19px!important}
+ body #appShell #view .px-budget-account{padding:14px 15px!important}
+ body #appShell #view .wa-inbox-side-head h1{font-size:22px!important}
+ body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window:not(.hidden){
+  max-height:calc(100dvh - 100px);
+ }
+}
+@media(prefers-reduced-motion:reduce){
+ body #appShell #view .px-kpi{transition:none!important;transform:none!important}
+ body #appShell #view .wa-list-row{transition:none!important}
+}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+ body #appShell #view :is(.px-budget-account,.px-kpi,.px-panel,.px-ads-metric,.wa-inbox){
+  background:#28312d!important;
+ }
+ body:has(#appShell:not(.hidden)) #socioThalitaDock :is(.px-assistant-window,.px-assistant-feed,.px-assistant-line){
+  background:#222d27!important;
+ }
+}
+
+/* Ensure the generic legacy button:not(.primary) color rule cannot erase
+   the dark-on-lime accessible button labels. */
+body #appShell #view .wa-inbox-side button.wa-inbox-connect,
+body #appShell #view .wa-compose-row button.wa-compose-send,
+body #appShell #view .wa-filters button.active{
+ color:#243116!important;
+}
+body #appShell #view .wa-inbox-side button.wa-inbox-connect :is(span,b,strong),
+body #appShell #view .wa-compose-row button.wa-compose-send :is(span,b,strong),
+body #appShell #view .wa-filters button.active :is(span,b,strong){
+ color:inherit!important;
+}
+
+/* Compact but readable assistant proportions: avoids the tall empty canvas
+   visible in the report, without moving or hiding its interactive controls. */
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window:not(.hidden){
+ width:min(405px,calc(100vw - 28px));
+ max-height:min(645px,calc(100dvh - 95px));
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-feed{
+ min-height:155px;max-height:310px;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock #thalitaInput{
+ min-height:73px;max-height:130px;
+}
