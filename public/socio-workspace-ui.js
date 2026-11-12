@@ -13,7 +13,7 @@
  // Small per-company GET cache removes the blank transition on repeat visits.
  // In-flight calls are shared; values expire quickly and manual refresh clears them.
  const getCache=new Map();const snapshots=new Map();const posterCache=new Map();const billingAutoAttempts=new Map();let selectedTenant=null,renderSerial=0;
- let liveRefreshTimer=null,liveRefreshSerial=0;
+ let liveRefreshTimer=null,liveRefreshSerial=0,liveRefreshBusy=false;
  const stopLiveRefresh=()=>{if(liveRefreshTimer){clearInterval(liveRefreshTimer);liveRefreshTimer=null;}liveRefreshSerial++;};
  const invalidateRender=()=>{renderSerial++;stopLiveRefresh();};
  const forTenant=me=>{const id=[me?.tenant?.id||'',me?.user?.id||'',me?.user?.role||''].join(':');
@@ -23,16 +23,18 @@
  const startLiveRefresh=(root,kind,renderId,refresh,updateWhilePlaying)=>{
   stopLiveRefresh();const serial=liveRefreshSerial;
   liveRefreshTimer=setInterval(async()=>{
-   if(serial!==liveRefreshSerial||renderId!==renderSerial||document.hidden||!root.isConnected)return;
+   if(liveRefreshBusy||serial!==liveRefreshSerial||renderId!==renderSerial||document.hidden||!root.isConnected)return;
    if(!root.querySelector('.px-'+kind)){stopLiveRefresh();return;}
    if(root.querySelector('dialog[open]')||root.querySelector('[data-px-action-review]:disabled'))return;
    const playing=!!root.querySelector('.px-feature-media video,.px-feature-media iframe,.px-ad-creative-media video,.px-ad-creative-media iframe');
+   liveRefreshBusy=true;
    try{
-    getCache.clear(); // Always ask server/Meta again, never reuse old KPI figures.
+    getCache.clear(); // Fresh provider values, no estimated KPIs.
     if(playing){await updateWhilePlaying?.();return;}
     await refresh();
    }catch{/* Keep the last confirmed values on transient provider errors. */}
-  },30000);
+   finally{liveRefreshBusy=false;}
+  },60000);
  };
  const displayLiveTime=root=>{
   const label=root.querySelector('.px-live-indicator');
@@ -307,7 +309,7 @@
    activeAds:adList.filter(x=>(x.effective_status||x.status)==='ACTIVE').length,
    best:daily.filter(x=>Number(x.clicks)>0).sort((a,b)=>Number(b.clicks)-Number(a.clicks))[0]||null};
  }
- async function overview({root,api,me,navigate,activityRange='1m'}){
+ async function overview({root,api,me,navigate,activityRange='1m',progressive=false}){
   const renderId=++renderSerial;
   const range=['7d','1m','90d'].includes(activityRange)?activityRange:'1m';
   forTenant(me);
@@ -333,7 +335,15 @@
    ads?cached(api,'/api/marketing/tools/finance',45000):Promise.resolve({ok:false}),
    ads?cached(api,'/api/marketing/browser/status',30000):Promise.resolve({ok:false}),
   ];
-  const [dashboard,activity,exec,wa,monitor,meta,google,metaBilling,browserBilling]=await Promise.all(calls);
+  // First paint: operational counts render as soon as the fast own-company APIs
+  // finish. Meta, finance and Google continue separately (sometimes >2 seconds).
+  // The second paint reuses the already settled request cache, not new requests.
+  const later=progressive&&ads?Promise.all(calls.slice(5)):null;
+  const base=progressive?[
+   ...calls.slice(0,5),
+   Promise.resolve(null),Promise.resolve({ok:false}),Promise.resolve({ok:false}),Promise.resolve({ok:false})
+  ]:calls;
+  const [dashboard,activity,exec,wa,monitor,meta,google,metaBilling,browserBilling]=await Promise.all(base);
   if(renderId!==renderSerial)return;
   const d=dashboard.data||{},ex=exec.data||{},m=ex.counts||{},realWa=Array.isArray(wa.data)?wa.data.filter(c=>c.status==='connected').length:0;
   const metaReady=meta?.insights.ok===true,googleReady=google.ok===true;
@@ -396,7 +406,7 @@
    if(checkedAt&&Number.isFinite(Date.parse(checkedAt)))checkedLabel='Consultado às '+
     new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}).format(new Date(checkedAt));
    const displayFunds=fundsAvailable?moneyMinor(funds,currencyCode):'Não disponível';
-   const status=!ads?'Sem permissão':!connected?'Conta não autorizada':
+   const status=progressive?'Consultando dados da conta…':!ads?'Sem permissão':!connected?'Conta não autorizada':
     fundsAvailable?(browserObserved?'Saldo observado no faturamento Meta':'Saldo pré-pago confirmado'):
     provider==='meta_ads'&&billingSession==='disconnected'?'Faturamento ainda não conectado':
     provider==='meta_ads'&&billingSession==='connected'?'Aguardando leitura do faturamento':
@@ -441,9 +451,9 @@
     kpi('Pedidos registrados (30d)',authorized?number(m.registeredOrders):'—','Pedidos, não pagamentos','▣','blue')+
     kpi('Vendas pagas', '—','Sem conciliação financeira de produção','◈','muted')+
    '</div>'+
-   '<p class="px-live-indicator"><span class="px-live-dot"></span>Atualização automática a cada 30 segundos · indicadores retornados pelos provedores</p>'+
+   '<p class="px-live-indicator"><span class="px-live-dot"></span>'+(progressive?'Indicadores da empresa disponíveis · consultando anúncios em segundo plano':'Atualização automática a cada 60 segundos · indicadores retornados pelos provedores')+'</p>'+
    '<div class="px-ads-strip">'+
-    '<article class="px-ads-metric"><div><span class="px-brand-dot meta"></span><strong>Meta Ads</strong><small>Gasto hoje</small></div><b>'+ (metaReady?money(meta.spend,meta.currency):'Não disponível')+'</b>'+
+    '<article class="px-ads-metric"><div><span class="px-brand-dot meta"></span><strong>Meta Ads</strong><small>Gasto hoje</small></div><b>'+ (metaReady?money(meta.spend,meta.currency):progressive?'Consultando…':'Não disponível')+'</b>'+
      '<small>'+(metaReady?'Retornado pela conta autorizada':'Conecte ou valide a conta para consultar')+'</small></article>'+
     '<article class="px-ads-metric"><div><span class="px-brand-dot google"></span><strong>Google Ads</strong><small>Gasto hoje</small></div><b>'+(googleReady?money(googleMicros,googleCode):'Não disponível')+'</b>'+
      '<small>'+(googleReady?'Moeda da conta: '+(googleCode||'não identificada'):'Requer OAuth, conta selecionada e API autorizada')+'</small></article>'+
@@ -546,12 +556,19 @@
    }
   }
 
-  startLiveRefresh(root,'overview',renderId,
+  if(progressive&&ads){
+   // Never hold up the dashboard for an ad provider. If the visitor switches
+   // pages meanwhile, renderSerial stops the stale secondary paint.
+   void later.then(()=>{
+    if(renderId!==renderSerial||!root.isConnected||!root.querySelector('.px-overview'))return;
+    return overview({root,api,me,navigate,activityRange:range,progressive:false});
+   }).catch(()=>{});
+  }else startLiveRefresh(root,'overview',renderId,
    ()=>overview({root,api,me,navigate,activityRange:range}),
    async()=>{
     const [nextMeta,nextGoogle,nextDashboard]=await Promise.all([
      ads?loadMeta(api,'today').catch(()=>null):Promise.resolve(null),
-     ads?optional(api,'/api/google-ads/campaigns?period=today'):Promise.resolve(null),
+     ads?googleOverview():Promise.resolve(null),
      optional(api,'/api/dashboard')
     ]);
     if(renderId!==renderSerial||!root.querySelector('.px-overview'))return;
@@ -609,7 +626,7 @@
    '<div class="px-page-heading"><div><span class="px-eyebrow">MÍDIA PAGA · META ADS</span><h1>Campanhas e desempenho</h1>'+
     '<p>Seus anúncios, resultados e custo de mídia — sem configurar contas nesta página.</p></div>'+btn+'</div>'+
    (!connected||!selected?'<div class="px-notice"><strong>'+(!connected?'Conecte a Meta para visualizar as campanhas.':'Selecione a conta de anúncios em Conexões.')+'</strong><p>A autorização é feita em Conexões, por login oficial do Facebook.</p></div>':'')+
-   '<p class="px-live-indicator" aria-live="off"><span class="px-live-dot"></span>Atualização automática a cada 30 segundos · dados retornados pela Meta</p>'+
+   '<p class="px-live-indicator" aria-live="off"><span class="px-live-dot"></span>Atualização automática a cada 60 segundos · dados retornados pela Meta</p>'+
    '<div class="px-marketing-filters" role="group" aria-label="Período dos anúncios">'+
      [['today','Hoje'],['last_7d','7 dias'],['last_30d','30 dias']].map(([v,l])=>
        '<button type="button" class="'+(period===v?'selected':'')+'" data-px-period="'+v+'" aria-pressed="'+(period===v)+'">'+l+'</button>').join('')+'</div>'+

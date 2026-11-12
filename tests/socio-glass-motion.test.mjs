@@ -19,7 +19,8 @@ test('motion is valid JS, respects accessible motion choice and never replaces n
   assert.doesNotThrow(()=>new vm.Script(motion,{filename:'socio-glass-motion.js'}));
   assert.match(motion,/prefers-reduced-motion: reduce/);
   assert.match(motion,/clipPath/);
-  assert.match(motion,/duration:560/);
+  assert.match(motion,/duration:280/);
+  assert.doesNotMatch(motion,/filter:'blur\(10px\)'|clipPath:'inset\(0 100%/);
   assert.match(motion,/attributeFilter:\['class'\]/);
   assert.doesNotMatch(motion,/\\.innerHTML\s*=|fetch\(|\\.addEventListener\('click'/);
 });

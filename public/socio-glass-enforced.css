@@ -14,13 +14,13 @@
  --socio-bg:#171b1b;
  --socio-sidebar:#1c2325;
  --socio-top:#293133;
- --socio-surface:rgba(38,43,43,.89);
- --socio-surface-raised:rgba(49,55,55,.90);
+ --socio-surface:#2b3332;
+ --socio-surface-raised:#35403c;
  --socio-surface-soft:rgba(255,255,255,.032);
  --socio-ink:#f1f2ef;
  --socio-copy:#d2d7d1;
  --socio-muted:#a3aba7;
- --socio-soft:#818d89;
+ --socio-soft:#b2bdb5;
  --socio-line:rgba(226,232,223,.115);
  --socio-line-strong:rgba(225,234,226,.20);
  --socio-accent:#c9f16d;
@@ -30,9 +30,9 @@
  --socio-olive:#b6d177;
  --socio-clay:#dca18a;
  --socio-rose:#d69a9b;
- --socio-glass-panel:linear-gradient(145deg,rgba(56,63,63,.83),rgba(34,40,39,.91) 67%);
+ --socio-glass-panel:linear-gradient(152deg,#333b39,#272e2c 72%);
  --socio-glass-edge:rgba(229,237,229,.125);
- --socio-glass-shadow:0 5px 21px rgba(0,0,0,.14),inset 0 1px 0 rgba(255,255,255,.055);
+ --socio-glass-shadow:0 4px 14px rgba(0,0,0,.13),inset 0 1px 0 rgba(255,255,255,.055);
  --bg:var(--socio-bg);--surface:var(--socio-surface);--ink:var(--socio-ink);
  --muted:var(--socio-muted);--line:var(--socio-line);--purple:var(--socio-accent);
  --purple-light:rgba(201,241,109,.12);--green:var(--socio-olive);
@@ -46,7 +46,7 @@
  --socio-top:#2b353d;
  --socio-surface:rgba(42,49,53,.91);
  --socio-surface-raised:rgba(52,62,68,.92);
- --socio-glass-panel:linear-gradient(147deg,rgba(58,69,75,.84),rgba(35,44,50,.92) 70%);
+ --socio-glass-panel:linear-gradient(152deg,#384247,#292f33 72%);
  --socio-glass-edge:rgba(215,230,231,.135);
  --socio-sky:#b3c7d8;
  --master-ink:#eff2ed;--master-muted:#a9b6b9;
@@ -230,8 +230,8 @@ body #appShell #view :is(.card,.callout,.panel,.lucid-card,.ember-card,.ember-kp
  color:var(--socio-copy)!important;
  border-color:var(--socio-glass-edge)!important;
  box-shadow:var(--socio-glass-shadow)!important;
- -webkit-backdrop-filter:blur(9px) saturate(102%);
- backdrop-filter:blur(9px) saturate(102%);
+ -webkit-backdrop-filter:none!important;
+ backdrop-filter:none!important;
 }
 body #appShell #view :is(.card,.ember-card,.ember-kpi,.px-panel,.px-kpi,
  .master-panel,.master-kpi,.catalog-product):hover{
@@ -382,7 +382,7 @@ body #appShell :is(.btn,.ember-ai-cta,.ember-qr-cta):active:not(:disabled){
 body #appShell :is(.btn,.nav-item,button,a,input,select,textarea,summary):focus-visible{
  outline:2px solid var(--socio-accent)!important;outline-offset:2px!important;
 }
-body #appShell :is(.btn,button)[disabled]{opacity:.50!important;filter:saturate(.6)!important}
+body #appShell :is(.btn,button)[disabled]{opacity:.76!important;filter:saturate(.82)!important}
 body #appShell #view :is(.ai-guide-tabs,.ember-filter,.px-marketing-filters,
  .px-range-tabs,.settings-tabs button){
  background:rgba(14,19,19,.26)!important;
@@ -691,4 +691,227 @@ body .auth-screen:not(.hidden) .auth-box .btn.primary{
 body .auth-screen:not(.hidden) .auth-box :is(.auth-password-toggle,.help-card){
  background:rgba(237,246,230,.09)!important;
  color:#e2ebdd!important;border-color:rgba(235,242,232,.16)!important;
+}
+
+
+/* ------------ Liquid Glass 03: functional layer, not the data layer ------------ */
+/* Apple-inspired web approximation: translucent controls, specular rim, gentle
+   luminance variation and one composite surface. The native Apple material
+   changes with the background; a browser cannot reproduce its optics exactly. */
+body #appShell .sidebar{
+ background:linear-gradient(165deg,rgba(49,58,59,.94),rgba(28,35,35,.97) 70%)!important;
+}
+body #appShell .topbar{
+ background:
+  linear-gradient(160deg,rgba(244,255,247,.083),transparent 32%),
+  linear-gradient(106deg,rgba(54,65,65,.84),rgba(35,44,43,.86))!important;
+ border-bottom:1px solid rgba(238,246,232,.17)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 6px 24px rgba(0,0,0,.10)!important;
+ -webkit-backdrop-filter:blur(18px) saturate(120%)!important;
+ backdrop-filter:blur(18px) saturate(120%)!important;
+}
+body #appShell :is(.workspace-box,.quick-search){
+ background:
+  linear-gradient(166deg,rgba(255,255,255,.105),transparent 43%),
+  linear-gradient(105deg,rgba(227,239,227,.08),rgba(195,216,207,.04))!important;
+ border:1px solid rgba(236,245,231,.17)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.14),
+            inset 0 -1px 0 rgba(0,0,0,.14),
+            0 4px 14px rgba(0,0,0,.08)!important;
+ -webkit-backdrop-filter:blur(15px) saturate(119%)!important;
+ backdrop-filter:blur(15px) saturate(119%)!important;
+}
+body #appShell .nav>.socio-glass-nav-pill{
+ background:
+  linear-gradient(160deg,rgba(251,255,246,.21),rgba(246,252,243,.075) 43%,rgba(184,206,194,.04))!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.23),
+            inset 0 -1px 0 rgba(0,0,0,.17),
+            inset 0 0 0 1px rgba(234,243,224,.15),
+            0 6px 14px rgba(0,0,0,.12)!important;
+ -webkit-backdrop-filter:blur(14px) saturate(116%)!important;
+ backdrop-filter:blur(14px) saturate(116%)!important;
+}
+/* Keep the CSS-selected state as a fallback when animations are unsupported. */
+body #appShell .nav:has(>.socio-glass-nav-pill)>.nav-item.selected{
+ background:transparent!important;border-color:transparent!important;box-shadow:none!important;
+}
+body #appShell .sidebar-bottom #masterProductionSwitch:not(.hidden),
+body #appShell #view :is(.ember-filter,.ai-guide-tabs,.px-marketing-filters){
+ background:
+  linear-gradient(152deg,rgba(255,255,255,.09),rgba(218,230,220,.035))!important;
+ border-color:rgba(236,245,231,.20)!important;
+ box-shadow:inset 0 1px rgba(255,255,255,.12),0 4px 15px rgba(0,0,0,.12)!important;
+ -webkit-backdrop-filter:blur(12px) saturate(112%)!important;
+ backdrop-filter:blur(12px) saturate(112%)!important;
+}
+body #appShell :is(.btn:not(.primary),.px-quick-action,
+ .wa-mode-btn,.wa-small-action,.wa-round-icon){
+ background:
+  linear-gradient(150deg,rgba(251,255,249,.095),rgba(196,207,198,.042))!important;
+ border-color:rgba(236,245,230,.21)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.11),
+            0 2px 7px rgba(0,0,0,.09)!important;
+}
+/* Content reads as a calm stable plane. GPU-expensive background blurs belong
+   ONLY to controls/navigation, not every KPI or nested card. */
+body #appShell #view :is(.card,.callout,.panel,.lucid-card,.ember-card,
+ .ember-kpi,.ember-recent-card,.ember-activity,.ember-ai-card,.ember-qr-card,
+ .px-panel,.px-kpi,.px-ads-metric,.px-conn-card,.px-budget-account,
+ .master-panel,.master-kpi,.catalog-product,.ps-review-card,
+ .socio-training-center,.socio-clean-section,.socio-list-panel,
+ .commerce-summary>div,.commerce-lead-card,.socio-train-result,
+ .quote-request-item,.wa-qr-panel,.socio-ops-panel){
+ background:var(--socio-glass-panel)!important;
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+}
+body #appShell #view :is(.wa-inbox,.wa-inbox-side,.wa-inbox-main,
+ .wa-thread-header,.wa-compose,.wa-compose-top,.wa-compose-row,.wa-compose-foot,
+ .wa-message-list,.wa-inbox-details,.wa-dialog-surface,.wa-inbox-search){
+ -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+}
+
+/* ---------------- Legibility: text never inherits old lilac-on-dark -------- */
+/* The old theme's :is() selectors colorized more than 200 texts assuming a
+   white background. Enforce neutral typography in the dark content plane.
+   Specific class-based semantic status and button rules below retain meaning. */
+body #appShell #view :is(
+ h1,h2,h3,h4,h5,h6,p,small,span,label,legend,summary,output,caption,
+ blockquote,li,dt,dd,th,td,strong,b,em,code,pre){
+ color:var(--socio-copy)!important;
+ text-shadow:none!important;
+}
+body #appShell #view :is(h1,h2,h3,h4,h5,h6,strong,b){
+ color:var(--socio-ink)!important;
+}
+body #appShell #view :is(p,small,label,legend,caption,dt,dd,li,th){
+ color:#b7c4ba!important;  /* AA contrast on #303936 at normal text size. */
+}
+body #appShell #view :is(.px-muted,.px-provenance,.form-note,
+ .ember-kpi-meta,.ember-chart-labels,.ember-qr-disclaimer,
+ .px-panel-head p,.master-panel-head p,.wa-message-meta,
+ .wa-chat-preview,.wa-chat-meta,.wa-inbox-details small,
+ .px-budget-stat>span,.px-budget-brand>small,.px-budget-top-heading>small,
+ .px-account-select,.px-conn-row small,.px-axis,.px-legend,
+ .master-kpi small,.master-month-col>span){
+ color:#bec9c1!important;
+}
+body #appShell #view :is(.px-conn-head h2,.px-page-heading h1,
+ .px-kpi-number,.px-ads-metric>b,.px-ads-metric strong,
+ .px-budget-stat>strong,.px-budget-brand>strong,.px-panel-head h2,
+ .master-donut-center strong,.master-table td strong,.master-hero h1,
+ .ember-kpi-value,.wa-thread-header strong,.wa-chat-name-line strong){
+ color:#f4f6f0!important;
+}
+/* Buttons may contain spans/small/strong: keep correct control contrast. */
+body #appShell #view :is(button,.btn,summary[role="button"]):not(:disabled)
+ :is(span,small,strong,b,em,svg){
+ color:inherit!important;
+}
+body #appShell #view :is(.btn.primary,.ember-ai-cta,.ember-qr-cta,
+ .wa-compose-send,#newProduct){
+ color:var(--socio-accent-ink)!important;
+}
+body #appShell #view :is(.btn.primary,.ember-ai-cta,.ember-qr-cta,
+ .wa-compose-send,#newProduct) :is(span,small,strong,b,em,svg){
+ color:var(--socio-accent-ink)!important;
+}
+body #appShell #view :is(button,.btn):not(.primary){
+ color:#e9f1e7!important;
+}
+body #appShell #view :is(button,.btn):not(.primary) :is(span,small,strong,b,em,svg){
+ color:inherit!important;
+}
+body #appShell #view :is(.badge,.px-status,.catalog-status,
+ .px-live-indicator,.px-budget-warning,.px-notice,.master-status){
+ color:#dee8d9!important;
+}
+/* Preserve red/warning/positive labels rather than converting them to white. */
+body #appShell #view :is(.badge.green,.px-status.on,.catalog-status.yes,
+ .master-status.active){color:#d8f1b8!important}
+body #appShell #view :is(.badge.yellow,.px-budget-warning,
+ .master-status.trial){color:#f6d5a2!important}
+body #appShell #view :is(.badge.red,.catalog-status.no,
+ .master-status.paused){color:#f4c1b9!important}
+body #appShell #view .badge.blue{color:#c2e0f1!important}
+body #appShell #view .px-status :is(span,small,strong),
+body #appShell #view .badge :is(span,small,strong){color:inherit!important}
+
+/* Explicit backgrounds for form surfaces and auxiliary widgets left white by
+   older CSS. Text + fill are always set together. */
+body #appShell #view :is(.px-chart-wrap,.px-rank-track,
+ .px-funnel>div,.px-best-ad,.px-notice,.px-advanced,.px-footnote,
+ .wa-inbox-welcome,.wa-inbox-empty-list,.wa-message-quote,
+ .socio-training-clean,.socio-train-emblem,.socio-train-account,
+ .catalog-variant-row,.commerce-empty,.socio-knowledge-edit,
+ .report-note-grid>div,.px-budget-child,.px-feature-details,
+ .master-donut-center,.master-month-track,.master-plan-track){
+ background-color:#27312e!important;
+ color:#e4eee1!important;
+ border-color:rgba(233,244,230,.15)!important;
+}
+body #appShell #view :is(input:not([type=checkbox]):not([type=radio]),
+ select,textarea,option){
+ background-color:#1c2523!important;color:#f2f5ef!important;
+ caret-color:#d7f7a2!important;
+}
+body #appShell #view :is(input,textarea)::placeholder{
+ color:#b5c4b7!important;opacity:1!important;
+}
+body #appShell #view :is(.wa-inbox-search input,.wa-compose textarea){
+ color:#ecf3e9!important;
+}
+body #appShell #view :is(.wa-inbox-search input,.wa-compose textarea)::placeholder{
+ color:#acbcb0!important;
+}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.socio-billing-dialog,
+ .px-assistant-window,.command-box) :is(h1,h2,h3,h4,strong,b,p,small,label,span){
+ color:#e6efe4!important;
+}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.socio-billing-dialog,
+ .px-assistant-window,.command-box) :is(.btn.primary,[type="submit"].primary){
+ background:#c9f16d!important;color:#233019!important;
+}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.socio-billing-dialog,
+ .px-assistant-window,.command-box) :is(.btn.primary,[type="submit"].primary)
+ :is(span,strong,b){color:inherit!important}
+body #appShell #view :is(.px-quick-action,.px-campaign-back,
+ .px-budget-billing-link,.master-text-action){color:#e5efe2!important;}
+body #appShell #view .px-danger-zone :is(.btn,span,strong,b){
+ color:#f2c2b9!important;
+}
+body #appShell #view .loading,
+body #appShell #view .px-loading,
+body #appShell #view .master-loading{
+ color:#e0eadb!important;
+}
+
+/* -------------------- Accessibility, low-power fallbacks --------------- */
+@supports not ((backdrop-filter:blur(4px)) or (-webkit-backdrop-filter:blur(4px))){
+ body #appShell :is(.topbar,.sidebar,.workspace-box,.quick-search,
+   .nav>.socio-glass-nav-pill,.sidebar-bottom #masterProductionSwitch){
+  background-color:#303a38!important;box-shadow:inset 0 1px rgba(255,255,255,.12)!important;
+ }
+}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+ body #appShell :is(.topbar,.sidebar,.workspace-box,.quick-search,
+   .nav>.socio-glass-nav-pill,.sidebar-bottom #masterProductionSwitch),
+ body:has(#appShell:not(.hidden)) :is(.command-box,.socio-popup-surface,.px-assistant-window){
+  background:#28312f!important;
+  -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+ }
+ body #appShell #view :is(.card,.px-panel,.px-kpi,.master-panel,.master-kpi){
+  background:#303936!important;border-color:rgba(238,245,232,.25)!important;
+ }
+ body #appShell #view :is(p,small,span,label){color:#ecf4e8!important}
+}
+@media(max-width:780px){
+ body #appShell :is(.topbar,.workspace-box,.quick-search,.nav>.socio-glass-nav-pill){
+  -webkit-backdrop-filter:blur(6px)!important;
+  backdrop-filter:blur(6px)!important;
+ }
+}
+@media(prefers-reduced-motion:reduce){
+ body #appShell :is(.nav-item,.btn,.quick-search,.topbar){
+  transition:none!important;animation:none!important;
+ }
 }

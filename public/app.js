@@ -83,9 +83,16 @@ function toast(message,error=false){
 async function api(path,method='GET',body,headers={},options={}){
  const opts={method,credentials:'same-origin',headers:{'Accept':'application/json',...headers}};
  if(options?.signal)opts.signal=options.signal;
+ // A stalled GET must not keep a dashboard in "Carregando" forever.
+ const controller=method==='GET'&&!opts.signal&&typeof AbortController==='function'?new AbortController():null;
+ const timeout=controller?setTimeout(()=>controller.abort(),18000):null;
+ if(controller)opts.signal=controller.signal;
  if(body!==undefined){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
  if(method!=='GET'&&state.csrf)opts.headers['X-CSRF-Token']=state.csrf;
- const resp=await fetch(path,opts);
+ let resp;
+ try{resp=await fetch(path,opts);}
+ catch(error){if(controller?.signal.aborted)throw new Error('Tempo limite da consulta atingido. Tente novamente.');throw error;}
+ finally{if(timeout)clearTimeout(timeout);}
  const data=await resp.json().catch(()=>({error:'Erro de conexão.'}));
  if(!resp.ok){if(resp.status===401&&state.me){state.me=null;boot();}throw new Error(data.error||'Falha ao acessar o servidor.');}
  return data;
@@ -375,7 +382,7 @@ function emberIcon(kind){
  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(emberIcons[kind]||emberIcons.spark)+'</svg>';
 }
 async function overview(){
- if(globalThis.SocioWorkspaceUI)return globalThis.SocioWorkspaceUI.overview({root:view,api,me:state.me,navigate:changeView});
+ if(globalThis.SocioWorkspaceUI)return globalThis.SocioWorkspaceUI.overview({root:view,api,me:state.me,navigate:changeView,progressive:true});
  const [d,trend,recent,links]=await Promise.all([
   api('/api/dashboard'),api('/api/dashboard/activity?range=1m'),
   featureAvailable('whatsapp')?api('/api/inbox'):Promise.resolve([]),
