@@ -67,13 +67,13 @@ test('Apple-inspired glass stays on functional controls, not data cards or giant
 test('Dashboard first paints operational metrics and fetches Meta independently',()=>{
  assert.match(workspace,/async function overview\(\{root,api,me,navigate,activityRange='1m',progressive=false\}\)/);
  assert.match(app,/progressive:true/);
- assert.match(workspace,/Promise\.all\(calls\.slice\(5\)\)/);
+ assert.match(workspace,/Promise\.all\(calls\.slice\(4\)\)/);
  assert.match(workspace,/if\(renderId!==renderSerial\|\|!root\.isConnected/);
  assert.match(workspace,/progressive:false/);
  assert.match(workspace,/getCache\.clear/);
  assert.match(workspace,/if\(liveRefreshBusy\|\|serial!==liveRefreshSerial/);
  assert.match(workspace,/\},60000\)/);
- assert.match(workspace,/ads\?googleOverview\(\):Promise\.resolve\(null\)/);
+ assert.match(workspace,/ads&&googleAdsVisible\(\)\?googleOverview\(\):Promise\.resolve\(\{ok:false\}\)/);
  assert.doesNotMatch(workspace,/optional\(api,'\/api\/google-ads\/campaigns\?period=today'\)/);
 });
 

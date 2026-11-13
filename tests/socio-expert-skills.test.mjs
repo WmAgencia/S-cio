@@ -6,11 +6,11 @@ import {listExpertSkills,getExpertSkillGuide,selectExpertSkill} from '../socio-e
 import {speakToSocioSkill} from '../socio-skill-router.mjs';
 
 const actor={active_tenant_id:randomUUID(),user_id:randomUUID(),role:'owner',tenant_status:'active',
- features:{meta_ads:true,ai:true,whatsapp:true,catalog:true,quotes:true,team:true}};
+ features:{meta_ads:true,ai:true,whatsapp:true,catalog:true,team:true}};
 
 test('expert SKILL.md catalog is allowlisted, useful, uniquely named and versioned with the application',()=>{
  const skills=listExpertSkills();
- assert.equal(skills.length,7);assert.equal(new Set(skills.map(x=>x.id)).size,skills.length);
+ assert.equal(skills.length,6);assert.equal(new Set(skills.map(x=>x.id)).size,skills.length);
  for(const skill of skills){
   assert(skill.hasGuide);assert(skill.guide.startsWith('skills/'));
   const guide=getExpertSkillGuide(skill.id);
@@ -22,7 +22,7 @@ test('expert SKILL.md catalog is allowlisted, useful, uniquely named and version
  assert.equal(skills.find(s=>s.id==='google.ads').canExecute,false);
  assert.equal(skills.find(s=>s.id==='tracking.conversions').canExecute,false);
  assert.equal(skills.find(s=>s.id==='meta.campaigns').canExecute,true);
- assert.equal(skills.find(s=>s.id==='commerce.assistant').canExecute,true);
+ assert.equal(skills.find(s=>s.id==='commerce.assistant'),undefined);
  assert.throws(()=>getExpertSkillGuide('../../.env'),{status:404});
  assert.throws(()=>getExpertSkillGuide('skills/meta-campaigns/SKILL.md'),{status:404});
 });

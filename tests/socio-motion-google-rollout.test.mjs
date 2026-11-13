@@ -42,20 +42,22 @@ test('Google UI flag and unified visual assets load in correct order',()=>{
  assert(html.indexOf('/socio-product-features.js')<html.indexOf('/socio-thalita-ui.js'));
  assert(html.indexOf('/socio-stripe-system.css')>html.indexOf('/socio-master.css'));
  assert(!html.includes('<script src="/socio-glass-motion.js'));
- assert.match(html,/\/socio-workspace-ui\.js\?v=20261112d/);
- assert.match(html,/\/app\.js\?v=20261112d/);
+ assert.match(html,/\/socio-workspace-ui\.js\?v=20261112g/);
+ assert.match(html,/\/app\.js\?v=20261113a/);
 });
 
 test('overview orders information from headline to budget, KPIs, Meta and reports',()=>{
  const p=workspace.slice(workspace.indexOf("root.innerHTML='<div class=\"px-workspace px-overview\">'+"));
  const order=['CENTRAL DE INTELIGÊNCIA','px-budget-top','px-kpi-grid',
-  'px-ad-performance','Atividade de conversas','Funil de atendimento'];
+  'px-ad-performance','Atividade de conversas'];
  let at=-1;
  for(const marker of order){
   const next=p.indexOf(marker);
   assert(next>at,'misordered or missing '+marker);
   at=next;
  }
+ assert(p.includes('trafficSection+'),'overview renders the autonomous traffic panel');
+ assert(!p.includes('Funil de atendimento'),'removed commerce funnel is gone from the overview');
  const preview=workspace.slice(workspace.indexOf("if(kind==='overview')"),workspace.indexOf("if(kind==='overview')")+1800);
  assert(preview.indexOf('CENTRAL DE INTELIGÊNCIA')<preview.indexOf('px-budget-top'));
  assert.match(p,/Publicidade<\/h2>/);

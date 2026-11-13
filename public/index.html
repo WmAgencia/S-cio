@@ -11,12 +11,11 @@
  <link rel="stylesheet" href="/ember-theme.css">
  <link rel="stylesheet" href="/inbox.css">
  <link rel="stylesheet" href="/socio-ux.css">
- <link rel="stylesheet" href="/sales.css">
  <link rel="stylesheet" href="/meta-browser.css">
  <link rel="stylesheet" href="/prospector-socio.css">
  <link rel="stylesheet" href="/socio-executive.css">
  <link rel="stylesheet" href="/socio-master.css">
- <link rel="stylesheet" href="/socio-stripe-system.css?v=20261112a">
+ <link rel="stylesheet" href="/socio-stripe-system.css?v=20261113l">
  <script src="/socio-product-features.js?v=20261112a" defer></script>
  <script src="/meta-browser-ui.js" defer></script>
  <script src="/meta-local-ui.js" defer></script>
@@ -27,18 +26,21 @@
  <script src="/socio-ad-skills-ui.js" defer></script>
  <script src="/meta-report-schedule-ui.js" defer></script>
  <script src="/attribution-ui.js" defer></script>
- <script src="/socio-integrations-ui.js?v=20261112d" defer></script>
+ <script src="/socio-integrations-ui.js?v=20261112e" defer></script>
  <script src="/socio-ux.js" defer></script>
  <script src="/inbox.js" defer></script>
- <script src="/sales.js" defer></script>
  <script src="/flow-owner-ui.js" defer></script>
  <script src="/flow-images-ui.js" defer></script>
- <script src="/socio-interview-ui.js" defer></script>
+ <script src="/socio-interview-ui.js?v=20261112a" defer></script>
  <script src="/meta-billing-ui.js" defer></script>
- <script src="/socio-workspace-ui.js?v=20261112d" defer></script>
- <script src="/socio-thalita-ui.js?v=20261112d" defer></script>
+ <script src="/socio-orb-mesh.js?v=20261113a" defer></script>
+ <script src="/socio-workspace-ui.js?v=20261112g" defer></script>
+ <script src="/socio-thalita-ui.js?v=20261112e" defer></script>
+ <script src="/socio-orb-ui.js?v=20261113f" defer></script>
  <script src="/socio-master-dashboard.js" defer></script>
- <script src="/app.js?v=20261112d" defer></script>
+ <script src="/owner-channel-ui.js?v=20261112e" defer></script>
+ <script src="/trial-input.js?v=20261113a" defer></script>
+ <script src="/app.js?v=20261113a" defer></script>
  <script src="/ads-media-ui.js" defer></script>
  <script src="/socio-entry-motion.js?v=20261112b" defer></script>
 </head>
@@ -85,29 +87,32 @@
 <div id="appShell" class="app-shell hidden" data-workspace="production">
  <aside class="sidebar">
   <div class="sidebar-logo"><div class="brand-mark">s<span>.</span></div><div><strong>Sócio</strong><small>por Consecom</small></div></div>
+  <div class="workspace-switcher hidden" id="workspaceSwitcher" role="tablist" aria-label="Ambiente do Sócio">
+   <span class="workspace-switcher-thumb" aria-hidden="true"></span>
+   <button type="button" role="tab" data-workspace-target="production" aria-selected="true" tabindex="0"><span class="ws-mark" aria-hidden="true">P</span><span>Produção</span></button>
+   <button type="button" role="tab" data-workspace-target="master" aria-selected="false" tabindex="-1"><span class="ws-mark" aria-hidden="true">M</span><span>Master</span></button>
+  </div>
   <div class="workspace-box"><span class="workspace-circle" id="workspaceInitial">C</span><div class="workspace-label"><small id="workspaceKind">AMBIENTE DE PRODUÇÃO</small><strong id="workspaceName">Empresa</strong></div><span class="workspace-chevron">⌄</span></div>
-  <div class="sidebar-label">MENU PRINCIPAL</div>
+  <div class="sidebar-label" id="productionMenuLabel">MENU PRINCIPAL</div>
   <nav class="nav" id="productionNav" aria-label="Menu do painel de produção">
    <button data-view="overview" class="nav-item selected"><span class="nav-symbol">◈</span> Visão geral</button>
    <button data-view="inbox" class="nav-item"><span class="nav-symbol">▤</span> WhatsApp</button>
    <button data-view="connections" class="nav-item"><span class="nav-symbol">⌁</span> Conexões</button>
    <button data-view="marketing" class="nav-item"><span class="nav-symbol">◇</span> Meta Ads</button>
-   
    <button data-view="products" class="nav-item"><span class="nav-symbol">▦</span> Produtos e serviços</button>
    <div class="sidebar-label inner">INTELIGÊNCIA</div>
+   <button data-view="orb" class="nav-item"><span class="nav-symbol">◉</span> Conversar com IA</button>
    <button data-view="training" class="nav-item"><span class="nav-symbol">✳</span> Inteligência Artificial</button>
    <div class="sidebar-label inner">ADMINISTRAÇÃO</div>
    <button data-view="team" class="nav-item" id="teamNav"><span class="nav-symbol">♙</span> Equipe</button>
-   <button data-view="admin" class="nav-item hidden" id="adminNav"><span class="nav-symbol">▧</span> Empresas</button>
   </nav>
   <nav class="nav master-side-nav hidden" id="masterNav" aria-label="Menu do painel Master">
-   <div class="sidebar-label inner master-nav-title">ADMINISTRAÇÃO DO SAAS</div>
+   <div class="sidebar-label inner master-nav-title" id="masterMenuLabel">ADMINISTRAÇÃO DO SAAS</div>
    <button data-view="masterOverview" class="nav-item selected"><span class="nav-symbol">▤</span> Dashboard</button>
    <button data-view="admin" class="nav-item"><span class="nav-symbol">▧</span> Empresas</button>
    <button data-view="masterPlans" class="nav-item"><span class="nav-symbol">▥</span> Planos e métricas</button>
   </nav>
   <div class="sidebar-bottom">
-   <button id="masterProductionSwitch" type="button" class="nav-item hidden" aria-label="Alternar painel Master e produção"><span class="nav-symbol" aria-hidden="true">⇄</span> <span id="masterSwitchLabel">Painel Master</span></button>
    <button type="button" class="nav-item" data-view="settings"><span class="nav-symbol">⚙</span> Configurações da conta</button>
    <button id="logoutBtn" class="nav-item logout"><span class="nav-symbol">↪</span> Sair da conta</button>
   </div>
@@ -119,7 +124,7 @@
      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke="currentColor"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
      <span>Buscar no Sócio</span><span class="shortcut">⌘ / Ctrl + K</span>
     </button>
-    <div class="breadcrumb">Sócio <span>/</span> <strong id="topTitle">Visão geral</strong></div>
+    <div class="breadcrumb"><span id="crumbRoot">Sócio</span> <span>/</span> <strong id="topTitle">Visão geral</strong></div>
    </div>
    <div class="top-right">
     <span class="top-pill"><i></i> Ambiente privado</span>
@@ -141,7 +146,6 @@
   <div class="command-tip">Escolha uma seção para navegar. Esc para fechar.</div>
  </div>
 </div>
-<div id="commerceAlerts" class="commerce-alert-stack" aria-label="Notificações de vendas e orçamentos" aria-live="polite"></div>
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 </body>
 </html>

@@ -124,8 +124,7 @@ async function rehearse(){
     "SELECT (SELECT count(*) FROM tenants)::int AS tenants,"+
     "(SELECT count(*) FROM channels)::int AS channels,"+
     "(SELECT count(*) FROM conversations)::int AS conversations,"+
-    "(SELECT count(*) FROM users)::int AS users,"+
-    "(SELECT count(*) FROM sales_orders)::int AS orders");
+    "(SELECT count(*) FROM users)::int AS users");
    process.stdout.write(JSON.stringify({ok:true,rehearsed:true,disposableDatabase:targetName,counts:checks.rows[0]})+'\n');
   }finally{await client.end();}
  }catch(err){pg.child.kill('SIGTERM');throw err;}

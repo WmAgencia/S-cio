@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const file=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
-const APP=file('public/app.js'),HTML=file('public/index.html'),
- SALES=file('public/sales.js'),CSS=file('public/socio-ux.css');
+const APP=file('public/app.js'),HTML=file('public/index.html'),CSS=file('public/socio-ux.css');
 
 function simulatedApp({features=null,products=[]}={}){
  const nodes=new Map(),handlers=new Map();
@@ -30,14 +29,14 @@ function simulatedApp({features=null,products=[]}={}){
   }
   return nodes.get(id);
  }
- const names=['overview','inbox','products','sales','marketing','training','team','admin'];
+ const names=['overview','inbox','products','marketing','training','team','admin'];
  const nav=names.map(key=>({...node('nav:'+key),dataset:{view:key},querySelector:()=>node('symbol:'+key)}));
  const values={
   '/api/bootstrap':{initialized:true},
   '/api/me':{user:{id:'u',name:'Gestora Teste',role:'owner',platformOwner:false,permissions:[
-   'catalog.read','catalog.manage','sales.read','sales.manage','marketing.read','training.manage','team.read'
+   'catalog.read','catalog.manage','marketing.read','marketing.manage','training.manage','team.read'
   ]},tenant:{id:'tenant',name:'Empresa Teste',features:features||{
-   whatsapp:true,catalog:true,quotes:true,meta_ads:true,ai:true,team:true
+   whatsapp:true,catalog:true,meta_ads:true,ai:true,team:true
   }},csrf:'abc'},
   '/api/dashboard':{openConversations:0,channels:0,products:products.length,imports:0,inboundMessages:0,messagesReceivedToday:0},
   '/api/waakg/channels':[],
@@ -56,7 +55,7 @@ function simulatedApp({features=null,products=[]}={}){
   addEventListener(){}
  };
  const context={document,Date,URL,Intl,FormData,console,setTimeout,clearTimeout,
-  window:{SocioSales:{render:async()=>{}}},
+  window:{},
   fetch:async u=>({ok:Object.hasOwn(values,u),status:Object.hasOwn(values,u)?200:404,
    json:async()=>values[u]||{error:'Not found'}})};
  vm.createContext(context);vm.runInContext(APP,context,{timeout:4000});
@@ -72,7 +71,7 @@ test('login uses accessible interactive controls with focus and motion fallback'
  assert.match(APP,/submit.disabled=true/);
 });
 test('catalog populated UI includes photos, variants and statuses without emitting raw HTML',async()=>{
- const flag={whatsapp:true,catalog:true,quotes:true,meta_ads:false,ai:true,team:false};
+ const flag={whatsapp:true,catalog:true,meta_ads:false,ai:true,team:false};
  const fixture=[{
   id:'11111111-1111-4111-8111-111111111111',name:'Câmera <Premium>',sku:'CAM-01',
   price_cents:55990,stock_quantity:7,active:true,
@@ -101,28 +100,25 @@ test('catalog populated UI includes photos, variants and statuses without emitti
  assert.equal(sim.node('id:appShell').classList.contains('hidden'),false);
 });
 test('tenant hides modules and stops navigation even when caller invokes internal view',async()=>{
- const flags={whatsapp:true,catalog:true,quotes:false,meta_ads:false,ai:true,team:false};
+ const flags={whatsapp:true,catalog:true,meta_ads:false,ai:true,team:false};
  const sim=simulatedApp({features:flags});
  await new Promise(r=>setTimeout(r,60));
- assert.equal(sim.node('nav:sales').classList.contains('hidden'),false,'Synthetic nav items are not actual DOM selectors');
  await vm.runInContext("changeView('sales')",sim.context);
+ assert.equal(vm.runInContext('state.view',sim.context),'overview');
+ await vm.runInContext("changeView('quotes')",sim.context);
  assert.equal(vm.runInContext('state.view',sim.context),'overview');
  await vm.runInContext("changeView('marketing')",sim.context);
  assert.equal(vm.runInContext('state.view',sim.context),'overview');
  await vm.runInContext("changeView('products')",sim.context);
  assert.match(sim.node('id:view').innerHTML,/Seu catálogo está vazio/);
 });
-test('quote screen includes human review, owner opt-in and no automatic customer quote send',()=>{
- for(const phrase of ['Pedidos de orçamento recebidos','quoteOwnerAlerts','data-quote-prepare',
-  "data-quote-resolve","api('/api/sales/quote-requests')","/api/sales/quote-alerts"])
-  assert(SALES.includes(phrase),phrase);
- assert(SALES.includes('Nenhum pedido identificado'));
- assert(SALES.includes('Cadastre um produto ativo'));
- assert(SALES.includes('Copiar link'));
+test('commerce is fully removed from the dashboard and server',()=>{
+ assert.doesNotMatch(APP,/SocioSales|sales\.read|quote-requests|quote-alerts/);
+ assert.doesNotMatch(HTML,/sales\.js|sales\.css|commerceAlerts/);
 });
 
 test('own account security remains accessible without the team module',async()=>{
- const sim=simulatedApp({features:{whatsapp:false,catalog:true,quotes:false,meta_ads:false,ai:false,team:false}});
+ const sim=simulatedApp({features:{whatsapp:false,catalog:true,meta_ads:false,ai:false,team:false}});
  await new Promise(resolve=>setTimeout(resolve,60));
  await vm.runInContext("state.me.user.permissions.push('account.manage'); changeView('settings')",sim.context);
  assert.equal(vm.runInContext('state.view',sim.context),'settings');

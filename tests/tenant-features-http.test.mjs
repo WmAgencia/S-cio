@@ -50,14 +50,14 @@ test('HTTP tenant bundles: master creates company with optional modules, switch 
  const request=(path,method='GET',payload)=>fetch(base+path,{method,headers:{
   Cookie:session,'Content-Type':'application/json','X-CSRF-Token':csrf
  },...(payload===undefined?{}:{body:JSON.stringify(payload)})});
- const opts={whatsapp:true,catalog:false,quotes:false,meta_ads:false,ai:false,team:false};
+ const opts={whatsapp:true,catalog:false,meta_ads:false,ai:false,team:false};
  const added=await request('/api/admin/tenants','POST',{
-  company:'Cliente Sem Orçamentos',ownerName:'Dona do Cliente',ownerEmail:'owner-features@example.test',
+  company:'Cliente Sem Catálogo',ownerName:'Dona do Cliente',ownerEmail:'owner-features@example.test',
   ownerPassword:'LongStrongPassword123!',plan:'essencial',features:opts
  });
  assert.equal(added.status,201,await added.text().catch(()=>'?'));
  const companies=await(await request('/api/admin/tenants')).json();
- const company=companies.find(x=>x.name==='Cliente Sem Orçamentos');
+ const company=companies.find(x=>x.name==='Cliente Sem Catálogo');
  assert(company);
  assert.deepEqual(company.features,opts);
  const switched=await request('/api/admin/switch','POST',{tenantId:company.id});
@@ -66,25 +66,19 @@ test('HTTP tenant bundles: master creates company with optional modules, switch 
  assert.deepEqual(me.tenant.features,opts);
  assert(!me.user.permissions.includes('catalog.read'));
  assert(!me.user.permissions.includes('marketing.read'));
- assert(!me.user.permissions.includes('sales.manage'));
+ assert(me.user.permissions.includes('billing.manage'),'Billing is not module-scoped');
  assert(me.user.permissions.includes('platform.manage'),'Platform master controls remain available');
- for(const url of ['/api/products','/api/sales','/api/marketing/oauth','/api/agent']){
+ for(const url of ['/api/products','/api/marketing/oauth','/api/agent']){
   const res=await request(url);
   assert.equal(res.status,403,'Disabled module accessible at '+url);
  }
- const alerts=await request('/api/sales/quote-requests');
- assert.equal(alerts.status,403);
- const bad=await request('/api/admin/tenants/'+company.id+'/features','PUT',{
-  features:{...opts,quotes:true}});
- assert.equal(bad.status,422,'Quotes cannot run without products');
+ const removed=await request('/api/sales/quote-requests');
+ assert.equal(removed.status,404,'Commerce routes are removed');
  const updated=await request('/api/admin/tenants/'+company.id+'/features','PUT',{
-  features:{...opts,catalog:true,quotes:true}});
+  features:{...opts,catalog:true}});
  assert.equal(updated.status,200);
- assert.equal((await(await request('/api/me')).json()).tenant.features.quotes,true);
+ assert.equal((await(await request('/api/me')).json()).tenant.features.catalog,true);
  assert.equal((await request('/api/products')).status,200);
- assert.equal((await request('/api/sales')).status,200);
- const alertsOn=await request('/api/sales/quote-alerts','PUT',{enabled:true});
- assert.notEqual(alertsOn.status,200,'Owner notifications must not enable without authorized outbound/connected channel');
  const tenant=await(await request('/api/admin/tenants')).json();
- assert(tenant.find(x=>x.id===company.id).features.quotes);
+ assert(tenant.find(x=>x.id===company.id).features.catalog);
 });

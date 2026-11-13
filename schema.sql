@@ -427,60 +427,8 @@ CREATE INDEX IF NOT EXISTS socio_conversation_memory_expiry_idx
  ON socio_conversation_memory(expires_at);
 
 
--- Sócio Fase 3: vendas e aprovações; alterações aditivas sem cobranças automáticas.
+-- Sócio Fase 3: índice único de conversas por tenant (usado por chaves estrangeiras compostas).
 CREATE UNIQUE INDEX IF NOT EXISTS conversations_tenant_sales_fk ON conversations(tenant_id,id);
-CREATE TABLE IF NOT EXISTS sales_quotes (
- id uuid PRIMARY KEY,
- tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
- conversation_id uuid NOT NULL,
- series_id uuid NOT NULL,
- version integer NOT NULL CHECK(version>0),
- status text NOT NULL DEFAULT 'draft'
-  CHECK(status IN ('draft','issued','accepted','declined','superseded','cancelled','expired')),
- currency char(3) NOT NULL DEFAULT 'BRL' CHECK(currency='BRL'),
- amount_cents integer NOT NULL CHECK(amount_cents>0 AND amount_cents<100000000),
- items jsonb NOT NULL,
- token_hash char(64) UNIQUE,
- buyer_name text,
- expires_at timestamptz,
- accepted_at timestamptz,
- created_by uuid REFERENCES users(id) ON DELETE SET NULL,
- created_at timestamptz NOT NULL DEFAULT now(),
- updated_at timestamptz NOT NULL DEFAULT now(),
- FOREIGN KEY(tenant_id,conversation_id) REFERENCES conversations(tenant_id,id) ON DELETE CASCADE,
- UNIQUE(tenant_id,series_id,version),
- UNIQUE(tenant_id,id)
-);
-CREATE INDEX IF NOT EXISTS sales_quotes_tenant_recent ON sales_quotes(tenant_id,created_at DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS sales_quotes_one_issued_per_series
- ON sales_quotes(tenant_id,series_id) WHERE status='issued';
-CREATE TABLE IF NOT EXISTS sales_orders (
- id uuid PRIMARY KEY,
- tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
- quote_id uuid NOT NULL,
- conversation_id uuid NOT NULL,
- customer_name text NOT NULL,
- amount_cents integer NOT NULL CHECK(amount_cents>0),
- items jsonb NOT NULL,
- status text NOT NULL DEFAULT 'pending_payment'
-  CHECK(status IN ('pending_payment','paid_test','manual_review','cancelled')),
- payment_provider text,
- payment_session_id text UNIQUE,
- payment_url text,
- paid_at timestamptz,
- created_at timestamptz NOT NULL DEFAULT now(),
- UNIQUE(tenant_id,quote_id),
- UNIQUE(tenant_id,id),
- FOREIGN KEY(tenant_id,quote_id) REFERENCES sales_quotes(tenant_id,id),
- FOREIGN KEY(tenant_id,conversation_id) REFERENCES conversations(tenant_id,id)
-);
-CREATE INDEX IF NOT EXISTS sales_orders_tenant_recent ON sales_orders(tenant_id,created_at DESC);
-CREATE TABLE IF NOT EXISTS sales_payment_events (
- event_id text PRIMARY KEY,
- order_id uuid NOT NULL REFERENCES sales_orders(id) ON DELETE CASCADE,
- provider text NOT NULL,
- processed_at timestamptz NOT NULL DEFAULT now()
-);
 
 
 -- Phase 4, additive authorization + tenant integrity hardening.
@@ -666,68 +614,6 @@ CREATE TABLE IF NOT EXISTS instagram_hosted_profiles (
  FOREIGN KEY(tenant_id,created_by) REFERENCES users(tenant_id,id)
 );
 
-
--- Customer-initiated budget requests are NOT priced or sent to customers by AI.
--- Incoming message uniqueness prevents duplicate owner alerts when a worker restarts.
-CREATE TABLE IF NOT EXISTS quote_requests (
- id uuid PRIMARY KEY,
- tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
- conversation_id uuid NOT NULL,
- inbound_message_id uuid NOT NULL,
- customer_name text NOT NULL DEFAULT '',
- customer_phone text NOT NULL DEFAULT '',
- summary text NOT NULL DEFAULT '',
- status text NOT NULL DEFAULT 'pending'
-  CHECK(status IN ('pending','preparing','resolved')),
- alert_status text NOT NULL DEFAULT 'pending'
-  CHECK(alert_status IN ('pending','processing','sent','unconfirmed')),
- alert_last_attempt_at timestamptz,
- alert_sent_at timestamptz,
- created_at timestamptz NOT NULL DEFAULT now(),
- updated_at timestamptz NOT NULL DEFAULT now(),
- UNIQUE(tenant_id,inbound_message_id),
- UNIQUE(tenant_id,id),
- FOREIGN KEY(tenant_id,conversation_id) REFERENCES conversations(tenant_id,id) ON DELETE CASCADE,
- FOREIGN KEY(tenant_id,inbound_message_id) REFERENCES messages(tenant_id,id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS quote_requests_tenant_status ON quote_requests(tenant_id,status,created_at DESC);
-CREATE INDEX IF NOT EXISTS quote_requests_delivery_queue ON quote_requests(alert_status,created_at);
-
-
--- Supervised purchase opportunities. Each inbound message yields at most one card.
--- A potential sale is NOT a paid order; prices come from the official tenant catalogue.
-CREATE TABLE IF NOT EXISTS sale_intents (
- id uuid PRIMARY KEY,
- tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
- conversation_id uuid NOT NULL,
- inbound_message_id uuid NOT NULL,
- customer_name text NOT NULL DEFAULT '',
- customer_phone text NOT NULL DEFAULT '',
- summary text NOT NULL DEFAULT '',
- items jsonb NOT NULL DEFAULT '[]'::jsonb,
- amount_cents integer CHECK(amount_cents IS NULL OR amount_cents BETWEEN 1 AND 99999999),
- status text NOT NULL DEFAULT 'pending'
-  CHECK(status IN ('pending','contacted','completed','dismissed')),
- created_at timestamptz NOT NULL DEFAULT now(),
- updated_at timestamptz NOT NULL DEFAULT now(),
- UNIQUE(tenant_id,id),
- UNIQUE(tenant_id,inbound_message_id),
- FOREIGN KEY(tenant_id,conversation_id) REFERENCES conversations(tenant_id,id) ON DELETE CASCADE,
- FOREIGN KEY(tenant_id,inbound_message_id) REFERENCES messages(tenant_id,id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS sale_intents_tenant_recent ON sale_intents(tenant_id,status,created_at DESC);
-
--- Manually reviewed custom estimates. One customer-directed send per request;
--- uncertain gateway delivery is never retried without deliberate intervention.
-ALTER TABLE quote_requests ADD COLUMN IF NOT EXISTS draft_text text;
-ALTER TABLE quote_requests ADD COLUMN IF NOT EXISTS draft_amount_cents integer;
-ALTER TABLE quote_requests ADD COLUMN IF NOT EXISTS delivery_status text NOT NULL DEFAULT 'not_sent';
-ALTER TABLE quote_requests ADD COLUMN IF NOT EXISTS quote_sent_at timestamptz;
-DO $quote_amount_check$ BEGIN
- IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conname='quote_requests_draft_amount_nonnegative' AND conrelid='quote_requests'::regclass) THEN
-  ALTER TABLE quote_requests ADD CONSTRAINT quote_requests_draft_amount_nonnegative CHECK(draft_amount_cents IS NULL OR draft_amount_cents BETWEEN 1 AND 99999999) NOT VALID;
- END IF;
-END $quote_amount_check$;
 
 -- Sócio Ads Media Bridge — isolamento por tenant, sem mídia ou token públicos.
 CREATE TABLE IF NOT EXISTS ads_media (
@@ -1045,6 +931,99 @@ CREATE TABLE IF NOT EXISTS socio_whatsapp_meta_video_imports (
 CREATE INDEX IF NOT EXISTS socio_whatsapp_meta_video_imports_tenant_idx
  ON socio_whatsapp_meta_video_imports(tenant_id,created_at DESC);
 
+-- Owner channel: one WhatsApp group per connected number, named "Meu Sócio".
+-- The owner sends commands there; Sócio answers in the same group.
+CREATE TABLE IF NOT EXISTS socio_owner_groups (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ channel_id uuid NOT NULL,
+ group_jid text CHECK (group_jid IS NULL OR group_jid ~ '^[0-9]{5,24}(-[0-9]{5,24})?@g\.us$'),
+ subject text NOT NULL CHECK (char_length(subject) BETWEEN 1 AND 100),
+ status text NOT NULL DEFAULT 'active'
+  CHECK (status IN ('active','waiting_owner_phone','failed')),
+ error_code text,
+ ad_page_id text CHECK (ad_page_id IS NULL OR ad_page_id ~ '^[0-9]{4,30}$'),
+ ad_city_key text CHECK (ad_city_key IS NULL OR ad_city_key ~ '^[0-9]{4,30}$'),
+ ad_city_name text,
+ ad_daily_budget_cents integer
+  CHECK (ad_daily_budget_cents IS NULL OR ad_daily_budget_cents BETWEEN 100 AND 10000000),
+ ad_age_min integer NOT NULL DEFAULT 18 CHECK (ad_age_min BETWEEN 18 AND 65),
+ ad_age_max integer NOT NULL DEFAULT 65 CHECK (ad_age_max BETWEEN 18 AND 65),
+ ad_genders integer[] NOT NULL DEFAULT '{}',
+ whatsapp_destination text CHECK (whatsapp_destination IS NULL OR whatsapp_destination ~ '^[0-9]{10,15}$'),
+ last_video_message_id text,
+ last_video_id text CHECK (last_video_id IS NULL OR last_video_id ~ '^[0-9]{4,30}$'),
+ last_seen_at timestamptz,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE (tenant_id,channel_id),
+ UNIQUE (tenant_id,group_jid),
+ FOREIGN KEY (tenant_id,channel_id) REFERENCES channels(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS socio_owner_groups_status_idx ON socio_owner_groups(status);
+
+-- Every inbound group message is stored once; the row is also the job that
+-- turns it into an answer. provider_message_id makes re-polling idempotent.
+CREATE TABLE IF NOT EXISTS socio_owner_commands (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ group_id uuid NOT NULL REFERENCES socio_owner_groups(id) ON DELETE CASCADE,
+ provider_message_id text NOT NULL CHECK (char_length(provider_message_id) BETWEEN 4 AND 180),
+ sender_jid text,
+ kind text NOT NULL DEFAULT 'text' CHECK (kind IN ('text','video','image','other')),
+ body text,
+ media_message_id text,
+ action text,
+ state text NOT NULL DEFAULT 'received'
+  CHECK (state IN ('received','working','preparing','awaiting_settings',
+   'awaiting_confirmation','done','failed','cancelled')),
+ attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+ next_attempt_at timestamptz NOT NULL DEFAULT now(),
+ context jsonb NOT NULL DEFAULT '{}'::jsonb,
+ reply text,
+ error_code text,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE (tenant_id,provider_message_id)
+);
+CREATE INDEX IF NOT EXISTS socio_owner_commands_pending_idx
+ ON socio_owner_commands(state,next_attempt_at);
+CREATE INDEX IF NOT EXISTS socio_owner_commands_group_idx
+ ON socio_owner_commands(tenant_id,group_id,created_at DESC);
+
+-- Every autonomous or requested traffic change, with the evidence behind it.
+-- The row is written before the Meta plan runs, so an interrupted worker never
+-- hides an action, and the same action is not repeated inside the cooldown.
+CREATE TABLE IF NOT EXISTS socio_traffic_decisions (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ account_id text NOT NULL CHECK (account_id ~ '^act_[0-9]{4,30}$'),
+ action text NOT NULL CHECK (action IN ('pause','scale','duplicate_campaign',
+  'broaden_audience','approval_request','hold')),
+ entity text NOT NULL CHECK (entity IN ('campaign','adset','ad')),
+ entity_id text NOT NULL CHECK (entity_id ~ '^[0-9]{4,30}$'),
+ entity_name text,
+ campaign_id text CHECK (campaign_id IS NULL OR campaign_id ~ '^[0-9]{4,30}$'),
+ reason text NOT NULL,
+ explanation text NOT NULL,
+ evidence jsonb NOT NULL DEFAULT '{}'::jsonb,
+ current_budget_cents integer CHECK (current_budget_cents IS NULL OR current_budget_cents >= 100),
+ target_budget_cents integer CHECK (target_budget_cents IS NULL OR target_budget_cents >= 100),
+ within_autonomy boolean NOT NULL DEFAULT false,
+ status text NOT NULL DEFAULT 'proposed'
+  CHECK (status IN ('proposed','awaiting_approval','executing','done','failed','dismissed')),
+ plan_id uuid,
+ result jsonb,
+ error_code text,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS socio_traffic_decisions_tenant_idx
+ ON socio_traffic_decisions(tenant_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS socio_traffic_decisions_pending_idx
+ ON socio_traffic_decisions(tenant_id,status)
+ WHERE status IN ('awaiting_approval','executing');
+
 -- One-off owner-authorized pilot: immutable operation ID, exactly-once attempt.
 CREATE TABLE IF NOT EXISTS socio_whatsapp_meta_video_pilot_jobs (
  id uuid PRIMARY KEY,
@@ -1061,7 +1040,7 @@ CREATE TABLE IF NOT EXISTS socio_whatsapp_meta_video_pilot_jobs (
 CREATE INDEX IF NOT EXISTS socio_whatsapp_meta_video_pilot_jobs_tenant_idx
  ON socio_whatsapp_meta_video_pilot_jobs(tenant_id,created_at DESC);
 
--- Opt-in SaaS billing. Isolated from sales_orders (customer purchases / Stripe test).
+-- Opt-in SaaS billing da assinatura do Sócio.
 -- A subscription status NEVER directly changes tenants.status: no automatic suspension.
 CREATE TABLE IF NOT EXISTS socio_billing_accounts (
  tenant_id uuid PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
@@ -1087,6 +1066,20 @@ CREATE TABLE IF NOT EXISTS socio_billing_webhook_events (
  received_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS socio_billing_events_recent_idx ON socio_billing_webhook_events(received_at DESC);
+
+-- One free trial per business identity. Values are HMAC digests, never the raw
+-- CPF, CNPJ, phone or e-mail; the trial window lives on the tenant row.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tax_id text;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tax_id_type text CHECK (tax_id_type IS NULL OR tax_id_type IN ('cnpj','cpf'));
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at timestamptz;
+UPDATE tenants SET trial_ends_at=created_at+interval '7 days' WHERE trial_ends_at IS NULL;
+CREATE TABLE IF NOT EXISTS socio_trial_claims (
+ kind text NOT NULL CHECK (kind IN ('tax_id','phone','email')),
+ value_hash char(64) NOT NULL,
+ tenant_id uuid REFERENCES tenants(id) ON DELETE SET NULL,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY (kind,value_hash)
+);
 
 
 -- Official Google Ads OAuth: callback state is one-use, session-bound and encrypted.

@@ -256,54 +256,10 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const alpha=await call('/api/products','POST',{name:'Site Institucional',description:'Site responsivo',priceCents:49700},adminCookie,csrf);
  assert.equal(alpha.status,201);
  const alphaId=alpha.result.id;
- // Supervised sales Phase 3: immutable catalog price snapshots, revision
- // invalidation, public buyer approval and order idempotency.
- const noCsrfQuote=await call('/api/sales/quotes','POST',{conversationId,items:[{productId:alphaId,quantity:1}]},adminCookie);
- assert.equal(noCsrfQuote.status,403,'Quote creation requires CSRF');
- const invalidQuantity=await call('/api/sales/quotes','POST',{conversationId,items:[{productId:alphaId,quantity:999}]},adminCookie,csrf);
- assert.equal(invalidQuantity.status,422);
- const quoteOne=await call('/api/sales/quotes','POST',
-  {conversationId,items:[{productId:alphaId,quantity:2,unitPriceCents:1}]},adminCookie,csrf);
- assert.equal(quoteOne.status,201,JSON.stringify(quoteOne.result));
- assert.equal(quoteOne.result.amount_cents,99400,'Price must be sourced from the official catalog, never client payload');
- const issuedOne=await call('/api/sales/quotes/'+quoteOne.result.id+'/issue','POST',{},adminCookie,csrf);
- assert.equal(issuedOne.status,200);
- const tokenOne=issuedOne.result.path.split('#')[1];
- assert.equal(tokenOne.length,64);
- const publicOne=await call('/api/public/quotes/'+tokenOne,'GET');
- assert.equal(publicOne.status,200);
- assert.equal(publicOne.result.items[0].unitPriceCents,49700);
- const revision=await call('/api/sales/quotes','POST',
-  {conversationId,seriesId:quoteOne.result.series_id,items:[{productId:alphaId,quantity:1}]},adminCookie,csrf);
- assert.equal(revision.status,201);
- assert.equal(revision.result.version,2);
- const invalidated=await call('/api/public/quotes/'+tokenOne,'GET');
- assert.equal(invalidated.status,404,'Old buyer links must be invalidated when repriced');
- const issuedTwo=await call('/api/sales/quotes/'+revision.result.id+'/issue','POST',{},adminCookie,csrf);
- assert.equal(issuedTwo.status,200);
- const tokenTwo=issuedTwo.result.path.split('#')[1];
- const noConsent=await call('/api/public/quotes/'+tokenTwo+'/accept','POST',{buyerName:'Cliente',agree:false});
- assert.equal(noConsent.status,422);
- const accepted=await call('/api/public/quotes/'+tokenTwo+'/accept','POST',{buyerName:'Compradora Exemplo',agree:true});
- assert.equal(accepted.status,200,JSON.stringify(accepted.result));
- assert.equal(accepted.result.status,'pending_payment');
- const twice=await call('/api/public/quotes/'+tokenTwo+'/accept','POST',{buyerName:'Compradora Exemplo',agree:true});
- assert.equal(twice.status,200);
- assert.equal(twice.result.id,accepted.result.id,'Buyer retry must not duplicate order');
- assert.equal(twice.result.alreadyApproved,true);
- const unavailableCheckout=await call('/api/public/quotes/'+tokenTwo+'/checkout','POST',{});
- assert.equal(unavailableCheckout.status,503,'Real payment must remain disabled without test credentials');
- const afterSales=await call('/api/sales','GET',undefined,adminCookie);
- assert.equal(afterSales.status,200);
- assert.equal(afterSales.result.orders.length,1);
- assert.equal(afterSales.result.orders[0].status,'pending_payment');
- assert.equal(afterSales.result.quotes.length,2);
- const noReprice=await call('/api/sales/quotes','POST',
-  {conversationId,seriesId:quoteOne.result.series_id,items:[{productId:alphaId,quantity:1}]},adminCookie,csrf);
- assert.equal(noReprice.status,409,'An approved quote must stay immutable');
- const publicPage=await fetch(base+'/quote.html');
- assert.equal(publicPage.status,200);
- assert.match(await publicPage.text(),/ORÇAMENTO DIGITAL/);
+ const noCsrfCatalog=await call('/api/products','POST',{name:'Sem CSRF',priceCents:100},adminCookie);
+ assert.equal(noCsrfCatalog.status,403,'Product creation requires CSRF');
+ const removedCommerce=await call('/api/sales/quotes','POST',{conversationId,items:[]},adminCookie,csrf);
+ assert.equal(removedCommerce.status,404,'Commerce routes are removed');
 
  const foreign=await call('/api/admin/tenants','POST',{company:'Pizzaria Beta',ownerName:'Dono Beta',ownerEmail:'beta@test.invalid',ownerPhone:'15981112222',ownerPassword:'SenhaBetaMuitoForte2026',plan:'essencial'},adminCookie,csrf);
  assert.equal(foreign.status,201);
@@ -312,14 +268,7 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const betaProducts=await call('/api/products','GET',undefined,adminCookie);
  assert.equal(betaProducts.result.length,0);
  const betaSales=await call('/api/sales','GET',undefined,adminCookie);
- assert.equal(betaSales.status,200);
- assert.deepEqual(betaSales.result.quotes,[],'Company B must not see company A proposals');
- assert.deepEqual(betaSales.result.orders,[],'Company B must not see company A orders');
- const crossQuote=await call('/api/sales/quotes','POST',
-  {conversationId,items:[{productId:alphaId,quantity:1}]},adminCookie,csrf);
- assert.equal(crossQuote.status,404,'One tenant cannot quote another tenant conversation');
- const crossCancelQuote=await call('/api/sales/quotes/'+revision.result.id+'/cancel','POST',{},adminCookie,csrf);
- assert.equal(crossCancelQuote.status,409,'Other company must not cancel customer-approved quotes');
+ assert.equal(betaSales.status,404,'Commerce routes are removed');
 
  const betaActivity=await call('/api/dashboard/activity?range=6m','GET',undefined,adminCookie);
  assert.equal(betaActivity.status,200);
@@ -375,7 +324,7 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  const employeeMe=await call('/api/me','GET',undefined,employeeCookie);
  assert.equal(employeeMe.status,200);
  assert(!employeeMe.result.user.permissions.includes('team.promote'));
- for(const endpoint of ['/api/team','/api/ops/audit','/api/ops/migration-readiness','/api/ops/tenant-integrity','/api/sales','/api/agent','/api/training/auto','/api/training/versions','/api/imports','/api/waakg/scans']){
+ for(const endpoint of ['/api/team','/api/ops/audit','/api/ops/migration-readiness','/api/ops/tenant-integrity','/api/agent','/api/training/auto','/api/training/versions','/api/imports','/api/waakg/scans']){
   const denied=await call(endpoint,'GET',undefined,employeeCookie);
   assert.equal(denied.status,403,'Attendant must not read '+endpoint);
  }
@@ -438,10 +387,13 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
   currentPassword:'SenhaAtendente2026!',newPassword:'SenhaNova2026!MuitoForte'
  },activeCookie,activeCsrf);
  assert.equal(passwordChanged.status,200);
- assert.equal(passwordChanged.result.otherSessionsRevoked,true);
+ assert.equal(passwordChanged.result.allSessionsRevoked,true);
  const otherSessionRevoked=await call('/api/me','GET',undefined,anotherSession.cookie.split(';')[0]);
  assert.equal(otherSessionRevoked.status,401,'Password rotation invalidates other sessions');
- assert.equal((await call('/api/me','GET',undefined,activeCookie)).status,200,'Current session survives own password change');
+ assert.equal((await call('/api/me','GET',undefined,activeCookie)).status,401,'The pre-change cookie is revoked too');
+ // The response carries a fresh session for this device, so the user stays signed in.
+ const rotatedCookie=passwordChanged.cookie.split(';')[0];
+ assert.equal((await call('/api/me','GET',undefined,rotatedCookie)).status,200,'Password change reissues the current session');
  assert.equal((await call('/api/login','POST',{email:'agent-phase4@example.test',password:'SenhaAtendente2026!'})).status,401);
  assert.equal((await call('/api/login','POST',{email:'agent-phase4@example.test',password:'SenhaNova2026!MuitoForte'})).status,200);
 

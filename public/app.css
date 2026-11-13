@@ -2,7 +2,7 @@
 :root{--bg:#f7f7f4;--surface:#fff;--ink:#25262c;--muted:#84858e;--line:#e8e8e6;--purple:#6b5dd3;--purple-light:#eeeafe;--sidebar:#1e2025;--green:#35b58e;--shadow:0 12px 34px rgba(30,31,39,.035);font-synthesis:none;}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
 button,input,textarea,select{font:inherit}button{cursor:pointer}button:disabled{cursor:wait;opacity:.55}
-.hidden{display:none!important}.app-shell{min-height:100vh;display:flex}.sidebar{width:254px;flex:0 0 254px;background:var(--sidebar);color:#f9f9fa;min-height:100vh;padding:28px 16px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.hidden{display:none!important}.hidden.hidden{display:none!important}.app-shell{min-height:100vh;display:flex}.sidebar{width:254px;flex:0 0 254px;background:var(--sidebar);color:#f9f9fa;min-height:100vh;padding:28px 16px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
 .sidebar-logo{display:flex;align-items:center;gap:12px;padding:0 14px;margin-bottom:43px}.sidebar-logo strong{display:block;font-size:22px;line-height:1.1;font-weight:630;letter-spacing:-.9px}.sidebar-logo small{display:block;font-size:10px;color:#9e9fa7;letter-spacing:1.5px;text-transform:uppercase;margin-top:4px}.brand-mark{font-family:Georgia,Times,serif;display:grid;place-items:center;font-size:46px;font-weight:800;letter-spacing:-5px;line-height:1;color:#fff;width:45px;height:48px}.brand-mark span{color:#a99aff}.brand-mark.large{width:94px;height:94px;font-size:94px;letter-spacing:-11px}
 .workspace-box{border:1px solid #3b3c44;border-radius:13px;padding:12px 9px;display:flex;align-items:center;gap:10px;background:#292b32;margin:0 4px 28px}.workspace-circle{height:35px;width:35px;display:grid;place-items:center;border-radius:10px;background:#d9d2ff;color:#483ba4;font-weight:750}.workspace-label{min-width:0;flex:1}.workspace-label small{display:block;font-size:9px;letter-spacing:1.1px;color:#9f9da7}.workspace-label strong{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}.workspace-chevron{font-size:18px;color:#898a90}
 .sidebar-label{color:#858691;font-size:9px;font-weight:750;letter-spacing:1.6px;margin:0 14px 12px}.sidebar-label.inner{margin-top:24px}
@@ -63,3 +63,14 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}button:disabled{
  .catalog-variant-row button{grid-column:span 2;justify-self:end}
 }
 @media(max-width:430px){.catalog-pair{grid-template-columns:1fr}.catalog-product{gap:8px}.catalog-cover{height:60px;width:60px;flex-basis:60px}.catalog-status{font-size:9px;padding:3px 5px}}
+
+/* Owner channel ("Meu Sócio") */
+.owner-channel{margin-top:18px}
+.owner-channel h3{font-size:14px;font-weight:640;color:#41414c;margin:18px 0 8px}
+.owner-city,.owner-ages,.owner-genders{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.owner-city{flex-direction:column;align-items:stretch}
+.owner-city-results{display:flex;gap:6px;flex-wrap:wrap}
+.owner-ages input{max-width:96px}
+.owner-genders label{flex-direction:row;align-items:center;gap:6px;font-size:12px;font-weight:500;color:#41414c}
+.owner-genders input{width:auto}
+.owner-commands p{font-size:12px;color:#5d5c66;margin:4px 0}

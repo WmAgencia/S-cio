@@ -3,8 +3,8 @@ const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,workspace:'production',aiTab:'training',catalogSearch:'',catalogStock:'all'};
 const googleAdsVisible=()=>globalThis.SocioProductFeatures?.googleAdsVisible===true;
-const featureLabels={whatsapp:'Atendimento WhatsApp',catalog:'Produtos e serviços',quotes:'Orçamentos e pedidos',meta_ads:'Meta Ads',ai:'Inteligência Artificial',team:'Equipe'};
-const featureView={inbox:'whatsapp',products:'catalog',sales:'quotes',quotes:'quotes',marketing:'meta_ads',training:'ai',team:'team'};
+const featureLabels={whatsapp:'Atendimento WhatsApp',catalog:'Produtos e serviços',meta_ads:'Meta Ads',ai:'Inteligência Artificial',team:'Equipe'};
+const featureView={inbox:'whatsapp',products:'catalog',marketing:'meta_ads',training:'ai',team:'team'};
 const featureKeys=Object.keys(featureLabels);
 const featuresEnabled=()=>state.me?.tenant?.features||{};
 const featureAvailable=key=>featuresEnabled()[key]!==false;
@@ -28,7 +28,7 @@ function workspaceFromLocation(){
 function initialWorkspaceView(){
  const part=typeof location==='object'?String(location.hash||'').replace(/^#\//,''):'';
  if(state.workspace==='master')return workspaceRoutes[part]||'masterOverview';
- return ['overview','inbox','connections','marketing','products','training','team','settings'].includes(part)?part:'overview';
+ return ['overview','orb','inbox','connections','marketing','products','training','team','settings'].includes(part)?part:'overview';
 }
 function updateWorkspaceUrl(){
  if(typeof history!=='object'||typeof location!=='object'||!state.me)return;
@@ -36,18 +36,25 @@ function updateWorkspaceUrl(){
  if(location.pathname+location.search+location.hash!==next)history.replaceState(null,'',next);
 }
 function syncMasterSwitch(){
- const button=$('#masterProductionSwitch'),label=$('#masterSwitchLabel');
- if(!button||!label)return;
  const visible=isPrimaryMaster(),master=isMasterView();
  document.body?.classList?.toggle('socio-is-master',master);
  document.body?.classList?.toggle('socio-is-production',!master);
  const shell=$('#appShell');
  if(shell)shell.dataset.workspace=master?'master':'production';
+ const switcher=$('#workspaceSwitcher');
+ if(switcher){
+  switcher.classList.toggle('hidden',!visible);
+  switcher.dataset.active=master?'master':'production';
+  switcher.querySelectorAll('[data-workspace-target]').forEach(button=>{
+   const active=button.dataset.workspaceTarget===(master?'master':'production');
+   button.setAttribute('aria-selected',String(active));
+   button.tabIndex=active?0:-1;
+  });
+ }
  const kind=$('#workspaceKind');
  if(kind)kind.textContent=master?'ADMINISTRAÇÃO MASTER':'AMBIENTE DE PRODUÇÃO';
  const pill=document.querySelector('.top-pill');
  if(pill)pill.innerHTML='<i></i> '+(master?'Painel Master · SaaS':'Ambiente de produção');
- button.classList.toggle('hidden',!visible);
  const production=$('#productionNav'),admin=$('#masterNav');
  for(const [nav,hide] of [[production,master],[admin,!master]]){
   if(!nav)continue;
@@ -55,19 +62,19 @@ function syncMasterSwitch(){
   nav.setAttribute('aria-hidden',String(hide));
   nav.inert=hide;
  }
+ $('#productionMenuLabel')?.classList.toggle('hidden',master);
  document.querySelector('.sidebar-bottom [data-view="settings"]')?.classList.toggle('hidden',master);
  if(!visible)return;
- label.textContent=master?'Ir para Produção':'Ir para Master';
- button.title=label.textContent;button.setAttribute('aria-label',label.textContent);
- const workspace=$('#workspaceName'),initial=$('#workspaceInitial');
+ const workspace=$('#workspaceName'),initial=$('#workspaceInitial'),crumb=$('#crumbRoot');
  if(workspace)workspace.textContent=master?'Sócio · Plataforma':state.me?.tenant?.name||'Seu espaço';
  if(initial)initial.textContent=master?'M':(state.me?.tenant?.name?.[0]||'S').toUpperCase();
+ if(crumb)crumb.textContent=master?'Master':'Sócio';
  const role=$('#userRole');
  if(role)role.textContent=master?'Administração da plataforma':'Ambiente da empresa';
 }
 
 const viewAvailable=key=>!featureView[key]||featureAvailable(featureView[key])||key==='team'&&ownAccountAvailable();
-const titles={overview:'Visão geral',inbox:'WhatsApp',connections:'Conexões',marketing:'Meta Ads',products:'Produtos e serviços',sales:'Vendas',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',settings:'Configurações da conta',admin:'Empresas',masterOverview:'Dashboard Master',masterPlans:'Planos e métricas'};
+const titles={overview:'Visão geral',orb:'Conversar com IA',inbox:'WhatsApp',connections:'Conexões',marketing:'Meta Ads',products:'Produtos e serviços',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',settings:'Configurações da conta',admin:'Empresas',masterOverview:'Dashboard',masterPlans:'Planos e métricas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -99,63 +106,6 @@ async function api(path,method='GET',body,headers={},options={}){
  return data;
 }
 
-// Tenant-scoped in-app commerce notifications. Only opaque IDs are stored locally.
-let commerceAlertTimer=null,commerceAlertBusy=false;
-async function pollCommerceAlerts(){
- if(commerceAlertBusy||!state.me||isMasterView()||!featureAvailable('quotes')||
-  !(state.me.user.permissions||[]).includes('sales.read'))return;
- commerceAlertBusy=true;
- try{
-  const result=await api('/api/sales/alerts');
-  const tenant=state.me.tenant.id;
-  const key='socio-commerce-seen:'+tenant;
-  let seen=[];
-  try{seen=JSON.parse(sessionStorage.getItem(key)||'[]');if(!Array.isArray(seen))seen=[];}catch{}
-  const known=new Set(seen);
-  const fresh=(result.items||[]).filter(item=>!known.has(item.kind+':'+item.id)).slice(0,3);
-  for(const item of result.items||[])known.add(item.kind+':'+item.id);
-  try{sessionStorage.setItem(key,JSON.stringify([...known].slice(-250)));}catch{}
-  const host=$('#commerceAlerts');
-  if(!host)return;
-  for(const item of fresh.reverse()){
-   const isSale=item.kind==='sale',products=Array.isArray(item.items)?item.items:[];
-   const summary=isSale?(products.length?products.map(x=>x.quantity+'× '+x.name).join(', '):
-    'Produtos e quantidade a confirmar'):(item.summary||'Solicitação de orçamento');
-   const total=isSale&&item.amount_cents!=null?' · '+brl(item.amount_cents):'';
-   const card=document.createElement('section');
-   card.className='commerce-alert';
-   card.setAttribute('role','status');
-   card.innerHTML='<div class="commerce-alert-top"><span>'+(isSale?'NOVA OPORTUNIDADE DE VENDA':'NOVO ORÇAMENTO')+
-    '</span><button type="button" class="commerce-alert-close" aria-label="Fechar notificação">×</button></div>'+
-    '<strong>'+e(item.customer_name||'Cliente')+'</strong>'+
-    '<small>'+e(item.customer_phone||'Número não informado')+'</small>'+
-    '<p>'+e(summary.slice(0,170))+e(total)+'</p>'+
-    '<div class="commerce-alert-actions"><button type="button" class="btn primary" data-open-alert>Ver '+(isSale?'venda':'orçamento')+'</button>'+
-    '<button type="button" class="btn soft" data-chat-alert>Conversar</button></div>';
-   card.querySelector('.commerce-alert-close').addEventListener('click',()=>card.remove());
-   card.querySelector('[data-open-alert]').addEventListener('click',async()=>{
-    card.remove();await changeView(isSale?'sales':'quotes');
-    const target=view.querySelector(isSale?'[data-intent="'+item.id+'"]':'[data-quote-prepare="'+item.id+'"]');
-    target?.scrollIntoView({block:'center',behavior:'smooth'});
-    if(isSale)target?.querySelector('[data-lead-expand]')?.click();
-    else target?.closest('.quote-request-item')?.querySelector('summary')?.click();
-   });
-   card.querySelector('[data-chat-alert]').addEventListener('click',()=>{card.remove();changeView('inbox',item.conversation_id);});
-   host.prepend(card);
-  }
-  while(host.children.length>3)host.lastElementChild.remove();
- }catch(error){
-  // No false success pop-up for network errors; the queue remains in the database.
-  if(error.message&&!String(error.message).includes('Entre na sua conta'))console.warn('Alertas Sócio indisponíveis');
- }finally{commerceAlertBusy=false;}
-}
-function startCommerceAlerts(){
- clearInterval(commerceAlertTimer);
- if(!state.me||isMasterView()||!featureAvailable('quotes')||
-  !(state.me.user.permissions||[]).includes('sales.read'))return;
- void pollCommerceAlerts();
- commerceAlertTimer=setInterval(pollCommerceAlerts,12000);
-}
 
 function heading(eyebrow,title,description,action=''){
  return '<div class="view-heading"><div><span class="eyebrow">'+e(eyebrow)+'</span><h1>'+e(title)+'</h1><p>'+e(description)+'</p></div>'+action+'</div>';
@@ -189,22 +139,19 @@ async function boot(){
    $('#userChip').textContent=me.user.name.split(/\s+/).slice(0,2).map(v=>v[0]).join('').toUpperCase();
    $('#userName').textContent=me.user.name;
    $('#userRole').textContent=me.user.platformOwner?'Administrador master':me.user.role==='owner'?'Proprietário':'Equipe da empresa';
-   // The Master menu belongs to its own workspace; keep company tools hidden in production.
-   $('#adminNav')?.classList.add('hidden');
    syncMasterSwitch();
    $('#teamNav')?.classList.toggle('hidden',!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner);
    const access=new Set(me.user.permissions||[]);
    document.querySelector('.nav-item[data-view="connections"]')?.classList.toggle('hidden',
     !access.has('marketing.read')&&!access.has('channels.manage'));
 
-   for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['quotes','sales.read'],['reports','audit.read'],['marketing','marketing.read']]){
+   for(const [section,permission] of [['training','training.manage'],['reports','audit.read'],['marketing','marketing.read']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
    for(const [section,feature] of Object.entries(featureView)){
     const nav=document.querySelector('.nav-item[data-view="'+section+'"]');
     if(nav)nav.classList.toggle('hidden',!viewAvailable(section)||
      (section==='training'&&!access.has('training.manage'))||
-     ((section==='sales'||section==='quotes')&&!access.has('sales.read'))||
      (section==='marketing'&&!access.has('marketing.read')));
    }
    $('#teamNav')?.classList.toggle('hidden',!featureAvailable('team')||!access.has('team.read'));
@@ -266,7 +213,7 @@ async function changeView(next,conversationId=null){
  if(next!=='inbox'&&activeInbox){activeInbox.cleanup();activeInbox=null;}
  if(next==='channels')next='connections';
  if(next==='reports')next='overview';
- if(next==='quotes')next='sales';
+ if(next==='quotes'||next==='sales')next='overview';
  if(next==='agent'){state.aiTab='agent';next='training';}
  else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
@@ -277,7 +224,6 @@ async function changeView(next,conversationId=null){
  if(!viewAvailable(next))next='overview';
  const access=new Set(state.me?.user?.permissions||[]);
  if(next==='training'&&!access.has('training.manage'))next='overview';
- if((next==='sales'||next==='quotes')&&!access.has('sales.read'))next='overview';
  if(next==='connections'&&!access.has('marketing.read')&&!access.has('channels.manage'))next='overview';
  if(next==='instagram')next='marketing';
  if(next==='marketing'&&!access.has('marketing.read'))next='overview';
@@ -286,6 +232,8 @@ async function changeView(next,conversationId=null){
  globalThis.SocioFlowImages?.dispose();
  globalThis.SocioMetaBrowser?.dispose();
  globalThis.SocioMetaLocal?.dispose();
+ if(next!=='orb')globalThis.SocioOrbUI?.dispose();
+ document.body?.classList?.toggle('socio-orb-view',next==='orb');
  state.view=next;
  syncMasterSwitch();
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
@@ -293,10 +241,15 @@ async function changeView(next,conversationId=null){
  updateWorkspaceUrl();
  setLoading();
  try{
+  if(next==='orb'&&globalThis.SocioOrbUI){
+   await globalThis.SocioOrbUI.render({root:view,api,me:state.me,csrfToken:state.csrf,navigate:changeView});
+  }
   if(next==='overview')await overview();
-   if(next==='connections')await globalThis.SocioWorkspaceUI.connections({root:view,api,me:state.me,navigate:changeView});
+   if(next==='connections'){
+    await globalThis.SocioWorkspaceUI.connections({root:view,api,me:state.me,navigate:changeView});
+    await globalThis.SocioOwnerChannelUI?.render({root:view,api,me:state.me});
+   }
   if(next==='products')await products();
-  if(next==='sales'||next==='quotes')await window.SocioSales.render({api,e,toast,view,me:state.me,navigate:changeView,mode:next});
   if(next==='training'){
    if(state.aiTab==='images'){await window.SocioFlowImages.render({root:view,api,me:state.me});mountAiGuideTabs();}
    else await (state.aiTab==='agent'?agent():training());
@@ -602,6 +555,7 @@ async function channels(){
    if(command==='start')await showWaQr(id);
   });
  }));
+ if(globalThis.SocioOwnerChannelUI)await globalThis.SocioOwnerChannelUI.render({root:view,api,me:state.me});
 }
 async function marketing(){
  if(globalThis.SocioWorkspaceUI)return globalThis.SocioWorkspaceUI.marketing({root:view,api,me:state.me,navigate:changeView});
@@ -1250,25 +1204,22 @@ async function reports(){
   api('/api/billing/status').catch(()=>null)
  ]);
  const t=report.totals||{};
- const cards=[
-  ['Mensagens recebidas',t.inbound_messages,'WhatsApp · últimos 30 dias'],
-  ['Oportunidades de compra',t.purchase_intents,'Intenções detectadas, não vendas pagas'],
-  ['Aguardando atendimento',t.purchase_pending,'Solicitações de compra abertas'],
-  ['Orçamentos solicitados',t.quote_requests,'Pedidos identificados no período'],
-  ['Orçamentos enviados pelo Sócio',t.quote_sent,'Envios confirmados no gateway'],
-  ['Pedidos aprovados',t.approved_orders,'Não significa pagamento confirmado']
- ];
  const days=Array.isArray(report.dailyMessages)?report.dailyMessages:[];
  const max=Math.max(1,...days.map(d=>Number(d.messages||0)));
  const ops=monitor?.activity||null;
  const showNumber=value=>value===null||value===undefined?'Indisponível':Number(value).toLocaleString('pt-BR');
+ const cards=[
+  ['Mensagens recebidas',t.inbound_messages,'WhatsApp · últimos 30 dias'],
+  ['Respostas confirmadas',ops?.confirmedBusinessMessages30d,'Somente envios com ID do provedor'],
+  ['Conversas aguardando resposta',ops?.awaitingBusinessReply30d,'Clientes sem retorno do negócio']
+ ];
  const monitorSection=ops?
   '<section class="card card-pad"><h2>Monitoramento da operação</h2>'+
    '<p class="form-note">Últimos 30 dias. Só mensagens com ID do provedor são respostas confirmadas; canal cadastrado não comprova conexão ativa no gateway.</p>'+
    '<div class="report-note-grid"><div><small>Conversas aguardando resposta</small><strong>'+e(showNumber(ops.awaitingBusinessReply30d))+'</strong></div>'+
    '<div><small>Respostas confirmadas</small><strong>'+e(showNumber(ops.confirmedBusinessMessages30d))+'</strong></div>'+
-   '<div><small>Orçamentos pendentes</small><strong>'+e(showNumber(ops.pendingQuotes))+'</strong></div>'+
-   '<div><small>Oportunidades abertas</small><strong>'+e(showNumber(ops.openOpportunities))+'</strong></div></div>'+
+   '<div><small>Conversas iniciadas</small><strong>'+e(showNumber(ops.conversationsStarted30d))+'</strong></div>'+
+   '<div><small>Canais cadastrados</small><strong>'+e(showNumber(ops.connectedChannelRecords))+'</strong></div></div>'+
    '<h3>Pontos de atenção</h3>'+
    (monitor.alerts.length?monitor.alerts.map(a=>'<p class="form-note">• '+e(a.message)+' ('+e(a.count)+')</p>').join(''):
     '<p class="form-note">Nenhum alerta encontrado nos registros disponíveis.</p>')+
@@ -1299,12 +1250,7 @@ async function reports(){
     return '<div class="report-bar-row"><span>'+e(stamp)+'</span><div class="report-bar-track"><i data-width="'+width+'"></i></div><strong>'+e(n)+'</strong></div>';
    }).join('')+'</div>':'<p class="form-note">Nenhuma mensagem recebida no período.</p>')+
   '</section><section class="card card-pad"><h2>Interpretação dos dados</h2>'+
-   '<p class="form-note">O Sócio registra intenções de compra, orçamentos enviados e pedidos aprovados separadamente. Valores estimados não entram como faturamento.</p>'+
-   '<div class="report-note-grid"><div><small>Concluídas manualmente</small><strong>'+e(t.purchase_completed_manually||0)+'</strong>'+
-    '<p>Requer conferência financeira pela equipe.</p></div>'+
-    '<div><small>Pagamentos de teste</small><strong>'+e(t.sandbox_payments||0)+'</strong>'+
-    '<p>Transações sandbox, sem receita real.</p></div></div>'+
-   '<p class="form-note">Para medir receita real será necessário conectar e conciliar um meio de pagamento autorizado.</p>'+
+   '<p class="form-note">Estes números medem volume e tempo de resposta no WhatsApp. Vendas e receita só podem ser afirmadas com conciliação de pagamento; o Sócio não infere faturamento a partir de conversa.</p>'+
   '</section></div></section>';
  if(window.SocioIntegrationsUI)
   window.SocioIntegrationsUI.render({root:view,api}).catch(error=>console.warn('[integrations-panel]',String(error?.message||'unavailable').slice(0,100)));
@@ -1369,8 +1315,9 @@ async function settings(){
   ev.preventDefault();
   const form=ev.currentTarget;
   await action(async()=>{
-   await api('/api/me/password','POST',formValues(form));
-   toast('Senha alterada. As outras sessões foram encerradas.');await settings();
+   const result=await api('/api/me/password','POST',formValues(form));
+   if(result.csrf)state.csrf=result.csrf;
+   toast('Senha alterada. Todas as outras sessões foram encerradas.');await settings();
   });
  });
 }
@@ -1436,22 +1383,11 @@ function featureChecks(flags={},prefix='feature-'){
  return '<div class="feature-grid" role="group" aria-label="Funcionalidades da empresa">'+
   featureKeys.map(key=>'<label class="feature-choice"><input type="checkbox" name="'+prefix+key+
    '" '+(flags[key]!==false?'checked':'')+'><span><strong>'+e(featureLabels[key])+
-   '</strong><small>'+(key==='quotes'?'Precisa de WhatsApp e catálogo':key==='meta_ads'?'Sessão de navegador do Ads Manager':'Ativar neste ambiente')+
+   '</strong><small>'+(key==='meta_ads'?'Sessão de navegador do Ads Manager':'Ativar neste ambiente')+
    '</small></span></label>').join('')+'</div>';
 }
 function selectedFeatures(form,prefix='feature-'){
  return Object.fromEntries(featureKeys.map(key=>[key,form.elements[prefix+key]?.checked===true]));
-}
-function wireFeatureDependencies(form,prefix='feature-'){
- form.addEventListener('change',ev=>{
-  const key=String(ev.target?.name||'').replace(prefix,'');
-  const quote=form.elements[prefix+'quotes'],catalog=form.elements[prefix+'catalog'],whatsapp=form.elements[prefix+'whatsapp'];
-  if(!quote||!catalog||!whatsapp)return;
-  if(key==='quotes'&&quote.checked){catalog.checked=true;whatsapp.checked=true;}
-  if((key==='catalog'&&!catalog.checked)||(key==='whatsapp'&&!whatsapp.checked)){
-   quote.checked=false;
-  }
- });
 }
 async function admin(){
  const [tenants,monitor]=await Promise.all([
@@ -1488,9 +1424,9 @@ async function admin(){
   '<p>Consulte o CNPJ para preencher os dados públicos automaticamente.</p></div>'+
   '<button type="button" class="socio-popup-close" id="companyClose" aria-label="Fechar cadastro">×</button></div>'+
   '<form id="tenantForm" class="form-stack">'+
-   '<div class="socio-cnpj-lookup"><label>CNPJ (opcional)<input name="cnpj" maxlength="18" placeholder="00.000.000/0000-00" inputmode="numeric"></label>'+
+   '<div class="socio-cnpj-lookup"><label>CNPJ ou CPF (opcional)<input name="cnpj" maxlength="18" placeholder="00.000.000/0000-00" inputmode="numeric"></label>'+
    '<button type="button" class="btn soft" id="lookupCnpj">Buscar CNPJ</button></div>'+
-   '<p class="form-note" id="cnpjFeedback" role="status">A consulta é pública e pode ficar indisponível. Todos os dados podem ser preenchidos manualmente.</p>'+
+   '<p class="form-note" id="cnpjFeedback" role="status">O CNPJ preenche os dados públicos automaticamente. CPF não tem consulta pública — preencha manualmente. O teste de 7 dias vale uma vez por CPF/CNPJ, telefone e e-mail.</p>'+
    '<label>Nome da empresa<input name="company" required maxlength="120" placeholder="Ex.: Pizzaria Bella"></label>'+
    '<div class="catalog-pair"><label>Razão social<input name="legalName" maxlength="200"></label>'+
    '<label>Nome fantasia<input name="tradeName" maxlength="200"></label></div>'+
@@ -1572,33 +1508,52 @@ async function admin(){
   finally{submit.disabled=false;}
  });
  const modal=$('#companyModal'),form=$('#tenantForm');
- wireFeatureDependencies(form);
  let publicProfile=null;
  const open=()=>{modal.classList.remove('hidden');form.elements.cnpj.focus();};
  const close=()=>modal.classList.add('hidden');
  $('#newCompany').addEventListener('click',open);
  $('#companyClose').addEventListener('click',close);
  modal.addEventListener('click',ev=>{if(ev.target===modal)close();});
- $('#lookupCnpj').addEventListener('click',async()=>{
-  const cnpj=form.elements.cnpj.value.replace(/\D/g,'');
+ const taxDigits=()=>globalThis.SocioTrialInput.taxIdDigits(form.elements.cnpj.value);
+ const cpfIsValid=value=>globalThis.SocioTrialInput.cpfIsValid(value);
+ let lookupTimer=null,lookedUp=null;
+ const lookupCnpj=async()=>{
+  const cnpj=taxDigits();
   const feedback=$('#cnpjFeedback'),btn=$('#lookupCnpj');
-  if(cnpj.length!==14){feedback.textContent='Digite os 14 dígitos do CNPJ.';return;}
+  if(cnpj.length!==14){feedback.textContent='Digite o CNPJ (14 dígitos) ou o CPF (11 dígitos).';return;}
+  if(cnpj===lookedUp&&publicProfile)return;
   btn.disabled=true;feedback.textContent='Buscando dados públicos do CNPJ...';
   try{
    const result=await api('/api/admin/cnpj?number='+encodeURIComponent(cnpj));
-   publicProfile=result;
-   form.elements.company.value=result.company||result.legalName||'';
+   lookedUp=cnpj;publicProfile=result;
+   if(!form.elements.company.value)form.elements.company.value=result.company||result.legalName||'';
    form.elements.legalName.value=result.legalName||'';
    form.elements.tradeName.value=result.tradeName||'';
-   form.elements.companyPhone.value=result.phone||'';
-   form.elements.companyEmail.value=result.email||'';
+   if(!form.elements.companyPhone.value)form.elements.companyPhone.value=result.phone||'';
+   if(!form.elements.companyEmail.value)form.elements.companyEmail.value=result.email||'';
    const a=result.address||{};
    form.elements.companyAddress.value=[a.street,a.number,a.additional,a.neighborhood,a.city,a.state,a.postalCode].filter(Boolean).join(', ');
    feedback.textContent='Dados encontrados: '+(result.legalName||result.company)+'. Confira e complete o acesso do responsável.';
-  }catch(error){publicProfile=null;feedback.textContent=errMsg(error)+' Você pode preencher manualmente.';}
+  }catch(error){publicProfile=null;lookedUp=null;feedback.textContent=errMsg(error)+' Você pode preencher manualmente.';}
   finally{btn.disabled=false;}
+ };
+ $('#lookupCnpj').addEventListener('click',lookupCnpj);
+ form.elements.cnpj.addEventListener('input',()=>{
+  publicProfile=null;clearTimeout(lookupTimer);
+  const digits=taxDigits(),feedback=$('#cnpjFeedback');
+  if(digits.length===11){
+   feedback.textContent=cpfIsValid(digits)?
+    'CPF válido. Não há consulta pública de CPF: preencha os dados da empresa manualmente.':
+    'CPF inválido; confira os 11 dígitos.';
+   return;
+  }
+  if(digits.length!==14){
+   if(digits)feedback.textContent='Digite todo o CNPJ (14 dígitos) ou o CPF (11 dígitos).';
+   return;
+  }
+  feedback.textContent='Buscando dados públicos do CNPJ...';
+  lookupTimer=setTimeout(lookupCnpj,400);
  });
- form.elements.cnpj.addEventListener('input',()=>{publicProfile=null;});
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();
   const data=formValues(form);
@@ -1608,13 +1563,14 @@ async function admin(){
     commercialEmail:data.companyEmail,commercialPhone:data.companyPhone}:
    {commercialEmail:data.companyEmail,commercialPhone:data.companyPhone};
   await action(async()=>{
-   await api('/api/admin/tenants','POST',data);
-   toast('Empresa cadastrada e ambiente criado com isolamento.');
+   const created=await api('/api/admin/tenants','POST',data);
+   toast(created?.trial?.granted?
+    'Empresa cadastrada. Teste grátis de '+created.trial.days+' dias liberado.':
+    'Empresa cadastrada sem teste grátis: o CPF/CNPJ, telefone ou e-mail já usou o período de teste.');
    close();await admin();
   });
  });
  const featureModal=$('#featuresModal'),featureForm=$('#featuresForm');
- wireFeatureDependencies(featureForm,'edit-feature-');
  let editingTenant=null;
  const closeFeatures=()=>{featureModal.classList.add('hidden');editingTenant=null;};
  $('#featuresClose').addEventListener('click',closeFeatures);
@@ -1655,12 +1611,12 @@ const sidebarIcons={
  inbox:'<path d="M4 4h16v12h-5l-3 3-3-3H4z"/><path d="M7 9h10M7 12h7"/>',
  instagram:'<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.6 6.7h.01"/>',
  reports:'<path d="M4 20V11m5 9V5m5 15v-7m5 7V8"/><path d="M2 21h20"/>',
- quotes:'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 9h6M9 13h6"/>',
  marketing:'<path d="M3 21V8l9-5 9 5v13M7 14v4M12 11v7M17 13v5"/>',
  channels:'<path d="M6 18c-2-1.7-3-4.1-3-6.6C3 6.6 6.7 3 12 3s9 3.6 9 8.4c0 4.5-3.7 8.6-9 8.6-1.6 0-3.2-.3-4.4-1L3 21z"/><path d="M9 9c.4 2.6 2.4 4.7 5 5l1.4-1.5"/>',
  products:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 10h18M10 3v18"/>',
  training:'<path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8m8.6 8.6 2.8 2.8M2 12h4m12 0h4M4.9 19.1l2.8-2.8m8.6-8.6 2.8-2.8"/><circle cx="12" cy="12" r="3.4"/>',
  agent:'<path d="m12 2 2.7 7.3L22 12l-7.3 2.7L12 22l-2.7-7.3L2 12l7.3-2.7z"/>',
+ orb:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2"/>',
  settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1m10 10 2.1 2.1M4.9 19.1 7 17m10-10 2.1-2.1"/>',
  team:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-1c0-3.6 2.5-5 6-5s6 1.4 6 5v1z"/><path d="M17 5a3 3 0 0 1 0 6m1 4c2 .5 3 1.8 3 4v1"/>',
  admin:'<path d="M3 21V5l9-3 9 3v16M3 21h18M9 21v-5h6v5M7 9h2m6 0h2M7 13h2m6 0h2"/>',
@@ -1682,11 +1638,10 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  key!=='agent'&&key!=='channels'&&key!=='reports'&&key!=='quotes'&&key!=='sales'&&viewAvailable(key)&&
+  key!=='agent'&&key!=='channels'&&key!=='reports'&&viewAvailable(key)&&
   (isMasterView()?masterViews.has(key):!masterViews.has(key))&&
   (key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&
   (key!=='reports'||(state.me?.user?.permissions||[]).includes('audit.read'))&&
-  (!['sales','quotes'].includes(key)||(state.me?.user?.permissions||[]).includes('sales.read'))&&
   (key!=='training'||(state.me?.user?.permissions||[]).includes('training.manage'))&&
   (key!=='team'||ownAccountAvailable())&&
   (!masterViews.has(key)||isPrimaryMaster())&&
@@ -1723,22 +1678,51 @@ document.addEventListener('keydown',event=>{
  if(event.key==='Escape'&&!$('#commandOverlay').classList.contains('hidden'))closeCommand();
 });
 initSidebarIcons();
-$('#masterProductionSwitch')?.addEventListener('click',()=>action(async()=>{
+async function switchWorkspace(mode){
  if(!isPrimaryMaster())return;
- const button=$('#masterProductionSwitch');
- if(button.disabled)return;
- button.disabled=true;
+ const nextMode=mode==='master'?'master':'production';
+ if(nextMode===state.workspace)return;
+ const switcher=$('#workspaceSwitcher');
+ if(switcher?.dataset.busy==='true')return;
+ if(switcher)switcher.dataset.busy='true';
+ const root=document.documentElement;
+ root.classList.add('socio-workspace-switching');
  try{
-  // Same login; a full page reinitialization separates the two workspaces.
   // Master always opens on the platform owner's home tenant, not a customer.
-  const nextMode=isMasterView()?'production':'master';
   const homeTenantId=state.me.user.homeTenantId;
-  if(state.me.tenant.id!==homeTenantId){
+  if(nextMode==='master'&&state.me.tenant.id!==homeTenantId){
    await api('/api/admin/switch','POST',{tenantId:homeTenantId});
+   state.me=await api('/api/me');state.csrf=state.me.csrf;
   }
-  location.assign(workspaceUrl(nextMode));
- }finally{button.disabled=false;syncMasterSwitch();}
-}));
+  state.workspace=nextMode;
+  view.classList.remove('socio-workspace-enter');
+  void view.offsetWidth;
+  view.classList.add('socio-workspace-enter');
+  setTimeout(()=>view.classList.remove('socio-workspace-enter'),760);
+  if(isMasterView())globalThis.SocioThalitaUI?.unmount();
+  else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf});
+  await changeView(nextMode==='master'?'masterOverview':'overview');
+  updateWorkspaceUrl();
+ }catch(error){toast(errMsg(error),true);}
+ finally{
+  if(switcher)delete switcher.dataset.busy;
+  syncMasterSwitch();
+  setTimeout(()=>root.classList.remove('socio-workspace-switching'),640);
+ }
+}
+$('#workspaceSwitcher')?.addEventListener('click',event=>{
+ const target=event.target.closest?.('[data-workspace-target]');
+ if(target)switchWorkspace(target.dataset.workspaceTarget);
+});
+$('#workspaceSwitcher')?.addEventListener('keydown',event=>{
+ if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+ const tabs=$$('#workspaceSwitcher [data-workspace-target]');
+ const current=tabs.indexOf(document.activeElement);
+ event.preventDefault();
+ const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:
+  (current+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+ tabs[next]?.focus();
+});
 
 const loginPassword=$('#loginPassword'),togglePassword=$('#togglePassword'),capsWarning=$('#capsWarning');
 togglePassword.addEventListener('click',()=>{
@@ -1778,5 +1762,5 @@ $$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{
  if(b.dataset.view==='training')state.aiTab='training';
  changeView(b.dataset.view);
 }));
-$('#logoutBtn').addEventListener('click',async()=>{globalThis.SocioWorkspaceUI?.clearCache();globalThis.SocioThalitaUI?.unmount();clearInterval(commerceAlertTimer);$('#commerceAlerts').replaceChildren();try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
+$('#logoutBtn').addEventListener('click',async()=>{globalThis.SocioWorkspaceUI?.clearCache();globalThis.SocioThalitaUI?.unmount();globalThis.SocioOrbUI?.dispose();document.body?.classList?.remove('socio-orb-view');try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
 boot();

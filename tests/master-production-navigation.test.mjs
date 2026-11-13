@@ -7,7 +7,9 @@ const js=read('public/app.js');
 const server=read('server.mjs');
 const meta=read('public/socio-workspace-ui.js');
 test('Master and Production are isolated authenticated workspaces sharing the same login',()=>{
- assert.match(html,/id="masterProductionSwitch"[^>]+hidden/);
+ assert.match(html,/class="workspace-switcher hidden" id="workspaceSwitcher"/);
+ assert.match(html,/data-workspace-target="production"/);
+ assert.match(html,/data-workspace-target="master"/);
  assert.match(html,/data-workspace="production"/);
  assert.match(html,/id="workspaceKind"/);
  assert.match(js,/const isPrimaryMaster=\(\)=>!!\(state\.me\?\.user\?\.platformOwner&&state\.me\?\.user\?\.homeTenantId\)/);
@@ -19,16 +21,17 @@ test('Master and Production are isolated authenticated workspaces sharing the sa
  assert.match(js,/if\(isMasterView\(\)&&!masterViews\.has\(next\)\)return/);
  assert.match(js,/if\(!isMasterView\(\)&&masterViews\.has\(next\)\)return/);
  assert.match(js,/nav\.inert=hide/);
- assert.match(js,/location\.assign\(workspaceUrl\(nextMode\)\)/);
+ assert.match(js,/async function switchWorkspace\(mode\)/);
+ assert.match(js,/await changeView\(nextMode==='master'\?'masterOverview':'overview'\)/);
  assert.match(js,/location\.assign\(workspaceUrl\('production','overview'\)\)/);
  assert.match(js,/api\('\/api\/admin\/switch','POST',\{tenantId:homeTenantId\}\)/);
  assert.match(server,/homeTenantId:\(a\.platform_owner&&a\.role==='owner'\)\?a\.tenant_id:null/);
  assert.match(server,/if\(method==='POST'&&pathname==='\/api\/admin\/switch'\)\{\s*needPlatform\(a\)/);
 });
-test('Sales is gone from navigation and global search but business data stays available',()=>{
- assert.doesNotMatch(html,/data-view="sales"/);
- assert.match(js,/key!=='sales'&&viewAvailable\(key\)/);
- assert.match(js,/window\.SocioSales\.render/);
+test('Commerce is gone from navigation, search and the client bundle',()=>{
+ assert.doesNotMatch(html,/data-view="sales"|data-view="quotes"/);
+ assert.doesNotMatch(html,/\/sales\.js|\/sales\.css|commerceAlerts/);
+ assert.doesNotMatch(js,/SocioSales|sales\.read|commerceAlert/);
 });
 test('Meta does not render the interpretation results card',()=>{
  assert.doesNotMatch(meta,/section\('Interpretação dos resultados'/);

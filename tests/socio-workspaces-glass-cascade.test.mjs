@@ -6,7 +6,7 @@ const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const html=read('public/index.html'),css=read('public/socio-stripe-system.css'),app=read('public/app.js'),server=read('server.mjs');
 
 test('One canonical light stylesheet is loaded last and served with no 404',()=>{
- assert(html.includes('/socio-stripe-system.css?v=20261112a'));
+ assert(html.includes('/socio-stripe-system.css?v=20261113l'));
  assert(server.includes("'/socio-stripe-system.css'"));
  assert(html.indexOf('/socio-stripe-system.css')>html.indexOf('/socio-master.css'));
  assert(!html.includes('<script src="/socio-glass-motion.js'));
@@ -48,7 +48,9 @@ test('Workspace navigation cannot mix production menus, AI and SaaS administrati
  assert.match(app,/if\(!isMasterView\(\)&&masterViews\.has\(next\)\)return/);
  assert.match(app,/if\(isMasterView\(\)\)globalThis\.SocioThalitaUI\?\.unmount\(\)/);
  assert.match(app,/location\.assign\(workspaceUrl\('production','overview'\)\)/);
- assert.match(app,/location\.assign\(workspaceUrl\(nextMode\)\)/);
+ assert.match(app,/async function switchWorkspace\(mode\)/);
+ assert.match(app,/await changeView\(nextMode==='master'\?'masterOverview':'overview'\)/);
+ assert.doesNotMatch(app,/location\.assign\(workspaceUrl\(nextMode\)\)/,'Workspace switch must not reload the page');
  assert.match(app,/nav\.inert=hide/);
 });
 test('Application and animations parse',()=>{

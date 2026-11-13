@@ -3,6 +3,7 @@
 // authenticated, explicit Checkout action and separate Stripe approval.
 import {createHmac,timingSafeEqual,randomUUID} from 'node:crypto';
 import {requirePermission} from './team-permissions.mjs';
+import {readTrial,trialEndFrom} from './socio-trial.mjs';
 
 const fault=(status,message)=>Object.assign(new Error(message),{status});
 const VALID_PLANS=new Set(['essencial','equipe','voz']);
@@ -29,7 +30,7 @@ export function billingConfiguration(env=process.env){
   ]};
 }
 function mustWrite(actor){
- requirePermission(actor,'sales.manage');
+ requirePermission(actor,'billing.manage');
  if(actor.tenant_status==='paused')throw fault(403,'Empresa pausada.');
  if(!actor.active_tenant_id)throw fault(403,'Empresa não selecionada.');
 }
@@ -49,16 +50,14 @@ export async function readSubscriptionStatus(pool,actor,{env=process.env,now=new
  requirePermission(actor,'audit.read');
  if(!actor.active_tenant_id)throw fault(403,'Empresa não selecionada.');
  const [tenant,billing]=await Promise.all([
-  pool.query('SELECT id,plan,status,created_at FROM tenants WHERE id=$1',[actor.active_tenant_id]),
+  pool.query('SELECT id,plan,status,created_at,trial_ends_at FROM tenants WHERE id=$1',[actor.active_tenant_id]),
   pool.query('SELECT subscription_status,stripe_mode,period_end,paid_invoices_count,paid_amount_cents,last_paid_at FROM socio_billing_accounts WHERE tenant_id=$1',[actor.active_tenant_id])
  ]);
  if(!tenant.rows[0])throw fault(404,'Empresa não encontrada.');
- const t=tenant.rows[0],cfg=billingConfiguration(env),end=new Date(new Date(t.created_at).getTime()+7*86400000);
+ const t=tenant.rows[0],cfg=billingConfiguration(env),trial=readTrial(t,now);
  const billingRow=billing.rows[0]||null;
  return {tenantStatus:t.status,plan:t.plan,
-  trial:{endsAt:end.toISOString(),calendarExpired:new Date(now)>=end,
-   daysRemaining:t.status==='trial'?Math.max(0,Math.ceil((end-new Date(now))/86400000)):null,
-   automaticallySuspended:false},
+  trial:{...trial,daysRemaining:t.status==='trial'?trial.daysRemaining:null,automaticallySuspended:false},
   subscription:{status:billingRow?.subscription_status||'not_started',
    periodEnd:billingRow?.period_end||null,
    paymentEnvironment:billingRow?.stripe_mode||null,
@@ -76,7 +75,7 @@ export async function createSubscriptionCheckout(pool,actor,{env=process.env,fet
  if(!cfg.enabled)throw fault(503,'Assinaturas indisponíveis: confira as configurações Stripe.');
  const tenant=actor.active_tenant_id;
  const [{rows:tenants},{rows:accounts},{rows:owners}]=await Promise.all([
-  pool.query('SELECT id,name,plan,status,created_at FROM tenants WHERE id=$1',[tenant]),
+  pool.query('SELECT id,name,plan,status,created_at,trial_ends_at FROM tenants WHERE id=$1',[tenant]),
   pool.query('SELECT stripe_customer_id,stripe_subscription_id,subscription_status,stripe_checkout_session_id FROM socio_billing_accounts WHERE tenant_id=$1',[tenant]),
   pool.query('SELECT email FROM users WHERE id=$1 AND tenant_id=$2 AND active=true',[actor.user_id,tenant])
  ]);
@@ -87,7 +86,7 @@ export async function createSubscriptionCheckout(pool,actor,{env=process.env,fet
  if(old?.subscription_status==='checkout_pending')
   throw fault(409,'Existe uma sessão Checkout pendente; conclua ou solicite atendimento para renovar a sessão.');
  const base=new URL(env.SOCIO_PUBLIC_URL).origin;
- const trialEnd=new Date(t.created_at).getTime()+7*86400000;
+ const trialEnd=t.trial_ends_at?new Date(t.trial_ends_at):trialEndFrom(t.created_at);
  const secondsLeft=Math.floor((trialEnd-new Date(now))/1000);
  if(secondsLeft>0&&secondsLeft<48*3600)
   throw fault(409,'Seu teste gratuito ainda está em andamento. O Checkout com fim exato do teste será liberado após essa janela; não haverá cobrança antecipada.');

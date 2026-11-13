@@ -6,7 +6,7 @@ import {Pool} from 'pg';
 import {validateTrackingInput,buildPrefilledWhatsAppLink,createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from '../whatsapp-attribution.mjs';
 import {readWhatsAppFunnel} from '../whatsapp-funnel.mjs';
 
-const flags={meta_ads:true,whatsapp:true,ai:true,team:true,quotes:true,catalog:true};
+const flags={meta_ads:true,whatsapp:true,ai:true,team:true,catalog:true};
 const id=()=>randomUUID();
 test('tracking codes are only WhatsApp prefilled messages, not confirmed Meta attribution',()=>{
  const code='SC'+randomBytes(10).toString('hex').toUpperCase();
@@ -76,19 +76,8 @@ test('real PostgreSQL: attribution only for tenant-bound inbound messages, first
   const br=(await trackingReport(db,ownerB)).items;
   assert.equal(ar.length,1);assert.equal(br.length,1);
   assert.equal(ar[0].conversations,1);assert.equal(br[0].conversations,1);
-  assert.equal(ar[0].quote_requests,0);assert.equal(ar[0].purchase_intents,0);
-  const quoteId=id(),intentId=id();
-  await db.query("INSERT INTO quote_requests(id,tenant_id,conversation_id,inbound_message_id,summary) VALUES($1,$2,$3,$4,'Solicitação real')",
-   [quoteId,t1,convA,messageA]);
-  await db.query("INSERT INTO sale_intents(id,tenant_id,conversation_id,inbound_message_id,summary) VALUES($1,$2,$3,$4,'Cliente demonstrou interesse')",
-   [intentId,t1,convA,messageA]);
-  let updated=(await trackingReport(db,ownerA)).items[0];
-  assert.equal(updated.quote_requests,1);assert.equal(updated.purchase_intents,1);
-  // A quote from before the tracked message must not be attributed to this link.
-  await db.query("UPDATE quote_requests SET created_at=(SELECT created_at FROM messages WHERE id=$1)-interval '1 hour' WHERE id=$2",
-   [messageA,quoteId]);
-  updated=(await trackingReport(db,ownerA)).items[0];
-  assert.equal(updated.quote_requests,0);assert.equal(updated.purchase_intents,1);
+  assert.equal(Object.hasOwn(ar[0],'quote_requests'),false);
+  assert.equal(Object.hasOwn(ar[0],'purchase_intents'),false);
 
   // Only provider-confirmed outbound responses count as business replies.
   const replyId=id(),customerFollowUp=id(),unverifiedNote=id();
@@ -104,35 +93,15 @@ test('real PostgreSQL: attribution only for tenant-bound inbound messages, first
    "INSERT INTO messages(id,tenant_id,conversation_id,direction,body,created_at) VALUES "+
    "($1,$2,$3,'outbound','Rascunho local sem confirmação do gateway',(SELECT created_at+interval '1 minute' FROM messages WHERE id=$4))",
    [unverifiedNote,t1,convA,messageA]);
-  const approvedQuote=id(),approvedOrder=id(),pendingQuote=id(),pendingOrder=id();
-  await db.query("INSERT INTO sales_quotes(id,tenant_id,conversation_id,series_id,version,status,amount_cents,items) VALUES "+
-   "($1,$2,$3,$4,1,'accepted',3800,'[]'::jsonb),($5,$2,$3,$6,1,'accepted',1000,'[]'::jsonb)",
-   [approvedQuote,t1,convA,id(),pendingQuote,id()]);
-  await db.query("INSERT INTO sales_orders(id,tenant_id,quote_id,conversation_id,customer_name,amount_cents,items,status,payment_provider,created_at,paid_at) VALUES "+
-   "($1,$2,$3,$4,'Cliente',3800,'[]'::jsonb,'paid_test','stripe_test',"+
-   "(SELECT created_at+interval '3 minutes' FROM messages WHERE id=$5),"+
-   "(SELECT created_at+interval '4 minutes' FROM messages WHERE id=$5))",
-   [approvedOrder,t1,approvedQuote,convA,messageA]);
-  await db.query("INSERT INTO sales_orders(id,tenant_id,quote_id,conversation_id,customer_name,amount_cents,items,status,created_at) VALUES "+
-   "($1,$2,$3,$4,'Cliente',1000,'[]'::jsonb,'pending_payment',"+
-   "(SELECT created_at+interval '5 minutes' FROM messages WHERE id=$5))",
-   [pendingOrder,t1,pendingQuote,convA,messageA]);
   const funnelA=await readWhatsAppFunnel(db,ownerA),funnelB=await readWhatsAppFunnel(db,ownerB);
   assert.equal(funnelA.items.length,1);assert.equal(funnelB.items.length,1);
   assert.equal(funnelA.items[0].conversations,1);
   assert.equal(funnelA.items[0].businessResponded,1);
   assert.equal(funnelA.items[0].customerFollowedUp,1);
   assert.equal(funnelA.items[0].averageFirstBusinessReplySeconds,120);
-  assert.equal(funnelA.items[0].quoteRequests,0,'pre-attribution quotes excluded');
-  assert.equal(funnelA.items[0].purchaseIntents,1);
-  assert.equal(funnelA.items[0].ordersCreated,2);
-  assert.equal(funnelA.items[0].sandboxPaidOrders,1);
-  assert.equal(funnelA.items[0].sandboxRevenueCents,'3800');
   assert.equal(funnelA.items[0].livePaidOrders,null);
   assert.equal(funnelA.items[0].liveRevenueCents,null);
   assert.equal(funnelB.items[0].businessResponded,0);
-  assert.equal(funnelB.items[0].sandboxPaidOrders,0);
-  assert.equal(funnelB.items[0].sandboxRevenueCents,'0');
 
   assert.equal((await listTrackingLinks(db,ownerB)).links[0].accountId,'act_2222222222');
   assert.equal((await db.query('SELECT count(*)::int AS n FROM wa_lead_attributions')).rows[0].n,2);

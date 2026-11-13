@@ -5,7 +5,6 @@ import {requirePermission} from './team-permissions.mjs';
 import {parseTenantFeatures} from './tenant-features.mjs';
 import {getExecutiveMetrics} from './socio-executive-metrics.mjs';
 import {getTenantBusinessMonitor,formatBusinessMonitor} from './socio-business-monitor.mjs';
-import {askSalesAssistant} from './socio-sales-assistant.mjs';
 import {speakToSocioSkill} from './socio-skill-router.mjs';
 import {groqResponse} from './groq-client.mjs';
 import {voiceReplyPlan,voiceStyleInstruction,polishVoiceReply} from './socio-thalita-dialogue-style.mjs';
@@ -197,21 +196,15 @@ export async function askThalita(pool,a,body={},opts={}){
    message:'Não foi possível consultar o Google Ads desta empresa. Verifique a autorização e a conta escolhida em Conexões. '+String(error.message||'').slice(0,120)};}
  }
 
- if(/\b(venda|vendas|orcamento|pedido|cliente interessado|oportunidad)/.test(lower)&&features.quotes){
-  requirePermission(a,'sales.read');
-  return {...await (opts.sales||askSalesAssistant)(pool,a,{message}),executed:false};
- }
  if(/\b(relatorio|indicador|desempenho|quantos|dashboard|resultado|resumo|mensagen|estatistic)/.test(lower)){
   requirePermission(a,'audit.read');
   const metrics=await (opts.metrics||readReports)();
   const monitor=await (opts.monitor||getTenantBusinessMonitor)(pool,a);
   return {status:'completed',readOnly:true,executed:false,
-   message:'Resumo da empresa (30 dias): '+metrics.counts.opportunities+' oportunidades, '+
-    metrics.counts.registeredOrders+' pedidos registrados e '+metrics.counts.quoteRequests+
-    ' solicitações de orçamento. Hoje, '+metrics.counts.receivedToday+' mensagens recebidas e '+
-    metrics.counts.sentToday+' respostas de saída confirmadas. Produto mais solicitado: '+
-    (metrics.popularProducts[0]?.name||'nenhum identificado')+
-    '. Vendas pagas e receita: indisponíveis sem conciliação financeira.\n'+
+   message:'Resumo da empresa: '+metrics.counts.openConversations+
+    ' conversas abertas. Hoje, '+metrics.counts.receivedToday+' mensagens recebidas e '+
+    metrics.counts.sentToday+' respostas de saída confirmadas. '+
+    'Vendas e receita: indisponíveis sem conciliação financeira.\n'+
     formatBusinessMonitor(monitor),data:{metrics,monitor}};
  }
  if(!features.ai)throw fail(403,'Assistente desabilitada para esta empresa.');
