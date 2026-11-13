@@ -32,19 +32,12 @@
      card.append(el('p','Conversas com código: '+detail.conversations+
       ' · Respondidas pela empresa: '+detail.businessResponded+
       ' · Clientes que responderam novamente: '+detail.customerFollowedUp));
-     card.append(el('p','Orçamentos: '+detail.quoteRequests+' · Intenções: '+
-      detail.purchaseIntents+' · Pedidos cadastrados: '+detail.ordersCreated));
      card.append(el('p','Primeira resposta média: '+
       (detail.averageFirstBusinessReplySeconds===null?'sem dados':
        Math.round(detail.averageFirstBusinessReplySeconds/60)+' min (aproximado)')));
-     if(Number(detail.sandboxPaidOrders)>0)card.append(el('p','Somente em teste Stripe: '+
-      detail.sandboxPaidOrders+' pagamento(s), '+
-      new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(detail.sandboxRevenueCents)/100)+
-      '. Esses pagamentos não são vendas reais.'));
      card.append(el('p','Vendas reais e receita confirmada: indisponíveis sem um provedor de pagamentos de produção validado.'));
     }else{
-     card.append(el('p','Conversas com código: '+item.conversations+
-      ' · Orçamentos: '+item.quote_requests+' · Intenções de compra: '+item.purchase_intents));
+     card.append(el('p','Conversas com código: '+item.conversations));
     }
     const saved=links.links.find(x=>x.id===item.id);
     if(saved){

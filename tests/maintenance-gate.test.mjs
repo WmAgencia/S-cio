@@ -49,8 +49,6 @@ test('maintenance server returns 503 for all mutation routes, including webhooks
  for(const [method,path] of [
   ['POST','/api/setup'],['POST','/api/login'],['POST','/webhooks/whatsapp'],
   ['POST','/webhooks/stripe-test'],
-  ['POST','/api/public/quotes/'+('a'.repeat(64))+'/accept'],
-  ['POST','/api/public/quotes/'+('a'.repeat(64))+'/checkout'],
   ['PATCH','/api/products/00000000-0000-0000-0000-000000000000'],
   ['DELETE','/api/products/00000000-0000-0000-0000-000000000000'],
   ['PUT','/api/agent']

@@ -23,7 +23,7 @@ async function context(pool,a,options={},write=false){
  return {account,token:secret.token,options,tenantId:a.active_tenant_id};
 }
 async function graph(c,path,params={},method='GET'){
- if(!/^\/(act_\d+|\d+|search)(\/(campaigns|adsets|ads|adcreatives|adimages|adspixels|insights|promote_pages|previews))?$/.test(path))throw fail(422,'Operação Meta inválida.');
+ if(!/^\/(act_\d+|\d+|search)(\/(campaigns|adsets|ads|adcreatives|adimages|adspixels|insights|promote_pages|previews|copies))?$/.test(path))throw fail(422,'Operação Meta inválida.');
  const cfg=officialConfig(c.options.env||process.env),url=new URL('https://graph.facebook.com/'+cfg.version+path);
  const body=new URLSearchParams();
  for(const [k,v] of Object.entries(params))body.set(k,typeof v==='object'?JSON.stringify(v):String(v));
@@ -117,7 +117,12 @@ export async function readAdsTool(pool,a,kind,input={},options={}){
  if(kind==='pages')return listing(await availablePages(c));
  if(kind==='insights'){
   const datePreset=['today','yesterday','last_7d','last_30d'].includes(input.period)?input.period:'last_7d';
-  return listing(await graph(c,'/'+id+'/insights',{fields:'campaign_id,campaign_name,impressions,reach,clicks,spend,actions',level:'campaign',date_preset:datePreset,limit:100}));
+  const level=['campaign','adset','ad'].includes(input.level)?input.level:'campaign';
+  const keys={campaign:'campaign_id,campaign_name',
+   adset:'campaign_id,campaign_name,adset_id,adset_name',
+   ad:'campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name'}[level];
+  return listing(await graph(c,'/'+id+'/insights',{fields:keys+
+   ',impressions,reach,clicks,spend,ctr,cpc,cpm,actions',level,date_preset:datePreset,limit:100}));
  }
  if(kind==='cities'){
   if(!text(input.query,100)||input.query.trim().length<2)throw fail(422,'Digite uma cidade.');
@@ -226,6 +231,14 @@ export function validateAdsPlan(kind,input){
   if(!name||name.length<3)throw fail(422,'Informe um nome para o Pixel, de 3 a 120 caracteres.');
   return {name};
  }
+ if(kind==='duplicate_campaign'){
+  if(!numeric(input.campaignId))throw fail(422,'Selecione uma campanha válida para duplicar.');
+  return {campaignId:input.campaignId};
+ }
+ if(kind==='broaden_adset'){
+  if(!numeric(input.adsetId))throw fail(422,'Selecione um conjunto de anúncios válido.');
+  return {adsetId:input.adsetId};
+ }
  if(kind==='create_ad'){
   const name=text(input.name,120),url=safeUrl(input.url),message=text(input.message,2200),
    headline=text(input.headline,120);
@@ -250,7 +263,8 @@ async function owned(c,id,kind='ad'){
  // Meta Campaign and Ad Set expose budgets; Ads don't. Avoid querying
  // unsupported Graph fields when preparing a status-only action.
  const fields='id,account_id,name,status,effective_status'+
-  (kind==='campaign'||kind==='adset'?',daily_budget,lifetime_budget':'');
+  (kind==='campaign'||kind==='adset'?',daily_budget,lifetime_budget':'')+
+  (kind==='adset'?',targeting':'');
  const data=await graph(c,'/'+id,{fields});
  if('act_'+data.account_id!==c.account.id)throw fail(403,'Este objeto não pertence à conta selecionada.');
  return data;
@@ -258,6 +272,25 @@ async function owned(c,id,kind='ad'){
 function ensureSafeActivation(entity,status){
  if(status==='ACTIVE'&&['WITH_ISSUES','DISAPPROVED'].includes(entity?.effective_status))
   throw fail(409,'Este anúncio ou campanha tem problemas de veiculação ou foi rejeitado. Corrija a causa na Meta antes de preparar uma ativação.');
+}
+// Broadening keeps only the geographic and placement constraints the owner
+// already chose. Anything not re-sent (interests, behaviors, custom audiences)
+// stops constraining delivery, which is exactly the intent of the action.
+const BROAD_TARGETING_KEYS=['geo_locations','genders','locales','languages',
+ 'excluded_geo_locations','publisher_platforms','facebook_positions',
+ 'instagram_positions','messenger_positions','device_platforms','user_os','user_device'];
+export function broadenedTargeting(targeting){
+ const t=targeting&&typeof targeting==='object'&&!Array.isArray(targeting)?targeting:null;
+ if(!t||!t.geo_locations)return null;
+ const flexible=Array.isArray(t.flexible_spec)&&t.flexible_spec.length>0;
+ const direct=(Array.isArray(t.interests)&&t.interests.length>0)||(Array.isArray(t.behaviors)&&t.behaviors.length>0);
+ const min=Number(t.age_min),max=Number(t.age_max);
+ const narrowAge=(Number.isFinite(min)&&min>18)||(Number.isFinite(max)&&max<65);
+ if(!flexible&&!direct&&!narrowAge)return null;
+ const out={};
+ for(const key of BROAD_TARGETING_KEYS)if(t[key]!==undefined)out[key]=t[key];
+ out.age_min=18;out.age_max=65;
+ return out;
 }
 async function validateAssets(c,payload,pool){
  const pages=await availablePages(c);
@@ -308,6 +341,19 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
   if(pixels.data.length||pixels.paging?.next)throw fail(409,'Esta conta já possui Pixel. Consulte e utilize o Pixel existente antes de criar outro.');
   summary={description:'Criar um Pixel (conjunto de dados) na conta selecionada, somente após confirmação. Não instala código no site, não envia eventos e não configura CAPI automaticamente.',
    account:c.account,name:payload.name,pixelName:payload.name,operation:'create_pixel',createsPixel:true};
+ }else if(kind==='duplicate_campaign'){
+  const campaign=await owned(c,payload.campaignId,'campaign');
+  if(['ARCHIVED','DELETED'].includes(String(campaign.effective_status||'').toUpperCase()))
+   throw fail(409,'Esta campanha não pode ser duplicada no estado atual.');
+  summary={description:'Duplicar a campanha com conjunto, criativo e anúncio PAUSADOS. A cópia não veicula nem gasta até ser ativada.',
+   account:c.account,name:campaign.name+' · cópia',object:campaign,
+   duplicatesCampaign:campaign.id,campaignName:campaign.name};
+ }else if(kind==='broaden_adset'){
+  const adset=await owned(c,payload.adsetId,'adset');
+  if(!broadenedTargeting(adset.targeting))
+   throw fail(409,'Este conjunto já está com público amplo; nenhum ajuste necessário.');
+  summary={description:'Ampliar o público: remove interesses segmentados e abre a faixa etária para 18–65, mantendo cidade, gênero e posicionamentos. O orçamento não muda.',
+   account:c.account,object:adset,changes:{targeting:'broadened',ageMin:18,ageMax:65}};
  }else if(kind==='create_ad'){
   await owned(c,payload.adsetId);
   await validateAssets(c,payload,pool);
@@ -378,6 +424,21 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
    if(!numeric(pixel?.id))throw Object.assign(fail(503,'A Meta não confirmou o ID do novo Pixel. Verifique o Gerenciador de Eventos antes de tentar novamente.'),{uncertain:true});
    result.pixelId=pixel.id;result.accountId=c.account.id;
    result.note='Pixel criado. O site e a Conversions API ainda precisam de instalação e validação dos eventos.';
+   await progress();
+  }else if(plan.kind==='duplicate_campaign'){
+   const source=await owned(c,p.campaignId,'campaign');
+   const copied=await graph(c,'/'+p.campaignId+'/copies',{deep_copy:true,status_option:'PAUSED'},'POST');
+   const newId=String(copied?.copied_campaign_id||copied?.id||'');
+   if(!numeric(newId))throw Object.assign(fail(503,'A Meta não confirmou a campanha duplicada.'),{uncertain:true});
+   result.campaignId=newId;result.sourceCampaignId=source.id;result.delivery='PAUSED';
+   await progress();
+  }else if(plan.kind==='broaden_adset'){
+   const adset=await owned(c,p.adsetId,'adset');
+   const targeting=broadenedTargeting(adset.targeting);
+   if(!targeting)throw fail(409,'O público deste conjunto já está amplo. Nada foi alterado.');
+   const updated=await graph(c,'/'+p.adsetId,{targeting},'POST');
+   if(updated.success!==true)throw Object.assign(fail(503,'A Meta não confirmou a mudança de público.'),{uncertain:true});
+   result.id=p.adsetId;result.changes={targeting:'broadened'};
    await progress();
   }else if(plan.kind==='create_ad'){
    await owned(c,p.adsetId);

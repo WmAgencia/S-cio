@@ -25,10 +25,10 @@ test('Master and Production are isolated authenticated workspaces sharing the sa
  assert.match(server,/homeTenantId:\(a\.platform_owner&&a\.role==='owner'\)\?a\.tenant_id:null/);
  assert.match(server,/if\(method==='POST'&&pathname==='\/api\/admin\/switch'\)\{\s*needPlatform\(a\)/);
 });
-test('Sales is gone from navigation and global search but business data stays available',()=>{
- assert.doesNotMatch(html,/data-view="sales"/);
- assert.match(js,/key!=='sales'&&viewAvailable\(key\)/);
- assert.match(js,/window\.SocioSales\.render/);
+test('Commerce is gone from navigation, search and the client bundle',()=>{
+ assert.doesNotMatch(html,/data-view="sales"|data-view="quotes"/);
+ assert.doesNotMatch(html,/\/sales\.js|\/sales\.css|commerceAlerts/);
+ assert.doesNotMatch(js,/SocioSales|sales\.read|commerceAlert/);
 });
 test('Meta does not render the interpretation results card',()=>{
  assert.doesNotMatch(meta,/section\('Interpretação dos resultados'/);

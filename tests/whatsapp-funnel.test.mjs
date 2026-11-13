@@ -7,28 +7,23 @@ import {speakToSocioSkill} from '../socio-skill-router.mjs';
 
 const tenant=randomUUID();
 const actor={active_tenant_id:tenant,user_id:randomUUID(),role:'owner',tenant_status:'active',
- features:{meta_ads:true,whatsapp:true,ai:true,catalog:true,quotes:true,team:true}};
+ features:{meta_ads:true,whatsapp:true,ai:true,catalog:true,team:true}};
 const sample={
  id:randomUUID(),label:'Loja feminina Sorocaba',account_id:'act_12345678',
  campaign_id:'22222222',adset_id:null,ad_id:'33333333',active:true,
  conversations:7,business_responded:5,customer_followed_up:3,
- avg_business_reply_seconds:185,quote_requests:2,purchase_intents:2,
- orders_created:1,sandbox_paid_orders:1,sandbox_revenue_cents:'3800'
+ avg_business_reply_seconds:185
 };
-test('stage5 returns tenant-only funnel, verified business reply and test-only paid amounts',async()=>{
+test('stage5 returns a tenant-only funnel with a verified business reply',async()=>{
  const calls=[];
  const pool={query:async(sql,args)=>{
   calls.push({sql,args});assert.deepEqual(args,[tenant]);assert.match(sql,/WITH attributed AS/);
   assert.match(sql,/first_inbound.direction='inbound'/);
   assert.match(sql,/reply.provider_id IS NOT NULL/);
   assert.match(sql,/follow_up.direction='inbound'/);
-  assert.match(sql,/q.tenant_id=a.tenant_id/);
-  assert.match(sql,/o.tenant_id=a.tenant_id/);
-  assert.match(sql,/o.status='paid_test'/);
-  assert.match(sql,/o.payment_provider='stripe_test'/);
-  assert.match(sql,/o.paid_at>=a.attributed_at/);
   assert.match(sql,/WHERE a.tenant_id=\$1/);
   assert.match(sql,/WHERE l.tenant_id=\$1/);
+  assert.doesNotMatch(sql,/quote_requests|sale_intents|sales_orders|sales_quotes/);
   assert(!/\b(INSERT|UPDATE|DELETE|POST)\b/i.test(sql));
   return {rows:[sample]};
  }};
@@ -37,16 +32,14 @@ test('stage5 returns tenant-only funnel, verified business reply and test-only p
  assert.equal(result.confidence,'indicative');
  const row=result.items[0];
  assert.equal(row.conversations,7);assert.equal(row.businessResponded,5);
- assert.equal(row.customerFollowedUp,3);assert.equal(row.ordersCreated,1);
- assert.equal(row.sandboxPaidOrders,1);assert.equal(row.sandboxRevenueCents,'3800');
+ assert.equal(row.customerFollowedUp,3);
  assert.equal(row.livePaidOrders,null);assert.equal(row.liveRevenueCents,null);
  assert.deepEqual([row.campaignId,row.adId],['22222222','33333333']);
  const text=formatWhatsAppFunnel(result);
  assert.match(text,/7 conversas com código/);
  assert.match(text,/5 com resposta registrada/);
- assert.match(text,/Somente em sandbox/);
  assert.match(text,/Vendas reais e receita confirmada: indisponíveis/);
- assert.doesNotMatch(text,/R\$ 38,00 de faturamento real|7 vendas confirmadas/);
+ assert.doesNotMatch(text,/7 vendas confirmadas/);
 });
 test('unlinked or missing data never becomes zero verified real revenue',async()=>{
  const pool={query:async()=>({rows:[]})};
@@ -55,7 +48,7 @@ test('unlinked or missing data never becomes zero verified real revenue',async()
  assert.match(formatWhatsAppFunnel(result),/não prova ausência de clientes/);
  assert.equal(result.partial,false);
  const synthetic={...result,partial:true,items:[{...sample,label:'Teste',conversations:1,businessResponded:0,
-  customerFollowedUp:0,quoteRequests:0,purchaseIntents:0,ordersCreated:0,sandboxPaidOrders:0}]};
+  customerFollowedUp:0}]};
  assert.match(formatWhatsAppFunnel(synthetic),/Relatório parcial/);
 });
 test('read-only WhatsApp funnel requires a scoped tenant, permissions and both modules',async()=>{
@@ -74,8 +67,7 @@ test('owner can ask WhatsApp funnel conversationally with zero Meta writes',asyn
   readWhatsAppFunnel:async(_p,a)=>{
    reads++;assert.equal(a.active_tenant_id,tenant);
    return {items:[{
-    ...sample,label:'Sorocaba',conversations:1,businessResponded:1,customerFollowedUp:1,
-    quoteRequests:0,purchaseIntents:0,ordersCreated:0,sandboxPaidOrders:0
+    ...sample,label:'Sorocaba',conversations:1,businessResponded:1,customerFollowedUp:1
    }],method:'message_code',confidence:'indicative',partial:false};
   },execute:async()=>{throw Error('Unexpected Meta write')},
   prepare:async()=>{throw Error('Unexpected campaign plan')}
@@ -93,5 +85,5 @@ test('panel and HTTP API use a separate read-only funnel route',()=>{
  assert.match(api,/readWhatsAppFunnel\(pool,a\)/);
  assert.match(ui,/attribution\/funnel/);
  assert.match(ui,/Respondidas pela empresa/);
- assert.match(ui,/Somente em teste Stripe/);
+ assert.doesNotMatch(ui,/Orçamentos|Intenções de compra/);
 });

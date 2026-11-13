@@ -12,7 +12,7 @@ const extract=(source,start,end)=>{const i=source.indexOf(start),j=source.indexO
 
 test('all new browser modules parse in Node with no syntax regression',()=>{
  for(const name of ['public/app.js','public/inbox.js','public/socio-workspace-ui.js',
-  'public/socio-thalita-ui.js','public/sales.js']){
+  'public/socio-thalita-ui.js']){
   assert.doesNotThrow(()=>new vm.Script(load(name),{filename:name}),name);
  }
 });
@@ -53,17 +53,15 @@ test('catalog creates product, variations, campaign reference in one transaction
  assert.match(app,/id="deleteProduct"/);
 });
 
-test('navigation consolidates reports and quotes while keeping server endpoints backwards compatible',()=>{
- assert.doesNotMatch(html,/data-view="reports"/);
- assert.doesNotMatch(html,/data-view="quotes"/);
+test('navigation hides reports and commerce, while the reports endpoint stays',()=>{
+ assert.doesNotMatch(html,/data-view="reports"|data-view="quotes"|data-view="sales"/);
  assert.match(html,/data-view="connections"/);
  assert.match(app,/if\(next==='reports'\)next='overview'/);
- assert.match(app,/if\(next==='quotes'\)next='sales'/);
  assert.match(app,/SocioWorkspaceUI\.overview/);
  assert.match(app,/SocioWorkspaceUI\.marketing/);
  assert.match(server,/pathname==='\/api\/reports'/);
- assert.doesNotMatch(load('public/sales.js'),/function attachSalesAssistant/);
- assert.doesNotMatch(load('public/sales.js'),/^\s*attachSalesAssistant\(view,api\);/m);
+ assert.doesNotMatch(server,/\/api\/sales/);
+ assert.doesNotMatch(app,/SocioSales|sales\.read/);
 });
 
 test('WhatsApp inbox has one search, Connect navigates to Connections, and auto sync remains active',()=>{
@@ -78,29 +76,25 @@ test('WhatsApp inbox has one search, Connect navigates to Connections, and auto 
  assert.match(server,/\},16000\)/);
 });
 
-test('executive dashboard reads scoped values and does not infer paid sales',async()=>{
+test('executive dashboard reads only scoped counts and never infers paid sales',async()=>{
  const tenant='00000000-0000-4000-8000-000000000005';
  const calls=[],pool={query:async(sql,args)=>{
   calls.push({sql,args});
-  if(sql.includes('SELECT p.id,p.name,count')){
-   return {rows:[{id:'1',name:'Kit azul',requests:4,requested_units:7}]};
-  }
-  return {rows:[{opportunities:8,completed_opportunities:3,registered_orders:2,
-   quote_requests:5,pending_quotes:2,open_conversations:4,received_today:9,sent_today:6}]};
+  return {rows:[{open_conversations:4,received_today:9,sent_today:6}]};
  }};
  const a={role:'owner',active_tenant_id:tenant};
  const data=await getExecutiveMetrics(pool,a);
  assert.equal(data.tenantScoped,true);assert.equal(data.readOnly,true);
- assert.equal(data.counts.receivedToday,9);
- assert.equal(data.popularProducts[0].name,'Kit azul');
+ assert.deepEqual(data.counts,{openConversations:4,receivedToday:9,sentToday:6});
  assert.equal(data.paidSales,null);
  assert.equal(data.confirmedRevenueCents,null);
  assert(calls.every(x=>x.args.length===1&&x.args[0]===tenant));
+ assert.doesNotMatch(calls[0].sql,/quote_requests|sales_orders|sale_intents/);
 });
 
 test('Thalita only prepares catalog writes and executes one approved action once',async()=>{
  const tenant='00000000-0000-4000-8000-000000000005';
- const a={role:'owner',active_tenant_id:tenant,user_id:'00000000-0000-4000-8000-000000000007',token_hash:'only-this-session',features:{ai:true,quotes:true,meta_ads:true,catalog:true}};
+ const a={role:'owner',active_tenant_id:tenant,user_id:'00000000-0000-4000-8000-000000000007',token_hash:'only-this-session',features:{ai:true,meta_ads:true,catalog:true}};
  let inserted=0;
  const pool={query:async(sql,args)=>{
   if(sql.startsWith('INSERT INTO products')){inserted++;return {rowCount:1,rows:[{id:'00000000-0000-4000-8000-000000000008'}]};}
@@ -125,7 +119,8 @@ test('dashboard ad spend and assistant tools degrade gracefully without invented
  assert.match(dash,/api\/marketing\/tools\/insights\?period=/);
  assert.match(dash,/api\/google-ads\/campaigns\?period=today/);
  assert.match(dash,/Não disponível/);
- assert.match(dash,/Vendas pagas/);
+ assert.match(dash,/Campanhas ativas/);
+ assert.doesNotMatch(dash,/Vendas pagas/);
  assert.match(dash,/CPA atribuído/);
  assert.match(floating,/Confirmar alteração/);
  assert.match(floating,/\/api\/thalita\/transcribe/);
@@ -136,7 +131,7 @@ test('dashboard ad spend and assistant tools degrade gracefully without invented
 
 test('Thalita uses the AI module, not WhatsApp permission; feature disabled stays locked',async()=>{
  const a={role:'owner',user_id:'user',active_tenant_id:'tenant',token_hash:'session',
-  features:{ai:false,whatsapp:false,catalog:true,quotes:false,meta_ads:false,team:false}};
+  features:{ai:false,whatsapp:false,catalog:true,meta_ads:false,team:false}};
  const db={query:async()=>{throw Error('No queries permitted before feature gate');}};
  await assert.rejects(askThalita(db,a,{message:'Olá, Thalita!'}),{status:403});
  const js=load('public/socio-thalita-ui.js'),server=load('server.mjs');

@@ -21,13 +21,6 @@ const METRICS=[
  " AND (SELECT max(m.created_at) FROM messages m WHERE m.tenant_id=c.tenant_id AND m.conversation_id=c.id AND m.direction='inbound') >= $2::timestamptz-interval '30 days'",
  " AND (SELECT max(m.created_at) FROM messages m WHERE m.tenant_id=c.tenant_id AND m.conversation_id=c.id AND m.direction='inbound') >",
  " coalesce((SELECT max(m.created_at) FROM messages m WHERE m.tenant_id=c.tenant_id AND m.conversation_id=c.id AND m.direction='outbound' AND m.provider_id IS NOT NULL),'-infinity'::timestamptz)) awaiting_30d,",
- "(SELECT count(*)::int FROM quote_requests q WHERE q.tenant_id=$1 AND q.created_at >= $2::timestamptz-interval '30 days') quotes_30d,",
- "(SELECT count(*)::int FROM quote_requests q WHERE q.tenant_id=$1 AND q.status IN ('pending','preparing')) pending_quotes,",
- "(SELECT count(*)::int FROM quote_requests q WHERE q.tenant_id=$1 AND q.delivery_status='sent' AND q.quote_sent_at >= $2::timestamptz-interval '30 days') sent_quotes_30d,",
- "(SELECT count(*)::int FROM sale_intents s WHERE s.tenant_id=$1 AND s.created_at >= $2::timestamptz-interval '30 days') intents_30d,",
- "(SELECT count(*)::int FROM sale_intents s WHERE s.tenant_id=$1 AND s.status IN ('pending','contacted')) open_intents,",
- "(SELECT count(*)::int FROM sales_orders o WHERE o.tenant_id=$1 AND o.created_at >= $2::timestamptz-interval '30 days') orders_30d,",
- "(SELECT count(*)::int FROM sales_orders o WHERE o.tenant_id=$1 AND o.status='paid_test' AND o.payment_provider='stripe_test' AND o.paid_at >= $2::timestamptz-interval '30 days') sandbox_30d,",
  "(SELECT count(*)::int FROM channels c WHERE c.tenant_id=$1 AND c.provider='waakg' AND c.status='connected') connected_records"
 ].join(' ');
 export async function getTenantBusinessMonitor(pool,actor,{now=new Date()}={}){
@@ -40,36 +33,25 @@ export async function getTenantBusinessMonitor(pool,actor,{now=new Date()}={}){
  ]);
  if(!tenant.rows?.length)throw fault(404,'Empresa não encontrada.');
  const t=tenant.rows[0],row=metrics.rows?.[0]||{},features=parseTenantFeatures(actor.features);
- const n=k=>Number(row[k]||0),wa=features.whatsapp,quotes=features.quotes;
+ const n=k=>Number(row[k]||0),wa=features.whatsapp;
  const activity={
   inboundMessages30d:wa?n('inbound_30d'):null,
   confirmedBusinessMessages30d:wa?n('outbound_30d'):null,
   conversationsStarted30d:wa?n('conv_30d'):null,
   awaitingBusinessReply30d:wa?n('awaiting_30d'):null,
   connectedChannelRecords:wa?n('connected_records'):null,
-  quoteRequests30d:quotes?n('quotes_30d'):null,
-  pendingQuotes:quotes?n('pending_quotes'):null,
-  quoteSendsConfirmed30d:quotes?n('sent_quotes_30d'):null,
-  purchaseIntents30d:quotes?n('intents_30d'):null,
-  openOpportunities:quotes?n('open_intents'):null,
-  ordersRegistered30d:quotes?n('orders_30d'):null,
-  stripeTestPayments30d:quotes?n('sandbox_30d'):null,
   confirmedLivePaidOrders:null,confirmedLiveRevenueCents:null
  };
  const alerts=[];
  if(wa&&activity.awaitingBusinessReply30d>0)alerts.push({code:'awaiting_reply',count:activity.awaitingBusinessReply30d,
   message:'Conversas abertas com mensagem de cliente sem resposta posterior confirmada.'});
- if(quotes&&activity.pendingQuotes>0)alerts.push({code:'pending_quotes',count:activity.pendingQuotes,
-  message:'Solicitações de orçamento pendentes ou em preparação.'});
- if(quotes&&activity.openOpportunities>0)alerts.push({code:'open_opportunities',count:activity.openOpportunities,
-  message:'Interesses de compra aguardando atendimento; não são vendas confirmadas.'});
  if(wa&&!activity.connectedChannelRecords)alerts.push({code:'no_channel_record',count:0,
   message:'Nenhuma sessão WA-AKG consta como conectada no banco; confirme pelo gateway.'});
  return {readOnly:true,tenantScoped:true,checkedAt:moment,periodDays:30,
   plan:t.plan,accountStatus:t.status,trial:trialWindow(t.status,t.created_at,{now}),activity,alerts,
   limitations:['Dados locais; canal conectado no banco não comprova sessão WA-AKG ativa.',
    'Respostas contam somente mensagens de saída com ID de provedor; a cobertura pode ser parcial.',
-   'Pagamento Stripe de teste não é receita. Vendas reais continuam indisponíveis.',
+   'Vendas reais continuam indisponíveis sem integração financeira.',
    'Alertas apenas no painel: não enviam mensagens nem alteram campanhas.']};
 }
 export async function getMasterSaasMonitor(pool,actor,{now=new Date()}={}){
@@ -89,19 +71,17 @@ export async function getMasterSaasMonitor(pool,actor,{now=new Date()}={}){
   pool.query([
    'SELECT t.id,t.name,t.plan,t.status,t.created_at,',
    "(SELECT count(*)::int FROM channels c WHERE c.tenant_id=t.id AND c.provider='waakg' AND c.status='connected') AS channels,",
-   "(SELECT count(*)::int FROM quote_requests q WHERE q.tenant_id=t.id AND q.status IN ('pending','preparing')) AS quotes,",
-   "(SELECT count(*)::int FROM sale_intents s WHERE s.tenant_id=t.id AND s.status IN ('pending','contacted')) AS opportunities,",
    "(SELECT max(m.created_at) FROM messages m WHERE m.tenant_id=t.id AND m.direction='inbound') AS last_inbound",
    'FROM tenants t ORDER BY t.created_at DESC,t.id DESC LIMIT 100'
   ].join(' '),[])
  ]);
  const rows=(tenants.rows||[]).map(t=>{
-  const trial=trialWindow(t.status,t.created_at,{now}),pending=Number(t.quotes||0);
+  const trial=trialWindow(t.status,t.created_at,{now});
   return {id:t.id,name:t.name,plan:t.plan,accountStatus:t.status,createdAt:t.created_at,
-   trial,connectedChannelRecords:Number(t.channels||0),pendingQuotes:pending,
-   openOpportunities:Number(t.opportunities||0),lastInboundAt:t.last_inbound,
-   needsAttention:trial.elapsed||pending>0,
-   attentionReasons:[...(trial.elapsed?['trial_calendar_elapsed']:[]),...(pending>0?['pending_quotes']:[])]};
+   trial,connectedChannelRecords:Number(t.channels||0),
+   lastInboundAt:t.last_inbound,
+   needsAttention:trial.elapsed,
+   attentionReasons:[...(trial.elapsed?['trial_calendar_elapsed']:[])]};
  });
  const row=totals.rows?.[0]||{},n=k=>Number(row[k]||0);
  return {readOnly:true,scope:'platform',checkedAt:moment,
@@ -122,12 +102,7 @@ export function formatBusinessMonitor(result){
  return ['Relatório operacional — últimos '+result.periodDays+' dias:',
   'Mensagens recebidas: '+fmt(v.inboundMessages30d)+' · respostas confirmadas pelo provedor: '+fmt(v.confirmedBusinessMessages30d)+'.',
   'Conversas iniciadas: '+fmt(v.conversationsStarted30d)+' · aguardando resposta confirmada: '+fmt(v.awaitingBusinessReply30d)+'.',
-  'Orçamentos solicitados: '+fmt(v.quoteRequests30d)+' · pendentes: '+fmt(v.pendingQuotes)+
-   ' · enviados: '+fmt(v.quoteSendsConfirmed30d)+'.',
-  'Intenções de compra: '+fmt(v.purchaseIntents30d)+' · oportunidades abertas: '+fmt(v.openOpportunities)+
-   ' · pedidos cadastrados: '+fmt(v.ordersRegistered30d)+'.',
-  'Pagamentos Stripe em teste: '+fmt(v.stripeTestPayments30d)+
-   '. Vendas reais e faturamento confirmado: indisponíveis.',
+  'Vendas reais e faturamento confirmado: indisponíveis.',
   'Pontos de atenção: '+result.alerts.length+'. '+result.alerts.map(a=>a.message+' ('+a.count+')').join(' '),
   'Nenhum pagamento, anúncio ou mensagem foi alterado.'].join('\n');
 }

@@ -38,11 +38,12 @@ export async function gatewayRead(path,{env=process.env,fetchImpl=fetch,timeoutM
   throw error(503,'Não foi possível consultar o gateway WA-AKG.');
  }finally{clearTimeout(timer);}
 }
-// Mutations are limited to gateway session lifecycle. No message sends.
+// Mutations are limited to gateway session lifecycle and owner group creation.
+// No message sends go through here.
+const controlPath=/^\/api\/(?:sessions(?:\/[a-zA-Z0-9_-]{6,64}(?:\/(?:start|stop|restart|logout|bot-config))?)?|groups\/[a-zA-Z0-9_-]{6,64}\/create)$/;
 export async function gatewayControl(path,{method='POST',payload,env=process.env,fetchImpl=fetch,timeoutMs=16000}={}){
  const base=gatewayBase(env);
- if(!/^\/api\/sessions(?:\/[a-zA-Z0-9_-]{6,64}(?:\/(?:start|stop|restart|logout|bot-config))?)?$/.test(path))
-  throw error(400,'Rota de controle inválida.');
+ if(!controlPath.test(path))throw error(400,'Rota de controle inválida.');
  if(method!=='POST')throw error(400,'Método não permitido.');
  const controller=new AbortController();
  const timeout=setTimeout(()=>controller.abort(),Math.min(16000,Math.max(1500,timeoutMs)));
@@ -97,6 +98,32 @@ export async function sessionLifecycle(sessionId,action,opts={}){
 export const validSessionId=x=>typeof x==='string'&&/^[A-Za-z0-9_-]{6,64}$/.test(x);
 export function privateJid(jid){
  return typeof jid==='string'&&/^[0-9]{5,24}@(s\.whatsapp\.net|lid)$/.test(jid);
+}
+export const groupJid=x=>typeof x==='string'&&/^[0-9]{5,24}(-[0-9]{5,24})?@g\.us$/.test(x);
+// Owner channel: one group per company, created by the connected number.
+export async function gatewayCreateGroup(sessionId,subject,participants,opts={}){
+ if(!validSessionId(sessionId))throw error(422,'Sessão inválida.');
+ const name=typeof subject==='string'?subject.trim():'';
+ if(!name||name.length>100||/[\u0000-\u001f]/.test(name))throw error(422,'Nome do grupo inválido.');
+ if(!Array.isArray(participants)||!participants.length||participants.length>50)
+  throw error(422,'O grupo precisa de pelo menos um participante.');
+ const unique=[...new Set(participants)];
+ if(unique.length>50||unique.some(p=>typeof p!=='string'||!/^[0-9]{5,24}@s\.whatsapp\.net$/.test(p)))
+  throw error(422,'Participante do grupo inválido.');
+ const result=await gatewayControl('/api/groups/'+pathPart(sessionId)+'/create',
+  {payload:{subject:name,participants:unique},...opts});
+ const group=result.data?.group;
+ const jid=String(group?.id||'');
+ if(!groupJid(jid))throw error(503,'O gateway não confirmou o grupo criado.');
+ return {jid,subject:String(group?.subject||name).slice(0,100),
+  participants:unique.length};
+}
+export async function loadGroupMessages(sessionId,jid,{env=process.env,fetchImpl=fetch,limit=40}={}){
+ if(!validSessionId(sessionId)||!groupJid(jid))throw error(422,'Grupo inválido.');
+ const query=new URLSearchParams({jid,limit:String(Math.min(Math.max(limit,1),100)),page:'1'});
+ const result=await gatewayRead('/api/messages/'+pathPart(sessionId)+'/search?'+query.toString(),{env,fetchImpl});
+ const rows=Array.isArray(result.data)?result.data:[];
+ return rows.filter(m=>m?.remoteJid===jid);
 }
 export function selectPrivateChats(data){
  if(!Array.isArray(data))throw error(503,'Gateway retornou lista de conversas inválida.');

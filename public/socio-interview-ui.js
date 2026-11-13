@@ -222,7 +222,7 @@
    const index=editingCardIndex;
    if(dialog.open)dialog.close();
    void run(()=>saveCard(index,value));
-  }));
+  });
   host.querySelector('[data-ps-save]')?.addEventListener('click',()=>run(async()=>{
    const draft=getDraft();if(!draft||draft.status!=='draft')return;
    await api('/api/training/versions/'+draft.id+'/edit','POST',{markdown:host.querySelector('#psDraftMarkdown').value});

@@ -8,12 +8,12 @@ test('Sócio migration covers every runtime table in dependency order',()=>{
  const schema=readFileSync(new URL('../schema.sql',import.meta.url),'utf8');
  const tables=[...schema.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/g)].map(match=>match[1]);
  assert.deepEqual([...TABLES].sort(),tables.sort(),'New runtime tables must enter the migration manifest');
- assert(TABLES.indexOf('messages')<TABLES.indexOf('sale_intents'));
+ assert(TABLES.indexOf('messages')<TABLES.indexOf('wa_tracking_links'));
  assert.equal(new Set(TABLES).size,TABLES.length);
  for(const [parent,child] of [['tenants','users'],['tenants','products'],['channels','conversations'],
   ['conversations','messages'],['users','instagram_oauth_states'],['users','marketing_connections'],['users','marketing_oauth_attempts'],['users','marketing_oauth_grants'],['users','instagram_hosted_profiles'],['marketing_connections','marketing_report_receipts'],['marketing_connections','marketing_daily_metrics'],['channels','instagram_accounts'],['conversations','instagram_outbox'],['training_jobs','training_job_items'],
   ['training_jobs','training_versions'],['imports','training_job_items'],
-  ['waakg_scans','waakg_scan_chats'],['products','product_variants'],['conversations','conversation_ui_state'],['messages','message_ui_state'],['messages','ai_reply_attempts'],['conversations','message_outbox'],['conversations','sales_quotes'],['messages','quote_requests'],['sales_quotes','sales_orders'],['sales_orders','sales_payment_events']]){
+  ['waakg_scans','waakg_scan_chats'],['products','product_variants'],['conversations','conversation_ui_state'],['messages','message_ui_state'],['messages','ai_reply_attempts'],['conversations','message_outbox']]){
   assert.ok(TABLES.indexOf(parent)<TABLES.indexOf(child),parent+' must be inserted before '+child);
  }
 });

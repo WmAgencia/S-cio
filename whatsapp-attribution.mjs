@@ -99,17 +99,10 @@ export async function trackingReport(pool,actor){
  authorize(actor);
  const result=await pool.query(
   "SELECT l.id,l.label,l.account_id,l.campaign_id,l.adset_id,l.ad_id,l.active,"+
-  "COUNT(DISTINCT a.conversation_id)::int AS conversations,"+
-  "COUNT(DISTINCT qr.id)::int AS quote_requests,"+
-  "COUNT(DISTINCT si.id)::int AS purchase_intents "+
+  "COUNT(DISTINCT a.conversation_id)::int AS conversations "+
   "FROM wa_tracking_links l "+
   "LEFT JOIN wa_lead_attributions a ON a.tenant_id=l.tenant_id AND a.link_id=l.id "+
-  "LEFT JOIN messages source ON source.tenant_id=a.tenant_id AND source.id=a.inbound_message_id "+
-  "LEFT JOIN quote_requests qr ON qr.tenant_id=a.tenant_id AND qr.conversation_id=a.conversation_id "+
-  "AND qr.created_at>=source.created_at "+
-  "LEFT JOIN sale_intents si ON si.tenant_id=a.tenant_id AND si.conversation_id=a.conversation_id "+
-  "AND si.created_at>=source.created_at "+
   "WHERE l.tenant_id=$1 GROUP BY l.id ORDER BY l.created_at DESC LIMIT 100",[actor.active_tenant_id]);
  return {period:'Desde a criação de cada link',method:'message_code',confidence:'indicative',items:result.rows,
-  note:'Código observado na mensagem ≠ atribuição confirmada pela Meta. Intenções e orçamentos ≠ vendas pagas. Cliques e receita não são estimados.'};
+  note:'Código observado na mensagem ≠ atribuição confirmada pela Meta. Cliques e receita não são estimados.'};
 }

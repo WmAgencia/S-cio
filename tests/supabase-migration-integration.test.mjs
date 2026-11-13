@@ -28,12 +28,8 @@ test('all-table migration: read-only preflight, exact copies, fingerprints, and 
   await target.query('CREATE SCHEMA socio_app');
   await target.query('SET search_path TO socio_app,public');
   await target.query(schema);
-  // Rehearse the additive alignment from a private schema missing sales leads.
-  await target.query('DROP TABLE socio_app.sale_intents');
-  const alignment=await readFile(new URL('../supabase/migrations/20261104_socio_sales_intents_audit_alignment.sql',import.meta.url),'utf8');
-  await target.query(alignment);await target.query(alignment);
   const companyA=randomUUID(),companyB=randomUUID(),user=randomUUID(),channel=randomUUID();
-  const conversation=randomUUID(),message=randomUUID(),product=randomUUID(),quote=randomUUID(),order=randomUUID();
+  const conversation=randomUUID(),message=randomUUID(),product=randomUUID();
   for(const [id,slug] of [[companyA,'alpha'],[companyB,'beta']])
    await source.query('INSERT INTO tenants(id,name,slug) VALUES($1,$2,$3)',[id,'Empresa '+slug,slug]);
   await source.query("INSERT INTO users(id,tenant_id,email,name,password_hash,role,platform_owner,active) "+
@@ -46,15 +42,6 @@ test('all-table migration: read-only preflight, exact copies, fingerprints, and 
    [message,companyA,conversation]);
   await source.query("INSERT INTO products(id,tenant_id,name,price_cents) VALUES($1,$2,'Produto teste',2999)",
    [product,companyA]);
-  await source.query("INSERT INTO sale_intents(id,tenant_id,conversation_id,inbound_message_id,summary) VALUES($1,$2,$3,$4,'Fixture lead')",
-   [randomUUID(),companyA,conversation,message]);
-  await source.query("INSERT INTO sales_quotes(id,tenant_id,conversation_id,series_id,version,status,amount_cents,items,created_by) "+
-   "VALUES($1,$2,$3,$4,1,'accepted',2999,$5,$6)",[quote,companyA,conversation,randomUUID(),JSON.stringify([
-    {productId:product,quantity:1,unitPriceCents:2999,totalCents:2999,name:'Produto teste'}
-   ]),user]);
-  await source.query("INSERT INTO sales_orders(id,tenant_id,quote_id,conversation_id,customer_name,amount_cents,items) "+
-   "VALUES($1,$2,$3,$4,'Cliente exemplo',2999,'[]')",[order,companyA,quote,conversation]);
-  await source.query("INSERT INTO sales_payment_events(event_id,order_id,provider) VALUES('evt_fixture_copy',$1,'stripe_test')",[order]);
   await source.query("INSERT INTO audit(id,tenant_id,actor_id,action,metadata) VALUES($1,$2,$3,'test.fixture',$4)",
    [randomUUID(),companyA,user,JSON.stringify({status:'fixture',nested:{foo:1,bar:2}})]);
  }finally{await source.end();await target.end();}
@@ -64,21 +51,22 @@ test('all-table migration: read-only preflight, exact copies, fingerprints, and 
  assert.equal(readOnly.applied,false);assert.equal(readOnly.schemasMatch,true);
  assert.equal(Object.keys(readOnly.counts).length,TABLES.length);
  assert.equal(readOnly.counts.tenants,2);
- assert.equal(readOnly.counts.sales_orders,1);
- assert.equal(readOnly.counts.sale_intents,1);
+ assert.equal(readOnly.counts.products,1);
+ assert.equal(Object.hasOwn(readOnly.counts,'sales_orders'),false);
  const snapshot=await migrate({...options,apply:true});
  assert.equal(snapshot.applied,true);assert.equal(snapshot.validated,true);
  assert(log.some(x=>x.includes('fingerprint')||x.includes('"phase":"verified"')));
  const validate=new Client({connectionString:targetUrl.href});await validate.connect();
  try{
   assert.equal(Number((await validate.query('SELECT count(*) AS n FROM socio_app.tenants')).rows[0].n),2);
-  assert.equal(Number((await validate.query('SELECT count(*) AS n FROM socio_app.sales_orders')).rows[0].n),1);
-  assert.equal((await validate.query('SELECT summary FROM socio_app.sale_intents')).rows[0].summary,'Fixture lead');
+  assert.equal((await validate.query('SELECT name FROM socio_app.products')).rows[0].name,'Produto teste');
   assert.equal((await validate.query('SELECT body FROM socio_app.messages')).rows[0].body,
    'Texto fictício 100% de teste');
   assert.equal((await validate.query('SELECT active FROM socio_app.users')).rows[0].active,true);
   assert.equal((await validate.query('SELECT metadata FROM socio_app.audit')).rows[0].metadata.nested.foo,1);
-  assert.equal(Number((await validate.query('SELECT count(*) AS n FROM socio_app.sales_payment_events')).rows[0].n),1);
+  const commerce=await validate.query("SELECT table_name FROM information_schema.tables WHERE table_schema='socio_app' AND table_name=ANY($1::text[])",
+   [['sales_quotes','sales_orders','sales_payment_events','quote_requests','sale_intents']]);
+  assert.equal(commerce.rowCount,0,'Removed commerce tables must not be migrated');
  }finally{await validate.end();}
  await assert.rejects(migrate(options),/Target not empty/,'Second copy must not overwrite already migrated records');
  // Recreate only the *disposable target* to simulate a downstream constraint
@@ -98,8 +86,8 @@ test('all-table migration: read-only preflight, exact copies, fingerprints, and 
  try{
   const tenants=await checked.query('SELECT count(*)::int AS n FROM socio_app.tenants');
   assert.equal(tenants.rows[0].n,0,'Migration failure must atomically roll back already copied tenants');
-  const orders=await checked.query('SELECT count(*)::int AS n FROM socio_app.sales_orders');
-  assert.equal(orders.rows[0].n,0,'Migration failure cannot expose partial orders');
+  const products=await checked.query('SELECT count(*)::int AS n FROM socio_app.products');
+  assert.equal(products.rows[0].n,0,'Migration failure cannot expose partial records');
  }finally{await checked.end();}
  const stillSource=new Client({connectionString:sourceUrl.href});
  await stillSource.connect();

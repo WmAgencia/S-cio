@@ -8,7 +8,6 @@ const CATALOG=Object.freeze([
  {id:'tracking.conversions',label:'Especialista em rastreamento e atribuição',platform:'tracking',availability:'pending_website_integration',path:'skills/tracking/SKILL.md',canExecute:false},
  {id:'meta.optimization',label:'Diagnóstico e otimização Meta Ads',platform:'meta',availability:'analysis_only',path:'skills/meta-optimization/SKILL.md',canExecute:false},
  {id:'whatsapp.sales',label:'Funil de atendimento WhatsApp WA-AKG',platform:'whatsapp',availability:'supervised',path:'skills/whatsapp-sales/SKILL.md',canExecute:false},
- {id:'commerce.assistant',label:'Assistente comercial e orçamentos',platform:'commerce',availability:'supervised',path:'skills/commerce-assistant/SKILL.md',canExecute:true},
  {id:'marketing.reports',label:'Relatórios de marketing e receita',platform:'meta',availability:'read_only',path:'skills/marketing-reports/SKILL.md',canExecute:true}
 ]);
 const byId=new Map(CATALOG.map(s=>[s.id,s]));
@@ -18,9 +17,6 @@ const meta=/\b(meta ads|facebook ads|instagram ads|gerenciador de anuncios da me
 const tracking=/\b(capi|conversions api|api de conversoes|rastrear (?:compra|venda|whatsapp)|rastreamento (?:de|do|no) whatsapp|pixel (?:no|dentro do) whatsapp|instalar (?:o )?pixel (?:no|em|dentro do) whatsapp|conversao (?:no|do|pelo) whatsapp)\b/;
 const optimize=/\b(otimizar|otimize|otimizacao|melhorar|melhore|analisar|analise|diagnostico|rejeitado|rejeitados|reprovado|reprovados|bloqueado|bloqueados|sem entrega|nao entrega|baixo desempenho|resultado ruim)\b/;
 const adTerms=/\b(campanha|campanhas|anuncio|anuncios|criativo|criativos|meta ads|trafego|facebook ads|instagram ads)\b/;
-const commerce=/(?:\b(?:orcamento|orcamentos|cotacao|cotacoes|preparar proposta|propostas comerciais|pedidos de clientes|pedidos pendentes|oportunidades de venda|vendas pendentes|meus produtos|catalogo da loja|estoque da loja|qual o preco|quanto custa|meus interessados|meus pedidos)\b)/;
-const commerceExclusion=/\b(campanha|campanhas|anuncio|anuncios|conjunto|conjuntos|adset|criativo|criativos|meta ads|facebook ads|instagram ads|google ads)\b|\b(?:alterar|altere|aumentar|reduzir)\s+(?:o\s+)?orcamento\b/;
-const commerceReport=/\b(relatorio|relatorios|indicadores|resumo|monitoramento|desempenho)\b.*\b(vendas|negocio|empresa|comercial|atendimento|operacao|pedidos|clientes)\b|\b(vendas|negocio|empresa|comercial|atendimento|operacao|pedidos|clientes)\b.*\b(relatorio|relatorios|indicadores|resumo|monitoramento|desempenho)\b/;
 const whatsReport=/\b(whatsapp|zap|wa-akg)\b.*\b(relatorio|resultado|quantas? conversas?|quantos? leads?|quantas? vendas?|atribui|rastre)\b|\b(relatorio|resultado|quantas? conversas?|quantas? vendas?|atribui|rastre)\b.*\b(whatsapp|zap|wa-akg)\b/;
 
 export function listExpertSkills(){
@@ -44,8 +40,6 @@ export function selectExpertSkill(message){
    !/\b(criar|crie|campanha|anuncio|anunciar)\b/.test(text)))
   return {id:'whatsapp.sales',reason:'whatsapp_attribution_request'};
  if(tracking.test(text))return {id:'tracking.conversions',reason:'tracking_request'};
- if((commerce.test(text)||commerceReport.test(text))&&!commerceExclusion.test(text))
-  return {id:'commerce.assistant',reason:'explicit_commerce'};
  if(optimize.test(text)&&adTerms.test(text))return {id:'meta.optimization',reason:'meta_diagnosis'};
  // Existing Meta Ads router owns mutations and reads when request is otherwise supported.
  return {id:'meta.campaigns',reason:'meta_default'};

@@ -3,8 +3,8 @@ const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,workspace:'production',aiTab:'training',catalogSearch:'',catalogStock:'all'};
 const googleAdsVisible=()=>globalThis.SocioProductFeatures?.googleAdsVisible===true;
-const featureLabels={whatsapp:'Atendimento WhatsApp',catalog:'Produtos e serviços',quotes:'Orçamentos e pedidos',meta_ads:'Meta Ads',ai:'Inteligência Artificial',team:'Equipe'};
-const featureView={inbox:'whatsapp',products:'catalog',sales:'quotes',quotes:'quotes',marketing:'meta_ads',training:'ai',team:'team'};
+const featureLabels={whatsapp:'Atendimento WhatsApp',catalog:'Produtos e serviços',meta_ads:'Meta Ads',ai:'Inteligência Artificial',team:'Equipe'};
+const featureView={inbox:'whatsapp',products:'catalog',marketing:'meta_ads',training:'ai',team:'team'};
 const featureKeys=Object.keys(featureLabels);
 const featuresEnabled=()=>state.me?.tenant?.features||{};
 const featureAvailable=key=>featuresEnabled()[key]!==false;
@@ -67,7 +67,7 @@ function syncMasterSwitch(){
 }
 
 const viewAvailable=key=>!featureView[key]||featureAvailable(featureView[key])||key==='team'&&ownAccountAvailable();
-const titles={overview:'Visão geral',inbox:'WhatsApp',connections:'Conexões',marketing:'Meta Ads',products:'Produtos e serviços',sales:'Vendas',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',settings:'Configurações da conta',admin:'Empresas',masterOverview:'Dashboard Master',masterPlans:'Planos e métricas'};
+const titles={overview:'Visão geral',inbox:'WhatsApp',connections:'Conexões',marketing:'Meta Ads',products:'Produtos e serviços',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',settings:'Configurações da conta',admin:'Empresas',masterOverview:'Dashboard Master',masterPlans:'Planos e métricas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -99,63 +99,6 @@ async function api(path,method='GET',body,headers={},options={}){
  return data;
 }
 
-// Tenant-scoped in-app commerce notifications. Only opaque IDs are stored locally.
-let commerceAlertTimer=null,commerceAlertBusy=false;
-async function pollCommerceAlerts(){
- if(commerceAlertBusy||!state.me||isMasterView()||!featureAvailable('quotes')||
-  !(state.me.user.permissions||[]).includes('sales.read'))return;
- commerceAlertBusy=true;
- try{
-  const result=await api('/api/sales/alerts');
-  const tenant=state.me.tenant.id;
-  const key='socio-commerce-seen:'+tenant;
-  let seen=[];
-  try{seen=JSON.parse(sessionStorage.getItem(key)||'[]');if(!Array.isArray(seen))seen=[];}catch{}
-  const known=new Set(seen);
-  const fresh=(result.items||[]).filter(item=>!known.has(item.kind+':'+item.id)).slice(0,3);
-  for(const item of result.items||[])known.add(item.kind+':'+item.id);
-  try{sessionStorage.setItem(key,JSON.stringify([...known].slice(-250)));}catch{}
-  const host=$('#commerceAlerts');
-  if(!host)return;
-  for(const item of fresh.reverse()){
-   const isSale=item.kind==='sale',products=Array.isArray(item.items)?item.items:[];
-   const summary=isSale?(products.length?products.map(x=>x.quantity+'× '+x.name).join(', '):
-    'Produtos e quantidade a confirmar'):(item.summary||'Solicitação de orçamento');
-   const total=isSale&&item.amount_cents!=null?' · '+brl(item.amount_cents):'';
-   const card=document.createElement('section');
-   card.className='commerce-alert';
-   card.setAttribute('role','status');
-   card.innerHTML='<div class="commerce-alert-top"><span>'+(isSale?'NOVA OPORTUNIDADE DE VENDA':'NOVO ORÇAMENTO')+
-    '</span><button type="button" class="commerce-alert-close" aria-label="Fechar notificação">×</button></div>'+
-    '<strong>'+e(item.customer_name||'Cliente')+'</strong>'+
-    '<small>'+e(item.customer_phone||'Número não informado')+'</small>'+
-    '<p>'+e(summary.slice(0,170))+e(total)+'</p>'+
-    '<div class="commerce-alert-actions"><button type="button" class="btn primary" data-open-alert>Ver '+(isSale?'venda':'orçamento')+'</button>'+
-    '<button type="button" class="btn soft" data-chat-alert>Conversar</button></div>';
-   card.querySelector('.commerce-alert-close').addEventListener('click',()=>card.remove());
-   card.querySelector('[data-open-alert]').addEventListener('click',async()=>{
-    card.remove();await changeView(isSale?'sales':'quotes');
-    const target=view.querySelector(isSale?'[data-intent="'+item.id+'"]':'[data-quote-prepare="'+item.id+'"]');
-    target?.scrollIntoView({block:'center',behavior:'smooth'});
-    if(isSale)target?.querySelector('[data-lead-expand]')?.click();
-    else target?.closest('.quote-request-item')?.querySelector('summary')?.click();
-   });
-   card.querySelector('[data-chat-alert]').addEventListener('click',()=>{card.remove();changeView('inbox',item.conversation_id);});
-   host.prepend(card);
-  }
-  while(host.children.length>3)host.lastElementChild.remove();
- }catch(error){
-  // No false success pop-up for network errors; the queue remains in the database.
-  if(error.message&&!String(error.message).includes('Entre na sua conta'))console.warn('Alertas Sócio indisponíveis');
- }finally{commerceAlertBusy=false;}
-}
-function startCommerceAlerts(){
- clearInterval(commerceAlertTimer);
- if(!state.me||isMasterView()||!featureAvailable('quotes')||
-  !(state.me.user.permissions||[]).includes('sales.read'))return;
- void pollCommerceAlerts();
- commerceAlertTimer=setInterval(pollCommerceAlerts,12000);
-}
 
 function heading(eyebrow,title,description,action=''){
  return '<div class="view-heading"><div><span class="eyebrow">'+e(eyebrow)+'</span><h1>'+e(title)+'</h1><p>'+e(description)+'</p></div>'+action+'</div>';
@@ -197,14 +140,13 @@ async function boot(){
    document.querySelector('.nav-item[data-view="connections"]')?.classList.toggle('hidden',
     !access.has('marketing.read')&&!access.has('channels.manage'));
 
-   for(const [section,permission] of [['training','training.manage'],['sales','sales.read'],['quotes','sales.read'],['reports','audit.read'],['marketing','marketing.read']]){
+   for(const [section,permission] of [['training','training.manage'],['reports','audit.read'],['marketing','marketing.read']]){
     document.querySelector('.nav-item[data-view="'+section+'"]')?.classList.toggle('hidden',!access.has(permission));
    }
    for(const [section,feature] of Object.entries(featureView)){
     const nav=document.querySelector('.nav-item[data-view="'+section+'"]');
     if(nav)nav.classList.toggle('hidden',!viewAvailable(section)||
      (section==='training'&&!access.has('training.manage'))||
-     ((section==='sales'||section==='quotes')&&!access.has('sales.read'))||
      (section==='marketing'&&!access.has('marketing.read')));
    }
    $('#teamNav')?.classList.toggle('hidden',!featureAvailable('team')||!access.has('team.read'));
@@ -266,7 +208,7 @@ async function changeView(next,conversationId=null){
  if(next!=='inbox'&&activeInbox){activeInbox.cleanup();activeInbox=null;}
  if(next==='channels')next='connections';
  if(next==='reports')next='overview';
- if(next==='quotes')next='sales';
+ if(next==='quotes'||next==='sales')next='overview';
  if(next==='agent'){state.aiTab='agent';next='training';}
  else if(next==='training'&&state.view!=='training')state.aiTab='training';
  clearTimeout(trainingTimer);clearTimeout(waQrTimer);
@@ -277,7 +219,6 @@ async function changeView(next,conversationId=null){
  if(!viewAvailable(next))next='overview';
  const access=new Set(state.me?.user?.permissions||[]);
  if(next==='training'&&!access.has('training.manage'))next='overview';
- if((next==='sales'||next==='quotes')&&!access.has('sales.read'))next='overview';
  if(next==='connections'&&!access.has('marketing.read')&&!access.has('channels.manage'))next='overview';
  if(next==='instagram')next='marketing';
  if(next==='marketing'&&!access.has('marketing.read'))next='overview';
@@ -294,9 +235,11 @@ async function changeView(next,conversationId=null){
  setLoading();
  try{
   if(next==='overview')await overview();
-   if(next==='connections')await globalThis.SocioWorkspaceUI.connections({root:view,api,me:state.me,navigate:changeView});
+   if(next==='connections'){
+    await globalThis.SocioWorkspaceUI.connections({root:view,api,me:state.me,navigate:changeView});
+    await globalThis.SocioOwnerChannelUI?.render({root:view,api,me:state.me});
+   }
   if(next==='products')await products();
-  if(next==='sales'||next==='quotes')await window.SocioSales.render({api,e,toast,view,me:state.me,navigate:changeView,mode:next});
   if(next==='training'){
    if(state.aiTab==='images'){await window.SocioFlowImages.render({root:view,api,me:state.me});mountAiGuideTabs();}
    else await (state.aiTab==='agent'?agent():training());
@@ -602,6 +545,7 @@ async function channels(){
    if(command==='start')await showWaQr(id);
   });
  }));
+ if(globalThis.SocioOwnerChannelUI)await globalThis.SocioOwnerChannelUI.render({root:view,api,me:state.me});
 }
 async function marketing(){
  if(globalThis.SocioWorkspaceUI)return globalThis.SocioWorkspaceUI.marketing({root:view,api,me:state.me,navigate:changeView});
@@ -1250,25 +1194,22 @@ async function reports(){
   api('/api/billing/status').catch(()=>null)
  ]);
  const t=report.totals||{};
- const cards=[
-  ['Mensagens recebidas',t.inbound_messages,'WhatsApp · últimos 30 dias'],
-  ['Oportunidades de compra',t.purchase_intents,'Intenções detectadas, não vendas pagas'],
-  ['Aguardando atendimento',t.purchase_pending,'Solicitações de compra abertas'],
-  ['Orçamentos solicitados',t.quote_requests,'Pedidos identificados no período'],
-  ['Orçamentos enviados pelo Sócio',t.quote_sent,'Envios confirmados no gateway'],
-  ['Pedidos aprovados',t.approved_orders,'Não significa pagamento confirmado']
- ];
  const days=Array.isArray(report.dailyMessages)?report.dailyMessages:[];
  const max=Math.max(1,...days.map(d=>Number(d.messages||0)));
  const ops=monitor?.activity||null;
  const showNumber=value=>value===null||value===undefined?'Indisponível':Number(value).toLocaleString('pt-BR');
+ const cards=[
+  ['Mensagens recebidas',t.inbound_messages,'WhatsApp · últimos 30 dias'],
+  ['Respostas confirmadas',ops?.confirmedBusinessMessages30d,'Somente envios com ID do provedor'],
+  ['Conversas aguardando resposta',ops?.awaitingBusinessReply30d,'Clientes sem retorno do negócio']
+ ];
  const monitorSection=ops?
   '<section class="card card-pad"><h2>Monitoramento da operação</h2>'+
    '<p class="form-note">Últimos 30 dias. Só mensagens com ID do provedor são respostas confirmadas; canal cadastrado não comprova conexão ativa no gateway.</p>'+
    '<div class="report-note-grid"><div><small>Conversas aguardando resposta</small><strong>'+e(showNumber(ops.awaitingBusinessReply30d))+'</strong></div>'+
    '<div><small>Respostas confirmadas</small><strong>'+e(showNumber(ops.confirmedBusinessMessages30d))+'</strong></div>'+
-   '<div><small>Orçamentos pendentes</small><strong>'+e(showNumber(ops.pendingQuotes))+'</strong></div>'+
-   '<div><small>Oportunidades abertas</small><strong>'+e(showNumber(ops.openOpportunities))+'</strong></div></div>'+
+   '<div><small>Conversas iniciadas</small><strong>'+e(showNumber(ops.conversationsStarted30d))+'</strong></div>'+
+   '<div><small>Canais cadastrados</small><strong>'+e(showNumber(ops.connectedChannelRecords))+'</strong></div></div>'+
    '<h3>Pontos de atenção</h3>'+
    (monitor.alerts.length?monitor.alerts.map(a=>'<p class="form-note">• '+e(a.message)+' ('+e(a.count)+')</p>').join(''):
     '<p class="form-note">Nenhum alerta encontrado nos registros disponíveis.</p>')+
@@ -1299,12 +1240,7 @@ async function reports(){
     return '<div class="report-bar-row"><span>'+e(stamp)+'</span><div class="report-bar-track"><i data-width="'+width+'"></i></div><strong>'+e(n)+'</strong></div>';
    }).join('')+'</div>':'<p class="form-note">Nenhuma mensagem recebida no período.</p>')+
   '</section><section class="card card-pad"><h2>Interpretação dos dados</h2>'+
-   '<p class="form-note">O Sócio registra intenções de compra, orçamentos enviados e pedidos aprovados separadamente. Valores estimados não entram como faturamento.</p>'+
-   '<div class="report-note-grid"><div><small>Concluídas manualmente</small><strong>'+e(t.purchase_completed_manually||0)+'</strong>'+
-    '<p>Requer conferência financeira pela equipe.</p></div>'+
-    '<div><small>Pagamentos de teste</small><strong>'+e(t.sandbox_payments||0)+'</strong>'+
-    '<p>Transações sandbox, sem receita real.</p></div></div>'+
-   '<p class="form-note">Para medir receita real será necessário conectar e conciliar um meio de pagamento autorizado.</p>'+
+   '<p class="form-note">Estes números medem volume e tempo de resposta no WhatsApp. Vendas e receita só podem ser afirmadas com conciliação de pagamento; o Sócio não infere faturamento a partir de conversa.</p>'+
   '</section></div></section>';
  if(window.SocioIntegrationsUI)
   window.SocioIntegrationsUI.render({root:view,api}).catch(error=>console.warn('[integrations-panel]',String(error?.message||'unavailable').slice(0,100)));
@@ -1369,8 +1305,9 @@ async function settings(){
   ev.preventDefault();
   const form=ev.currentTarget;
   await action(async()=>{
-   await api('/api/me/password','POST',formValues(form));
-   toast('Senha alterada. As outras sessões foram encerradas.');await settings();
+   const result=await api('/api/me/password','POST',formValues(form));
+   if(result.csrf)state.csrf=result.csrf;
+   toast('Senha alterada. Todas as outras sessões foram encerradas.');await settings();
   });
  });
 }
@@ -1436,22 +1373,11 @@ function featureChecks(flags={},prefix='feature-'){
  return '<div class="feature-grid" role="group" aria-label="Funcionalidades da empresa">'+
   featureKeys.map(key=>'<label class="feature-choice"><input type="checkbox" name="'+prefix+key+
    '" '+(flags[key]!==false?'checked':'')+'><span><strong>'+e(featureLabels[key])+
-   '</strong><small>'+(key==='quotes'?'Precisa de WhatsApp e catálogo':key==='meta_ads'?'Sessão de navegador do Ads Manager':'Ativar neste ambiente')+
+   '</strong><small>'+(key==='meta_ads'?'Sessão de navegador do Ads Manager':'Ativar neste ambiente')+
    '</small></span></label>').join('')+'</div>';
 }
 function selectedFeatures(form,prefix='feature-'){
  return Object.fromEntries(featureKeys.map(key=>[key,form.elements[prefix+key]?.checked===true]));
-}
-function wireFeatureDependencies(form,prefix='feature-'){
- form.addEventListener('change',ev=>{
-  const key=String(ev.target?.name||'').replace(prefix,'');
-  const quote=form.elements[prefix+'quotes'],catalog=form.elements[prefix+'catalog'],whatsapp=form.elements[prefix+'whatsapp'];
-  if(!quote||!catalog||!whatsapp)return;
-  if(key==='quotes'&&quote.checked){catalog.checked=true;whatsapp.checked=true;}
-  if((key==='catalog'&&!catalog.checked)||(key==='whatsapp'&&!whatsapp.checked)){
-   quote.checked=false;
-  }
- });
 }
 async function admin(){
  const [tenants,monitor]=await Promise.all([
@@ -1572,7 +1498,6 @@ async function admin(){
   finally{submit.disabled=false;}
  });
  const modal=$('#companyModal'),form=$('#tenantForm');
- wireFeatureDependencies(form);
  let publicProfile=null;
  const open=()=>{modal.classList.remove('hidden');form.elements.cnpj.focus();};
  const close=()=>modal.classList.add('hidden');
@@ -1614,7 +1539,6 @@ async function admin(){
   });
  });
  const featureModal=$('#featuresModal'),featureForm=$('#featuresForm');
- wireFeatureDependencies(featureForm,'edit-feature-');
  let editingTenant=null;
  const closeFeatures=()=>{featureModal.classList.add('hidden');editingTenant=null;};
  $('#featuresClose').addEventListener('click',closeFeatures);
@@ -1655,7 +1579,6 @@ const sidebarIcons={
  inbox:'<path d="M4 4h16v12h-5l-3 3-3-3H4z"/><path d="M7 9h10M7 12h7"/>',
  instagram:'<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.6 6.7h.01"/>',
  reports:'<path d="M4 20V11m5 9V5m5 15v-7m5 7V8"/><path d="M2 21h20"/>',
- quotes:'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 9h6M9 13h6"/>',
  marketing:'<path d="M3 21V8l9-5 9 5v13M7 14v4M12 11v7M17 13v5"/>',
  channels:'<path d="M6 18c-2-1.7-3-4.1-3-6.6C3 6.6 6.7 3 12 3s9 3.6 9 8.4c0 4.5-3.7 8.6-9 8.6-1.6 0-3.2-.3-4.4-1L3 21z"/><path d="M9 9c.4 2.6 2.4 4.7 5 5l1.4-1.5"/>',
  products:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 10h18M10 3v18"/>',
@@ -1682,11 +1605,10 @@ function renderCommandItems(){
  const input=$('#commandSearch');
  const keyword=input.value.trim().toLocaleLowerCase('pt-BR');
  const names=Object.entries(titles).filter(([key,label])=>
-  key!=='agent'&&key!=='channels'&&key!=='reports'&&key!=='quotes'&&key!=='sales'&&viewAvailable(key)&&
+  key!=='agent'&&key!=='channels'&&key!=='reports'&&viewAvailable(key)&&
   (isMasterView()?masterViews.has(key):!masterViews.has(key))&&
   (key!=='marketing'||(state.me?.user?.permissions||[]).includes('marketing.read'))&&
   (key!=='reports'||(state.me?.user?.permissions||[]).includes('audit.read'))&&
-  (!['sales','quotes'].includes(key)||(state.me?.user?.permissions||[]).includes('sales.read'))&&
   (key!=='training'||(state.me?.user?.permissions||[]).includes('training.manage'))&&
   (key!=='team'||ownAccountAvailable())&&
   (!masterViews.has(key)||isPrimaryMaster())&&
@@ -1778,5 +1700,5 @@ $$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{
  if(b.dataset.view==='training')state.aiTab='training';
  changeView(b.dataset.view);
 }));
-$('#logoutBtn').addEventListener('click',async()=>{globalThis.SocioWorkspaceUI?.clearCache();globalThis.SocioThalitaUI?.unmount();clearInterval(commerceAlertTimer);$('#commerceAlerts').replaceChildren();try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
+$('#logoutBtn').addEventListener('click',async()=>{globalThis.SocioWorkspaceUI?.clearCache();globalThis.SocioThalitaUI?.unmount();try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
 boot();

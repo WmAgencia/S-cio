@@ -19,9 +19,6 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
-import {scanQuoteRequests,listQuoteRequests,updateQuoteRequest,setQuoteAlerts,processNextOwnerQuoteAlert,saveQuoteDraft,sendQuoteDraft} from './quote-requests.mjs';
-import {scanSalesIntents,listSaleIntents,updateSaleIntent} from './sales-intents.mjs';
-import {askSalesAssistant} from './socio-sales-assistant.mjs';
 import {validateTenantFeatures,parseTenantFeatures,filterPermissions,assertApiFeature} from './tenant-features.mjs';
 import {startPipeboardOAuth,finishPipeboardOAuth,listPipeboardOAuth,revokePipeboardOAuth,oauthClientMetadata,testPipeboardConnection} from './marketing-oauth.mjs';
 import {instagramHostedReady,beginInstagramHosted,instagramHostedStatus,disconnectInstagramHosted} from './instagram-hosted.mjs';
@@ -29,6 +26,7 @@ import {connectPipeboard,listMarketing,disconnectMarketing} from './marketing-in
 import {instagramReady,beginInstagramOAuth,completeInstagramOAuth,ingestInstagramWebhook,revokeInstagramAccount} from './instagram-integration.mjs';
 import {maintenanceEnabled,writesBlocked,workersBlocked} from './migration-guard.mjs';
 import {TABLES as MIGRATION_TABLES} from './scripts/socio-supabase-migrate.mjs';
+import {applyPendingMigrations,schemaVersionStatus} from './schema-migrations.mjs';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier,clientIp,createLimiter} from './lib.mjs';
 import {permissionsFor,requirePermission,allowedNewMemberRole,validateMemberPatch} from './team-permissions.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
@@ -47,7 +45,9 @@ import {normalizeLabHistory,buildLabInput,polishCustomerReply,reviewReplyStyle} 
 import {analyzeSocioContinuity} from './socio-prospector-continuity.mjs';
 import {knowledgeV3Enabled,loadTenantApprovedKnowledge,retrieveApprovedKnowledge} from './socio-knowledge-retrieval.mjs';
 import {readConversationMemory,clearConversationMemory,purgeExpiredConversationMemories} from './socio-conversation-memory.mjs';
-import {reconcileConfirmedOutbox} from './socio-outbound.mjs';
+import {reconcileConfirmedOutbox,outboundEnabled} from './socio-outbound.mjs';
+import {readOwnerChannel,updateOwnerChannelSettings,retryOwnerGroup,provisionOwnerGroups,pollOwnerGroups,processOwnerCommands,runOwnerTrafficAutopilot} from './socio-owner-channel.mjs';
+import {runTrafficManager,approveTrafficDecisions,listTrafficDecisions} from './socio-traffic-manager.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
 import {getTenantBusinessMonitor,getMasterSaasMonitor} from './socio-business-monitor.mjs';
@@ -58,7 +58,6 @@ import {startGoogleAdsOAuth,finishGoogleAdsOAuth,googleAdsStatus,listGoogleAdsAc
 import {createTrackingSite,listTrackingSites,enableTrackingSite,receiveSignedSiteEvent} from './socio-site-tracking.mjs';
 import {integrationReadiness} from './socio-integrations-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
-import {createQuote,issueQuote,cancelQuote,publicQuote,approveQuote,declineQuote,listSales,createTestCheckout,processStripeTestEvent} from './sales-commerce.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
 import {reserveAdVideo,listAdVideos,storeAdVideo,adVideoExportUrl,resolveSignedAsset,serveSignedVideo,importWhatsAppAdVideo,createMediaMcpToken,revokeMediaMcpTokens,MAX_AD_VIDEO_BYTES} from './ads-media.mjs';
 import {handleAdsMediaMcp} from './ads-media-mcp.mjs';
@@ -74,6 +73,12 @@ const flowImages=createFlowImages();
 const PORT=Number(process.env.PORT||3000);
 const DATABASE_URL=process.env.DATABASE_URL;
 if(!DATABASE_URL){console.error('DATABASE_URL não configurada');process.exit(1);}
+// Production cookies are always Secure; refuse to boot in an environment that
+// would serve session cookies over plain HTTP because NODE_ENV was forgotten.
+if(process.env.NODE_ENV!=='production'&&process.env.NODE_ENV!=='test'){
+ console.error('NODE_ENV must be production (test is reserved for the test suite)');
+ process.exit(1);
+}
 // Railway remains the live source until data is copied and validated.
 // Supabase uses the private socio_app schema; never create the runtime tables
 // in the public Data API schema during a future database cutover.
@@ -86,6 +91,11 @@ if(!['public','socio_app'].includes(dbSchema)||(isSupabaseDb&&dbSchema!=='socio_
 }
 const pool=new Pool({connectionString:DATABASE_URL,max:10,connectionTimeoutMillis:8000,idleTimeoutMillis:30000,
  options:dbSchema==='socio_app'?'-c search_path=socio_app,pg_catalog':undefined});
+// Supabase's pooler closes idle connections; without this listener the error
+// event would be unhandled and Node would end the whole process.
+pool.on('error',error=>{
+ console.error('[socio-db] idle connection failed',String(error?.code||error?.message||'error').slice(0,80));
+});
 const query=(sql,values=[])=>pool.query(sql,values);
 async function fullCatalog(tenantId){
  const [items,variants,media,campaigns]=await Promise.all([
@@ -111,11 +121,36 @@ const validText=(v,max=500)=>typeof v==='string'&&v.trim().length>0&&v.length<=m
 const trimmed=(v,max=500)=>typeof v==='string'?v.trim().slice(0,max):'';
 const money=v=>Number.isInteger(v)&&v>=0&&v<100000000;
 const safeDetail=e=>[400,401,403,404,409,413,422,429,503].includes(e.status)?e.message:'Erro interno. Tente novamente.';
+// Readiness includes the schema, so a forgotten migration cannot look green.
+// Cached briefly: /health is polled by the platform and by the UI.
+let schemaHealthCache={at:0,state:{ok:false,error:'schema_not_checked'}};
+async function schemaHealth(){
+ const at=Date.now();
+ if(at-schemaHealthCache.at<15000)return schemaHealthCache.state;
+ let state;
+ try{
+  if(dbSchema!=='socio_app')state={ok:true,version:null};
+  else{
+   const version=await schemaVersionStatus(pool,{schema:'socio_app'});
+   if(!version.ok)throw Object.assign(new Error('schema version not applied'),{reason:'schema_version_missing'});
+   const critical=await query(
+    "SELECT count(*)::int AS found FROM information_schema.columns WHERE table_schema='socio_app' AND "+
+    "(table_name,column_name) IN (('users','active'),('sessions','csrf'),('messages','direction'),"+
+    "('meta_ads_plans','status'),('socio_owner_commands','state'),('socio_traffic_decisions','reason'))");
+   if((critical.rows[0]?.found||0)<6)throw Object.assign(new Error('critical columns missing'),{reason:'schema_incomplete'});
+   state={ok:true,version:version.version};
+  }
+ }catch(error){
+  state={ok:false,error:String(error?.reason||error?.code||'schema_check_failed')};
+ }
+ schemaHealthCache={at,state};
+ return state;
+}
 const cnpjCache=new Map();
 const limiter=createLimiter(query);
 const resetLimit=(bucket,key)=>query('DELETE FROM rate_limits WHERE bucket=$1 AND key=$2',[bucket,key]).catch(()=>{});
 function sessionCookie(token,clear=false){
- return 'socio_session='+(clear?'':encodeURIComponent(token))+'; Path=/; HttpOnly; SameSite=Strict'+(process.env.NODE_ENV==='production'?'; Secure':'')+(clear?'; Max-Age=0':'; Max-Age=604800');
+ return 'socio_session='+(clear?'':encodeURIComponent(token))+'; Path=/; HttpOnly; SameSite=Strict; Secure'+(clear?'; Max-Age=0':'; Max-Age=604800');
 }
 async function body(req,limit=900000){
  let size=0,parts=[];
@@ -142,7 +177,7 @@ async function sessionFor(req){
  if(!match)return null;
  let token;try{token=decodeURIComponent(match[1]);}catch{return null;}
  if(!token||token.length>256)return null;
- const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.phone,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status,t.features,t.quote_alert_whatsapp FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true AND (u.platform_owner=true OR u.tenant_id=s.active_tenant_id)",[hashToken(token)]);
+ const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.phone,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status,t.features FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true AND (u.platform_owner=true OR u.tenant_id=s.active_tenant_id)",[hashToken(token)]);
  return result.rows[0]||null;
 }
 async function createSession(userId,tenantId,res){
@@ -167,7 +202,11 @@ async function handle(req,res){
   // Railway only considers the app ready when the tenant database is usable.
   // A static 200 here used to hide Postgres outages from the healthcheck.
   await query('SELECT 1');
-  return json(res,200,{ok:true,app:'socio',database:'connected',readOnly:maintenanceEnabled()});
+  const schema=await schemaHealth();
+  if(!schema.ok)return json(res,503,{ok:false,app:'socio',database:'connected',
+   schema:dbSchema,schemaError:schema.error,readOnly:maintenanceEnabled()});
+  return json(res,200,{ok:true,app:'socio',database:'connected',schema:dbSchema,
+   schemaVersion:schema.version,readOnly:maintenanceEnabled()});
  }
  // Migration safety: every state-changing endpoint is blocked, including
  // login/session writes, public buyer acceptance and external webhooks.
@@ -258,7 +297,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/quote.html','/quote.js','/quote.css','/sales.js','/sales.css','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/socio-semantic-turn.mjs','/socio-workspace-ui.js','/socio-thalita-ui.js','/socio-executive.css','/socio-glass-motion.css','/socio-glass-motion.js','/socio-glass-enforced.css','/socio-premium-polish.css','/socio-contrast-audit.css','/socio-product-features.js','/socio-entry-motion.js','/socio-motion-refined.css','/socio-luminous-glass.css','/socio-stripe-system.css','/socio-master.css','/socio-master-dashboard.js','/meta-billing-ui.js','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/socio-semantic-turn.mjs','/socio-workspace-ui.js','/socio-thalita-ui.js','/socio-executive.css','/socio-glass-motion.css','/socio-glass-motion.js','/socio-glass-enforced.css','/socio-premium-polish.css','/socio-contrast-audit.css','/socio-product-features.js','/socio-entry-motion.js','/socio-motion-refined.css','/socio-luminous-glass.css','/socio-stripe-system.css','/socio-master.css','/socio-master-dashboard.js','/meta-billing-ui.js','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/owner-channel-ui.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':(file.endsWith('.js')||file.endsWith('.mjs'))?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -326,11 +365,6 @@ async function handle(req,res){
    throw fail(429,'Limite de eventos do Stripe atingido.');
   return json(res,200,await processSubscriptionWebhook(pool,raw,req.headers['stripe-signature']));
  }
- if(pathname==='/webhooks/stripe-test'&&method==='POST'){
-  const {raw}=await body(req,160000);
-  const result=await processStripeTestEvent(pool,raw,req.headers['stripe-signature']);
-  return json(res,200,result);
- }
  if(mutations.has(method))sameOrigin(req);
  if(pathname==='/downloads/socio-meta-connector.zip'&&method==='GET'){
   const archive=await connectorBundle();
@@ -353,23 +387,6 @@ async function handle(req,res){
    const {data}=await body(req,500000);return json(res,200,await finishLocalJob(pool,connection,data));
   }
   throw fail(404,'Operação não encontrada.');
- }
- // Opaque buyer approval link; no access to unrelated tenant records.
- const publicQuotePath=pathname.match(/^\/api\/public\/quotes\/([a-f0-9]{64})$/);
- if(publicQuotePath&&method==='GET'){
-  return json(res,200,await publicQuote(pool,publicQuotePath[1]));
- }
- const publicQuoteAction=pathname.match(/^\/api\/public\/quotes\/([a-f0-9]{64})\/(accept|decline|checkout)$/);
- if(publicQuoteAction&&method==='POST'){
-  const [,token,action]=publicQuoteAction;
-  if(!await limiter('sim','buyer:'+token.slice(0,20),60000,12))
-   throw fail(429,'Muitas solicitações neste orçamento.');
-  if(action==='accept'){
-   const {data}=await body(req,8000);
-   return json(res,200,await approveQuote(pool,token,data.buyerName,data.agree===true));
-  }
-  if(action==='decline')return json(res,200,await declineQuote(pool,token));
-  return json(res,200,await createTestCheckout(pool,token));
  }
  if(method==='POST'&&pathname==='/api/setup'){
   if(!await limiter('auth','setup:'+clientIp(req),600000,8))throw fail(429,'Muitas tentativas.');
@@ -428,7 +445,7 @@ async function handle(req,res){
    platformOwner:a.platform_owner,homeTenantId:(a.platform_owner&&a.role==='owner')?a.tenant_id:null,
    permissions:filterPermissions(permissionsFor(a.role,a.platform_owner),a.features)},
   tenant:{id:a.active_tenant_id,name:a.tenant_name,plan:a.plan,status:a.tenant_status,
-   features:parseTenantFeatures(a.features),quoteAlertWhatsApp:a.quote_alert_whatsapp===true},
+   features:parseTenantFeatures(a.features)},
   csrf:a.csrf,groqConfigured:groqReady(),groqModel:groqModel()});
  // The viewer role is enforced server-side: never permit writes through any authenticated API.
  // Explicitly preserve account logout and personal password management.
@@ -503,6 +520,58 @@ async function handle(req,res){
   if(!await limiter('sim','wa-owner-readiness:'+a.user_id,60000,6))
    throw fail(429,'Aguarde antes de repetir o diagnóstico.');
   return json(res,200,await ownerWhatsAppReadiness(pool,a));
+ }
+ if(pathname==='/api/marketing/owner-channel'&&method==='GET'){
+  requirePermission(a,'marketing.read');
+  return json(res,200,{...await readOwnerChannel(pool,a.active_tenant_id),
+   outboundEnabled:outboundEnabled()});
+ }
+ if(pathname==='/api/marketing/owner-channel'&&method==='PATCH'){
+  requirePermission(a,'marketing.manage');
+  if(!await limiter('sim','owner-channel-settings:'+a.user_id,60000,10))
+   throw fail(429,'Aguarde antes de salvar outra configuração.');
+  const {data}=await body(req,2500);
+  const result=await updateOwnerChannelSettings(pool,a,data);
+  await audit(a,'marketing.owner_channel.updated',{configured:result.missing.length===0});
+  return json(res,200,{...result,outboundEnabled:outboundEnabled()});
+ }
+ if(pathname==='/api/marketing/owner-channel/retry'&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  if(!await limiter('sim','owner-channel-retry:'+a.user_id,60000,4))
+   throw fail(429,'Aguarde antes de tentar criar o grupo novamente.');
+  const result=await retryOwnerGroup(pool,a.active_tenant_id);
+  await audit(a,'marketing.owner_channel.retry',{created:Boolean(result.created),
+   reason:String(result.reason||(result.created?'created':'skipped')).slice(0,40)});
+  return json(res,200,result);
+ }
+ if(pathname==='/api/marketing/traffic'&&method==='GET'){
+  requirePermission(a,'marketing.read');
+  return json(res,200,await listTrafficDecisions(pool,a.active_tenant_id));
+ }
+ if(pathname==='/api/marketing/traffic/preview'&&method==='GET'){
+  requirePermission(a,'marketing.read');
+  if(!await limiter('sim','traffic-preview:'+a.user_id,60000,10))
+   throw fail(429,'Aguarde antes de analisar as campanhas novamente.');
+  const result=await runTrafficManager(pool,a,{apply:false});
+  return json(res,200,{accountId:result.accountId,period:result.period,
+   actions:result.decisions,summary:result.summary,notes:result.notes,report:result.report});
+ }
+ if(pathname==='/api/marketing/traffic/run'&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  if(!await limiter('sim','traffic-run:'+a.user_id,60000,4))
+   throw fail(429,'Aguarde antes de otimizar o tráfego novamente.');
+  const result=await runTrafficManager(pool,a);
+  await audit(a,'marketing.traffic.autopilot',{executed:result.executed.length,
+   pending:result.pending.length,skipped:result.skipped.length});
+  return json(res,200,result);
+ }
+ if(pathname==='/api/marketing/traffic/approve'&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  if(!await limiter('sim','traffic-approve:'+a.user_id,60000,6))
+   throw fail(429,'Aguarde antes de aprovar outra mudança.');
+  const result=await approveTrafficDecisions(pool,a);
+  await audit(a,'marketing.traffic.approved',{applied:result.applied.length,failed:result.failed.length});
+  return json(res,200,result);
  }
  if(pathname==='/api/marketing/skills/catalog'&&method==='GET'){
   requirePermission(a,'marketing.read');
@@ -879,12 +948,19 @@ async function handle(req,res){
     throw fail(401,'Senha atual incorreta.');
    const encrypted=await hashPassword(data.newPassword);
    await c.query('UPDATE users SET password_hash=$2 WHERE id=$1',[a.user_id,encrypted]);
-   await c.query('DELETE FROM sessions WHERE user_id=$1 AND token_hash<>$2',[a.user_id,a.token_hash]);
+   // Every session is revoked, including the one used for this request: if the
+   // cookie had been stolen, the thief shares this token and must lose it too.
+   await c.query('DELETE FROM sessions WHERE user_id=$1',[a.user_id]);
+   const token=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');
+   await c.query("INSERT INTO sessions(token_hash,user_id,active_tenant_id,csrf,expires_at) "+
+    "VALUES($1,$2,$3,$4,now()+interval '7 days')",
+    [hashToken(token),a.user_id,a.active_tenant_id,csrf]);
    await c.query('INSERT INTO audit(id,tenant_id,actor_id,action,metadata) VALUES($1,$2,$3,$4,$5)',[
-    id(),a.active_tenant_id,a.user_id,'auth.password_changed',JSON.stringify({otherSessionsRevoked:true})]);
+    id(),a.active_tenant_id,a.user_id,'auth.password_changed',JSON.stringify({allSessionsRevoked:true})]);
    await c.query('COMMIT');
    await resetLimit('auth','password-change:'+a.user_id);
-   return json(res,200,{ok:true,otherSessionsRevoked:true});
+   res.setHeader('Set-Cookie',sessionCookie(token));
+   return json(res,200,{ok:true,allSessionsRevoked:true,csrf});
   }catch(e){await c.query('ROLLBACK').catch(()=>{});throw e;}finally{c.release();}
  }
  if(method==='POST'&&pathname==='/api/logout'){
@@ -1186,13 +1262,6 @@ async function handle(req,res){
   requirePermission(a,'audit.read');
   const [totals,daily]=await Promise.all([
    query("SELECT "+
-    "(SELECT count(*)::int FROM sale_intents WHERE tenant_id=$1 AND created_at>=now()-interval '30 days') AS purchase_intents,"+
-    "(SELECT count(*)::int FROM sale_intents WHERE tenant_id=$1 AND status='pending' AND created_at>=now()-interval '30 days') AS purchase_pending,"+
-    "(SELECT count(*)::int FROM sale_intents WHERE tenant_id=$1 AND status='completed' AND updated_at>=now()-interval '30 days') AS purchase_completed_manually,"+
-    "(SELECT count(*)::int FROM quote_requests WHERE tenant_id=$1 AND created_at>=now()-interval '30 days') AS quote_requests,"+
-    "(SELECT count(*)::int FROM quote_requests WHERE tenant_id=$1 AND delivery_status='sent' AND quote_sent_at>=now()-interval '30 days') AS quote_sent,"+
-    "(SELECT count(*)::int FROM sales_orders WHERE tenant_id=$1 AND created_at>=now()-interval '30 days') AS approved_orders,"+
-    "(SELECT count(*)::int FROM sales_orders WHERE tenant_id=$1 AND status='paid_test' AND created_at>=now()-interval '30 days') AS sandbox_payments,"+
     "(SELECT count(*)::int FROM messages WHERE tenant_id=$1 AND direction='inbound' AND created_at>=now()-interval '30 days') AS inbound_messages",
     [a.active_tenant_id]),
    query("SELECT date_trunc('day',m.created_at)::date AS day,count(*)::int AS messages "+
@@ -1200,91 +1269,7 @@ async function handle(req,res){
     "GROUP BY 1 ORDER BY 1",[a.active_tenant_id])
   ]);
   return json(res,200,{periodDays:30,totals:totals.rows[0],
-   dailyMessages:daily.rows,note:'Intenção de compra, pedido aprovado e pagamento são eventos distintos. Pagamento de teste não é receita real.'});
- }
- if(method==='POST'&&pathname==='/api/sales/assistant/chat'){
-  requirePermission(a,'sales.read');
-  assertApiFeature(a.features,'/api/agent');
-  if(!await limiter('sim','sales-assistant:'+a.user_id,60000,12))
-   throw fail(429,'Aguarde antes de fazer outra pergunta comercial.');
-  const {data}=await body(req,2500);
-  const result=await askSalesAssistant(pool,a,{message:data.message,requestId:data.requestId??null});
-  await audit(a,'sales.assistant.read',{requestId:result.requestId||null,
-   previewReady:result.preview?.readyToReview===true});
-  return json(res,200,result);
- }
- if(method==='GET'&&pathname==='/api/sales/intents'){
-  requirePermission(a,'sales.read');
-  return json(res,200,{intents:await listSaleIntents(pool,a.active_tenant_id)});
- }
- const saleIntentRoute=pathname.match(/^\/api\/sales\/intents\/([a-f0-9-]{36})$/i);
- if(saleIntentRoute&&method==='PATCH'){
-  requirePermission(a,'sales.manage');
-  const {data}=await body(req,15000);
-  const updated=await updateSaleIntent(pool,a.active_tenant_id,saleIntentRoute[1],data);
-  await audit(a,'sales.intent.updated',{intentId:updated.id,status:updated.status});
-  return json(res,200,updated);
- }
- if(method==='GET'&&pathname==='/api/sales/alerts'){
-  requirePermission(a,'sales.read');
-  const [intents,quotes]=await Promise.all([
-   query("SELECT id,conversation_id,customer_name,customer_phone,summary,items,amount_cents,created_at FROM sale_intents WHERE tenant_id=$1 AND status='pending' AND created_at>now()-interval '48 hours' ORDER BY created_at DESC LIMIT 20",[a.active_tenant_id]),
-   query("SELECT id,conversation_id,customer_name,customer_phone,summary,created_at FROM quote_requests WHERE tenant_id=$1 AND status='pending' AND created_at>now()-interval '48 hours' ORDER BY created_at DESC LIMIT 20",[a.active_tenant_id])
-  ]);
-  return json(res,200,{items:[...intents.rows.map(x=>({...x,kind:'sale'})),...quotes.rows.map(x=>({...x,kind:'quote'}))]
-   .sort((x,y)=>new Date(y.created_at)-new Date(x.created_at)).slice(0,20)});
- }
- const quoteDraftRoute=pathname.match(/^\/api\/sales\/quote-requests\/([a-f0-9-]{36})\/(draft|send)$/i);
- if(quoteDraftRoute&&method==='POST'){
-  requirePermission(a,'sales.manage');
-  const [,requestId,action]=quoteDraftRoute;
-  if(action==='send'&&!await limiter('sim','quote-send:'+a.user_id,60000,10))
-   throw fail(429,'Limite de envios por minuto atingido.');
-  const data=action==='draft'?(await body(req,6000)).data:{};
-  const result=action==='draft'?await saveQuoteDraft(pool,a.active_tenant_id,requestId,data):
-   await sendQuoteDraft(pool,a.active_tenant_id,requestId,a.user_id);
-  await audit(a,'sales.quote_request.'+action,{requestId,confirmed:action==='send'});
-  return json(res,200,result);
- }
- if(method==='GET'&&pathname==='/api/sales/quote-requests'){
-  requirePermission(a,'sales.read');
-  return json(res,200,{requests:await listQuoteRequests(pool,a.active_tenant_id),
-   alertWhatsAppEnabled:a.quote_alert_whatsapp===true});
- }
- if(method==='PUT'&&pathname==='/api/sales/quote-alerts'){
-  requirePermission(a,'sales.manage');
-  const {data}=await body(req,1000);
-  const result=await setQuoteAlerts(pool,a,data.enabled);
-  await audit(a,'sales.quote_alerts.changed',{enabled:result.enabled});
-  return json(res,200,result);
- }
- const reqStatus=pathname.match(/^\/api\/sales\/quote-requests\/([a-f0-9-]{36})\/status$/);
- if(reqStatus&&method==='PATCH'){
-  requirePermission(a,'sales.manage');
-  const {data}=await body(req,1000);
-  const result=await updateQuoteRequest(pool,a.active_tenant_id,reqStatus[1],data.status);
-  await audit(a,'sales.quote_request.updated',{requestId:result.id,status:result.status});
-  return json(res,200,result);
- }
- if(method==='GET'&&pathname==='/api/sales'){
-  requirePermission(a,'sales.read');
-  return json(res,200,await listSales(pool,a.active_tenant_id));
- }
- if(method==='POST'&&pathname==='/api/sales/quotes'){
-  needRole(a,['owner','admin']);
-  const {data}=await body(req,15000);
-  const quote=await createQuote(pool,a.active_tenant_id,a.user_id,data);
-  await audit(a,'sales.quote.created',{quoteId:quote.id,seriesId:quote.series_id,version:quote.version});
-  return json(res,201,quote);
- }
- const salesAction=pathname.match(/^\/api\/sales\/quotes\/([a-f0-9-]{36})\/(issue|cancel)$/);
- if(salesAction&&method==='POST'){
-  needRole(a,['owner','admin']);
-  const result=salesAction[2]==='issue'?
-   await issueQuote(pool,a.active_tenant_id,salesAction[1]):
-   await cancelQuote(pool,a.active_tenant_id,salesAction[1]);
-  await audit(a,'sales.quote.'+salesAction[2],{quoteId:salesAction[1]});
-  return json(res,200,result);
+   dailyMessages:daily.rows});
  }
  if(method==='GET'&&pathname==='/api/products'){
   return json(res,200,await fullCatalog(a.active_tenant_id));
@@ -1900,10 +1885,6 @@ async function handle(req,res){
    " WHERE v.tenant_id=$1 AND (p.id IS NULL OR p.tenant_id IS DISTINCT FROM v.tenant_id)) AS variant_links,"+
    "(SELECT count(*)::int FROM product_media pm LEFT JOIN products p ON p.id=pm.product_id "+
    " WHERE pm.tenant_id=$1 AND (p.id IS NULL OR p.tenant_id IS DISTINCT FROM pm.tenant_id)) AS media_links,"+
-   "(SELECT count(*)::int FROM sales_quotes q LEFT JOIN conversations c ON c.id=q.conversation_id "+
-   " WHERE q.tenant_id=$1 AND (c.id IS NULL OR c.tenant_id IS DISTINCT FROM q.tenant_id)) AS quote_links,"+
-   "(SELECT count(*)::int FROM sales_orders o LEFT JOIN sales_quotes q ON q.id=o.quote_id "+
-   " WHERE o.tenant_id=$1 AND (q.id IS NULL OR q.tenant_id IS DISTINCT FROM o.tenant_id)) AS order_links,"+
    "(SELECT count(*)::int FROM sessions s JOIN users u ON u.id=s.user_id "+
    " WHERE s.active_tenant_id=$1 AND u.platform_owner=false AND u.tenant_id<>s.active_tenant_id) AS foreign_sessions",
    [a.active_tenant_id]);
@@ -1946,7 +1927,7 @@ async function handle(req,res){
  }
  if(method==='GET'&&pathname==='/api/admin/tenants'){
   needPlatform(a);
-  const r=await query("SELECT t.id,t.name,t.slug,t.plan,t.status,t.cnpj,t.legal_name,t.trade_name,t.features,t.quote_alert_whatsapp,t.created_at,(SELECT count(*)::int FROM users u WHERE u.tenant_id=t.id) AS members FROM tenants t ORDER BY t.created_at DESC");
+  const r=await query("SELECT t.id,t.name,t.slug,t.plan,t.status,t.cnpj,t.legal_name,t.trade_name,t.features,t.created_at,(SELECT count(*)::int FROM users u WHERE u.tenant_id=t.id) AS members FROM tenants t ORDER BY t.created_at DESC");
   return json(res,200,r.rows);
  }
  const editMasterTenant=pathname.match(/^\/api\/admin\/tenants\/([a-f0-9-]{36})$/i);
@@ -1987,7 +1968,7 @@ async function handle(req,res){
    data.companyProfile:{};
   const addr=candidate.address&&typeof candidate.address==='object'&&!Array.isArray(candidate.address)?candidate.address:{};
   const features=validateTenantFeatures(data.features||{
-   whatsapp:true,catalog:true,quotes:true,meta_ads:true,ai:true,team:true
+   whatsapp:true,catalog:true,meta_ads:true,ai:true,team:true
   });
   const companyProfile={
    address:Object.fromEntries(['street','number','additional','neighborhood','city','state','postalCode']
@@ -2058,18 +2039,23 @@ async function receiveWhatsApp(req,res){
 async function main(){
  const schema=await readFile(new URL('./schema.sql',import.meta.url),'utf8');
  if(dbSchema==='socio_app'){
-  // Private Supabase runtime is migrated explicitly; do not silently run
-  // Railway's public DDL against a remotely managed Postgres project.
+  // Private Supabase runtime is migrated by the ordered ledger, never by
+  // running Railway's public DDL against a remotely managed Postgres project.
+  const client=await pool.connect();
+  try{
+   await client.query('SET search_path TO socio_app,pg_catalog');
+   const result=await applyPendingMigrations(client,{schema:'socio_app'});
+   if(result.applied.length)
+    console.info('[socio-migrate]',JSON.stringify({applied:result.applied}));
+  }finally{client.release();}
   const expected=MIGRATION_TABLES;
   const check=await query(
    "SELECT table_name FROM information_schema.tables WHERE table_schema='socio_app' AND table_name=ANY($1::text[])",
    [expected]);
   const names=new Set(check.rows.map(x=>x.table_name));
   if(expected.some(name=>!names.has(name)))throw new Error('Private Supabase schema is incomplete');
-  const requiredColumns=await query(
-   "SELECT column_name FROM information_schema.columns WHERE table_schema='socio_app' "+
-   "AND table_name='users' AND column_name='active'");
-  if(!requiredColumns.rowCount)throw new Error('Private Supabase team schema is outdated');
+  const readiness=await schemaHealth();
+  if(!readiness.ok)throw new Error('Private Supabase schema is not ready: '+readiness.error);
  }else await query(schema);
  // Google Ads was removed from this SaaS. Revoke any previously stored local
  // authorizations and legacy script secrets, without deleting historic metrics.
@@ -2145,6 +2131,54 @@ async function main(){
   finally{ownerMediaBusy=false;}
  },23000);
  ownerMediaWorker.unref();
+ // Owner group channel ("Meu Sócio"): one group per connected number, created
+ // by the connected session. Explicit opt-in; only that group is read. Every
+ // campaign is created PAUSED and only after the owner confirms inside it.
+ let ownerChannelBusy=false,ownerChannelProvisionAt=0,ownerChannelLastError=0;
+ const ownerChannelWorker=setInterval(async()=>{
+  if(ownerChannelBusy||workersBlocked()||!gatewayConfigured()||
+   process.env.SOCIO_OWNER_CHANNEL_ENABLED!=='true')return;
+  ownerChannelBusy=true;
+  try{
+   if(Date.now()>=ownerChannelProvisionAt){
+    ownerChannelProvisionAt=Date.now()+60000;
+    await provisionOwnerGroups(pool);
+   }
+   await pollOwnerGroups(pool);
+   if(outboundEnabled())await processOwnerCommands(pool);
+  }catch(error){
+   if(Date.now()-ownerChannelLastError>30000){
+    console.warn('[socio-owner-channel]',String(error?.code||error?.status||'CHANNEL_ERROR').slice(0,40));
+    ownerChannelLastError=Date.now();
+   }
+  }finally{ownerChannelBusy=false;}
+ },8000);
+ ownerChannelWorker.unref();
+ // Autonomous traffic manager: every eligible tenant is reviewed at most once
+ // per 45 minutes, and each individual change has its own cooldown. Opt-in.
+ let trafficBusy=false;
+ const trafficWorker=setInterval(async()=>{
+  if(trafficBusy||workersBlocked()||process.env.SOCIO_TRAFFIC_AUTOPILOT_ENABLED!=='true')return;
+  trafficBusy=true;
+  try{
+   const tenants=await pool.query(
+    "SELECT g.tenant_id FROM socio_owner_groups g "+
+    "WHERE g.status='active' AND EXISTS(SELECT 1 FROM meta_official_account_selections s "+
+    "WHERE s.tenant_id=g.tenant_id) "+
+    "AND NOT EXISTS(SELECT 1 FROM socio_traffic_decisions d WHERE d.tenant_id=g.tenant_id "+
+    "AND d.created_at>now()-interval '45 minutes') "+
+    "ORDER BY g.created_at LIMIT 3");
+   for(const row of tenants.rows){
+    try{await runOwnerTrafficAutopilot(pool,row.tenant_id);}
+    catch(error){
+     console.warn('[socio-traffic]',String(error?.status||error?.code||'TRAFFIC_ERROR').slice(0,40));
+    }
+   }
+  }catch(error){
+   console.warn('[socio-traffic]',String(error?.code||'SCAN_ERROR').slice(0,40));
+  }finally{trafficBusy=false;}
+ },60000);
+ trafficWorker.unref();
 
  // Attribution: only observed inbound prefilled codes. Never reads/writes campaigns or sends messages.
  let attributionBusy=false;
@@ -2167,37 +2201,6 @@ async function main(){
   finally{metaReportBusy=false;}
  },60000);
  metaReportsWorker.unref();
- // Quote lead intake scans only recent inbound messages. It never sends any
- // quote to the customer and cannot create a paid order automatically.
- let quoteBusy=false;
- const quoteWorker=setInterval(async()=>{
-  if(quoteBusy||workersBlocked())return;
-  quoteBusy=true;
-  try{await scanQuoteRequests(pool);}
-  catch(error){console.warn('[socio-quote-intake]',String(error?.code||'INTAKE_ERROR').slice(0,40));}
-  finally{quoteBusy=false;}
- },15000);
- quoteWorker.unref();
- let saleIntakeBusy=false;
- const saleIntakeWorker=setInterval(async()=>{
-  if(saleIntakeBusy||workersBlocked())return;
-  saleIntakeBusy=true;
-  try{await scanSalesIntents(pool);}
-  catch(error){console.warn('[socio-sales-intake]',String(error?.code||'INTAKE_ERROR').slice(0,40));}
-  finally{saleIntakeBusy=false;}
- },15000);
- saleIntakeWorker.unref();
- // Owner WhatsApp alerts only when the owner explicitly enabled the setting.
- // Uncertain sends are marked permanently, never retried automatically.
- let ownerAlertBusy=false;
- const ownerAlertWorker=setInterval(async()=>{
-  if(ownerAlertBusy||workersBlocked())return;
-  ownerAlertBusy=true;
-  try{await processNextOwnerQuoteAlert(pool);}
-  catch(error){console.warn('[socio-quote-alert]',String(error?.code||'ALERT_ERROR').slice(0,40));}
-  finally{ownerAlertBusy=false;}
- },12000);
- ownerAlertWorker.unref();
  // Physically purge expired derived topic summaries on startup and hourly,
  // even if the feature was disabled after previously storing a memory.
  // Underlying customer messages are never deleted by this worker.
@@ -2290,6 +2293,30 @@ async function main(){
    oneTime.unref();
   }
  });
- process.on('SIGTERM',()=>server.close(()=>Promise.allSettled([metaBrowser.close(),flowImages.close()]).then(()=>pool.end()).then(()=>process.exit(0))));
+ // One controlled shutdown path for signals and for fatal errors: stop
+ // accepting traffic, close helpers and the pool, and force-exit if a hung
+ // connection keeps the process alive.
+ let shuttingDown=false;
+ function shutdown(reason,code=0){
+  if(shuttingDown)return;
+  shuttingDown=true;
+  console.warn('[socio] shutdown',reason);
+  const force=setTimeout(()=>process.exit(code||1),10000);
+  force.unref();
+  server.close(()=>{
+   Promise.allSettled([metaBrowser.close(),flowImages.close()])
+    .then(()=>pool.end()).then(()=>process.exit(code)).catch(()=>process.exit(code||1));
+  });
+ }
+ process.on('SIGTERM',()=>shutdown('SIGTERM'));
+ process.on('SIGINT',()=>shutdown('SIGINT'));
+ process.on('uncaughtException',error=>{
+  console.error('[socio] uncaught exception',String(error?.stack||error).slice(0,600));
+  shutdown('uncaughtException',1);
+ });
+ process.on('unhandledRejection',error=>{
+  console.error('[socio] unhandled rejection',String(error?.stack||error).slice(0,600));
+  shutdown('unhandledRejection',1);
+ });
 }
 main().catch(e=>{console.error('startup failed',e.message);process.exit(1);});

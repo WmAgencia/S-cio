@@ -350,25 +350,25 @@
   const calls=[
    cached(api,'/api/dashboard',12000),
    cached(api,'/api/dashboard/activity?range='+range,16000),
-   authorized?cached(api,'/api/dashboard/executive',12000):Promise.resolve({data:null,ok:false}),
    cached(api,'/api/waakg/channels',12000),
    authorized?cached(api,'/api/reports/monitor',16000):Promise.resolve({data:null,ok:false}),
    ads?loadMeta(api,'today').catch(()=>null):Promise.resolve(null),
    ads&&googleAdsVisible()?googleOverview():Promise.resolve({ok:false}),
    ads?cached(api,'/api/marketing/tools/finance',45000):Promise.resolve({ok:false}),
    ads?cached(api,'/api/marketing/browser/status',30000):Promise.resolve({ok:false}),
+   ads?cached(api,'/api/marketing/traffic?limit=4',30000):Promise.resolve({ok:false}),
   ];
   // First paint: operational counts render as soon as the fast own-company APIs
   // finish. Meta, finance and Google continue separately (sometimes >2 seconds).
   // The second paint reuses the already settled request cache, not new requests.
-  const later=progressive&&ads?Promise.all(calls.slice(5)):null;
+  const later=progressive&&ads?Promise.all(calls.slice(4)):null;
   const base=progressive?[
-   ...calls.slice(0,5),
-   Promise.resolve(null),Promise.resolve({ok:false}),Promise.resolve({ok:false}),Promise.resolve({ok:false})
+   ...calls.slice(0,4),
+   Promise.resolve(null),Promise.resolve({ok:false}),Promise.resolve({ok:false}),Promise.resolve({ok:false}),Promise.resolve({ok:false})
   ]:calls;
-  const [dashboard,activity,exec,wa,monitor,meta,google,metaBilling,browserBilling]=await Promise.all(base);
+  const [dashboard,activity,wa,monitor,meta,google,metaBilling,browserBilling,traffic]=await Promise.all(base);
   if(renderId!==renderSerial)return;
-  const d=dashboard.data||{},ex=exec.data||{},m=ex.counts||{},realWa=Array.isArray(wa.data)?wa.data.filter(c=>c.status==='connected').length:0;
+  const d=dashboard.data||{},realWa=Array.isArray(wa.data)?wa.data.filter(c=>c.status==='connected').length:0;
   const metaReady=meta?.insights.ok===true,googleReady=google.ok===true;
   const googleMicros=googleReady?Number(google.data?.summary?.costMicros||0)/1e6:null;
   const googleCode=google.data?.currencyCode||null;
@@ -395,14 +395,26 @@
   };
   const daily=activity.data?.points||[],received=daily.reduce((n,x)=>n+(Number(x.inbound)||0),0),sent=daily.reduce((n,x)=>n+(Number(x.outbound)||0),0);
   const connectedWa=Array.isArray(wa.data)?wa.data.filter(w=>w.status==='connected'):[];
-  const products=Array.isArray(ex.popularProducts)?ex.popularProducts:[];
-  const max=Math.max(1,...products.map(x=>x.requests));
   const bestCampaign=meta?.best||meta?.list?.find(c=>(c.effective_status||c.status)==='ACTIVE')||null;
   const bestCampaignId=String(bestCampaign?.campaign_id||bestCampaign?.id||'');
   const featuredAds=meta?.adList?.filter(ad=>String(ad.campaign_id||'')===bestCampaignId)||[];
   const featuredAd=featuredAds.find(ad=>(ad.effective_status||ad.status)==='ACTIVE')||featuredAds[0]||null;
   const featuredThumb=posterFromAd(featuredAd);
   const featuredIsRanked=Boolean(meta?.best);
+  const trafficLabels={pause:'Pausar anúncio',scale:'Aumentar orçamento',broaden_audience:'Ampliar público',duplicate_campaign:'Duplicar campanha',hold:'Sem ação'};
+  const trafficStatusLabels={awaiting_approval:'Aguardando aprovação',executing:'Aplicando',done:'Aplicado',failed:'Falhou',skipped:'Ignorado'};
+  const trafficItems=traffic?.ok&&Array.isArray(traffic.data?.items)?traffic.data.items.slice(0,4):[];
+  const trafficPending=traffic?.ok&&Array.isArray(traffic.data?.items)?
+   traffic.data.items.filter(item=>item.status==='awaiting_approval').length:0;
+  const trafficSection=section('Tráfego automático','Decisões do Sócio sobre as campanhas, com a razão de cada ajuste',
+   (trafficItems.length?'<div class="px-traffic-list">'+trafficItems.map(item=>
+     '<div class="px-traffic-item"><div class="px-traffic-item-head"><strong>'+esc(trafficLabels[item.action]||item.action)+'</strong>'+
+      '<span class="px-traffic-status '+(item.status||'')+'">'+esc(trafficStatusLabels[item.status]||item.status||'')+'</span></div>'+
+     '<small>'+esc(item.entityName||item.entityId||'')+'</small><p>'+esc(item.explanation||'')+'</p></div>').join('')+'</div>':
+     empty(traffic?.ok?'Nenhuma decisão registrada ainda.':'Decisões de tráfego indisponíveis agora.'))+
+   '<div class="px-traffic-actions"><button type="button" class="btn sm soft" data-px-traffic-review>Analisar agora</button>'+
+    (trafficPending?'<button type="button" class="btn sm primary" data-px-traffic-approve>Aprovar '+trafficPending+' pendente(s)</button>':'')+
+   '</div><p class="px-traffic-feedback" data-px-traffic-feedback role="status" aria-live="polite"></p>');
   // A prepaid balance is not the Meta account's "balance" (often payable),
   // nor the daily campaign budget. Do not infer prepaid credit from spend.
   const budgetHeaderItem=(provider,label,brand,connected,spent,currency,billing)=>{
@@ -500,9 +512,7 @@
     kpi('Conversas em aberto',number(d.openConversations),'Atendimento da empresa','▤')+
     kpi('WhatsApps conectados',number(realWa),'Sessões vinculadas','◉','green')+
     kpi('Mensagens hoje',number(d.messagesReceivedToday),'Recebidas · horário de Brasília','✉','blue')+
-    kpi('Oportunidades (30d)',authorized?number(m.opportunities):'—','Intenções, não vendas confirmadas','◇')+
-    kpi('Pedidos registrados (30d)',authorized?number(m.registeredOrders):'—','Pedidos, não pagamentos','▣','blue')+
-    kpi('Vendas pagas', '—','Sem conciliação financeira de produção','◈','muted')+
+    kpi('Campanhas ativas',metaReady?number(meta.activeCampaigns):'—','Situação atual da Meta','▦','blue')+
    '</div>'+
    '<p class="px-live-indicator"><span class="px-live-dot"></span>'+(progressive?'Indicadores da empresa disponíveis · consultando anúncios em segundo plano':'Atualização automática a cada 60 segundos · indicadores retornados pelos provedores')+'</p>'+
    '<section class="px-ad-performance" aria-label="Desempenho da Meta Ads">'+
@@ -528,22 +538,6 @@
        [['7d','7 dias'],['1m','30 dias'],['90d','90 dias']].map(([value,label])=>
         '<button type="button" class="px-range-btn '+(range===value?'active':'')+'" data-px-chart-range="'+value+'" aria-pressed="'+(range===value)+'">'+label+'</button>').join('')+
        '</div>')+
-    section('Produtos mais solicitados','Intenções identificadas nos últimos 30 dias — não vendas pagas',
-     products.length?'<div class="px-products-rank">'+products.map((p,i)=>
-      '<div class="px-rank"><div class="px-rank-title"><span>'+(i+1)+'. '+esc(p.name)+'</span><strong>'+number(p.requests)+' solicitações</strong></div>'+
-      '<div class="px-rank-track"><i style="width:'+Math.round(p.requests/max*100)+'%"></i></div></div>').join('')+'</div>':
-      empty(authorized?'Ainda não há produtos identificados em intenções de compra.':'Acesso ao relatório não disponível.'),
-      '<button type="button" class="btn sm soft" data-px-products>Catálogo</button>')+
-   '</div>'+
-   '<div class="px-dual">'+
-    section('Funil de atendimento','Oportunidades acompanhadas, sem confundir status com receita',
-      '<div class="px-funnel">'+[
-       ['Mensagens hoje',d.messagesReceivedToday],
-       ['Oportunidades',m.opportunities],
-       ['Pedidos registrados',m.registeredOrders],
-       ['Vendas pagas',null]
-      ].map(([label,val])=>'<div><span>'+esc(label)+'</span><strong>'+(val==null?'—':number(val))+'</strong></div>').join('')+'</div>'+
-      '<small class="px-muted">“Concluídas manualmente” não significa pagamento recebido.</small>')+
     section('Campanha em destaque','Destaque com métricas de hoje e miniatura do anúncio associado',
      bestCampaign?'<div class="px-featured-item">'+
       '<div class="px-feature-media" data-campaign-preview>'+posterView(featuredThumb,'Criativo da campanha '+String(bestCampaign.campaign_name||bestCampaign.name||''))+'</div>'+
@@ -554,6 +548,7 @@
      empty('Nenhuma campanha encontrada na conta Meta selecionada.'),
      '<button class="btn sm soft" data-px-marketing type="button">Ver Meta Ads</button>')+
    '</div>'+
+   trafficSection+
    section('Seus WhatsApps','Números conectados disponíveis para o atendimento',
     connectedWa.length?'<div class="px-wa-overview-list">'+connectedWa.slice(0,8).map(w=>
      '<div><span class="px-live-dot on"></span><div><strong>'+esc(w.label||'WhatsApp')+'</strong><small>'+esc(w.phone||'Número vinculado')+'</small></div><span class="px-status on">Conectado</span></div>').join('')+
@@ -582,6 +577,27 @@
   });
   root.querySelectorAll('[data-px-chart-range]').forEach(button=>button.addEventListener('click',()=>
    overview({root,api,me,navigate,activityRange:button.dataset.pxChartRange})));
+  const trafficFeedback=root.querySelector('[data-px-traffic-feedback]');
+  root.querySelector('[data-px-traffic-review]')?.addEventListener('click',async()=>{
+   if(!trafficFeedback)return;
+   trafficFeedback.textContent='Analisando campanhas…';
+   try{
+    const result=await api('/api/marketing/traffic/preview');
+    trafficFeedback.textContent=result.report||((result.actions||[]).length?
+     result.actions.length+' decisão(ões) encontradas.':'Nenhum ajuste necessário com a amostra atual.');
+   }catch(error){trafficFeedback.textContent=String(error?.message||'Não foi possível analisar agora.');}
+  });
+  root.querySelector('[data-px-traffic-approve]')?.addEventListener('click',async()=>{
+   if(!trafficFeedback)return;
+   if(!confirm('Aplicar na Meta as mudanças aguardando aprovação?'))return;
+   trafficFeedback.textContent='Aplicando mudanças aprovadas…';
+   try{
+    const result=await api('/api/marketing/traffic/approve','POST',{});
+    trafficFeedback.textContent=result.report||((result.applied||[]).length+' mudança(s) aplicada(s).');
+    getCache.clear();
+    await overview({root,api,me,navigate,activityRange:range});
+   }catch(error){trafficFeedback.textContent=String(error?.message||'Não foi possível aplicar agora.');}
+  });
 
   // With a previously authorized billing browser, read the Meta wallet on
   // entry and at most every five minutes. OAuth for ads does not share the

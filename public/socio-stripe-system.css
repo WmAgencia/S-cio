@@ -1652,3 +1652,41 @@ body #appShell #view .px-campaign-picker select{
  border:1px solid #d8dce5!important;
 }
 body #appShell #view .px-campaign-picker small{color:#667085!important}
+
+/* Autonomous traffic decisions: evidence and status stay readable, never alarmist. */
+body #appShell #view .px-traffic-list{display:flex!important;flex-direction:column!important;gap:10px!important}
+body #appShell #view .px-traffic-item{
+ background:#fafbfe!important;border:1px solid #e7eaf1!important;border-radius:10px!important;
+ padding:12px 14px!important;display:flex!important;flex-direction:column!important;gap:5px!important;
+}
+body #appShell #view .px-traffic-item-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px!important}
+body #appShell #view .px-traffic-item-head strong{color:#202735!important;font-size:13px!important}
+body #appShell #view .px-traffic-item small{color:#667085!important;font-size:12px!important}
+body #appShell #view .px-traffic-item p{margin:0!important;color:#475467!important;font-size:12.5px!important;line-height:1.5!important}
+body #appShell #view .px-traffic-status{
+ font-size:10.5px!important;font-weight:700!important;letter-spacing:.04em!important;
+ padding:3px 9px!important;border-radius:999px!important;background:#eef0f4!important;color:#5b687c!important;
+ white-space:nowrap!important;
+}
+body #appShell #view .px-traffic-status.done{background:#e7f7ee!important;color:#197a4b!important}
+body #appShell #view .px-traffic-status.failed{background:#fdecec!important;color:#b42318!important}
+body #appShell #view .px-traffic-status.awaiting_approval{background:#fff4e5!important;color:#b54708!important}
+body #appShell #view .px-traffic-actions{display:flex!important;gap:8px!important;flex-wrap:wrap!important;margin-top:12px!important}
+body #appShell #view .px-traffic-feedback{margin:10px 0 0!important;color:#475467!important;font-size:12.5px!important;white-space:pre-line!important}
+
+/* The dark theme file still ships unscoped label tokens; keep in-page form labels readable. */
+body #appShell #view .form-stack>label,
+body #appShell #view .form-grid>label,
+body #appShell #view .socio-my-account label{
+ color:#475467!important;font-size:12px!important;font-weight:650!important;
+}
+/* The invite panel starts hidden, so the members table takes the full row until it opens. */
+body #appShell #view .socio-team-grid{grid-template-columns:minmax(0,1fr)!important}
+body #appShell #view .socio-team-grid:has(>#teamInvitePanel:not([hidden])){
+ grid-template-columns:minmax(0,1.55fr) minmax(280px,1fr)!important;
+}
+body #appShell #view .ps-interview-welcome small{color:#667085!important}
+/* A narrow inbox column must not orphan the conversation counter under the title. */
+body #appShell #view .wa-inbox-side-head{flex-wrap:wrap!important}
+body #appShell #view .wa-inbox-side-head>div:first-child{min-width:158px}
+body #appShell #view .wa-inbox-side-head h1{white-space:nowrap!important}

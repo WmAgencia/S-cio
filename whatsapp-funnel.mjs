@@ -21,20 +21,7 @@ const SQL=[
  " EXISTS(SELECT 1 FROM messages follow_up",
  " WHERE follow_up.tenant_id=a.tenant_id AND follow_up.conversation_id=a.conversation_id",
  " AND follow_up.direction='inbound' AND follow_up.created_at>a.first_business_reply_at)",
- " AS customer_followed_up,",
- " (SELECT COUNT(*)::int FROM quote_requests q WHERE q.tenant_id=a.tenant_id",
- " AND q.conversation_id=a.conversation_id AND q.created_at>=a.attributed_at) AS quote_requests,",
- " (SELECT COUNT(*)::int FROM sale_intents si WHERE si.tenant_id=a.tenant_id",
- " AND si.conversation_id=a.conversation_id AND si.created_at>=a.attributed_at) AS purchase_intents,",
- " (SELECT COUNT(*)::int FROM sales_orders o WHERE o.tenant_id=a.tenant_id",
- " AND o.conversation_id=a.conversation_id AND o.created_at>=a.attributed_at",
- " AND o.status<>'cancelled') AS orders_created,",
- " (SELECT COUNT(*)::int FROM sales_orders o WHERE o.tenant_id=a.tenant_id",
- " AND o.conversation_id=a.conversation_id AND o.status='paid_test'",
- " AND o.payment_provider='stripe_test' AND o.paid_at>=a.attributed_at) AS sandbox_paid_orders,",
- " (SELECT COALESCE(SUM(o.amount_cents),0)::bigint FROM sales_orders o WHERE o.tenant_id=a.tenant_id",
- " AND o.conversation_id=a.conversation_id AND o.status='paid_test'",
- " AND o.payment_provider='stripe_test' AND o.paid_at>=a.attributed_at) AS sandbox_revenue_cents",
+ " AS customer_followed_up",
  " FROM attributed a",
  ")",
  " SELECT l.id,l.label,l.account_id,l.campaign_id,l.adset_id,l.ad_id,l.active,",
@@ -42,12 +29,7 @@ const SQL=[
  " COUNT(p.first_business_reply_at)::int AS business_responded,",
  " COUNT(p.conversation_id) FILTER (WHERE p.customer_followed_up)::int AS customer_followed_up,",
  " COALESCE(ROUND(AVG(EXTRACT(EPOCH FROM (p.first_business_reply_at-p.attributed_at)))",
- " FILTER (WHERE p.first_business_reply_at IS NOT NULL))::int,NULL) AS avg_business_reply_seconds,",
- " COALESCE(SUM(p.quote_requests),0)::int AS quote_requests,",
- " COALESCE(SUM(p.purchase_intents),0)::int AS purchase_intents,",
- " COALESCE(SUM(p.orders_created),0)::int AS orders_created,",
- " COALESCE(SUM(p.sandbox_paid_orders),0)::int AS sandbox_paid_orders,",
- " COALESCE(SUM(p.sandbox_revenue_cents),0)::bigint AS sandbox_revenue_cents",
+ " FILTER (WHERE p.first_business_reply_at IS NOT NULL))::int,NULL) AS avg_business_reply_seconds",
  " FROM wa_tracking_links l LEFT JOIN per_lead p ON p.link_id=l.id AND p.tenant_id=l.tenant_id",
  " WHERE l.tenant_id=$1",
  " GROUP BY l.id ORDER BY l.created_at DESC LIMIT 100"
@@ -67,12 +49,9 @@ export async function readWhatsAppFunnel(pool,actor,{env=process.env}={}){
    conversations:row.conversations,businessResponded:row.business_responded,
    customerFollowedUp:row.customer_followed_up,
    averageFirstBusinessReplySeconds:row.avg_business_reply_seconds,
-   quoteRequests:row.quote_requests,purchaseIntents:row.purchase_intents,
-   ordersCreated:row.orders_created,sandboxPaidOrders:row.sandbox_paid_orders,
-   sandboxRevenueCents:String(row.sandbox_revenue_cents||'0'),
    livePaidOrders:null,liveRevenueCents:null
   })),
-  note:'As conversas com código indicam possível origem do anúncio, não clique confirmado pela Meta. Respostas da empresa exigem uma mensagem outbound identificada pelo provedor. Pagamentos paid_test do Stripe são apenas testes e não faturamento real. Não existe integração verificada de pagamentos de produção neste relatório.'
+  note:'As conversas com código indicam possível origem do anúncio, não clique confirmado pela Meta. Respostas da empresa exigem uma mensagem outbound identificada pelo provedor. Vendas e receita não são rastreadas neste relatório.'
  };
 }
 export function formatWhatsAppFunnel(report,{max=5}={}){
@@ -82,13 +61,8 @@ export function formatWhatsAppFunnel(report,{max=5}={}){
  if(!rows.length)lines.push('Nenhum link de rastreamento cadastrado ou com dados disponíveis. Isso não prova ausência de clientes no WhatsApp.');
  for(const row of rows){
   lines.push('• '+String(row.label||'Link').slice(0,90)+': '+Number(row.conversations||0)+
-   ' conversas com código, '+Number(row.businessResponded||0)+' com resposta registrada da empresa, '+
-   Number(row.customerFollowedUp||0)+' com nova resposta do cliente, '+
-   Number(row.quoteRequests||0)+' pedidos de orçamento, '+
-   Number(row.purchaseIntents||0)+' intenções e '+
-   Number(row.ordersCreated||0)+' pedido(s) cadastrados.');
-  if(Number(row.sandboxPaidOrders||0)>0)
-   lines.push('  Somente em sandbox: '+Number(row.sandboxPaidOrders)+' pagamento(s) de teste Stripe. Não são vendas reais.');
+   ' conversas com código, '+Number(row.businessResponded||0)+' com resposta registrada da empresa e '+
+   Number(row.customerFollowedUp||0)+' com nova resposta do cliente.');
  }
  if(report.collectionEnabled===false)
   lines.push('Coleta automática de novos códigos desativada. Números podem estar incompletos.');

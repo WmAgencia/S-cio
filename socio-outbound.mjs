@@ -11,22 +11,44 @@ export function textPayload(text){
   throw bad(422,'Digite uma mensagem de até 3000 caracteres.');
  return text.trim();
 }
-export function gatewaySignature({timestamp,sessionId,jid,text,key}){
- if(!validSessionId(sessionId)||!/^\d{5,24}@s\.whatsapp\.net$/.test(jid))
-  throw bad(422,'Destinatário inválido.');
- return createHmac('sha256',key).update([timestamp,sessionId,jid,text].join('\n')).digest('hex');
+const privateJidRe=/^\d{5,24}@s\.whatsapp\.net$/;
+const groupJidRe=/^\d{5,24}(-\d{5,24})?@g\.us$/;
+// Sócio sends to one known contact or one owner group. Nothing else.
+export const outboundRecipient=jid=>typeof jid==='string'&&(privateJidRe.test(jid)||groupJidRe.test(jid));
+// Media must be served by Sócio: the gateway never fetches an arbitrary host.
+export function mediaPayload({kind,url,caption=''},env=process.env){
+ if(!['image','video'].includes(kind))throw bad(422,'Tipo de mídia inválido.');
+ const origin=String(env.SOCIO_PUBLIC_URL||'').replace(/\/+$/,'');
+ let parsed;
+ try{parsed=new URL(url);}catch{throw bad(422,'Endereço de mídia inválido.');}
+ if(!origin||parsed.origin!==origin||parsed.username||parsed.password||parsed.hash||
+    url.length>1800||!['https:','http:'].includes(parsed.protocol))
+  throw bad(422,'A mídia precisa ser servida pelo próprio Sócio.');
+ const text=typeof caption==='string'?caption.trim():'';
+ if(text.length>1024||/[\u0000-\u0008\u000e-\u001f]/.test(text))
+  throw bad(422,'Legenda da mídia inválida.');
+ return {kind,url:parsed.href,caption:text};
 }
-export async function sendGatewayText({sessionId,jid,text,env=process.env,fetchImpl=fetch}){
+export function gatewaySignature({timestamp,sessionId,jid,text,media,key}){
+ if(!validSessionId(sessionId)||!outboundRecipient(jid))
+  throw bad(422,'Destinatário inválido.');
+ const canonical=media?media.kind+':'+media.url+':'+media.caption:'text:'+text;
+ return createHmac('sha256',key).update([timestamp,sessionId,jid,canonical].join('\n')).digest('hex');
+}
+export async function sendGatewayMessage({sessionId,jid,text,media,env=process.env,fetchImpl=fetch}){
  if(!outboundEnabled(env))throw bad(503,'Envio de mensagens ainda não habilitado neste ambiente.');
- const body=textPayload(text),timestamp=String(Date.now());
- const signature=gatewaySignature({timestamp,sessionId,jid,text:body,key:env.WA_AKG_API_KEY});
+ const message=media
+  ?{[media.kind]:{url:media.url,...(media.caption?{caption:media.caption}:{})}}
+  :{text:textPayload(text)};
+ const timestamp=String(Date.now());
+ const signature=gatewaySignature({timestamp,sessionId,jid,text:message.text,media,key:env.WA_AKG_API_KEY});
  const url=gatewayBase(env)+'/api/messages/'+encodeURIComponent(sessionId)+'/'+encodeURIComponent(jid)+'/send';
- const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),14000);
+ const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),25000);
  try{
   const response=await fetchImpl(url,{method:'POST',signal:ctrl.signal,
    headers:{'x-api-key':env.WA_AKG_API_KEY,'x-socio-outbound-at':timestamp,
     'x-socio-outbound-signature':signature,'content-type':'application/json','accept':'application/json'},
-   body:JSON.stringify({message:{text:body}})});
+   body:JSON.stringify({message})});
   if(!response.ok)throw bad(503,'O WhatsApp não confirmou o envio.');
   const result=await response.json(),key=result?.data?.key;
   if(result?.status!==true||typeof key?.id!=='string'||!key.id||key.fromMe!==true||
@@ -38,6 +60,8 @@ export async function sendGatewayText({sessionId,jid,text,env=process.env,fetchI
   throw bad(503,'Não foi possível confirmar o envio com o gateway.');
  }finally{clearTimeout(timer);}
 }
+export const sendGatewayText=({sessionId,jid,text,env=process.env,fetchImpl=fetch})=>
+ sendGatewayMessage({sessionId,jid,text,env,fetchImpl});
 export async function deliverToConversation(pool,{tenantId,conversationId,userId=null,mode='human',
  text,clientRequestId,replyToId=null,env=process.env,getStatus=getSessionStatus,send=sendGatewayText}){
  if(!outboundEnabled(env))throw bad(503,'Envio indisponível até a validação de um WhatsApp conectado.');

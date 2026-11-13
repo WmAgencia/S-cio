@@ -9,12 +9,9 @@ import {assertApiFeature} from '../tenant-features.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from '../inbox-cursor.mjs';
 import {handleInboxApi} from '../inbox-api.mjs';
 import {processLiveInboxSync} from '../inbox-live-sync.mjs';
-import {createQuote,issueQuote,approveQuote,publicQuote} from '../sales-commerce.mjs';
 import {deliverToConversation,reconcileConfirmedOutbox} from '../socio-outbound.mjs';
 import {processNextAiReply} from '../ai-replies.mjs';
 import {processNextAnalysisJob,createTrainingAnalysis} from '../analysis-jobs.mjs';
-import {scanQuoteRequests} from '../quote-requests.mjs';
-import {scanSalesIntents} from '../sales-intents.mjs';
 import {finishPipeboardOAuth} from '../marketing-oauth.mjs';
 
 test('disabled WhatsApp blocks legacy and current conversation routes',()=>{
@@ -104,39 +101,12 @@ test('audit regressions against isolated PostgreSQL',
   await inbox('/api/conversations/'+conversation+'/ui','PATCH',{read:true});
   assert(!(await inbox('/api/inbox/v2?filter=unread')).result.conversations.some(c=>c.id===conversation));
  });
- await t.test('triage rotates past rejected batches instead of starving older requests',async()=>{
-  for(let i=0;i<65;i++)await pool.query(
-   "INSERT INTO messages(id,tenant_id,conversation_id,direction,body,created_at) VALUES($1,$2,$3,'inbound',$4,now()-($5::int*interval '1 second'))",
-   [randomUUID(),tenant,conversation,'Não quero comprar e não quero orçamento',i]);
-  const quoteMsg=randomUUID(),saleMsg=randomUUID();
-  await pool.query("INSERT INTO messages(id,tenant_id,conversation_id,direction,body,created_at) VALUES($1,$2,$3,'inbound','Quanto é o valor?',now()-interval '120 seconds'),($4,$2,$3,'inbound','Quero comprar 1 unidade do Last unit',now()-interval '121 seconds')",[quoteMsg,tenant,conversation,saleMsg]);
-  for(let i=0;i<3;i++){await scanQuoteRequests(pool);await scanSalesIntents(pool);}
-  assert.equal((await pool.query('SELECT id FROM quote_requests WHERE inbound_message_id=$1',[quoteMsg])).rowCount,1);
-  assert.equal((await pool.query('SELECT id FROM sale_intents WHERE inbound_message_id=$1',[saleMsg])).rowCount,1);
- });
  await t.test('a disabled marketing module invalidates a pending OAuth callback before provider access',async()=>{
   const state='ab'.repeat(32),stateHash=createHash('sha256').update(state).digest('hex');
   await pool.query("INSERT INTO marketing_oauth_attempts(state_hash,tenant_id,user_id,provider,data_ciphertext,expires_at) VALUES($1,$2,$3,'meta','not-decrypted',now()+interval '10 minutes')",[stateHash,tenant,user]);
   await pool.query("UPDATE tenants SET features=features||'{\"meta_ads\":false}'::jsonb WHERE id=$1",[tenant]);
   await assert.rejects(finishPipeboardOAuth(pool,state,'fixture-valid-code',{env:{},request:()=>{throw Error('Must not access provider');}}),{status:403});
   await pool.query("UPDATE tenants SET features=features||'{\"meta_ads\":true}'::jsonb WHERE id=$1",[tenant]);
- });
- await t.test('concurrent approvals reserve the last unit and expired reservations release it',async()=>{
-  const tokens=[];
-  for(let i=0;i<3;i++){
-   const q=await createQuote(pool,tenant,user,{conversationId:conversation,items:[{productId:product,quantity:1}]});
-   tokens.push({id:q.id,token:(await issueQuote(pool,tenant,q.id)).path.split('#')[1]});
-  }
-  const results=await Promise.allSettled(tokens.slice(0,2).map(q=>approveQuote(pool,q.token,'Buyer',true)));
-  assert.equal(results.filter(x=>x.status==='fulfilled').length,1);
-  assert.equal(results.find(x=>x.status==='rejected').reason.status,409);
-  assert.equal((await pool.query('SELECT stock_quantity FROM products WHERE id=$1',[product])).rows[0].stock_quantity,1,
-   'Sandbox orders reserve availability without consuming real inventory');
-  await pool.query("UPDATE sales_quotes SET expires_at=now()-interval '1 second' WHERE status='accepted'");
-  await approveQuote(pool,tokens[2].token,'Another buyer',true);
-  await pool.query("UPDATE tenants SET status='paused' WHERE id=$1",[tenant]);
-  await assert.rejects(publicQuote(pool,tokens[2].token),{status:404});
-  await pool.query("UPDATE tenants SET status='active' WHERE id=$1",[tenant]);
  });
  await t.test('confirmed sends survive history failures and reconcile without resending',async()=>{
   let sends=0,failHistory=true;

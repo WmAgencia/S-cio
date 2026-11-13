@@ -29,7 +29,7 @@ export function billingConfiguration(env=process.env){
   ]};
 }
 function mustWrite(actor){
- requirePermission(actor,'sales.manage');
+ requirePermission(actor,'billing.manage');
  if(actor.tenant_status==='paused')throw fault(403,'Empresa pausada.');
  if(!actor.active_tenant_id)throw fault(403,'Empresa não selecionada.');
 }

@@ -6,7 +6,7 @@ test('permissions are derived from a fixed server-side role matrix',()=>{
  const agent=permissionsFor('agent');
  assert(agent.includes('inbox.read'));
  assert(agent.includes('catalog.read'));
- for(const restricted of ['catalog.manage','sales.read','training.manage','team.invite','team.promote','team.manage','audit.read','platform.manage'])
+ for(const restricted of ['catalog.manage','billing.manage','training.manage','team.invite','team.promote','team.manage','audit.read','platform.manage'])
   assert(!agent.includes(restricted),'agent unexpectedly received '+restricted);
  const admin=permissionsFor('admin');
  assert(admin.includes('team.invite'));
@@ -29,7 +29,7 @@ test('permissions are derived from a fixed server-side role matrix',()=>{
  assert.deepEqual(permissionsFor('invalid'),[]);
 });
 test('server rejects forbidden privilege escalation regardless of submitted role',()=>{
- assert.equal(allowed({role:'agent'},'sales.manage'),false);
+ assert.equal(allowed({role:'agent'},'billing.manage'),false);
  assert.throws(()=>requirePermission({role:'agent'},'training.manage'),e=>e.status===403);
  assert.equal(allowedNewMemberRole({role:'admin'},'agent'),true);
  assert.equal(allowedNewMemberRole({role:'admin'},'admin'),true);
