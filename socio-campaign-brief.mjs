@@ -37,7 +37,22 @@ function sharedText(text){
  return TARGET.test(t)?t:null;
 }
 
+// The owner states the outcome, not the channel of the work: "quero vender
+// direto pro meu WhatsApp esse sistema aqui, R$ 6 por dia" names no campaign.
+// A wish plus a sell verb and one concrete detail is still a build order.
+function sellingBrief(text){
+ if(typeof text!=='string')return false;
+ const t=normalize(text);
+ if(!t||t.length>1400)return false;
+ if(/\bgoogle\s*ads\b|\badwords\b|\bpixel\b|\bcapi\b/.test(t))return false;
+ if(/\b(whatsapp|zap|wa-akg)\b/.test(t)&&/\b(relatorio|resultado|conversas|leads|vendas|atribui|quantos?)\b/.test(t))return false;
+ if(READ_START.test(t)||ASK_START.test(t))return false;
+ if(CHANGE_WITH_ID.test(t)&&CHANGE_VERB.test(t))return false;
+ if(IMPROVE.test(t))return false;
+ return WANT.test(t)&&SELL.test(t)&&(MONEY.test(t)||DESTINATION.test(t)||MEDIA.test(t)||cityCue(text));
+}
 export function isCampaignCreationRequest(text){
+ if(sellingBrief(text))return true;
  const t=sharedText(text);
  if(!t)return false;
  if(BUILD.test(t))return true;

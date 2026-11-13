@@ -9,7 +9,9 @@ test('orders to build a campaign are recognised even when the brief also mention
   'Quero que você faça uma campanha pra esse anúncio aqui',
   'Faça uma campanha pra divulgar minhas roupas',
   'Crie uma campanha para WhatsApp',
-  'Quero anunciar meus produtos em São Paulo'
+  'Quero anunciar meus produtos em São Paulo',
+  'Quero vender direto pro meu WhatsApp esse sistema aqui',
+  'Eu quero vender esse sistema aqui, já tenho o site, posso te mandar o link'
  ]) assert.equal(wantsCampaignOrder(message),true,message);
 });
 
@@ -32,7 +34,9 @@ test('questions, reports and optimisations about campaigns stay read-only',()=>{
   'Pause a campanha 120210000001',
   'Quero aumentar o orçamento da campanha 120210000001',
   'Meus anúncios no site não vendem',
-  'Quero anúncios em geral'
+  'Quero anúncios em geral',
+  'Quero vender mais',
+  'Quero saber como vender pelo site'
  ]) assert.equal(wantsCampaignOrder(message),false,message);
 });
 

@@ -60,13 +60,15 @@ function campaignPlan(result){
   detail:[brief.category,media?'criativo de '+media:null].filter(Boolean).join(' · ')||'Pedido recebido',status:'done'}];
  steps.push({title:'Conferi a conta Meta da empresa',detail:'Conta, Página e biblioteca verificadas',status:'done'});
  if(result.status==='collecting'){
-  steps.push({title:'Preciso de uma definição',detail:String(result.message||'').slice(0,190),status:'waiting'});
+  steps.push({title:'Preciso de uma definição',detail:String(result.question||result.message||'').slice(0,190),status:'waiting'});
   return {title:'Planejando a campanha',steps};
  }
  if(result.status==='ready'){
   const audience=[brief.cityName,brief.genders?.[0]===1?'homens':brief.genders?.[0]===2?'mulheres':null,
    brief.dailyBudgetCents?'R$ '+(brief.dailyBudgetCents/100).toFixed(2).replace('.',',')+'/dia':null]
    .filter(Boolean).join(' · ');
+  if(result.design?.objectiveLabel)steps.push({title:'Defini a estratégia da campanha',status:'done',
+   detail:result.design.objectiveLabel+' · verba no '+(result.design.budgetMode==='campaign'?'campanha (CBO)':'conjunto (ABO)')});
   steps.push({title:'Defini público, orçamento e criativo',detail:audience||'Público e orçamento definidos',status:'done'});
   const copy=Array.isArray(result.creativeVariants)&&result.creativeVariants[0]||{};
   steps.push({title:'Escrevi o texto do anúncio',status:'done',
@@ -169,7 +171,11 @@ async function askThalitaCore(pool,a,body={},opts={}){
   }
  }
  // Answers come from the active tenant's stored records, never inferred from chat text.
- if(!metaIntent&&/\b(produtos?|catalogo|estoque|precos?|preco do produto)\b/.test(lower)&&features.catalog){
+ // A catalog lookup must not swallow a campaign order or the answer to "o que
+ // você quer anunciar?" — "meus produtos" describes the subject, not a lookup.
+ const catalogMention=/\b(produtos?|catalogo|estoque|precos?|preco do produto)\b/.test(lower)&&features.catalog;
+ const catalogQuestion=/^(?:quais|quant[oa]s?|me\s+(?:mostra|mostre|diga|diz|fala))\b|\?\s*$/.test(lower);
+ if(!metaIntent&&!campaignOrder&&catalogMention&&(!campaignFollowUp||catalogQuestion)){
   requirePermission(a,'catalog.read');
   const response=await pool.query(
    'SELECT id,name,price_cents,stock_quantity,active FROM products WHERE tenant_id=$1 ORDER BY name ASC LIMIT 150',
@@ -186,7 +192,9 @@ async function askThalitaCore(pool,a,body={},opts={}){
    data:{products:selected.map(p=>({id:p.id,name:p.name,priceCents:p.price_cents,
     stockQuantity:p.stock_quantity,active:p.active}))}};
  }
- if(!metaIntent&&/\b(whatsapp|whatsapps|numeros conectados|canais de atendimento|conversas em aberto)\b/.test(lower)&&features.whatsapp){
+ // "vender direto pro meu WhatsApp esse sistema" names the destination of a
+ // campaign, not a request for the channel status.
+ if(!metaIntent&&!campaignOrder&&!campaignFollowUp&&/\b(whatsapp|whatsapps|numeros conectados|canais de atendimento|conversas em aberto)\b/.test(lower)&&features.whatsapp){
   requirePermission(a,'inbox.read');
   const [channels,conversations]=await Promise.all([
    pool.query('SELECT label,phone,status FROM channels WHERE tenant_id=$1 ORDER BY label LIMIT 40',[a.active_tenant_id]),

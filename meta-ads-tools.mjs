@@ -208,6 +208,31 @@ export async function uploadAdVideo(pool,a,video,options={}){
   title:options.title||'Criativo enviado pelo WhatsApp'});
 }
 
+// Objective plus optimization must match what the owner asked to achieve.
+// Awareness omits destination_type; WhatsApp always optimizes for conversations.
+const PLAN_OBJECTIVES=Object.freeze({
+ OUTCOME_ENGAGEMENT:['CONVERSATIONS'],
+ OUTCOME_TRAFFIC:['LINK_CLICKS','LANDING_PAGE_VIEWS'],
+ OUTCOME_AWARENESS:['REACH']
+});
+// Builds the campaign and adset bodies from the stored plan so the objective
+// chosen for the owner reaches Meta unchanged and cannot drift from the copy.
+export function campaignStructurePayloads(p,campaignId=null){
+ const whatsapp=Boolean(p.whatsappPhone);
+ const objective=p.objective||(whatsapp?'OUTCOME_ENGAGEMENT':'OUTCOME_TRAFFIC');
+ const optimizationGoal=p.optimizationGoal||(whatsapp?'CONVERSATIONS':'LINK_CLICKS');
+ const campaignBudget=p.budgetMode==='campaign';
+ const campaign={name:p.name,objective,special_ad_categories:[],status:'PAUSED',
+  ...(campaignBudget?{daily_budget:p.dailyBudgetCents}:{is_adset_budget_sharing_enabled:false})};
+ const adset={name:p.name+' · Público',campaign_id:campaignId,
+  ...(campaignBudget?{}:{daily_budget:p.dailyBudgetCents}),
+  billing_event:'IMPRESSIONS',optimization_goal:optimizationGoal,bid_strategy:'LOWEST_COST_WITHOUT_CAP',
+  ...(objective==='OUTCOME_AWARENESS'?{}:{destination_type:whatsapp?'WHATSAPP':'WEBSITE'}),
+  ...(whatsapp?{promoted_object:{page_id:p.pageId,whatsapp_phone_number:p.whatsappPhone}}:{}),
+  targeting:{geo_locations:p.countryCode?{countries:[p.countryCode]}:{cities:[{key:p.cityKey}]},
+   age_min:p.ageMin,age_max:p.ageMax,...(p.genders?.length?{genders:p.genders}:{})},status:'PAUSED'};
+ return {campaign,adset};
+}
 export function validateAdsPlan(kind,input){
  if(!input||typeof input!=='object'||Array.isArray(input))throw fail(422,'Operação inválida.');
  if(kind==='create'||kind==='create_whatsapp'){
@@ -224,10 +249,19 @@ export function validateAdsPlan(kind,input){
   const genders=input.genders===undefined?[]:input.genders;
   if(!Array.isArray(genders)||genders.length>2||genders.some(g=>g!==1&&g!==2)||
      new Set(genders).size!==genders.length)throw fail(422,'Segmentação de gênero inválida.');
+  const objective=input.objective===undefined?(whatsapp?'OUTCOME_ENGAGEMENT':'OUTCOME_TRAFFIC'):input.objective;
+  const allowed=PLAN_OBJECTIVES[objective];
+  if(!allowed)throw fail(422,'Objetivo de campanha inválido.');
+  const optimizationGoal=input.optimizationGoal===undefined?allowed[0]:input.optimizationGoal;
+  if(!allowed.includes(optimizationGoal))throw fail(422,'Estratégia de campanha inválida para este objetivo.');
+  if(whatsapp&&objective!=='OUTCOME_ENGAGEMENT')
+   throw fail(422,'Campanha de WhatsApp precisa de objetivo de conversas.');
+  const budgetMode=input.budgetMode===undefined?'adset':input.budgetMode;
+  if(!['adset','campaign'].includes(budgetMode))throw fail(422,'Forma de orçamento inválida.');
   return {name,url,whatsappPhone:phone,message,headline,pageId:input.pageId,
    ...(videoId?{videoId}:{imageHash}),
    ...(countryCode?{countryCode}:{cityKey:input.cityKey}),cityName:input.cityName.trim(),
-   dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax,genders};
+   dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax,genders,objective,optimizationGoal,budgetMode};
 
  }
  if(kind==='create_pixel'){
@@ -385,10 +419,12 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
    if(!city)throw fail(422,'Pesquise e selecione novamente a cidade desejada.');
    payload.cityName=[city.name,city.region,city.country_name].filter(Boolean).join(' · ');
   }
+  const budgetWhere=payload.budgetMode==='campaign'?'a campanha (CBO)':'o conjunto de anúncios (ABO)';
   summary={description:kind==='create_whatsapp'?
-   'Criar campanha para mensagens WhatsApp, conjunto, criativo e anúncio PAUSADOS. A Meta precisa validar se o número está vinculado à Página. O WA-AKG continua sendo o canal de atendimento.':
-   'Criar campanha de tráfego para site, conjunto, criativo e anúncio. Todos serão criados PAUSADOS.',
+   'Criar campanha para mensagens WhatsApp com objetivo '+payload.objective+' e otimização '+payload.optimizationGoal+', conjunto, criativo e anúncio PAUSADOS. A verba fica em '+budgetWhere+'. A Meta precisa validar se o número está vinculado à Página. O WA-AKG continua sendo o canal de atendimento.':
+   'Criar campanha para site com objetivo '+payload.objective+' e otimização '+payload.optimizationGoal+', conjunto, criativo e anúncio PAUSADOS. A verba fica em '+budgetWhere+'.',
    account:c.account,name:payload.name,message:payload.message,headline:payload.headline,pageId:payload.pageId,imageHash:payload.imageHash,dailyBudgetCents:payload.dailyBudgetCents,
+   objective:payload.objective,optimizationGoal:payload.optimizationGoal,budgetMode:payload.budgetMode,
    destination:kind==='create_whatsapp'?'WhatsApp +'+payload.whatsappPhone:payload.url,city:payload.cityName,ageMin:payload.ageMin,ageMax:payload.ageMax};
  }else if(kind==='create_pixel'){
   const pixels=await graph(c,'/'+c.account.id+'/adspixels',{fields:'id,name,last_fired_time',limit:100});
@@ -448,16 +484,12 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
    const whatsapp=plan.kind==='create_whatsapp';
    const assets=await validateAssets(c,p,pool);
    if(assets.videoThumbnailUrl)p.videoThumbnailUrl=assets.videoThumbnailUrl;
-   const campaign=await graph(c,'/'+c.account.id+'/campaigns',{name:p.name,objective:whatsapp?'OUTCOME_ENGAGEMENT':'OUTCOME_TRAFFIC',special_ad_categories:[],status:'PAUSED',is_adset_budget_sharing_enabled:false},'POST');
+   const structure=campaignStructurePayloads(p);
+   const campaign=await graph(c,'/'+c.account.id+'/campaigns',structure.campaign,'POST');
    if(!numeric(campaign.id))throw Object.assign(fail(503,'A Meta não retornou o ID da campanha.'),{uncertain:true});
    result.campaignId=campaign.id;await progress();
-   const adset=await graph(c,'/'+c.account.id+'/adsets',{
-    name:p.name+' · Público',campaign_id:campaign.id,daily_budget:p.dailyBudgetCents,
-    billing_event:'IMPRESSIONS',optimization_goal:whatsapp?'CONVERSATIONS':'LINK_CLICKS',
-    bid_strategy:'LOWEST_COST_WITHOUT_CAP',destination_type:whatsapp?'WHATSAPP':'WEBSITE',
-    ...(whatsapp?{promoted_object:{page_id:p.pageId,whatsapp_phone_number:p.whatsappPhone}}:{}),
-    targeting:{geo_locations:p.countryCode?{countries:[p.countryCode]}:{cities:[{key:p.cityKey}]},
-     age_min:p.ageMin,age_max:p.ageMax,...(p.genders?.length?{genders:p.genders}:{})},status:'PAUSED'},'POST');
+   const adset=await graph(c,'/'+c.account.id+'/adsets',
+    campaignStructurePayloads(p,campaign.id).adset,'POST');
    if(!numeric(adset.id))throw Object.assign(fail(503,'A Meta não retornou o ID do conjunto.'),{uncertain:true});result.adsetId=adset.id;await progress();
    const chatLink='https://wa.me/'+p.whatsappPhone;
    const destination=whatsapp?chatLink:p.url;

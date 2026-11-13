@@ -58,6 +58,22 @@ test('Thalita reports connected WhatsApp status as database status, with no send
  assert.equal(answer.data.openConversations,4);
  assert(b.calls.every(x=>!/^INSERT INTO messages/i.test(x.sql)));
 });
+test('a campaign order that names WhatsApp reaches the campaign skill, not the channel status',async()=>{
+ const b=db();let seen=null;
+ const answer=await askThalita(b.pool,actor(),
+  {message:'Quero vender direto pro meu WhatsApp esse sistema aqui, gastando no máximo seis reais por dia'},{
+   marketing:async(_pool,_a,args)=>{seen=args;
+    return {status:'collecting',message:'Montei o plano completo da campanha.',
+     question:'Qual é o objetivo principal?',brief:{}};}
+  });
+ assert(seen,'the campaign order reached the campaign skill');
+ assert.match(seen.message,/vender direto pro meu WhatsApp/);
+ assert.doesNotMatch(answer.message,/Canais do seu espaço/);
+ assert.equal(answer.status,'collecting');
+ const waiting=answer.plan.steps.find(step=>step.title==='Preciso de uma definição');
+ assert.equal(waiting.detail,'Qual é o objetivo principal?');
+ assert.equal(b.calls.length,0,'no channel or catalog lookup was made');
+});
 test('Product price and stock edits demand one-use confirmation and always scope to tenant',async()=>{
  const b=db(),a=actor();
  const start=await askThalita(b.pool,a,{message:'Atualize o preço do produto Camiseta preta para R$ 159,90'});

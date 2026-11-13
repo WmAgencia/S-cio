@@ -24,6 +24,18 @@ test('a spoken order to build a campaign reaches the ad skill with the attached 
  assert.match(result.plan.steps.at(-1).detail,/cidade/i);
 });
 
+test('a campaign order that mentions products never turns into a catalog answer',async()=>{
+ const seen=[];
+ const result=await askThalita({query:async()=>{throw Error('the catalog must not be read for a campaign order');}},actor(),
+  {message:'Quero anunciar meus produtos'},{marketing:async(_pool,_auth,request)=>{
+   seen.push(request);
+   return {skillId:'ads.campaign.launch',runId:run,status:'collecting',brief:{},
+    message:'O que você quer anunciar? Pode ser um produto ou serviço do seu catálogo, ou qualquer outra coisa que você descreva.'};
+  }});
+ assert.equal(seen.length,1,'the campaign order must reach the ad skill');
+ assert.doesNotMatch(result.message,/produtos cadastrados/i);
+ assert.equal(result.plan.title,'Planejando a campanha');
+});
 test('short answers and "pode criar" stay inside the open campaign conversation',async()=>{
  const seen=[];
  const result=await askThalita(pool,actor(),{message:'pode criar',runId:run},

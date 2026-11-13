@@ -116,10 +116,24 @@ test('skill asks only for creative when assets do not match and lets owner provi
  const opts={resolve,read:noImages,prepare:async(p,a,kind,input)=>{prepared.push(input);return{id:randomUUID()};}};
  const start=await speakToAdSkill(pool,actor,{message:'Quero divulgar roupa feminina em Sorocaba gastando R$ 6 por dia'},opts);
  assert.equal(start.status,'collecting');
+ assert.equal(start.slot,'media','the page knows the run is waiting for the creative');
  assert.match(start.message,/foto/i);
  assert.equal(prepared.length,0,'No Meta write or plan when image is missing');
  const withImage=await speakToAdSkill(pool,actor,{message:'',runId:start.runId,imageHash},opts);
  assert.equal(withImage.status,'ready');
+ assert.equal(prepared.length,1);
+ assert.equal(prepared[0].imageHash,imageHash);
+});
+test('the automatic attachment message never replaces an answered slot',async()=>{
+ const pool=fakePool(),prepared=[];
+ const noImages=async(_p,_a,kind)=>kind==='images'?{items:[]}:read(_p,_a,kind);
+ const opts={resolve,read:noImages,prepare:async(_p,_a,kind,input)=>{prepared.push(input);return{id:randomUUID()};}};
+ const start=await speakToAdSkill(pool,actor,{message:'Quero divulgar roupa feminina em Sorocaba gastando R$ 6 por dia'},opts);
+ assert.equal(start.slot,'media');
+ const attached=await speakToAdSkill(pool,actor,{message:'Anexei o criativo do anúncio.',runId:start.runId,imageHash},opts);
+ assert.equal(attached.status,'ready');
+ assert.equal(attached.brief.cityName,'Sorocaba','the attachment notice is not read as a city');
+ assert.equal(attached.brief.dailyBudgetCents,600);
  assert.equal(prepared.length,1);
  assert.equal(prepared[0].imageHash,imageHash);
 });
@@ -132,6 +146,18 @@ test('non-fashion businesses can answer a simple product question conversational
  assert.equal(replied.status,'collecting');
  assert.equal(replied.brief.category,'Bolos caseiros');
  assert.match(replied.message,/foto/i);
+});
+test('any free description is a valid subject, with or without a catalog item',async()=>{
+ const pool=fakePool(),opts={resolve,read};
+ const started=await speakToAdSkill(pool,actor,{message:'Crie uma campanha em Sorocaba gastando R$ 6 por dia'},opts);
+ assert.match(started.message,/catálogo/);
+ assert.match(started.message,/outra coisa/);
+ const vague=await speakToAdSkill(pool,actor,{message:'meus produtos',runId:started.runId},opts);
+ assert.equal(vague.brief.category,null,'a placeholder must not become the advertised subject');
+ assert.match(vague.message,/Ainda não identifiquei o produto ou serviço/);
+ const free=await speakToAdSkill(pool,actor,{message:'meu curso de violão',runId:started.runId},opts);
+ assert.equal(free.brief.category,'curso de violão');
+ assert.match(free.message,/foto ou um vídeo/);
 });
 test('"Brasil inteiro" is remembered and never asked back as a city',async()=>{
  const pool=fakePool(),prepared=[];
@@ -228,6 +254,9 @@ test('website campaigns plan a Pixel only when none exists, and text approval cr
  assert.equal(prepared[0].kind,'create_pixel');
  assert.equal(prepared[1].kind,'create');
  assert.equal(prepared[1].input.url,'https://example.test');
+ assert.equal(prepared[1].input.objective,'OUTCOME_TRAFFIC');
+ assert.equal(prepared[1].input.optimizationGoal,'LANDING_PAGE_VIEWS');
+ assert.equal(prepared[1].input.budgetMode,'adset');
  assert.equal(executed.length,0);
  assert.match(ready.message,/vou criar um Pixel/);
  const result=await speakToAdSkill(pool,actor,{message:'pode criar',runId:initial.runId},opts);
@@ -305,6 +334,9 @@ test('video received through Sócio can prepare a R$ 6 WhatsApp campaign in Soro
  assert.equal(prepared[0].input.dailyBudgetCents,600);
  assert.equal(prepared[0].input.cityName,'Sorocaba');
  assert.equal(prepared[0].input.whatsappPhone,'5515999999999');
+ assert.equal(prepared[0].input.objective,'OUTCOME_ENGAGEMENT');
+ assert.equal(prepared[0].input.optimizationGoal,'CONVERSATIONS');
+ assert.equal(prepared[0].input.budgetMode,'adset');
  assert.equal(validateAdsPlan('create_whatsapp',prepared[0].input).videoId,videoId);
  assert.equal(executed.length,0);
  const denied=await speakToAdSkill(pool,actor,{message:'não autorizei',runId:first.runId},opts);
@@ -328,4 +360,34 @@ test('campaign accepts either video or image, never both and not unrecognized vi
  assert.throws(()=>validateAdsPlan('create_whatsapp',{...base,videoId:'invalid'}),{status:422});
  assert.throws(()=>validateAdsPlan('create_whatsapp',{...base,videoId:'1824013938791734',imageHash}),{status:422});
  assert.throws(()=>validateAdsPlan('create_whatsapp',base),{status:422});
+});
+test('the owner states only the objective and the Sócio designs the whole campaign',async()=>{
+ const pool=fakePool(),prepared=[];
+ const withoutImages=async(_p,_a,kind)=>kind==='images'?{items:[]}:read(_p,_a,kind);
+ const opts={resolve,read:withoutImages,prepare:async(_p,_a,kind,input)=>{prepared.push({kind,input});return{id:randomUUID()};}};
+ const text='Quero vender direto pro meu WhatsApp esse sistema aqui, gastando no máximo seis reais por dia';
+ const parsed=extractCampaignBrief(text);
+ assert.equal(parsed.category,'sistema');
+ assert.equal(parsed.destination,'whatsapp');
+ assert.equal(parsed.goal,'sales_whatsapp');
+ assert.equal(parsed.dailyBudgetCents,600);
+ const started=await speakToAdSkill(pool,actor,{message:text},opts);
+ assert.equal(started.status,'collecting');
+ assert.equal(started.brief.goal,'sales_whatsapp');
+ assert.match(started.message,/cidade/i);
+ const city=await speakToAdSkill(pool,actor,{message:'Sorocaba',runId:started.runId},opts);
+ assert.equal(city.status,'collecting');
+ assert.equal(city.brief.cityName,'Sorocaba');
+ assert.match(city.message,/Objetivo: Conversas no WhatsApp/);
+ assert.match(city.message,/ABO/);
+ assert.match(city.message,/Funil/);
+ assert.match(city.message,/arrastar o arquivo/i);
+ assert.equal(prepared.length,0,'the plan is shown before the creative is requested');
+ const ready=await speakToAdSkill(pool,actor,{message:'',runId:started.runId,imageHash},opts);
+ assert.equal(ready.status,'ready');
+ assert.equal(ready.design.objective,'OUTCOME_ENGAGEMENT');
+ assert.equal(ready.design.budgetMode,'adset');
+ assert.equal(prepared.length,1);
+ assert.deepEqual([prepared[0].kind,prepared[0].input.objective,prepared[0].input.optimizationGoal,prepared[0].input.budgetMode],
+  ['create_whatsapp','OUTCOME_ENGAGEMENT','CONVERSATIONS','adset']);
 });
