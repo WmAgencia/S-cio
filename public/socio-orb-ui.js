@@ -6,11 +6,12 @@
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let instance=null,api=null,csrf=null,navigate=null;
  let voice=null,startingVoice=false,voiceRequested=false,voiceEpoch=0;
- let audioContext=null,analyser=null,freq=null,raf=0,amp=0,level=0;
+ let audioContext=null,analyser=null,freq=null,raf=0,amp=0,level=0,activeSource=null;
  let speaking=false,ttsAbort=null,queryAbort=null,runId=null,runEpoch=0;
- let history=[],media=null,busy=false,disposed=false;
+ let history=[],media=null,busy=false,disposed=false,greeting='Olá! Como posso te ajudar hoje?';
  const get=sel=>instance?.querySelector(sel);
  const stage=()=>get('#orbStage');
+ // Kept for screen readers only; the page never shows routine status pills.
  const statusText=message=>{const el=get('#orbStatus');if(el)el.textContent=String(message)};
  const setPhase=phase=>{
   const page=get('.orb-page');if(!page)return;
@@ -81,21 +82,25 @@
    if(!audioContext||audioContext.state==='closed')return reject(Error('Áudio encerrado.'));
    const source=audioContext.createBufferSource();
    source.buffer=buffer;source.connect(analyser);
-   source.onended=()=>{try{source.disconnect();}catch{}resolve();};
-   try{source.start();}catch(error){reject(error);}
+   activeSource=source;
+   source.onended=()=>{if(activeSource===source)activeSource=null;try{source.disconnect();}catch{}resolve();};
+   try{source.start();}catch(error){activeSource=null;reject(error);}
   });
  }
  function stopSpeech(){
   if(ttsAbort){ttsAbort.abort();ttsAbort=null;}
+  // Aborting the fetch is not enough: the already-decoded buffer keeps playing
+  // unless its source node is stopped, which is what makes barge-in feel deaf.
+  if(activeSource){const source=activeSource;activeSource=null;try{source.stop();}catch{}try{source.disconnect();}catch{}}
   speaking=false;stopLevelLoop();
-  if(get('.orb-page')?.classList.contains('is-speaking'))setPhase(voice?'listening':'idle');
+  if(get('.orb-page')?.classList.contains('is-speaking'))setPhase(voiceRequested?'listening':'idle');
  }
  async function speak(text){
   const parts=chunkText(text);
   if(!parts.length||!audioContext||audioContext.state==='closed')return;
   stopSpeech();
   const controller=new AbortController();ttsAbort=controller;
-  speaking=true;setPhase('speaking');statusText('Falando');
+  speaking=true;setPhase('speaking');
   try{
    if(audioContext.state!=='running')await audioContext.resume();
    let pending=fetchVoice(parts[0],controller.signal);
@@ -114,8 +119,7 @@
   }finally{
    if(ttsAbort===controller){
     ttsAbort=null;speaking=false;stopLevelLoop();
-    if(get('.orb-page'))setPhase(voice?'listening':'idle');
-    statusText(voice?'Ouvindo':'Pronto');
+    if(get('.orb-page'))setPhase(voiceRequested?'listening':'idle');
    }
   }
  }
@@ -148,13 +152,29 @@
   list.append(li);
   return li;
  }
+ function planCount(list){
+  if(!list)return;
+  const done=[...list.children].filter(x=>['done','error','waiting'].includes(x.dataset.status)).length;
+  const counter=get('#orbPlanCount');if(counter)counter.textContent=done+'/'+list.children.length;
+ }
  function planUpdate(li,status,detail){
   if(!li)return;
   li.dataset.status=status;
   if(detail!==undefined){const small=li.querySelector('small');if(small)small.textContent=String(detail);}
-  const list=li.parentElement;
-  if(list){const done=[...list.children].filter(x=>x.dataset.status==='done'||x.dataset.status==='error').length;
-   const counter=get('#orbPlanCount');if(counter)counter.textContent=done+'/'+list.children.length;}
+  planCount(li.parentElement);
+ }
+ // The server plans the work for this specific request; the page only presents it.
+ function renderPlan(plan){
+  if(!plan||!Array.isArray(plan.steps)||!plan.steps.length)return null;
+  const list=planReset(String(plan.title||'Plano do seu pedido'));
+  if(!list)return null;
+  for(const step of plan.steps.slice(0,7)){
+   planAdd(list,String(step?.title||'Etapa'),{
+    status:['done','running','waiting','error'].includes(step?.status)?step.status:'done',
+    detail:String(step?.detail||'')});
+  }
+  planCount(list);
+  return list;
  }
  function planHide(){
   const panel=get('#orbPlanPanel');if(!panel)return;
@@ -163,16 +183,25 @@
  // ------------------------------------------------------------------- media
  function mediaCard(li,file,status,detail){
   if(!li)return;
-  const label=file.seoName||file.name||'mídia';
+  const label=file.name||'criativo';
   const kind=file.kind==='image'?'foto':'vídeo';
   planUpdate(li,status,detail);
   const body=li.querySelector('strong');
   if(body&&li.dataset.titled!=='1'){body.textContent=kind==='foto'?'Foto recebida':'Vídeo recebido';li.dataset.titled='1';}
   const chip=get('#orbMediaChip');
-  if(chip){
-   chip.hidden=false;chip.textContent=(kind==='foto'?'🖼 ':'🎬 ')+label;
-   chip.classList.toggle('ready',status==='done');
-  }
+  if(!chip)return;
+  chip.hidden=false;
+  chip.dataset.status=status;
+  chip.setAttribute('aria-label','Remover '+(kind==='foto'?'foto':'vídeo')+' anexado: '+label);
+  const thumb=get('#orbMediaThumb');
+  if(thumb){thumb.hidden=file.kind!=='image';if(file.kind==='image')thumb.src=file.preview;}
+  const name=get('#orbMediaName');
+  if(name)name.textContent=label.length>26?label.slice(0,23)+'…':label;
+ }
+ function clearMedia(){
+  media=null;
+  const chip=get('#orbMediaChip');if(chip){chip.hidden=true;chip.dataset.status='';}
+  const thumb=get('#orbMediaThumb');if(thumb)thumb.removeAttribute('src');
  }
  function swallow(file,dropEvent){
   const s=stage();if(!s)return;
@@ -220,7 +249,6 @@
     const result=await api('/api/marketing/tools/image','POST',{contentBase64:base64});
     file.meta={imageHash:result.hash};
     mediaCard(li,file,'done','Foto publicada na biblioteca da Meta · '+sizeLabel(file.size));
-    statusText('Foto recebida');
    }else{
     if(file.size>90*1024*1024)throw Error('Vídeos acima de 90 MB não podem ser enviados pela orbe.');
     if(file.size<512)throw Error('O arquivo parece vazio ou corrompido.');
@@ -235,12 +263,10 @@
     if(!resp.ok)throw Error(answer.error||'Falha no envio do vídeo.');
     file.meta={mediaId:reserved.id};
     mediaCard(li,file,'done','Vídeo guardado na biblioteca da empresa · '+sizeLabel(file.size));
-    statusText('Vídeo recebido');
    }
   }catch(error){
    mediaCard(li,file,'error',String(error.message||'Não foi possível enviar a mídia.').slice(0,160));
-   statusText('Falha ao receber a mídia');
-   media=null;
+   clearMedia();
   }
  }
  const sizeLabel=bytes=>bytes>=1048576?(bytes/1048576).toFixed(1).replace('.',',')+' MB':
@@ -258,7 +284,7 @@
   const image=/^image\/(png|jpe?g|webp)$/i.test(raw.type)||/\.(png|jpe?g|webp)$/i.test(raw.name||'');
   const video=/^video\/(mp4|quicktime)$/i.test(raw.type)||/\.(mp4|mov)$/i.test(raw.name||'');
   if(!image&&!video){
-   statusText('Envie um vídeo MP4/MOV ou uma foto JPG/PNG/WebP');
+   showCaption('Envie um vídeo MP4/MOV ou uma foto JPG/PNG/WebP.');
    return;
   }
   if(busy){statusText('Aguarde o pedido atual terminar');return;}
@@ -266,13 +292,12 @@
    preview:URL.createObjectURL(raw),size:raw.size};
   swallow(file,event);
   void uploadMedia(file);
-  if(!voiceRequested)statusText('Mídia recebida · agora fale ou escreva a instrução');
  }
  // ------------------------------------------------------------------- turns
- function mediaNote(){
-  if(!media)return '';
-  if(media.kind==='image')return '\n[O usuário anexou a foto "'+media.name+'" na biblioteca da Meta da empresa.]';
-  return '\n[O usuário anexou o vídeo "'+media.name+'" na biblioteca de mídia da empresa.]';
+ function mediaRef(){
+  if(!media?.meta)return {};
+  if(media.kind==='image'&&media.meta.imageHash)return {imageHash:media.meta.imageHash};
+  return {};
  }
  function confirmCard(list,confirmation,answer){
   const li=planAdd(list,'Aguardando sua confirmação',{status:'waiting',detail:confirmation.label||''});
@@ -304,39 +329,36 @@
   busy=true;
   const input=get('#orbInput');if(input)input.value='';
   if(!fromVoice)showCaption(message,'user');
-  const list=planReset(media?(media.kind==='image'?'Foto em uso · preparando seu pedido':'Vídeo em uso · preparando seu pedido'):'Executando seu pedido');
-  const interpret=planAdd(list,media?'Interpretando sua instrução':'Entendendo seu pedido',{status:'running',detail:'Lendo o pedido…'});
-  const query=planAdd(list,'Consultando os dados da empresa',{status:'pending'});
-  const deliver=planAdd(list,'Preparando a resposta',{status:'pending'});
-  setPhase('thinking');statusText('Pensando');
+  const list=planReset('Entendendo o seu pedido');
+  const read=planAdd(list,'Lendo o pedido',{status:'running',
+   detail:media?'Instrução e criativo anexado':'Lendo o que você precisa'});
+  setPhase('thinking');
   const controller=new AbortController();queryAbort=controller;
   try{
-   await pause(160);
-   planUpdate(interpret,'done',media?'Instrução entendida · mídia anexada':'Pedido entendido');
-   planUpdate(query,'running','Consultando registros autorizados…');
    const result=await api('/api/thalita/ask','POST',{
-    message:message+mediaNote(),runId,history:history.slice(-6)
+    message,runId,history:history.slice(-6),...mediaRef()
    },{},{signal:controller.signal});
    if(!isActive())return;
-   runId=result.runId&&result.status==='ready'?result.runId:null;
+   // The campaign conversation continues while the skill still needs answers
+   // or waits for "pode criar"; dropping the id is what lost the context.
+   runId=result.runId&&(result.status==='ready'||result.status==='collecting')?result.runId:null;
    const answer=String(result.message||'Consulta concluída.');
-   planUpdate(query,'done',queryDetail(result));
-   planUpdate(deliver,'running','Montando a resposta…');
+   const planned=renderPlan(result.plan);
+   if(!planned)planUpdate(read,'done',queryDetail(result));
    history.push({role:'user',text:message.slice(0,350)},{role:'assistant',text:answer.slice(0,350)});
    if(history.length>10)history=history.slice(-10);
-   await pause(180);
-   planUpdate(deliver,result.status==='approval_required'?'waiting':'done',
-    result.status==='approval_required'?'Ação precisa da sua confirmação':'Resposta pronta');
    showCaption(answer);
-   if(result.status==='approval_required'&&result.confirmation)confirmCard(list,result.confirmation,answer);
+   if(result.status==='approval_required'&&result.confirmation){
+    confirmCard(planned||list,result.confirmation,answer);
+   }
+   if(result.status==='completed'&&media?.meta&&String(result.skillId||'')==='ads.campaign.launch')clearMedia();
    const spoken=String(result.speechText||answer);
    if(audioContext&&audioContext.state!=='closed')void speak(spoken);
-   else statusText('Resposta pronta');
+   else setPhase(voiceRequested?'listening':'idle');
   }catch(error){
    if(!isActive())return;
-   planUpdate(query,'error',String(error.message||'Falha ao consultar.').slice(0,160));
+   planUpdate(read,'error',String(error.message||'Falha ao consultar.').slice(0,160));
    showCaption('Não foi possível concluir: '+String(error.message||'erro inesperado'));
-   statusText('Não foi possível concluir');
   }finally{
    if(queryAbort===controller)queryAbort=null;
    if(epoch===runEpoch){busy=false;if(!speaking)setPhase(voiceRequested?'listening':'idle');}
@@ -344,8 +366,10 @@
  }
  function queryDetail(result){
   if(result.status==='approval_required')return 'Dados conferidos · alteração pronta para revisão';
-  if(result.status==='needs_details')return 'Preciso de mais alguns dados';
+  if(result.status==='needs_details'||result.status==='collecting')return 'Preciso de mais alguns dados';
+  if(result.status==='ready')return 'Campanha pronta para a sua aprovação';
   if(result.status==='unavailable')return 'Consulta indisponível agora';
+  if(result.status==='failed')return 'A Meta não confirmou a criação';
   if(Array.isArray(result.data?.products))return result.data.products.length+' produto(s) consultados';
   return 'Dados atualizados';
  }
@@ -358,7 +382,7 @@
   stopSpeech();
   const mic=get('[data-orb-mic]');
   if(mic){mic.classList.remove('on');mic.setAttribute('aria-pressed','false');}
-  setPhase('idle');statusText('Voz desligada');
+  setPhase('idle');
  }
  async function startVoice(){
   if(startingVoice){stopVoice();return;}
@@ -366,41 +390,43 @@
   try{
    await unlockAudio();
    startLevelLoop();
-  }catch(error){startingVoice=false;statusText(error.message);return;}
+  }catch(error){startingVoice=false;showCaption(error.message);return;}
   if(!navigator.mediaDevices?.getUserMedia||!globalThis.MediaRecorder){
-   startingVoice=false;statusText('Microfone indisponível neste navegador · use o texto');return;
+   startingVoice=false;showCaption('O microfone não está disponível neste navegador. Use o texto.');return;
   }
   try{
    const [{createSocioVoiceSession},{newSemanticTurnBuffer}]=await Promise.all([
-    import('/socio-francisca-live.mjs'),import('/socio-semantic-turn.mjs')
+    import('/socio-francisca-live.mjs?v=20261113a'),import('/socio-semantic-turn.mjs')
    ]);
    if(epoch!==voiceEpoch)return;
    const semantic=newSemanticTurnBuffer({maxWaitMs:16000,maxParts:3,maxChars:950});
    const session=createSocioVoiceSession({
+    silenceMs:1500,maxTurnMs:30000,minVoicedMs:500,
     canInterrupt:()=>speaking,
-    onInterrupt:()=>{stopSpeech();statusText('Interrompido · estou ouvindo');},
-    onError:message=>{if(voice===session)statusText(message);},
+    // Talking over the assistant only stops its audio. The caption, history and
+    // the open campaign run stay exactly where they were, so the conversation
+    // continues instead of restarting.
+    onInterrupt:()=>{stopSpeech();},
+    onError:message=>{if(voice===session)showCaption(message);},
     onState:next=>{
      if(voice!==session)return;
      if(next==='off'){stopVoice();return;}
      if(!speaking)setPhase(next==='listening'||next==='hearing'?'listening':'thinking');
-     statusText(({connecting:'Conectando…',listening:'Ouvindo',hearing:'Pode continuar falando…',
-      processing:'Processando sua fala…',off:'Voz desligada'})[next]||'Ouvindo');
     },
     onTurn:async(blob,{signal}={})=>{
      const turnEpoch=voiceEpoch;
      if(!voiceRequested||voice!==session||signal?.aborted)return;
-     if(blob.size>3*1024*1024){statusText('Fala longa demais · tente uma frase mais curta');return;}
-     setPhase('thinking');statusText('Transcrevendo');
+     if(blob.size>3*1024*1024){showCaption('A fala ficou longa demais. Fale em frases mais curtas.');return;}
+     setPhase('thinking');
      const resp=await fetch('/api/thalita/transcribe',{method:'POST',credentials:'same-origin',
       headers:{'Content-Type':blob.type.split(';')[0],'X-CSRF-Token':csrf},body:blob,signal});
      const data=await resp.json().catch(()=>({}));
      if(!resp.ok)throw Error(data.error||'Transcrição indisponível');
      if(signal?.aborted||turnEpoch!==voiceEpoch||!voiceRequested||voice!==session)return;
      const text=String(data.text||'').trim();
-     if(!meaningful(text)){statusText('Não entendi · pode repetir?');setPhase('listening');return;}
+     if(!meaningful(text)){setPhase('listening');return;}
      const assessed=semantic.take(text)||{hold:false,text};
-     if(assessed.hold){statusText('Pode continuar falando…');setPhase('listening');return;}
+     if(assessed.hold){setPhase('listening');return;}
      await runTurn(assessed.text,{fromVoice:true});
     }
    });
@@ -410,10 +436,11 @@
    startingVoice=false;voiceRequested=true;
    const mic=get('[data-orb-mic]');
    if(mic){mic.classList.add('on');mic.setAttribute('aria-pressed','true');}
-   setPhase('listening');statusText('Ouvindo');
-   if(audioContext&&audioContext.state!=='closed')void speak('Oi! Pode falar. Arraste um vídeo ou foto para cá quando quiser.');
+   setPhase('listening');
+   showCaption(greeting);
+   if(audioContext&&audioContext.state!=='closed')void speak(greeting);
   }catch(error){
-   if(epoch===voiceEpoch){stopVoice();statusText('Não foi possível usar o microfone: '+String(error.message||'').slice(0,120));}
+   if(epoch===voiceEpoch){stopVoice();showCaption('Não foi possível usar o microfone: '+String(error.message||'').slice(0,120));}
   }finally{if(epoch===voiceEpoch)startingVoice=false;}
  }
  function meaningful(text){
@@ -433,6 +460,7 @@
   get('[data-orb-back]')?.addEventListener('click',()=>navigate?.('overview'));
   get('[data-orb-mic]')?.addEventListener('click',startVoice);
   get('[data-orb-attach]')?.addEventListener('click',()=>get('#orbFile')?.click());
+  get('#orbMediaChip')?.addEventListener('click',clearMedia);
   get('#orbFile')?.addEventListener('change',event=>{
    const raw=event.currentTarget.files?.[0];
    event.currentTarget.value='';
@@ -483,13 +511,17 @@
   instance?.remove();instance=null;api=null;csrf=null;navigate=null;
   history=[];runId=null;busy=false;
  }
- function render({root,api:client,csrfToken,navigate:go}){
+ function render({root,api:client,csrfToken,navigate:go,me}={}){
   dispose();disposed=false;
   api=client;csrf=csrfToken;navigate=go;
+  const brand=String(me?.tenant?.name||'').trim().slice(0,40);
+  const person=String(me?.user?.name||'').trim().split(/\s+/)[0].slice(0,40);
+  const who=brand||person;
+  greeting=who?'Olá, '+who+'! Como posso te ajudar hoje?':'Olá! Como posso te ajudar hoje?';
   root.innerHTML='<div class="orb-page is-idle" data-orb>'+
    '<header class="orb-top">'+
     '<button class="orb-back" type="button" data-orb-back><span aria-hidden="true">←</span> Visão geral</button>'+
-    '<span class="orb-status" id="orbStatus" role="status" aria-live="polite">Pronto</span>'+
+    '<span class="ps-sr-only" id="orbStatus" role="status" aria-live="polite"></span>'+
     '<button class="orb-mic-btn" type="button" data-orb-mic aria-pressed="false" aria-label="Ativar microfone e conversar por voz">'+
      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">'+
       '<path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>'+
@@ -501,18 +533,21 @@
      '<canvas class="orb-canvas" id="orbCanvas"></canvas>'+
     '</div>'+
     '<div class="orb-transcript" id="orbTranscript" aria-live="polite">'+
-     '<p class="orb-line assistant in">Arraste um vídeo ou foto para dentro da orbe e diga o que fazer. Eu executo e mostro cada passo.</p>'+
+     '<p class="orb-line assistant in">'+esc(greeting)+'</p>'+
     '</div>'+
     '<p class="orb-drop-hint" aria-hidden="true">Solte para a orbe engolir</p>'+
-    '<p class="orb-media-chip" id="orbMediaChip" hidden></p>'+
     '<input type="file" id="orbFile" accept="video/mp4,video/quicktime,image/png,image/jpeg,image/webp" hidden>'+
    '</div>'+
    '<aside class="orb-plan-panel" id="orbPlanPanel" aria-label="Plano em execução" hidden>'+
-    '<header><div><span class="orb-plan-eyebrow">PLANO</span><strong id="orbPlanTitle">Executando seu pedido</strong></div>'+
+    '<header><div><span class="orb-plan-eyebrow">PLANO</span><strong id="orbPlanTitle">Entendendo o seu pedido</strong></div>'+
      '<small id="orbPlanCount"></small></header>'+
     '<ol class="orb-steps" id="orbSteps"></ol>'+
    '</aside>'+
    '<form class="orb-composer" id="orbForm" autocomplete="off">'+
+    '<button class="orb-media-pill" type="button" id="orbMediaChip" hidden>'+
+     '<img class="orb-media-thumb" id="orbMediaThumb" alt="" hidden>'+
+     '<span class="orb-media-name" id="orbMediaName"></span>'+
+     '<span class="orb-media-x" aria-hidden="true">×</span></button>'+
     '<button class="orb-attach" type="button" data-orb-attach aria-label="Anexar vídeo ou foto">'+
      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">'+
       '<path d="M12 5v14M5 12h14"/></svg></button>'+

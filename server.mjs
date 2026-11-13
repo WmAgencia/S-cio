@@ -995,7 +995,8 @@ async function handle(req,res){
   assertApiFeature(a.features,'/api/agent');
   if(!await limiter('sim','thalita-chat:'+a.user_id,60000,16))throw fail(429,'Aguarde antes de consultar novamente.');
   const {data}=await body(req,2400);
-  const result=await askThalita(pool,a,{message:data.message,runId:data.runId});
+  const result=await askThalita(pool,a,{message:data.message,runId:data.runId,
+   imageHash:data.imageHash,videoId:data.videoId});
   await audit(a,'thalita.chat',{status:result.status,readOnly:result.readOnly===true,executed:result.executed===true});
   return json(res,200,result);
  }
@@ -1753,7 +1754,7 @@ async function handle(req,res){
   });
   const hasConversation=history.some(turn=>turn.role==='assistant');
   const response=await groqResponse({
-   instructions:system,input:buildLabInput(history,data.message),maxOutputTokens:550
+   instructions:system,input:buildLabInput(history,data.message),maxOutputTokens:550,purpose:'chat'
   });
   const reply=polishCustomerReply(response.reply,{hasConversation,incoming:data.message,
    previousAssistant:history.filter(turn=>turn.role==='assistant').at(-1)?.content||''});

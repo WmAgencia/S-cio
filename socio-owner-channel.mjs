@@ -575,7 +575,7 @@ export async function draftAdCopy(pool,{tenantId,tenantName,env=process.env,fetc
  };
  if(!groqReady(env))return fallback;
  try{
-  const result=await groqResponse({env,fetchImpl,maxOutputTokens:420,
+  const result=await groqResponse({env,fetchImpl,maxOutputTokens:420,purpose:'planning',
    instructions:[
     'Você escreve anúncios para Meta Ads em português brasileiro.',
     'Responda APENAS um objeto JSON com as chaves "headline" e "message".',

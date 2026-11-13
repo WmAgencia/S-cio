@@ -4,7 +4,7 @@
 export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},onInterrupt=()=>{},canInterrupt=()=>false,silenceMs=2100,maxTurnMs=45000,minVoicedMs=650}){
  let active=false,stream=null,context=null,analyser=null,source=null,timer=null,recorder=null;
  let startedAt=0,lastSpeechAt=0,speechStartedAt=0,ambient=.003,finishing=false,processing=false;
- let generation=0,chunks=[],mime='',samples=null,bargeStarted=0,voicedMs=0,lastPollAt=0,turnAbort=null,startingCandidate=0,lastAssistantSoundAt=0;
+ let generation=0,chunks=[],mime='',samples=null,bargeStarted=0,bargeCandidate=false,voicedMs=0,lastPollAt=0,turnAbort=null,startingCandidate=0,lastAssistantSoundAt=0;
  const state=next=>{if(active||next==='off')onState(next);};
  const closeStream=()=>{
   if(timer){clearInterval(timer);timer=null;}
@@ -42,8 +42,8 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
    if(active)onError('Não consegui concluir a gravação. '+(error?.message||''));
   }
  }
- function record(){
-  if(!active||processing||recorder||!stream)return;
+ function record(force){
+  if(!active||(processing&&!force)||recorder||!stream)return;
   try{
    const NativeRecorder=window.MediaRecorder;
    mime=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'].find(t=>NativeRecorder.isTypeSupported(t));
@@ -71,7 +71,7 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
  }
  function discardTurn(){
   if(recorder){const old=recorder;old.onstop=null;try{old.stop();}catch{}recorder=null;}
-  chunks=[];voicedMs=0;lastSpeechAt=0;speechStartedAt=0;startingCandidate=0;
+  chunks=[];voicedMs=0;lastSpeechAt=0;speechStartedAt=0;startingCandidate=0;bargeCandidate=false;
   if(active)state('listening');
  }
  function poll(){
@@ -86,15 +86,23 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
   if(processing||assistantSpeaking){
    const userSpeech=assistantSpeaking&&rms>Math.max(.062,ambient*5.2);
    if(userSpeech){
-    if(!bargeStarted)bargeStarted=now;
+    // Record from the first voiced frame: when the interruption is confirmed the
+    // opening words must survive, otherwise the reply starts mid-sentence.
+    if(!bargeStarted){bargeStarted=now;bargeCandidate=true;record(true);}
+    if(recorder){lastSpeechAt=now;voicedMs+=delta;}
     if(now-bargeStarted>=750){
-     bargeStarted=0;
+     bargeStarted=0;bargeCandidate=false;
      try{onInterrupt();}catch(error){onError(error?.message||'Falha ao interromper');}
      // A pending transcription must never race with the interruption.
      if(turnAbort){turnAbort.abort();turnAbort=null;}
-     processing=false;lastPollAt=0;record();
+     processing=false;lastPollAt=0;
     }
-   }else bargeStarted=0;
+   }else if(bargeStarted){
+    // Sound stopped before the interruption was confirmed (echo or a cough):
+    // throw the candidate away and keep the assistant talking.
+    bargeStarted=0;
+    if(bargeCandidate){bargeCandidate=false;discardTurn();}
+   }
    return;
   }
   // Suppress speaker echo trailing the end of TTS playback.
@@ -150,7 +158,7 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
  }
  function handleHidden(){if(document.hidden)stop();}
  function stop(){
-  const wasActive=active;active=false;generation++;processing=false;finishing=false;bargeStarted=0;
+  const wasActive=active;active=false;generation++;processing=false;finishing=false;bargeStarted=0;bargeCandidate=false;
   startingCandidate=0;voicedMs=0;lastPollAt=0;lastAssistantSoundAt=0;
   if(turnAbort){turnAbort.abort();turnAbort=null;}
   document.removeEventListener('visibilitychange',handleHidden);

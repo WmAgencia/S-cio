@@ -164,13 +164,13 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   run=inserted.rows[0];
  }
  if(['completed','failed','executing'].includes(run.status))
-  return {runId:run.id,status:run.status,message:run.status==='executing'?
+  return {skillId:'ads.campaign.launch',runId:run.id,status:run.status,message:run.status==='executing'?
    'O pedido já está em execução. Aguarde o resultado; não repita a criação.':
    'Este pedido já foi concluído ou encerrado. Inicie outro para uma nova campanha.',result:run.result||null};
  const normalized=clean(message);
  if(run.status==='ready'){
   const confirm=/^(pode criar|pode fazer|confirmo|autorizo|aprovo(?: a campanha)?|sim[,. ]+pode criar|sim[,. ]+confirmo)[.! ]*$/.test(normalized);
-  if(!confirm)return {runId:run.id,status:'ready',brief:publicBrief(run.brief),
+  if(!confirm)return {skillId:'ads.campaign.launch',runId:run.id,status:'ready',brief:publicBrief(run.brief),
    message:"Campanha pronta para aprovação. Responda 'pode criar' para eu criar os itens PAUSADOS na Meta; isso não ativa gastos."};
   const claim=await pool.query(
    "UPDATE socio_skill_runs SET status='executing',updated_at=now() "+
@@ -195,7 +195,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   await pool.query(
    'UPDATE socio_skill_runs SET status=$2,result=$3::jsonb,updated_at=now() WHERE id=$1 AND tenant_id=$4',
    [run.id,status,JSON.stringify(executed),a.active_tenant_id]);
-  return {runId:run.id,status,result:executed,
+  return {skillId:'ads.campaign.launch',runId:run.id,status,brief:publicBrief(run.brief||{}),result:executed,
    message:status==='completed'?
     'A Meta confirmou a criação. Campanha, conjunto e anúncio foram criados PAUSADOS. IDs: '+
      [executed.result?.campaignId,executed.result?.adsetId,executed.result?.adId].filter(Boolean).join(', ')+
@@ -209,6 +209,22 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   if(candidate.length>=3&&candidate.length<=70&&!/\b(R\$|orcamento|campanha|pode criar|autorizo)\b/i.test(candidate))
    brief.category=candidate;
  }
+ // Spoken answers are short: "6" is the daily budget, "Sorocaba" is the city.
+ if(runId&&run.brief&&!brief.dailyBudgetCents&&run.brief.category&&run.brief.cityName){
+  const bare=message.trim().replace(/[.!]$/,'');
+  const numeric=/^(?:R\$\s*)?(\d{1,6}(?:[.,]\d{1,2})?)$/i.exec(bare);
+  if(numeric){
+   const n=Number(numeric[1].replace(',','.'));
+   if(n>=1&&n<=100000)brief.dailyBudgetCents=Math.round(n*100);
+  }
+ }
+ if(runId&&run.brief&&!brief.cityName&&run.brief.category){
+  const bare=message.trim().replace(/[.!]$/,'');
+  if(bare.length>=3&&bare.length<=75&&
+   !/^\d|[.:]|^(pode criar|pode fazer|confirmo|autorizo|aprovo|sim)\b/i.test(bare)&&
+   !/\b(whatsapp|site|zap|campanha|reais|pixel|orcamento)\b/i.test(clean(bare)))
+   brief.cityName=bare;
+ }
  if(imageHash){delete brief.videoId;brief.imageHash=imageHash;brief.imageName='Foto enviada nesta conversa';}
  if(videoId){delete brief.imageHash;brief.videoId=String(videoId);brief.imageName='Vídeo importado nesta conta Meta';}
  const {resources}=await enrich(pool,a,brief,{read:opts.read||readAdsTool,options:opts});
@@ -217,7 +233,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   await pool.query(
    "UPDATE socio_skill_runs SET brief=$2::jsonb,updated_at=now() WHERE id=$1 AND tenant_id=$3 AND user_id=$4 AND status='collecting'",
    [run.id,JSON.stringify(brief),a.active_tenant_id,a.user_id]);
-  return {runId:run.id,status:'collecting',brief:publicBrief(brief),message:prompt,
+  return {skillId:'ads.campaign.launch',runId:run.id,status:'collecting',brief:publicBrief(brief),message:prompt,
    note:brief.destination==='whatsapp'?
     'Para conversas WhatsApp, a origem pode ser apenas indicativa conforme os dados do WA-AKG; não existe Pixel instalado dentro do WhatsApp.':null};
  }
@@ -227,7 +243,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   brief.category=null;
   await pool.query("UPDATE socio_skill_runs SET brief=$2::jsonb,updated_at=now() WHERE id=$1 AND tenant_id=$3 AND user_id=$4 AND status='collecting'",
    [run.id,JSON.stringify(brief),a.active_tenant_id,a.user_id]);
-  return {runId:run.id,status:'collecting',brief:publicBrief(brief),
+  return {skillId:'ads.campaign.launch',runId:run.id,status:'collecting',brief:publicBrief(brief),
    message:creativeDrafts.reviewReason+' Qual produto ou serviço você deseja anunciar, sem alegações não comprovadas?',
    creativeReviewRequired:true};
  }
@@ -256,7 +272,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
  await pool.query("UPDATE socio_skill_runs SET brief=$2::jsonb,plan_id=$3,pixel_plan_id=$4,status='ready',expires_at=now()+interval '15 minutes',updated_at=now() "+
   "WHERE id=$1 AND tenant_id=$5 AND user_id=$6 AND status='collecting'",
   [run.id,JSON.stringify(brief),plan.id,pixelPlanId,a.active_tenant_id,a.user_id]);
- return {runId:run.id,status:'ready',brief:publicBrief(brief),planId:plan.id,
+ return {skillId:'ads.campaign.launch',runId:run.id,status:'ready',brief:publicBrief(brief),planId:plan.id,
   creativeVariants:creativeDrafts.variants,selectedCreativeStyle:creativeDrafts.variants[0].style,
   message:'Preparei a campanha '+creative.name+'. Público: '+(brief.genders?.[0]===2?'mulheres, ':'')+
    'maiores de 18 anos em '+brief.cityName+'. Página: '+brief.pageId+'. Mídia: '+(brief.imageName||'criativo enviado')+'. Orçamento diário definido: R$ '+

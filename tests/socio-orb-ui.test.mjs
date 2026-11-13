@@ -13,7 +13,7 @@ const orb=read('public/socio-orb-ui.js');
 const mesh=read('public/socio-orb-mesh.js');
 
 test('the orb page ships as its own script with a production nav entry',()=>{
- assert.match(html,/<script src="\/socio-orb-ui\.js\?v=20261113f" defer><\/script>/);
+ assert.match(html,/<script src="\/socio-orb-ui\.js\?v=20261113h" defer><\/script>/);
  assert.match(html,/<script src="\/socio-orb-mesh\.js\?v=20261113a" defer><\/script>/);
  assert(html.indexOf('/socio-orb-mesh.js')<html.indexOf('/socio-orb-ui.js'));
  assert(html.includes('<button data-view="orb" class="nav-item"><span class="nav-symbol">◉</span> Conversar com IA</button>'));
@@ -105,6 +105,33 @@ test('orb media and plan wiring uses the real authenticated endpoints',()=>{
  assert(orb.includes('/api/thalita/tts'));
  assert(orb.includes('/api/thalita/confirm'));
  assert(orb.includes('X-CSRF-Token'));
+});
+
+test('the orb greets by the registered company and never shows status pills',()=>{
+ assert(orb.includes('me?.tenant?.name'));
+ assert(orb.includes("greeting=who?'Olá, '+who+'! Como posso te ajudar hoje?'"));
+ assert(!orb.includes('Arraste um vídeo ou foto para cá quando quiser'));
+ assert(orb.includes('<span class="ps-sr-only" id="orbStatus" role="status" aria-live="polite"></span>'));
+ assert(!orb.includes("statusText('Ouvindo')"));
+ assert(!orb.includes("statusText('Voz desligada')"));
+ assert(!orb.includes("statusText('Pensando')"));
+});
+
+test('the plan comes from the server and a campaign conversation keeps its run id',()=>{
+ assert(orb.includes('renderPlan(result.plan)'));
+ assert(orb.includes("runId=result.runId&&(result.status==='ready'||result.status==='collecting')?result.runId:null"));
+ assert(orb.includes('imageHash:media.meta.imageHash'));
+ assert(orb.includes("String(result.skillId||'')==='ads.campaign.launch'"));
+});
+
+test('barge-in stops the live audio source and the attachment leaves the orb face',()=>{
+ assert(orb.includes('if(activeSource){const source=activeSource;activeSource=null;try{source.stop();}'));
+ assert(orb.includes("get('#orbMediaChip')?.addEventListener('click',clearMedia)"));
+ assert(orb.includes('class="orb-media-pill" type="button" id="orbMediaChip"'));
+ assert(orb.includes('silenceMs:1500,maxTurnMs:30000,minVoicedMs:500'));
+ assert(!css.includes('.orb-media-chip{'));
+ assert(css.includes('.orb-media-pill[hidden]{display:none!important}'));
+ assert(/\.orb-transcript\{[^}]*background:rgba\(255,255,255,\.9\)/.test(css));
 });
 
 test('app.js still parses after the orb wiring',()=>{
