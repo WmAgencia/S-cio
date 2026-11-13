@@ -13,7 +13,7 @@ const orb=read('public/socio-orb-ui.js');
 const mesh=read('public/socio-orb-mesh.js');
 
 test('the orb page ships as its own script with a production nav entry',()=>{
- assert.match(html,/<script src="\/socio-orb-ui\.js\?v=20261113j" defer><\/script>/);
+ assert.match(html,/<script src="\/socio-orb-ui\.js\?v=20261113k" defer><\/script>/);
  assert.match(html,/<script src="\/socio-orb-mesh\.js\?v=20261113a" defer><\/script>/);
  assert(html.indexOf('/socio-orb-mesh.js')<html.indexOf('/socio-orb-ui.js'));
  assert(html.includes('<button data-view="orb" class="nav-item"><span class="nav-symbol">◉</span> Conversar com IA</button>'));

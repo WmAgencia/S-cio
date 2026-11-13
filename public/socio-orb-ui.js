@@ -473,7 +473,7 @@
   }
   try{
    const [{createSocioVoiceSession},{newSemanticTurnBuffer}]=await Promise.all([
-    import('/socio-francisca-live.mjs?v=20261113b'),import('/socio-semantic-turn.mjs')
+    import('/socio-francisca-live.mjs?v=20261113c'),import('/socio-semantic-turn.mjs')
    ]);
    if(epoch!==voiceEpoch)return;
    const semantic=newSemanticTurnBuffer({maxWaitMs:16000,maxParts:3,maxChars:950});

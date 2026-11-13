@@ -112,6 +112,10 @@ export async function speakToSocioSkill(pool,a,request={},opts={}){
  if(/\b(pixel no whatsapp|instalar pixel no whatsapp)\b/.test(clean(raw)))
   return {runId:null,status:'completed',message:'Não existe Pixel instalado dentro do WhatsApp. Para conversas uso dados de anúncios e sinais do WA-AKG; para sites uso Pixel, CAPI e eventos de compra confirmados.'};
  const expert=selectExpertSkill(raw);
+ // A detailed owner brief is a build order, not a request about campaigns that
+ // already exist. It must reach the campaign skill before any read/diagnosis
+ // branch, otherwise the owner hears about another campaign.
+ if(expert.id==='meta.campaigns.brief')return (opts.campaign||speakToAdSkill)(pool,a,request,opts);
  if(expert.id==='google.ads'){
   return {runId:null,status:'action_required',skillId:'google.ads',platform:'google',executed:false,
    message:expert.reason==='multi_platform'?

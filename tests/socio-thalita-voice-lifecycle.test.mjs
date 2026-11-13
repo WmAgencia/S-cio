@@ -129,6 +129,48 @@ test('noise-gated VAD stops all input tracks and removes document listeners',asy
  for(let i=0;i<30;i++){amplitude=.11;now+=85;callback?.();}
  assert.equal(turns.length,count,'no more STT after stop');
 });
+test('talking over the assistant interrupts it even with natural gaps between syllables',async()=>{
+ const script=readFileSync(new URL('../public/socio-francisca-live.mjs',import.meta.url),'utf8')
+  .replace('export function createSocioVoiceSession','function createSocioVoiceSession')+
+  '\nglobalThis.createSocioVoiceSession=createSocioVoiceSession;';
+ let callback=null,now=0,amplitude=.002,interrupts=0,speaking=true;
+ const callbacks=new Map();
+ const stream={getTracks(){return [{enabled:true,stop(){}}];}};
+ class FakeRecorder{
+  static isTypeSupported(){return true;}
+  constructor(){this.state='inactive';this.onstop=null;}
+  start(){this.state='recording';}
+  stop(){if(this.state==='inactive')return;this.state='inactive';Promise.resolve().then(()=>this.onstop?.());}
+ }
+ class FakeAudioContext{
+  state='running';
+  async resume(){}
+  createMediaStreamSource(){return {connect(){},disconnect(){}};}
+  createAnalyser(){return {fftSize:2048,smoothingTimeConstant:.28,
+   getFloatTimeDomainData(a){a.fill(amplitude);}};}
+  async close(){}
+ }
+ const document={hidden:false,addEventListener(){},removeEventListener(){}};
+ const window={MediaRecorder:FakeRecorder,AudioContext:FakeAudioContext,
+  addEventListener(){},removeEventListener(){}};
+ const sandbox={window,document,navigator:{mediaDevices:{getUserMedia:async()=>stream}},
+  globalThis:{},setInterval:fn=>(callback=fn,1),clearInterval:()=>{callback=null;},
+  Date:{now:()=>now},Math,Float32Array,Uint8Array,Blob,AbortController,URL};
+ vm.runInNewContext(script,sandbox);
+ const session=sandbox.globalThis.createSocioVoiceSession({
+  onTurn:async()=>{throw Error('an interrupted candidate must not become a turn');},
+  canInterrupt:()=>speaking,
+  onInterrupt:()=>{interrupts++;speaking=false;}
+ });
+ await session.start();
+ // Room noise while the assistant speaks must not interrupt it.
+ for(let i=0;i<12;i++){amplitude=.008;now+=85;callback?.();}
+ assert.equal(interrupts,0,'room noise must not stop the assistant');
+ // The owner speaks: two voiced frames, a natural 170 ms gap, then more voice.
+ for(const a of [.07,.07,.002,.002,.07,.07]){amplitude=a;now+=85;callback?.();}
+ assert.equal(interrupts,1,'a short syllable gap must not cancel the interruption');
+ session.stop();
+});
 test('front-end revokes pending STT and response after the audio session is ended',()=>{
  const ui=readFileSync(new URL('../public/socio-thalita-ui.js',import.meta.url),'utf8');
  assert.match(ui,/voiceEpoch\+\+;cancelPendingAnswer\(\)/);

@@ -1,10 +1,10 @@
 // Hands-free, turn-based browser voice interaction. A user explicitly starts the
 // microphone, a small VAD detects the end of each utterance, and the same source
 // stays connected until they close the call. No recording is retained on disk; transcript requires human review.
-export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},onInterrupt=()=>{},canInterrupt=()=>false,silenceMs=1800,maxTurnMs=45000,minVoicedMs=380}){
+export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},onInterrupt=()=>{},canInterrupt=()=>false,silenceMs=1800,maxTurnMs=45000,minVoicedMs=380,bargeMs=360}){
  let active=false,stream=null,context=null,analyser=null,source=null,timer=null,recorder=null;
  let startedAt=0,lastSpeechAt=0,speechStartedAt=0,ambient=.003,finishing=false,processing=false;
- let generation=0,chunks=[],mime='',samples=null,bargeStarted=0,bargeCandidate=false,voicedMs=0,lastPollAt=0,turnAbort=null,startingCandidate=0,lastAssistantSoundAt=0;
+ let generation=0,chunks=[],mime='',samples=null,bargeStarted=0,bargeCandidate=false,bargeLastVoiceAt=0,voicedMs=0,lastPollAt=0,turnAbort=null,startingCandidate=0,lastAssistantSoundAt=0;
  const state=next=>{if(active||next==='off')onState(next);};
  const closeStream=()=>{
   if(timer){clearInterval(timer);timer=null;}
@@ -75,7 +75,7 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
  }
  function discardTurn(){
   if(recorder){const old=recorder;old.onstop=null;try{old.stop();}catch{}recorder=null;}
-  chunks=[];voicedMs=0;lastSpeechAt=0;speechStartedAt=0;startingCandidate=0;bargeCandidate=false;
+  chunks=[];voicedMs=0;lastSpeechAt=0;speechStartedAt=0;startingCandidate=0;bargeCandidate=false;bargeStarted=0;bargeLastVoiceAt=0;
   if(active)state('listening');
  }
  function poll(){
@@ -88,23 +88,29 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
   const assistantSpeaking=canInterrupt();
   if(assistantSpeaking)lastAssistantSoundAt=now;
   if(processing||assistantSpeaking){
-   const userSpeech=assistantSpeaking&&rms>Math.max(.048,ambient*4.4);
+   // Interrupting has to work in a real room: the ambient floor is frozen while
+   // the assistant speaks, and human speech dips between syllables. Require a
+   // clear peak plus average energy, and let short gaps (up to ~380 ms) pass
+   // without cancelling an interruption the owner already started.
+   const bargeGate=Math.max(.02,ambient*2.2);
+   const userSpeech=assistantSpeaking&&peak>Math.max(.05,bargeGate*2.4)&&rms>bargeGate;
    if(userSpeech){
+    bargeLastVoiceAt=now;
     // Record from the first voiced frame: when the interruption is confirmed the
     // opening words must survive, otherwise the reply starts mid-sentence.
     if(!bargeStarted){bargeStarted=now;bargeCandidate=true;record(true);}
     if(recorder){lastSpeechAt=now;voicedMs+=delta;}
-    if(now-bargeStarted>=650){
-     bargeStarted=0;bargeCandidate=false;
+    if(now-bargeStarted>=bargeMs){
+     bargeStarted=0;bargeLastVoiceAt=0;bargeCandidate=false;
      try{onInterrupt();}catch(error){onError(error?.message||'Falha ao interromper');}
      // A pending transcription must never race with the interruption.
      if(turnAbort){turnAbort.abort();turnAbort=null;}
      processing=false;lastPollAt=0;
     }
-   }else if(bargeStarted){
-    // Sound stopped before the interruption was confirmed (echo or a cough):
-    // throw the candidate away and keep the assistant talking.
-    bargeStarted=0;
+   }else if(bargeStarted&&now-bargeLastVoiceAt>=380){
+    // Sound really stopped before the interruption was confirmed (echo or a
+    // cough): throw the candidate away and keep the assistant talking.
+    bargeStarted=0;bargeLastVoiceAt=0;
     if(bargeCandidate){bargeCandidate=false;discardTurn();}
    }
    return;
@@ -163,7 +169,7 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
  }
  function handleHidden(){if(document.hidden)stop();}
  function stop(){
-  const wasActive=active;active=false;generation++;processing=false;finishing=false;bargeStarted=0;bargeCandidate=false;
+  const wasActive=active;active=false;generation++;processing=false;finishing=false;bargeStarted=0;bargeCandidate=false;bargeLastVoiceAt=0;
   startingCandidate=0;voicedMs=0;lastPollAt=0;lastAssistantSoundAt=0;
   if(turnAbort){turnAbort.abort();turnAbort=null;}
   document.removeEventListener('visibilitychange',handleHidden);

@@ -48,6 +48,38 @@ test('asking how to create a campaign stays advice and never calls the skill',as
  assert.equal(result.plan.title,'Resposta preparada');
 });
 
+test('a detailed brief that also mentions results still builds the campaign it describes',async()=>{
+ const seen=[];
+ const result=await askThalita(pool,actor(),{message:
+  'Crie uma campanha na Meta para vender roupas femininas em Sorocaba, R$ 20 por dia, e melhorar o desempenho'},
+ {chat:async()=>{throw Error('must not answer with generic advice');},
+  metrics:async()=>{throw Error('must not read company metrics');},
+  metaReport:async()=>{throw Error('must not report on existing campaigns');},
+  marketing:async(_pool,_auth,request)=>{
+   seen.push(request);
+   return {skillId:'ads.campaign.launch',runId:run,status:'collecting',
+    brief:{category:'moda feminina',cityName:'Sorocaba',dailyBudgetCents:2000},
+    message:'Quer receber os interessados pelo WhatsApp ou enviar para um site?'};
+  }});
+ assert.equal(seen.length,1,'the owner brief must reach the campaign skill');
+ assert.equal(seen[0].message.includes('roupas femininas'),true);
+ assert.equal(seen[0].message.includes('R$ 20 por dia'),true);
+ assert.equal(result.plan.title,'Planejando a campanha');
+ assert.doesNotMatch(result.plan.steps.map(s=>s.title+' '+(s.detail||'')).join(' '),/campanha anterior|últimos 7 dias/i);
+});
+
+test('a brief with place and budget but no explicit creation verb still builds a campaign',async()=>{
+ const seen=[];
+ await askThalita(pool,actor(),{message:'Quero uma campanha para vender roupas femininas em Sorocaba, R$ 20 por dia'},
+  {chat:async()=>{throw Error('must not answer with generic advice');},
+   marketing:async(_pool,_auth,request)=>{seen.push(request);
+    return {skillId:'ads.campaign.launch',runId:run,status:'collecting',
+     brief:{category:'moda feminina',cityName:'Sorocaba',dailyBudgetCents:2000},
+     message:'Quer receber os interessados pelo WhatsApp ou enviar para um site?'};}});
+ assert.equal(seen.length,1);
+ assert.match(seen[0].message,/roupas femininas/);
+});
+
 test('a campaign reply only keeps a run id while the skill still needs the user',async()=>{
  const result=await askThalita(pool,actor(),{message:'Faça uma campanha pra divulgar minhas roupas'},
   {marketing:async()=>({skillId:'ads.campaign.launch',runId:run,status:'ready',

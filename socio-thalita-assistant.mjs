@@ -12,6 +12,7 @@ import {validateProduct} from './catalog.mjs';
 import {readAdsTool} from './meta-ads-tools.mjs';
 import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
 import {isMetaAdsIntent,isMetaOverviewIntent,metaPeriodForQuery,formatFriendlyMetaReport} from './socio-thalita-meta-summary.mjs';
+import {wantsCampaignOrder} from './socio-campaign-brief.mjs';
 import {readGoogleAdsCampaigns} from './socio-google-ads.mjs';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const pending=new Map();
@@ -120,6 +121,9 @@ async function askThalitaCore(pool,a,body={},opts={}){
  ).slice(-6).map(turn=>({role:turn.role,text:turn.text.trim().slice(0,350)})):[];
  const lower=normalize(message);
  const metaIntent=isMetaAdsIntent(lower)&&!/\bgoogle\s*ads\b/.test(lower);
+ // A full brief that includes "desempenho/resultado" is still an order to build
+ // the campaign. It must never fall through to an existing-campaign report.
+ const campaignOrder=wantsCampaignOrder(message);
  // A running campaign conversation keeps the next short answer ("6", "Sorocaba",
  // "pode criar") inside that conversation instead of starting a generic chat.
  const campaignFollowUp=Boolean(body.runId)&&
@@ -201,14 +205,14 @@ async function askThalitaCore(pool,a,body={},opts={}){
    data:{channelCount:channels.rows.length,connectedInDatabase:connected.length,
     openConversations:Number(conversations.rows[0]?.n||0)}};
  }
- if(metaIntent||wantsCampaign(message)||campaignFollowUp){
+ if(metaIntent||wantsCampaign(message)||campaignFollowUp||campaignOrder){
   if(!features.meta_ads)return {status:'feature_disabled',executed:false,
    message:'Meta Ads está desativado para esta empresa. Sugestão: ative o módulo antes de consultar campanhas.'};
   // MetaEdge is a common speech-to-text rendering of "Meta Ads".
   // Campaign listings include inactive campaigns; metrics are period-scoped
   // and never replaced with WhatsApp/quote metrics.
   const changing=/\b(pausar|pause|desativar|desative|ativar|ative|criar|crie|editar|edite|alterar|altere|mudar|mude|aumentar|aumente|reduzir|reduza|excluir|exclua|deletar)\b/.test(lower);
-  if(metaIntent&&!changing&&isMetaOverviewIntent(lower)){
+  if(metaIntent&&!changing&&!campaignOrder&&isMetaOverviewIntent(lower)){
    requirePermission(a,'marketing.read');
    try{
     const period=metaPeriodForQuery(lower);
@@ -226,7 +230,7 @@ async function askThalitaCore(pool,a,body={},opts={}){
   }
   if(!features.meta_ads)return {status:'feature_disabled',executed:false,message:'Meta Ads não está ativado para esta empresa.'};
   const asksForMetrics=/\b(gasto|gastos|cliques|cpc|cpa|metricas|desempenho|relatorio|resultado|investimento|campanhas ativas)\b/.test(lower);
-  if(metaIntent&&asksForMetrics){
+  if(metaIntent&&asksForMetrics&&!campaignOrder){
    requirePermission(a,'marketing.read');
    try{
     const report=await (opts.metaReport||readAdsTool)(pool,a,'insights',{period:/\bhoje\b/.test(lower)?'today':'last_7d'});
