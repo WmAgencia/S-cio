@@ -94,6 +94,22 @@ test('manager approves exact spending change with target ID, currency and daily 
  assert.match(budget.message,/6.00 BRL/);
  assert.equal(plans.length,0);
 });
+test('"ok, pode criar" authorizes, and a failed command explains itself instead of looking already done',async()=>{
+ const pool=fake(),calls=[];
+ const opts={resolve:async()=>meta,
+  prepare:async(_p,_a,kind,input)=>{calls.push({kind,input});return{id:randomUUID()};},
+  execute:async()=>{calls.push({stage:'execute'});
+   return {status:'failed',error:'A Meta recusou a operação: orçamento abaixo do mínimo.'};}};
+ const asked=await speakToSocioSkill(pool,actor,{message:'Crie um pixel'},opts);
+ await speakToSocioSkill(pool,actor,{message:'Pixel Loja do Bairro',runId:asked.runId},opts);
+ const executed=await speakToSocioSkill(pool,actor,{message:'ok, pode criar',runId:asked.runId},opts);
+ assert.equal(executed.status,'failed');
+ assert.equal(calls.length,2,'the spoken confirmation must reach Meta');
+ const why=await speakToSocioSkill(pool,actor,{message:'o que aconteceu?',runId:asked.runId},opts);
+ assert.equal(why.status,'failed');
+ assert.match(why.message,/orçamento abaixo do mínimo/,'the owner hears the real reason');
+ assert.match(why.message,/Envie o pedido novamente/);
+});
 test('pixel in WhatsApp is never presented as an actual tracking implementation',async()=>{
  const p=fake();
  const reply=await speakToSocioSkill(p,actor,{message:'Instalar pixel no WhatsApp'}, {});

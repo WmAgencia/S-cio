@@ -123,6 +123,17 @@ test('Thalita reads authorized Meta and Google metrics, returning uncertainty in
   metaReport:async()=>{throw Error('CONNECTION_NOT_READY');}});
  assert.equal(failure.status,'unavailable');assert.doesNotMatch(failure.message,/gasto 0/);
 });
+test('a spoken campaign confirmation and a question about the failure stay inside the campaign',async()=>{
+ const noSql={query:async()=>{throw Error('The campaign skill owns this conversation');}};
+ const seen=[];
+ const marketing=async(_p,_a,req)=>{seen.push(req.message);return {runId:req.runId,status:'completed',message:'ok'};};
+ for(const message of ['ok, pode criar','Beleza, pode subir','o que aconteceu?','tentar de novo']){
+  const reply=await askThalita(noSql,actor(),{message,runId:'55555555-5555-4555-8555-555555555555'},{marketing});
+  assert.equal(reply.status,'completed');
+ }
+ assert.deepEqual(seen,['ok, pode criar','Beleza, pode subir','o que aconteceu?','tentar de novo'],
+  'voice confirmations and failure questions must reach the campaign skill');
+});
 test('The executive chart supports accessible 7/30/90 day display and assistant shortcuts',()=>{
  const root=file=>readFileSync(new URL('../'+file,import.meta.url),'utf8');
  const ui=root('public/socio-workspace-ui.js'),assistant=root('public/socio-thalita-ui.js'),css=root('public/socio-executive.css');

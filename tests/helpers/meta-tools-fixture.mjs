@@ -106,6 +106,9 @@ export async function metaToolsScenario(pool){
  assert.equal(writes[5].body.optimization_goal,'CONVERSATIONS');
  assert.equal(JSON.parse(writes[5].body.promoted_object).whatsapp_phone_number,'5515999999999');
  assert.equal(JSON.parse(writes[6].body.object_story_spec).link_data.call_to_action.type,'WHATSAPP_MESSAGE');
+ const waCta=JSON.parse(writes[6].body.object_story_spec).link_data.call_to_action.value;
+ assert.deepEqual(waCta,{app_destination:'WHATSAPP'},'WhatsApp CTA must not carry a link');
+ assert.equal(JSON.parse(writes[6].body.object_story_spec).link_data.link,'https://wa.me/5515999999999');
  await assert.rejects(prepareAdsPlan(pool,a,'create_whatsapp',{...wa,whatsappPhone:'5515888888888'},opts),{status:422});
  const adOnly=await prepareAdsPlan(pool,a,'create_ad',{...input,adsetId:'998877'},opts);
  assert.equal(writes.length,8,'Standalone ad preview does not write to Meta');

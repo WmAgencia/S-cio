@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {extractCampaignBrief,chooseMetaCity,skillAdCopy,speakToAdSkill,readCampaignProgress,SOCIO_AD_SKILLS} from '../socio-ad-skills.mjs';
+import {extractCampaignBrief,chooseMetaCity,skillAdCopy,speakToAdSkill,readCampaignProgress,SOCIO_AD_SKILLS,isConfirmation} from '../socio-ad-skills.mjs';
 import {validateAdsPlan} from '../meta-ads-tools.mjs';
 const tenant=randomUUID(),user=randomUUID();
 const actor={active_tenant_id:tenant,user_id:user,tenant_name:'Loja exemplo',role:'owner',
@@ -39,6 +39,12 @@ function fakePool(){
   if(sql.startsWith("UPDATE socio_skill_runs SET status='executing'")){
    const row=runs.get(params[0]);if(!row||row.status!=='ready')return {rowCount:0,rows:[]};
    row.status='executing';return {rowCount:1,rows:[{...row}]};
+  }
+  if(sql.startsWith("UPDATE socio_skill_runs SET status='collecting',plan_id=NULL")){
+   const row=runs.get(params[0]);
+   if(!row||row.status!=='failed')return {rowCount:0,rows:[]};
+   row.status='collecting';row.plan_id=null;row.pixel_plan_id=null;row.result=null;
+   return {rowCount:1,rows:[{...row}]};
   }
   if(sql.startsWith('UPDATE socio_skill_runs SET status=$2,result=$3::jsonb')){
    const row=runs.get(params[0]);row.status=params[1];row.result=JSON.parse(params[2]);return {rowCount:1};
@@ -349,6 +355,63 @@ test('video received through Sócio can prepare a R$ 6 WhatsApp campaign in Soro
  const replay=await speakToAdSkill(pool,actor,{message:'pode criar',runId:first.runId},opts);
  assert.equal(replay.status,'completed');
  assert.equal(executed.length,1);
+});
+test('a spoken confirmation is understood dressed up, and a negation never approves',async()=>{
+ assert.equal(isConfirmation('ok, pode criar'),true);
+ assert.equal(isConfirmation('Beleza, pode subir'),true);
+ assert.equal(isConfirmation('então manda ver'),true);
+ assert.equal(isConfirmation('sim'),true);
+ assert.equal(isConfirmation('sim, pode'),true);
+ assert.equal(isConfirmation('pode criar agora'),true,'trailing fillers from speech must not block it');
+ assert.equal(isConfirmation('não autorizei'),false);
+ assert.equal(isConfirmation('não pode criar'),false);
+ assert.equal(isConfirmation('ok'),false,'a filler alone never authorizes a write');
+ assert.equal(isConfirmation('ainda não'),false);
+ const pool=fakePool(),executed=[];
+ const opts={resolve,read,prepare:async()=>({id:randomUUID()}),
+  execute:async()=>{executed.push(1);return {status:'succeeded',result:{campaignId:'1',adsetId:'2',adId:'3',delivery:'PAUSED'}};}};
+ const first=await speakToAdSkill(pool,actor,{message:'Crie um anúncio para WhatsApp, em Sorocaba, gastando 6 reais por dia, com essa foto',imageHash},opts);
+ assert.equal(first.status,'collecting');
+ const ready=await speakToAdSkill(pool,actor,{message:'serviços de publicidade',runId:first.runId},opts);
+ assert.equal(ready.status,'ready');
+ assert.equal(executed.length,0);
+ const approved=await speakToAdSkill(pool,actor,{message:'ok, pode criar',runId:first.runId},opts);
+ assert.equal(approved.status,'completed','a spoken "ok, pode criar" must create the campaign');
+ assert.equal(executed.length,1);
+});
+test('a failed creation explains the real cause and a retry prepares the campaign again',async()=>{
+ const pool=fakePool(),prepared=[],outcomes=[
+  {status:'failed',error:'A Meta recusou a operação. Remova o parâmetro "link" do valor do tipo de chamada para ação WHATSAPP_MESSAGE.',
+   result:{campaignId:'120260294640850386',adsetId:'120260294641030386'}},
+  {status:'succeeded',result:{campaignId:'4',adsetId:'5',adId:'6',delivery:'PAUSED'}}
+ ];
+ const opts={resolve,read:async(db,a,kind)=>kind==='images'?{items:[]}:read(db,a,kind),
+  prepare:async(_p,_a,kind,input)=>{prepared.push({kind,input});return {id:randomUUID()};},
+  execute:async()=>outcomes.shift()};
+ const text='Crie um anúncio para WhatsApp, em Sorocaba, gastando 6 reais por dia, com esse vídeo';
+ const first=await speakToAdSkill(pool,actor,{message:text,videoId:'1824013938791734'},opts);
+ const ready=await speakToAdSkill(pool,actor,{message:'serviços de publicidade',runId:first.runId},opts);
+ assert.equal(ready.status,'ready');
+ const failed=await speakToAdSkill(pool,actor,{message:'pode criar',runId:first.runId},opts);
+ assert.equal(failed.status,'failed');
+ assert.match(failed.message,/destino WhatsApp/,'the owner hears the real cause in plain words');
+ assert.match(failed.message,/pausados/,'what was left on Meta is disclosed');
+ assert.doesNotMatch(failed.message,/diagnóstico técnico|WHATSAPP_MESSAGE|parâmetro/);
+ assert.equal(failed.result.result.campaignId,'120260294640850386','the partial creation is kept for a diagnosis');
+ assert.equal(prepared.length,1);
+ const diagnosis=await speakToAdSkill(pool,actor,{message:'o que aconteceu?',runId:first.runId},opts);
+ assert.equal(diagnosis.status,'failed');
+ assert.match(diagnosis.message,/destino WhatsApp/,'asking why repeats the cause instead of a definition');
+ assert.equal(prepared.length,1,'asking why never creates another plan');
+ const refused=await speakToAdSkill(pool,actor,{message:'não quero tentar de novo',runId:first.runId},opts);
+ assert.equal(refused.status,'failed','a negated retry must not recreate the campaign');
+ assert.equal(prepared.length,1);
+ const retried=await speakToAdSkill(pool,actor,{message:'tentar de novo',runId:first.runId},opts);
+ assert.equal(retried.status,'ready','a retry re-prepares the campaign with the same brief');
+ assert.equal(prepared.length,2);
+ const approved=await speakToAdSkill(pool,actor,{message:'pode criar',runId:first.runId},opts);
+ assert.equal(approved.status,'completed');
+ assert.match(approved.message,/pausados/i);
 });
 test('campaign accepts either video or image, never both and not unrecognized video IDs',()=>{
  const base={name:'Criativo teste',message:'Texto legítimo',headline:'Título',

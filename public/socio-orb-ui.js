@@ -12,6 +12,9 @@
  // Which answer the open campaign is waiting for; only "media" auto-continues,
  // otherwise a dropped file would be read as the city or the budget.
  let pendingSlot=null,dragHole=null;
+ // The owner keeps talking while a turn is in flight and while a file is being
+ // dropped, so those arrivals wait their turn instead of being thrown away.
+ let queuedTurns=[],pendingFile=null;
  // The orb page is the bound root itself, so a plain querySelector could never
  // find it; every phase class lives on that very element.
  const get=sel=>!instance?null:instance.matches(sel)?instance:instance.querySelector(sel);
@@ -360,7 +363,7 @@
   showCaption(note+(runId&&pendingSlot==='media'?'':' Quando você pedir o anúncio, '+(foto?'ela':'ele')+' entra como criativo.'),'user');
   // The campaign is waiting for exactly this file: continue the same run so the
   // owner does not have to repeat that the attachment is the creative.
-  if(runId&&pendingSlot==='media'&&!busy)void runTurn('Anexei o criativo do anúncio.',{hidden:true});
+  if(runId&&pendingSlot==='media')void runTurn('Anexei o criativo do anúncio.',{hidden:true});
  }
  const sizeLabel=bytes=>bytes>=1048576?(bytes/1048576).toFixed(1).replace('.',',')+' MB':
   Math.max(1,Math.round(bytes/1024))+' KB';
@@ -380,7 +383,8 @@
    showCaption('Envie um vídeo MP4/MOV ou uma foto JPG/PNG/WebP.');
    return;
   }
-  if(busy){statusText('Aguarde o pedido atual terminar');return;}
+  // Dropping a file mid-turn must never lose it: it waits for the turn to end.
+  if(busy){pendingFile=raw;showCaption('Vou anexar '+(image?'a foto':'o vídeo')+' assim que o pedido atual terminar.');return;}
   const file={raw,kind:image?'image':'video',name:raw.name||'mídia',
    preview:URL.createObjectURL(raw),size:raw.size};
   dragHole=null;
@@ -418,17 +422,33 @@
   li.querySelector('.orb-step-body')?.append(actions);
   li.scrollIntoView({block:'nearest',behavior:'smooth'});
  }
- async function runTurn(text,{fromVoice=false,hidden=false}={}){
+ // Mirrors the server's confirmation rule: speech arrives as "ok, pode criar",
+ // "beleza pode subir" or a bare "sim", and those open the execution log.
+ const CONFIRM_FILLER=/^(?:ok|okay|beleza|ta|esta|tudo bem|certo|isso|claro|sim|entao|vamos|perfeito|legal|bora|por|favor|agora|ja|e)$/;
+ function isConfirmPhrase(text){
+  const words=String(text||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z ]+/g,' ').split(/\s+/).filter(Boolean);
+  if(words.length===1&&words[0]==='sim')return true;
+  while(words.length&&CONFIRM_FILLER.test(words[0]))words.shift();
+  while(words.length&&CONFIRM_FILLER.test(words[words.length-1]))words.pop();
+  return /^(?:pode criar|pode fazer|pode executar|pode subir|pode montar|pode lancar|pode|confirmo|confirma|autorizo|aprovo|aprovado|manda ver|faz|cria)$/.test(words.join(' '));
+ }
+ async function runTurn(text,{fromVoice=false,hidden=false,echoed=false}={}){
   const message=String(text||'').trim();
-  if(!message||busy)return;
+  if(!message)return;
+  if(busy){
+   if(!fromVoice&&!hidden)showCaption(message,'user');
+   queuedTurns.push({message,opts:{fromVoice,hidden,echoed:true}});
+   if(queuedTurns.length>3)queuedTurns.shift();
+   return;
+  }
   const epoch=++runEpoch;
   const isActive=()=>!disposed&&epoch===runEpoch;
   busy=true;
   const input=get('#orbInput');if(input)input.value='';
-  if(!fromVoice&&!hidden)showCaption(message,'user');
+  if(!fromVoice&&!hidden&&!echoed)showCaption(message,'user');
   // Confirming a ready campaign is the one turn that writes to Meta, so it gets
   // the live execution log instead of the generic reading step.
-  const confirming=Boolean(runId)&&/^(pode criar|pode fazer|confirmo|autorizo|aprovo(?: a campanha)?|sim[,. ]+pode criar|sim[,. ]+confirmo)[.! ]*$/i.test(message);
+  const confirming=Boolean(runId)&&isConfirmPhrase(message);
   const list=planReset(confirming?'Criando sua campanha na Meta':'Entendendo o seu pedido');
   const execution=confirming?executionLog(list):null;
   const read=confirming?null:planAdd(list,'Lendo o pedido',{status:'running',
@@ -447,7 +467,7 @@
    if(!isActive())return;
    // The campaign conversation continues while the skill still needs answers
    // or waits for "pode criar"; dropping the id is what lost the context.
-   runId=result.runId&&(result.status==='ready'||result.status==='collecting')?result.runId:null;
+   runId=result.runId&&(result.status==='ready'||result.status==='collecting'||result.status==='failed')?result.runId:null;
    pendingSlot=result.status==='collecting'&&String(result.skillId||'')==='ads.campaign.launch'?String(result.slot||'')||null:null;
    const answer=String(result.message||'Consulta concluída.');
    const planned=renderPlan(result.plan);
@@ -476,7 +496,16 @@
   }finally{
    progressPoll?.stop();
    if(queryAbort===controller)queryAbort=null;
-   if(epoch===runEpoch){busy=false;if(!speaking)setPhase(voiceRequested?'listening':'idle');}
+   if(epoch===runEpoch){
+    busy=false;
+    if(!speaking)setPhase(voiceRequested?'listening':'idle');
+    // The file the owner dropped mid-turn goes first: a queued instruction
+    // about the ad must find the creative already uploaded.
+    const file=pendingFile;pendingFile=null;
+    if(file&&!disposed)acceptFile(file,null);
+    const next=queuedTurns.shift();
+    if(next&&!disposed)void runTurn(next.message,next.opts);
+   }
   }
  }
  function queryDetail(result){
@@ -511,7 +540,7 @@
   }
   try{
    const [{createSocioVoiceSession},{newSemanticTurnBuffer}]=await Promise.all([
-    import('/socio-francisca-live.mjs?v=20261113d'),import('/socio-semantic-turn.mjs')
+    import('/socio-francisca-live.mjs?v=20261113e'),import('/socio-semantic-turn.mjs')
    ]);
    if(epoch!==voiceEpoch)return;
    const semantic=newSemanticTurnBuffer({maxWaitMs:16000,maxParts:3,maxChars:950});
@@ -648,6 +677,7 @@
   audioContext=null;analyser=null;freq=null;
   instance?.remove();instance=null;api=null;csrf=null;navigate=null;
   history=[];runId=null;busy=false;pendingSlot=null;dragHole=null;
+  queuedTurns=[];pendingFile=null;
  }
  function render({root,api:client,csrfToken,navigate:go,me}={}){
   dispose();disposed=false;

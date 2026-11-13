@@ -18,6 +18,52 @@ const moneyWords=Object.freeze({um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5
  vinte:20,trinta:30,quarenta:40,cinquenta:50,cem:100});
 const moneyWordPattern='um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|catorze|quatorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta|cem';
 const clean=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+// The owner answers by voice, so real confirmations arrive dressed up:
+// "ok, pode criar", "beleza, pode fazer", "ent\u00e3o manda ver". They must all
+// count, while a negation must never be read as approval.
+const CONFIRM_FILLER=/^(?:ok|okay|beleza|ta|esta|esta bem|tudo bem|certo|isso|claro|sim|entao|vamos|perfeito|legal|bora|por|favor|agora|ja|e)$/;
+export function isConfirmation(message){
+ const words=clean(message).replace(/[^a-z ]+/g,' ').split(/\s+/).filter(Boolean);
+ // A bare "sim" is the whole answer to "posso criar?"; it is a filler only
+ // when something else follows it.
+ if(words.length===1&&words[0]==='sim')return true;
+ while(words.length&&CONFIRM_FILLER.test(words[0]))words.shift();
+ while(words.length&&CONFIRM_FILLER.test(words[words.length-1]))words.pop();
+ const rest=words.join(' ');
+ return /^(?:pode criar|pode fazer|pode executar|pode subir|pode montar|pode lancar|pode|confirmo|confirma|autorizo|aprovo|aprovado|manda ver|faz|cria)$/.test(rest);
+}
+// Meta's rejection text is written for developers. The owner gets the reason in
+// plain words, and the original sentence stays available as the detail.
+function ownerCause(error){
+ const raw=String(error||'').trim();
+ if(/link/i.test(raw)&&/WHATSAPP_MESSAGE/i.test(raw))
+  return 'o bot\u00e3o do an\u00fancio apontava para um endere\u00e7o, e a Meta s\u00f3 aceita o destino WhatsApp nesse tipo de an\u00fancio.';
+ if(/image_hash|image_url/i.test(raw)&&/video_data/i.test(raw))
+  return 'a Meta n\u00e3o recebeu a imagem de capa do v\u00eddeo.';
+ if(/parecer|revis|politic|ineligiv|desaprov/i.test(raw))
+  return 'a revis\u00e3o de an\u00fancios da Meta recusou o conte\u00fado do criativo.';
+ if(/pagamento|forma de pagamento|metodo de pagamento|billing/i.test(raw))
+  return 'a conta de an\u00fancios precisa de uma forma de pagamento v\u00e1lida.';
+ if(/permiss|autoriz|acesso|token/i.test(raw))
+  return 'a conta de an\u00fancios n\u00e3o autorizou esta opera\u00e7\u00e3o; a conex\u00e3o com a Meta precisa ser refeita.';
+ if(/pagina|page/i.test(raw)&&/nao|invali|pertenc/i.test(raw))
+  return 'a p\u00e1gina do Facebook escolhida n\u00e3o pertence a esta conta.';
+ return null;
+}
+// "Me pe\u00e7a o diagn\u00f3stico t\u00e9cnico" was a dead end for the owner: they asked and got
+// a definition instead. The failure now answers with the real reason, what was
+// left behind on Meta, and the exact words that retry it.
+function creationFailure(executed){
+ const done=executed?.result||{};
+ const cause=ownerCause(executed?.error);
+ const leftovers=done.campaignId
+  ?` A campanha${done.adsetId?' e o conjunto':''} foram criados e ficaram pausados na Meta. Nada est\u00e1 sendo veiculado e nenhum valor est\u00e1 sendo gasto.`
+  :' Nada foi criado na Meta e nenhum valor foi gasto.';
+ const retry=executed?.status==='uncertain'
+  ?' Para n\u00e3o duplicar o que a Meta talvez j\u00e1 tenha criado, n\u00e3o repito sozinho: confira o Gerenciador de An\u00fancios e diga "tentar de novo" se quiser que eu refa\u00e7a.'
+  :' Diga "tentar de novo" que eu refa\u00e7o a campanha com o mesmo plano.';
+ return `N\u00e3o consegui concluir a cria\u00e7\u00e3o da campanha porque ${cause||'a Meta recusou a cria\u00e7\u00e3o e n\u00e3o informou um motivo claro'}.${leftovers}${retry}`;
+}
 // A campaign can target a whole country; "cidade" is not a mandatory slot.
 function wantsCountrywide(normal){
  return /\b(brasil inteiro|todo o brasil|em todo brasil|de norte a sul|pais inteiro|todo o pais|territorio nacional|cobertura nacional|nacional)\b/.test(normal)||
@@ -245,14 +291,30 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
    [id,a.active_tenant_id,a.user_id,accountId,JSON.stringify(initial),opts.originConversationId||null]);
   run=inserted.rows[0];
  }
- if(['completed','failed','executing'].includes(run.status))
+ // A failed run stays answerable: the owner asks what happened and asks for
+ // another attempt instead of being sent back to the start of the conversation.
+ if(run.status==='failed'){
+  // "não quero tentar de novo" contains the retry words but means the opposite.
+  const retry=!/\b(?:nao|nunca|nem|jamais)\b/.test(clean(message))&&
+   (isConfirmation(message)||/\b(tentar|tenta|tente|repete|repita|refaz|refazer)\b[\s\S]*\b(de novo|novamente|outra vez)\b|\b(tentar|tenta|tente) (de )?novo\b/.test(clean(message)));
+  if(retry){
+   const reopened=await pool.query(
+    "UPDATE socio_skill_runs SET status='collecting',plan_id=NULL,pixel_plan_id=NULL,result=NULL,expires_at=now()+interval '2 hours',updated_at=now() "+
+    "WHERE id=$1 AND tenant_id=$2 AND user_id=$3 AND status='failed' RETURNING *",
+    [run.id,a.active_tenant_id,a.user_id]);
+   if(reopened.rowCount)run=reopened.rows[0];
+  }else{
+   return {skillId:'ads.campaign.launch',runId:run.id,status:'failed',brief:publicBrief(run.brief||{}),result:run.result||null,
+    message:creationFailure(run.result)};
+  }
+ }else if(['completed','executing'].includes(run.status)){
   return {skillId:'ads.campaign.launch',runId:run.id,status:run.status,message:run.status==='executing'?
    'O pedido já está em execução. Aguarde o resultado; não repita a criação.':
-   'Este pedido já foi concluído ou encerrado. Inicie outro para uma nova campanha.',result:run.result||null};
+   'Este pedido já foi concluído. Inicie outro para uma nova campanha.',result:run.result||null};
+ }
  const normalized=clean(message);
  if(run.status==='ready'){
-  const confirm=/^(pode criar|pode fazer|confirmo|autorizo|aprovo(?: a campanha)?|sim[,. ]+pode criar|sim[,. ]+confirmo)[.! ]*$/.test(normalized);
-  if(!confirm)return {skillId:'ads.campaign.launch',runId:run.id,status:'ready',brief:publicBrief(run.brief),
+  if(!isConfirmation(message))return {skillId:'ads.campaign.launch',runId:run.id,status:'ready',brief:publicBrief(run.brief),
    message:"Campanha pronta para aprovação. Responda 'pode criar' para eu criar os itens PAUSADOS na Meta; isso não ativa gastos."};
   const claim=await pool.query(
    "UPDATE socio_skill_runs SET status='executing',updated_at=now() "+
@@ -275,14 +337,15 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   }
   const status=executed.status==='succeeded'?'completed':'failed';
   await pool.query(
-   'UPDATE socio_skill_runs SET status=$2,result=$3::jsonb,updated_at=now() WHERE id=$1 AND tenant_id=$4',
+  // The failure stays answerable: the owner may still ask why or ask for a retry.
+  "UPDATE socio_skill_runs SET status=$2,result=$3::jsonb,expires_at=now()+interval '2 hours',updated_at=now() WHERE id=$1 AND tenant_id=$4",
    [run.id,status,JSON.stringify(executed),a.active_tenant_id]);
   return {skillId:'ads.campaign.launch',runId:run.id,status,brief:publicBrief(run.brief||{}),result:executed,
    message:status==='completed'?
     'A Meta confirmou: campanha, conjunto e anúncio criados e pausados. Nada está veiculando e nenhum valor será gasto até você ativar.'+
      (pixelOutcome?.result?.pixelId?' O Pixel novo também foi criado, mas ainda precisa ser instalado no site.':'')+
      ' Quando quiser começar, peça a ativação.' :
-    'A Meta não concluiu a criação da campanha. Nada foi publicado e nenhum valor foi gasto. Pode tentar de novo; se acontecer outra vez, me peça o diagnóstico técnico.'};
+    creationFailure(executed)};
  }
  const brief=extractCampaignBrief(message,run.brief||{});
  // The last question asked decides how a short spoken answer is read.

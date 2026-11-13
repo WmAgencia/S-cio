@@ -493,15 +493,18 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
    if(!numeric(adset.id))throw Object.assign(fail(503,'A Meta não retornou o ID do conjunto.'),{uncertain:true});result.adsetId=adset.id;await progress();
    const chatLink='https://wa.me/'+p.whatsappPhone;
    const destination=whatsapp?chatLink:p.url;
+   // Click-to-WhatsApp ads reject any `link` in the call to action: Meta only
+   // accepts app_destination there, and the creative carries the wa.me URL.
+   const cta=whatsapp?{type:'WHATSAPP_MESSAGE',value:{app_destination:'WHATSAPP'}}:{type:'LEARN_MORE',value:{link:destination}};
    const creative=await graph(c,'/'+c.account.id+'/adcreatives',{
     name:p.name+' · Criativo',
     object_story_spec:{page_id:p.pageId,
      ...(p.videoId?{video_data:{
       video_id:p.videoId,title:p.headline,message:p.message,
       ...(p.videoThumbnailUrl?{image_url:p.videoThumbnailUrl}:{}),
-      call_to_action:{type:whatsapp?'WHATSAPP_MESSAGE':'LEARN_MORE',value:{link:destination}}
+      call_to_action:cta
      }}:{link_data:{image_hash:p.imageHash,link:destination,
-      message:p.message,name:p.headline,call_to_action:{type:whatsapp?'WHATSAPP_MESSAGE':'LEARN_MORE',value:{link:destination}}}})}
+      message:p.message,name:p.headline,call_to_action:cta}})}
    },'POST');
    if(!numeric(creative.id))throw Object.assign(fail(503,'A Meta não retornou o ID do criativo.'),{uncertain:true});result.creativeId=creative.id;await progress();
    const ad=await graph(c,'/'+c.account.id+'/ads',{name:p.name+' · Anúncio',adset_id:adset.id,creative:{creative_id:creative.id},status:'PAUSED'},'POST');

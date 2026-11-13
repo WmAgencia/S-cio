@@ -7,7 +7,7 @@ import {assertApiFeature} from './tenant-features.mjs';
 import {resolveSelectedOfficialAccount} from './meta-official.mjs';
 import {parseMetaCommand,previewMetaCommand} from './meta-ads-commands.mjs';
 import {prepareAdsPlan,executeAdsPlan} from './meta-ads-tools.mjs';
-import {speakToAdSkill} from './socio-ad-skills.mjs';
+import {speakToAdSkill,isConfirmation} from './socio-ad-skills.mjs';
 import {selectExpertSkill} from './socio-expert-skills.mjs';
 import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
 import {formatMetaTrafficDiagnosis} from './meta-traffic-diagnostics.mjs';
@@ -16,7 +16,7 @@ import {readWhatsAppFunnel,formatWhatsAppFunnel} from './whatsapp-funnel.mjs';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const uuid=x=>typeof x==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
 const clean=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
-const confirm=x=>/^(pode criar|pode fazer|pode executar|confirmo|confirma|autorizo|aprovo|sim[, ]+pode|sim[, ]+confirmo)[.! ]*$/.test(clean(x));
+const confirm=isConfirmation;
 
 export function formatSkillRead(command,result){
  if(command.kind==='pixels'){
@@ -70,7 +70,15 @@ export async function speakToSocioSkill(pool,a,request={},opts={}){
   if(run.skill!=='ads.meta.command')throw fail(422,'Skill desconhecida.');
   const account=await (opts.resolve||resolveSelectedOfficialAccount)(pool,a,opts);
   if(run.account_id!==account.id)throw fail(409,'A conta foi alterada. Faça um novo pedido para evitar operações na conta errada.');
-  if(['completed','failed','executing'].includes(run.status))
+  // A failed command is not "already processed": the owner needs the reason, and
+  // this plan cannot be replayed, so the request has to be sent again.
+  if(run.status==='failed')
+   return {runId:run.id,status:'failed',result:run.result||null,
+    message:'A Meta não concluiu este pedido. Nada foi veiculado. '+
+     String(run.result?.error||'Confira o histórico.').slice(0,220)+
+     (run.result?.campaignId?' O que já foi criado ficou pausado na Meta.':'')+
+     ' Envie o pedido novamente para eu preparar um plano novo; este não pode ser reaproveitado.'};
+  if(['completed','executing'].includes(run.status))
    return {runId:run.id,status:run.status,message:'Esse pedido já foi processado. Confira o histórico antes de repetir.',
     result:run.result||null};
   if(run.status==='collecting'){

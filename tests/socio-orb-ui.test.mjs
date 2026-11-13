@@ -13,7 +13,7 @@ const orb=read('public/socio-orb-ui.js');
 const mesh=read('public/socio-orb-mesh.js');
 
 test('the orb page ships as its own script with a production nav entry',()=>{
- assert.match(html,/<script src="\/socio-orb-ui\.js\?v=20261113o" defer><\/script>/);
+ assert.match(html,/<script src="\/socio-orb-ui\.js\?v=20261113p" defer><\/script>/);
  assert.match(html,/<script src="\/socio-orb-mesh\.js\?v=20261113e" defer><\/script>/);
  assert(html.indexOf('/socio-orb-mesh.js')<html.indexOf('/socio-orb-ui.js'));
  assert(html.includes('<button data-view="orb" class="nav-item"><span class="nav-symbol">◉</span> Conversar com IA</button>'));
@@ -131,7 +131,7 @@ test('the orb greets by the registered company and never shows status pills',()=
 
 test('the plan comes from the server and a campaign conversation keeps its run id',()=>{
  assert(orb.includes('renderPlan(result.plan)'));
- assert(orb.includes("runId=result.runId&&(result.status==='ready'||result.status==='collecting')?result.runId:null"));
+ assert(orb.includes("runId=result.runId&&(result.status==='ready'||result.status==='collecting'||result.status==='failed')?result.runId:null"));
  assert(orb.includes('imageHash:media.meta.imageHash'));
  assert(orb.includes("'/api/ads-media/'+reserved.id+'/meta'"));
  assert(orb.includes('videoId:media.meta.videoId'));
@@ -191,7 +191,9 @@ test('a dropped file joins the conversation and becomes the campaign creative',(
  assert(orb.includes("history.push({role:'user',text:note},"));
  assert(orb.includes("if(ok)mediaAttached(file);"),'only a successful upload joins the conversation');
  assert(orb.includes("pendingSlot=result.status==='collecting'&&String(result.skillId||'')==='ads.campaign.launch'?String(result.slot||'')||null:null"));
- assert(orb.includes("if(runId&&pendingSlot==='media'&&!busy)void runTurn('Anexei o criativo do anúncio.',{hidden:true});"));
+ assert(orb.includes("if(runId&&pendingSlot==='media')void runTurn('Anexei o criativo do anúncio.',{hidden:true});"),
+  'a file dropped mid-turn is uploaded and announced instead of being refused');
+ assert(orb.includes('if(busy){pendingFile=raw;showCaption('),'a drop during a turn waits for that turn');
  assert(orb.includes("if(!fromVoice&&!hidden)showCaption(message,'user')"));
 });
 

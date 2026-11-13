@@ -13,6 +13,7 @@ import {readAdsTool} from './meta-ads-tools.mjs';
 import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
 import {isMetaAdsIntent,isMetaOverviewIntent,metaPeriodForQuery,formatFriendlyMetaReport} from './socio-thalita-meta-summary.mjs';
 import {wantsCampaignOrder} from './socio-campaign-brief.mjs';
+import {isConfirmation} from './socio-ad-skills.mjs';
 import {readGoogleAdsCampaigns} from './socio-google-ads.mjs';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const pending=new Map();
@@ -125,8 +126,13 @@ async function askThalitaCore(pool,a,body={},opts={}){
  const campaignOrder=wantsCampaignOrder(message);
  // A running campaign conversation keeps the next short answer ("6", "Sorocaba",
  // "pode criar") inside that conversation instead of starting a generic chat.
+ // The owner confirms by voice: "ok, pode criar", "beleza pode subir" and a bare
+ // "sim" all belong to the campaign they just heard. Questions about the failure
+ // and a retry request stay there too, instead of falling into generic chat.
  const campaignFollowUp=Boolean(body.runId)&&
-  (/^(pode criar|pode fazer|confirmo|autorizo|aprovo|sim)\b/.test(lower)||message.trim().length<=70);
+  (isConfirmation(message)||
+   /^(?:o que (?:aconteceu|deu errado|foi)|por que|porque|qual (?:foi )?o (?:problema|erro)|diagnostico|analise tecnica|tentar de novo|tenta de novo|tente de novo)\b/.test(lower)||
+   message.trim().length<=70);
  const features=parseTenantFeatures(a.features);
  const readReports=()=>getExecutiveMetrics(pool,a);
  // Product write commands require EXACT unambiguous match and separate approval.

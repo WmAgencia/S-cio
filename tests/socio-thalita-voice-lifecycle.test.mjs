@@ -171,6 +171,59 @@ test('talking over the assistant interrupts it even with natural gaps between sy
  assert.equal(interrupts,1,'a short syllable gap must not cancel the interruption');
  session.stop();
 });
+test('the owner keeps being heard while a turn is in flight: words are queued, never dropped',async()=>{
+ const script=readFileSync(new URL('../public/socio-francisca-live.mjs',import.meta.url),'utf8')
+  .replace('export function createSocioVoiceSession','function createSocioVoiceSession')+
+  '\nglobalThis.createSocioVoiceSession=createSocioVoiceSession;';
+ let callback=null,now=0,amplitude=.002;
+ const stream={getTracks(){return [{enabled:true,stop(){}}];}};
+ class FakeRecorder{
+  static isTypeSupported(){return true;}
+  constructor(){this.state='inactive';this.onstop=null;}
+  start(){this.state='recording';}
+  stop(){if(this.state==='inactive')return;this.state='inactive';
+   this.ondataavailable?.({data:new Blob([new Uint8Array(400)])});
+   Promise.resolve().then(()=>this.onstop?.());}
+ }
+ class FakeAudioContext{
+  state='running';
+  async resume(){}
+  createMediaStreamSource(){return {connect(){},disconnect(){}};}
+  createAnalyser(){return {fftSize:2048,smoothingTimeConstant:.28,
+   getFloatTimeDomainData(a){a.fill(amplitude);}};}
+  async close(){}
+ }
+ const document={hidden:false,addEventListener(){},removeEventListener(){}};
+ const window={MediaRecorder:FakeRecorder,AudioContext:FakeAudioContext,
+  addEventListener(){},removeEventListener(){}};
+ const sandbox={window,document,navigator:{mediaDevices:{getUserMedia:async()=>stream}},
+  globalThis:{},setInterval:fn=>(callback=fn,1),clearInterval:()=>{callback=null;},
+  Date:{now:()=>now},Math,Float32Array,Uint8Array,Blob,AbortController,URL};
+ vm.runInNewContext(script,sandbox);
+ const started=[],pending=[];
+ const session=sandbox.globalThis.createSocioVoiceSession({
+  onTurn:()=>{started.push(started.length+1);return new Promise(resolve=>pending.push(resolve));}
+ });
+ await session.start();
+ for(const a of [.10,.10,.10,.10,.10,.10,.10,.10,.10,.10,.10,.10,.10,.10,.10,.10,.10,.10,.10,.10]){amplitude=a;now+=85;callback?.();}
+ for(let i=0;i<30;i++){amplitude=.002;now+=85;callback?.();}
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(started.length,1,'the first turn reached the server');
+ assert.equal(session.processing,true);
+ // The owner keeps talking while that turn is still running.
+ for(let i=0;i<20;i++){amplitude=.10;now+=85;callback?.();}
+ for(let i=0;i<30;i++){amplitude=.002;now+=85;callback?.();}
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(session.processing,true,'the second turn waits its turn instead of being thrown away');
+ assert.equal(started.length,1,'turns run one at a time');
+ pending.shift()();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(started.length,2,'the words spoken during the first turn are still handled');
+ pending.shift()();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(session.processing,false);
+ session.stop();
+});
 test('front-end revokes pending STT and response after the audio session is ended',()=>{
  const ui=readFileSync(new URL('../public/socio-thalita-ui.js',import.meta.url),'utf8');
  assert.match(ui,/voiceEpoch\+\+;cancelPendingAnswer\(\)/);
