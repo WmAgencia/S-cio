@@ -1,6 +1,7 @@
-// Object layout of the private media bucket. The snapshot copies every
-// namespace the application writes, and refuses anything it does not know
-// instead of silently skipping data the owner believes is protected.
+// Object layout of the private media bucket. The snapshot copies the catalogue
+// photos the owner believes are protected and refuses any namespace it does not
+// know. Ad videos are transient: they are staged only so Meta can fetch them
+// into the ad account, so they are neither backed up nor treated as data.
 const UUID='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const productImage=new RegExp('^'+UUID+'/'+UUID+'/'+UUID+'\\.jpg$','i');
 const adVideo=new RegExp('^ads-private/'+UUID+'/'+UUID+'/source\\.(?:mp4|mov)$','i');
@@ -13,7 +14,7 @@ export function classifyMediaKey(key){
  if(typeof key!=='string')return 'unknown';
  if(key.startsWith('health/'))return 'probe';
  if(productImage.test(key))return 'product-image';
- if(adVideo.test(key))return 'ad-video';
+ if(adVideo.test(key))return 'transient';
  return 'unknown';
 }
 // Accumulates one listing page; the caller carries files/bytes across pages.
@@ -21,7 +22,7 @@ export function collectMediaObjects(contents,{files=0,bytes=0}={}){
  const items=[];
  for(const item of contents||[]){
   const kind=classifyMediaKey(item?.Key);
-  if(kind==='probe')continue;
+  if(kind==='probe'||kind==='transient')continue;
   if(kind==='unknown')throw failure('UNEXPECTED_NAMESPACE','Unexpected object outside the private media namespaces');
   const size=Number(item.Size);
   if(!Number.isSafeInteger(size)||size<1||size>MAX_OBJECT_BYTES)

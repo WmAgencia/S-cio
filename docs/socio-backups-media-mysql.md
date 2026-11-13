@@ -8,8 +8,9 @@ O backup PostgreSQL 18 do Sócio utiliza um bucket Railway independente (`socio-
 
 - Serviço dedicado `socio-media-backup`; comando `node backup-runner/media.mjs`.
 - Lista os objetos existentes em `socio-product-media`, ignorando apenas sondas temporárias em `health/`.
-- Copia os dois espaços de nomes que a aplicação grava: fotos do catálogo (`tenant-id/product-id/image-id.jpg`) e mídias de anúncio (`ads-private/tenant-id/media-id/source.mp4|mov`). Objetos fora desses formatos falham a execução com o código `UNEXPECTED_NAMESPACE` em vez de serem ignorados silenciosamente.
-- Limites por execução: até 100 MiB por objeto (acima do limite de 90 MiB de vídeo da aplicação), 10.000 arquivos e 1 GiB no total. Um estouro falha com `OBJECT_TOO_LARGE` ou `SNAPSHOT_LIMIT`.
+- Copia as fotos do catálogo (`tenant-id/product-id/image-id.jpg`). Vídeos de anúncio (`ads-private/...`) não entram no backup: são apenas a cópia de passagem que a Meta busca para a conta de anúncios e podem ser descartados sem perda de conteúdo do Sócio.
+- Objetos fora desses formatos falham a execução com o código `UNEXPECTED_NAMESPACE` em vez de serem ignorados silenciosamente.
+- Limites por execução: até 100 MiB por objeto, 10.000 arquivos e 1 GiB no total. Um estouro falha com `OBJECT_TOO_LARGE` ou `SNAPSHOT_LIMIT`.
 - Lê o arquivo privado, cifra com AES-256-GCM usando sal e IV aleatórios exclusivos para cada arquivo, e envia ao bucket independente sem publicar URLs.
 - Faz download remoto do ciphertext, valida SHA-256, descifra localmente e compara SHA-256 do original.
 - Grava um manifesto `media/manifests/...` **somente após verificar todos os arquivos**. Se a listagem estiver vazia, cria um manifesto com quantidade 0 (não afirma haver fotos).

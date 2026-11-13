@@ -1,7 +1,8 @@
-// Sócio private media disaster snapshot: catalogue photos and ad creatives.
-// Read original private Railway S3 objects, encrypt independently per object,
-// upload to a different private Railway bucket, read back, decrypt and verify.
-// Never log content, tenant IDs, object names or credentials.
+// Sócio private media disaster snapshot: catalogue photos only. Ad videos are
+// staging for the Meta account and are skipped. Read original private Railway
+// S3 objects, encrypt independently per object, upload to a different private
+// Railway bucket, read back, decrypt and verify. Never log content, tenant IDs,
+// object names or credentials.
 import {randomBytes,scryptSync,createCipheriv,createDecipheriv,createHash} from 'node:crypto';
 import {S3Client,ListObjectsV2Command,GetObjectCommand,PutObjectCommand,HeadObjectCommand} from '@aws-sdk/client-s3';
 import {collectMediaObjects} from './media-keys.mjs';
