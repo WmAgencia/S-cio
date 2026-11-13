@@ -9,6 +9,16 @@ function access(a,permission='marketing.read'){
  requirePermission(a,permission);assertApiFeature(a.features,'/api/marketing/official');
  if(a.tenant_status==='paused')throw fail(403,'Empresa pausada.');
 }
+// A single overview load fans out into several account-bound reads. Each one
+// would otherwise repeat the live /me/adaccounts roundtrip, so the account list
+// is shared per user briefly. Only the real Graph client is cached; injected
+// test clients always run fresh.
+const accountsCache=new Map(),ACCOUNTS_TTL_MS=60000;
+const accountsKey=a=>a.active_tenant_id+':'+a.user_id;
+export function clearOfficialAccountsCache(a){
+ if(!a)return accountsCache.clear();
+ accountsCache.delete(accountsKey(a));
+}
 export function officialConfig(env=process.env){
  const origin=new URL(env.SOCIO_PUBLIC_URL||'https://invalid.invalid');
  const appId=env.SOCIO_META_APP_ID||'2827016234367972';
@@ -78,6 +88,7 @@ export async function finishOfficial(pool,state,code,{env=process.env,request=fe
  DO UPDATE SET meta_user_id=EXCLUDED.meta_user_id,token_encrypted=EXCLUDED.token_encrypted,scopes=EXCLUDED.scopes,expires_at=EXCLUDED.expires_at,updated_at=now()`,[row.tenant_id,row.user_id,me.id,encrypted,scopes,expires]);
  await client.query('COMMIT');
  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+ clearOfficialAccountsCache({active_tenant_id:row.tenant_id,user_id:row.user_id});
  return {ok:true};
 }
 export async function officialStatus(pool,a,{env=process.env}={}){
@@ -91,13 +102,24 @@ export async function officialStatus(pool,a,{env=process.env}={}){
   writesEnabled:connected&&scopes.includes('ads_management'),
   readsEnabled:connected&&scopes.includes('ads_read')};
 }
-export async function officialAccounts(pool,a,{env=process.env,request=fetch}={}){
- access(a);const r=await pool.query('SELECT token_encrypted FROM meta_official_grants WHERE tenant_id=$1 AND user_id=$2 AND expires_at>now()',[a.active_tenant_id,a.user_id]);
- if(!r.rows[0])throw fail(409,'Conecte sua conta Meta.');
- const clear=JSON.parse(openMarketingSecret(r.rows[0].token_encrypted,env));
- if(clear.tenant!==a.active_tenant_id||clear.user!==a.user_id)throw fail(403,'Autorização de outra empresa.');
- const data=await officialGraph('/me/adaccounts',clear.token,{env,request,params:{fields:'id,name,account_status,currency,timezone_name',limit:100}});
- return {accounts:(data.data||[]).map(x=>({id:x.id,name:x.name,status:x.account_status,currency:x.currency,timezone:x.timezone_name})),hasMore:Boolean(data.paging?.next)};
+export async function officialAccounts(pool,a,{env=process.env,request=fetch,fresh=false}={}){
+ access(a);
+ const shareable=!fresh&&request===fetch,key=accountsKey(a),hit=accountsCache.get(key);
+ if(shareable&&hit&&Date.now()-hit.at<ACCOUNTS_TTL_MS)return hit.promise;
+ const load=(async()=>{
+  const r=await pool.query('SELECT token_encrypted FROM meta_official_grants WHERE tenant_id=$1 AND user_id=$2 AND expires_at>now()',[a.active_tenant_id,a.user_id]);
+  if(!r.rows[0])throw fail(409,'Conecte sua conta Meta.');
+  const clear=JSON.parse(openMarketingSecret(r.rows[0].token_encrypted,env));
+  if(clear.tenant!==a.active_tenant_id||clear.user!==a.user_id)throw fail(403,'Autorização de outra empresa.');
+  const data=await officialGraph('/me/adaccounts',clear.token,{env,request,params:{fields:'id,name,account_status,currency,timezone_name',limit:100}});
+  return {accounts:(data.data||[]).map(x=>({id:x.id,name:x.name,status:x.account_status,currency:x.currency,timezone:x.timezone_name})),hasMore:Boolean(data.paging?.next)};
+ })();
+ if(shareable){
+  if(accountsCache.size>1000)accountsCache.clear();
+  accountsCache.set(key,{at:Date.now(),promise:load});
+  load.catch(()=>{if(accountsCache.get(key)?.promise===load)accountsCache.delete(key);});
+ }
+ return load;
 }
 export async function disconnectOfficial(pool,a){
  access(a,'marketing.manage');
@@ -109,6 +131,7 @@ export async function disconnectOfficial(pool,a){
   await client.query('DELETE FROM meta_official_grants WHERE tenant_id=$1 AND user_id=$2',[a.active_tenant_id,a.user_id]);
   await client.query('DELETE FROM meta_official_states WHERE tenant_id=$1 AND user_id=$2',[a.active_tenant_id,a.user_id]);
   await client.query('COMMIT');
+  clearOfficialAccountsCache(a);
  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
  return {ok:true};
 }
@@ -141,6 +164,7 @@ export async function handleMetaRemoval(pool,signedRequest,{env=process.env}={})
   await client.query('INSERT INTO meta_official_deletions(confirmation_code) VALUES($1) ON CONFLICT DO NOTHING',[code]);
   await client.query('COMMIT');
  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+ clearOfficialAccountsCache();
  return {url:c.origin+'/meta-exclusao-status?code='+code,confirmation_code:code};
 }
 export async function metaRemovalStatus(pool,code){

@@ -453,15 +453,15 @@
    '</div></aside>';
   // A prepaid balance is not the Meta account's "balance" (often payable),
   // nor the daily campaign budget. Do not infer prepaid credit from spend.
-  const budgetHeaderItem=(provider,label,brand,connected,spent,currency,billing)=>{
-   if(progressive&&ads&&provider==='meta_ads'){
+  const budgetHeaderItem=(provider,label,brand,connected,spent,currency,billing,pending=progressive&&ads)=>{
+   if(pending&&provider==='meta_ads'){
     return '<article class="px-budget-account px-budget-meta-ribbon px-budget-meta-pending" data-budget-provider="meta_ads" aria-busy="true" aria-label="Consultando limite de gastos e gasto de hoje da Meta">'+
      '<div class="px-budget-meta-summary"><div class="px-budget-meta-brand"><span class="px-brand-dot meta"></span><strong>Meta Ads</strong></div>'+
      '<div class="px-budget-meta-metric"><span>Limite disponível</span><span class="px-load-line" aria-hidden="true"></span></div>'+
      '<div class="px-budget-meta-metric"><span>Gasto hoje</span><span class="px-load-line" aria-hidden="true"></span></div></div>'+
      '<div class="px-budget-meta-action" aria-hidden="true"><span class="px-load-line px-budget-meta-action-placeholder"></span></div></article>';
    }
-   if(progressive&&ads){
+   if(pending){
     return '<article class="px-budget-account px-load-card px-budget-provider-pending" data-budget-provider="'+provider+'" aria-busy="true">'+
      '<div class="px-budget-account-main"><div class="px-budget-brand"><span class="px-brand-dot '+brand+'"></span>'+
      '<strong>'+esc(label)+'</strong><small>Consultando informações da conta…</small></div>'+
@@ -491,7 +491,7 @@
    if(checkedAt&&Number.isFinite(Date.parse(checkedAt)))checkedLabel='Consultado às '+
     new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}).format(new Date(checkedAt));
    const displayFunds=fundsAvailable?moneyMinor(funds,currencyCode):'Não disponível';
-   const status=progressive?'Consultando dados da conta…':!ads?'Sem permissão':!connected?'Conta não autorizada':
+   const status=pending?'Consultando dados da conta…':!ads?'Sem permissão':!connected?'Conta não autorizada':
     fundsAvailable?(browserObserved?'Saldo observado no faturamento Meta':'Saldo pré-pago confirmado'):
     provider==='meta_ads'&&billingSession==='disconnected'?'Faturamento ainda não conectado':
     provider==='meta_ads'&&billingSession==='connected'?'Aguardando leitura do faturamento':
@@ -534,14 +534,24 @@
     '</article>';
   };
 
-  root.innerHTML='<div class="px-workspace px-overview">'+
-   '<section class="px-budget-top" aria-label="Verba disponível nas contas publicitárias">'+
+  const budgetTopHtml=(state={})=>{
+   const pending=state.pending??(progressive&&ads);
+   const ready=state.metaReady??metaReady,currency=state.currency??meta?.currency,spent=state.spent??meta?.spend;
+   const fin=state.finance??finance;
+   const billing=state.billing||(metaBillingUrl?
+    {finance:fin,paymentsUrl:metaBillingUrl,alert:metaBilling.data?.balanceAlert}:
+    {finance:fin,alert:metaBilling.data?.balanceAlert});
+   return '<section class="px-budget-top" aria-label="Verba disponível nas contas publicitárias">'+
     '<div class="px-budget-top-heading"><strong>Controle de verba</strong></div>'+
     '<div class="px-budget-top-grid">'+
-     budgetHeaderItem('meta_ads','Meta Ads','meta',metaReady,meta?.spend,meta?.currency,metaBillingUrl?{finance,paymentsUrl:metaBillingUrl,alert:metaBilling.data?.balanceAlert}:{finance,alert:metaBilling.data?.balanceAlert})+
-     (googleAdsVisible()?budgetHeaderItem('google_ads','Google Ads','google',googleReady,googleMicros,googleCode):'')+
-    '</div>'+
-   '</section>'+
+     budgetHeaderItem('meta_ads','Meta Ads','meta',ready,spent,currency,billing,pending)+
+     (googleAdsVisible()?budgetHeaderItem('google_ads','Google Ads','google',
+      state.googleReady??googleReady,state.googleMicros??googleMicros,state.googleCode??googleCode,
+      state.googlePending??pending):'')+
+    '</div></section>';
+  };
+  root.innerHTML='<div class="px-workspace px-overview">'+
+   budgetTopHtml()+
    '<div class="ov-board">'+
     '<div class="ov-kpi-stack">'+
      kpi('Conversas em aberto',number(d.openConversations),'Atendimento da empresa','inbox')+
@@ -594,6 +604,28 @@
    '<p class="px-provenance">Indicadores consolidados por empresa. Métricas publicitárias dependem das permissões das contas autorizadas; conversões atribuídas por anúncios não são comprovantes de pagamento. Nenhum número indisponível é substituído por uma estimativa.</p>'+
   '</div>';
   snapshots.set('overview',root.innerHTML);
+  // The wallet panel needs only the account status, today's totals and the
+  // finance read. Paint it as soon as those land instead of waiting for the
+  // campaign, adset and ad listings the rest of the page needs.
+  if(progressive&&ads){
+   Promise.all([
+    cached(api,'/api/marketing/official/status',25000),
+    cached(api,'/api/marketing/tools/insights?period=today',16000),
+    calls[6]
+   ]).then(([status,insights,financeResult])=>{
+    if(renderId!==renderSerial||!root.isConnected||!root.querySelector('.px-overview'))return;
+    const section=root.querySelector('.px-budget-top');
+    if(!section)return;
+    const items=Array.isArray(insights?.data?.items)?insights.data.items:[];
+    const spend=items.reduce((sum,x)=>sum+(Number(x.spend)||0),0);
+    const fin=financeResult?.ok?financeResult.data?.finance:null;
+    const url=(()=>{try{const u=new URL(financeResult?.data?.paymentsUrl);return u.protocol==='https:'&&u.hostname==='adsmanager.facebook.com'?u.href:null;}catch{return null;}})();
+    section.outerHTML=budgetTopHtml({pending:false,metaReady:insights?.ok===true,
+     spent:spend,currency:selectedCurrency(status?.data),finance:fin,
+     billing:url?{finance:fin,paymentsUrl:url,alert:financeResult?.data?.balanceAlert}:
+      {finance:fin,alert:financeResult?.data?.balanceAlert},googlePending:true});
+   }).catch(()=>{});
+  }
   if(featuredAd){
    const placeholder=root.querySelector('[data-campaign-preview]');
    cached(api,'/api/marketing/tools/ad-media?adId='+encodeURIComponent(featuredAd.id),25000).then(result=>{
