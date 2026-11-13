@@ -15,6 +15,7 @@ const transcription=(text,segments)=>transcribeSocioTraining(Buffer.alloc(1500,1
   assert.equal(opt.body.get('language'),'pt');
   assert.equal(opt.body.get('temperature'),'0');
   assert.equal(opt.body.get('timestamp_granularities[]'),'segment');
+  assert.match(opt.body.get('prompt'),/anúncios/i);
   return {ok:true,json:async()=>({text,segments})};
  }});
 test('Whisper rejects silence metadata and repeated ambient-noise hallucinations',async()=>{
@@ -26,6 +27,11 @@ test('Whisper rejects silence metadata and repeated ambient-noise hallucinations
  const answer=await transcription('Me diga o desempenho das campanhas do Meta Ads.',clear);
  assert.match(answer.text,/Meta Ads/);
  assert.equal(answer.approved,false);
+});
+test('a short spoken number is a complete answer to the budget question',async()=>{
+ const clear=[{no_speech_prob:.04,avg_logprob:-.22,compression_ratio:1.1}];
+ const answer=await transcription('6',clear);
+ assert.equal(answer.text,'6');
 });
 test('Thalita caches only predefined generic voice and shares concurrent requests',async()=>{
  const phrase=THALITA_CANNED_PHRASES[1];

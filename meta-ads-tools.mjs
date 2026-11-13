@@ -12,6 +12,8 @@ const text=(v,max=200)=>typeof v==='string'&&v.trim()&&v.length<=max?v.trim():nu
 const numeric=v=>typeof v==='string'&&/^\d{4,30}$/.test(v);
 const money=v=>Number.isSafeInteger(v)&&v>=100&&v<=10000000;
 const safeUrl=v=>{try{const u=new URL(v);return u.protocol==='https:'&&!u.username&&!u.password&&u.href.length<=1800?u.href:null;}catch{return null;}};
+// Meta's video thumbnail CDN URLs carry long signed query strings.
+const safeThumbnail=v=>{try{const u=new URL(v);return u.protocol==='https:'&&!u.username&&!u.password&&u.href.length<=4096?u.href:null;}catch{return null;}};
 function permit(a,write=false){requirePermission(a,write?'marketing.manage':'marketing.read');assertApiFeature(a.features,'/api/marketing/tools');if(a.tenant_status==='paused')throw fail(403,'Empresa pausada.');}
 async function context(pool,a,options={},write=false){
  permit(a,write);const account=await resolveSelectedOfficialAccount(pool,a,options);
@@ -23,7 +25,7 @@ async function context(pool,a,options={},write=false){
  return {account,token:secret.token,options,tenantId:a.active_tenant_id};
 }
 async function graph(c,path,params={},method='GET'){
- if(!/^\/(act_\d+|\d+|search)(\/(campaigns|adsets|ads|adcreatives|adimages|adspixels|insights|promote_pages|previews|copies))?$/.test(path))throw fail(422,'Operação Meta inválida.');
+ if(!/^\/(act_\d+|\d+|search)(\/(campaigns|adsets|ads|adcreatives|adimages|adspixels|insights|promote_pages|previews|copies|thumbnails))?$/.test(path))throw fail(422,'Operação Meta inválida.');
  const cfg=officialConfig(c.options.env||process.env),url=new URL('https://graph.facebook.com/'+cfg.version+path);
  const body=new URLSearchParams();
  for(const [k,v] of Object.entries(params))body.set(k,typeof v==='object'?JSON.stringify(v):String(v));
@@ -302,13 +304,31 @@ async function pollVideoReady(c,videoId,{timeoutMs=12000,intervalMs=1500}={}){
  let status='';
  for(;;){
   let video;
-  try{video=await graph(c,'/'+videoId,{fields:'id,status'});}
+  try{video=await graph(c,'/'+videoId,{fields:'id,status,picture'});}
   catch{return {ready:false,status:'unknown'};}
   status=String((typeof video?.status==='object'?video.status.video_status:video?.status)||'').toLowerCase();
-  if(String(video?.id)===videoId&&status==='ready')return {ready:true,status};
+  if(String(video?.id)===videoId&&status==='ready')
+   return {ready:true,status,picture:safeThumbnail(video?.picture)};
   if(['error','failed','invalid'].includes(status)||Date.now()>=deadline)return {ready:false,status};
   await new Promise(resolve=>setTimeout(resolve,intervalMs));
  }
+}
+// A video creative must carry a thumbnail (image_hash or image_url). Meta only
+// renders the `picture` field once processing ends, so fall back to the
+// thumbnails edge, preferring the one Meta marks as preferred.
+async function videoThumbnail(c,videoId,check){
+ if(!check.ready)return {ready:false,status:check.status,url:null};
+ if(check.picture)return {ready:true,status:check.status,url:check.picture};
+ try{
+  const thumbs=await graph(c,'/'+videoId+'/thumbnails',{fields:'uri,is_preferred,width,height'});
+  const candidates=(Array.isArray(thumbs?.data)?thumbs.data:[]).map(item=>({
+   url:safeThumbnail(item?.uri),preferred:item?.is_preferred===true,
+   area:(Number(item?.width)||0)*(Number(item?.height)||0)}))
+   .filter(item=>item.url);
+  candidates.sort((a,b)=>(Number(b.preferred)-Number(a.preferred))||(b.area-a.area));
+  if(candidates[0])return {ready:true,status:check.status,url:candidates[0].url};
+ }catch{}
+ return {ready:true,status:check.status,url:null};
 }
 export async function waitForAdVideoReady(pool,a,videoId,options={}){
  const c=await context(pool,a,options,true);
@@ -331,20 +351,27 @@ async function validateAssets(c,payload,pool){
    [c.tenantId,c.account.id,payload.videoId]);
   if(!ownedVideo.rowCount)throw fail(403,'Vídeo não foi importado e confirmado nesta conta da empresa.');
   const check=await pollVideoReady(c,payload.videoId,{timeoutMs:12000});
-  if(check.ready)return;
-  if(check.status==='unknown')throw fail(409,'Não foi possível confirmar se o vídeo terminou de processar na Meta.');
-  if(['error','failed','invalid'].includes(check.status))
-   throw fail(409,'A Meta recusou o processamento deste vídeo. Envie outro arquivo.');
-  throw fail(409,'A Meta ainda não confirmou que o vídeo está pronto. Verifique a biblioteca antes de criar o anúncio.');
+  if(!check.ready){
+   if(check.status==='unknown')throw fail(409,'Não foi possível confirmar se o vídeo terminou de processar na Meta.');
+   if(['error','failed','invalid'].includes(check.status))
+    throw fail(409,'A Meta recusou o processamento deste vídeo. Envie outro arquivo.');
+   throw fail(409,'A Meta ainda não confirmou que o vídeo está pronto. Verifique a biblioteca antes de criar o anúncio.');
+  }
+  const thumb=await videoThumbnail(c,payload.videoId,check);
+  if(!thumb.url)
+   throw fail(409,'A Meta não gerou uma imagem de capa para este vídeo. Envie o vídeo novamente ou use uma foto.');
+  return {videoThumbnailUrl:thumb.url};
  }
  const images=await graph(c,'/'+c.account.id+'/adimages',{fields:'hash,name',hashes:[payload.imageHash],limit:100});
  if(!(images.data||[]).some(i=>i.hash===payload.imageHash))throw fail(403,'Imagem não encontrada nesta conta. Atualize a biblioteca.');
+ return {};
 }
 export async function prepareAdsPlan(pool,a,kind,input,options={}){
  const c=await context(pool,a,options,true),payload=validateAdsPlan(kind,input);
  let summary;
  if(kind==='create'||kind==='create_whatsapp'){
-  await validateAssets(c,payload,pool);
+  const assets=await validateAssets(c,payload,pool);
+  if(assets.videoThumbnailUrl)payload.videoThumbnailUrl=assets.videoThumbnailUrl;
   if(kind==='create_whatsapp'){
    const channel=await pool.query("SELECT id FROM channels WHERE tenant_id=$1 AND provider='waakg' AND phone=$2 AND status='connected' LIMIT 1",
     [a.active_tenant_id,payload.whatsappPhone]);
@@ -384,7 +411,8 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
    account:c.account,object:adset,changes:{targeting:'broadened',ageMin:18,ageMax:65}};
  }else if(kind==='create_ad'){
   await owned(c,payload.adsetId);
-  await validateAssets(c,payload,pool);
+  const assets=await validateAssets(c,payload,pool);
+  if(assets.videoThumbnailUrl)payload.videoThumbnailUrl=assets.videoThumbnailUrl;
   summary={description:payload.videoId?
    'Adicionar anúncio com VÍDEO previamente importado ao conjunto existente. Criativo e anúncio serão criados PAUSADOS; sem início de gastos.':
    'Adicionar anúncio com imagem a um conjunto existente da conta selecionada. Criativo e anúncio serão criados PAUSADOS.',
@@ -418,7 +446,8 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
  try{
   if(plan.kind==='create'||plan.kind==='create_whatsapp'){
    const whatsapp=plan.kind==='create_whatsapp';
-   await validateAssets(c,p,pool);
+   const assets=await validateAssets(c,p,pool);
+   if(assets.videoThumbnailUrl)p.videoThumbnailUrl=assets.videoThumbnailUrl;
    const campaign=await graph(c,'/'+c.account.id+'/campaigns',{name:p.name,objective:whatsapp?'OUTCOME_ENGAGEMENT':'OUTCOME_TRAFFIC',special_ad_categories:[],status:'PAUSED',is_adset_budget_sharing_enabled:false},'POST');
    if(!numeric(campaign.id))throw Object.assign(fail(503,'A Meta não retornou o ID da campanha.'),{uncertain:true});
    result.campaignId=campaign.id;await progress();
@@ -437,6 +466,7 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
     object_story_spec:{page_id:p.pageId,
      ...(p.videoId?{video_data:{
       video_id:p.videoId,title:p.headline,message:p.message,
+      ...(p.videoThumbnailUrl?{image_url:p.videoThumbnailUrl}:{}),
       call_to_action:{type:whatsapp?'WHATSAPP_MESSAGE':'LEARN_MORE',value:{link:destination}}
      }}:{link_data:{image_hash:p.imageHash,link:destination,
       message:p.message,name:p.headline,call_to_action:{type:whatsapp?'WHATSAPP_MESSAGE':'LEARN_MORE',value:{link:destination}}}})}
@@ -471,11 +501,13 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
    await progress();
   }else if(plan.kind==='create_ad'){
    await owned(c,p.adsetId);
-   await validateAssets(c,p,pool);
+   const assets=await validateAssets(c,p,pool);
+   if(assets.videoThumbnailUrl)p.videoThumbnailUrl=assets.videoThumbnailUrl;
    const creative=await graph(c,'/'+c.account.id+'/adcreatives',{
     name:p.name+' · Criativo',object_story_spec:{page_id:p.pageId,
      ...(p.videoId?{video_data:{
       video_id:p.videoId,message:p.message,title:p.headline,
+      ...(p.videoThumbnailUrl?{image_url:p.videoThumbnailUrl}:{}),
       call_to_action:{type:'LEARN_MORE',value:{link:p.url}}
      }}:{link_data:{
       image_hash:p.imageHash,link:p.url,message:p.message,name:p.headline,

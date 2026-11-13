@@ -73,6 +73,15 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
   for(const b of bytes){const d=(b-128)/128;sum+=d*d;const a=Math.abs(d);if(a>peak)peak=a;}
   return {rms:Math.sqrt(sum/bytes.length),peak};
  }
+ // Normalised voice energy for the orb: 0 when the room is quiet, 1 at a clear
+ // speaking voice. The inward animation follows this while the owner talks.
+ function meter(){
+  if(!active)return 0;
+  const {rms,peak}=level();
+  const threshold=Math.max(.009,ambient*2.2);
+  if(rms<=threshold&&peak<=Math.max(.05,threshold*3.2))return 0;
+  return Math.max(0,Math.min(1,(rms*.9+peak*.45-.02)/.16));
+ }
  function discardTurn(){
   if(recorder){const old=recorder;old.onstop=null;try{old.stop();}catch{}recorder=null;}
   chunks=[];voicedMs=0;lastSpeechAt=0;speechStartedAt=0;startingCandidate=0;bargeCandidate=false;bargeStarted=0;bargeLastVoiceAt=0;
@@ -120,8 +129,8 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
   // A soft voice must count as speech. Require both enough average energy and a
   // real peak so the room's steady hum still never opens a turn, and let the
   // ambient floor adapt quickly to a noisy place.
-  const threshold=Math.max(.011,ambient*2.6);
-  const loud=rms>threshold&&peak>Math.max(.055,threshold*3.5);
+  const threshold=Math.max(.009,ambient*2.2);
+  const loud=rms>threshold&&peak>Math.max(.05,threshold*3.2);
   if(!loud)ambient=Math.max(.002,Math.min(.05,ambient*.97+rms*.03));
   if(loud){
    if(!recorder){
@@ -176,5 +185,5 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
   window.removeEventListener('pagehide',stop);
   closeStream();if(wasActive)state('off');
  }
- return {start,stop,get active(){return active;},get processing(){return processing;}};
+ return {start,stop,getLevel:meter,get active(){return active;},get processing(){return processing;}};
 }

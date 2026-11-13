@@ -2013,7 +2013,7 @@ body.socio-orb-view #appShell .app-main{background:transparent!important}
 .orb-aura{
  position:absolute;inset:-28%;border-radius:50%;pointer-events:none;
  background:radial-gradient(circle at 50% 50%,rgba(96,93,236,.16),rgba(124,93,255,.09) 44%,rgba(34,211,238,0) 72%);
- filter:blur(calc(24px + var(--orb-amp,0)*36px));opacity:calc(.7 + var(--orb-amp,0)*.3);
+ filter:blur(max(0px,calc(24px + var(--orb-amp,0)*36px)));opacity:calc(.7 + var(--orb-amp,0)*.3);
  transform:scale(calc(1 + var(--orb-amp,0)*.16));transition:transform .12s linear,filter .12s linear;
 }
 .orb-canvas{

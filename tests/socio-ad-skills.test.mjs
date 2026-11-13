@@ -103,7 +103,7 @@ test('selected account + WA-AKG + page + qualified photo prepare a campaign, but
  assert.equal(no.status,'ready');assert.equal(actions.length,1);
  const confirmed=await speakToAdSkill(pool,actor,{message:'pode criar',runId:start.runId},options);
  assert.equal(confirmed.status,'completed');
- assert.match(confirmed.message,/PAUSADOS/);
+ assert.match(confirmed.message,/criados e pausados/i);
  assert.equal(actions.length,2);
  assert.equal(actions[1].confirmed,true);
  const replay=await speakToAdSkill(pool,actor,{message:'pode criar',runId:start.runId},options);
@@ -229,12 +229,12 @@ test('website campaigns plan a Pixel only when none exists, and text approval cr
  assert.equal(prepared[1].kind,'create');
  assert.equal(prepared[1].input.url,'https://example.test');
  assert.equal(executed.length,0);
- assert.match(ready.message,/Pixel novo/);
+ assert.match(ready.message,/vou criar um Pixel/);
  const result=await speakToAdSkill(pool,actor,{message:'pode criar',runId:initial.runId},opts);
  assert.equal(result.status,'completed');
  assert.equal(executed.length,2);
- assert.match(result.message,/Pixel criado: 1234567890/);
- assert.match(result.message,/PAUSADOS/);
+ assert.match(result.message,/Pixel novo também foi criado/);
+ assert.match(result.message,/criados e pausados/i);
 });
 test('when existing Pixel is visible, website skill reuses the account instead of creating a duplicate',async()=>{
  const pool=fakePool(),prepared=[];
@@ -295,6 +295,9 @@ test('video received through Sócio can prepare a R$ 6 WhatsApp campaign in Soro
  assert.equal(ready.status,'ready');
  assert.equal(ready.brief.hasVideo,true);
  assert.equal(ready.brief.hasPhoto,false);
+ assert.match(ready.message,/anúncio usa o vídeo que você enviou/);
+ assert(!/\d{6,}/.test(ready.message),'the owner must not receive raw Meta IDs');
+ assert(!/Página:|WA-AKG|Texto:/.test(ready.message));
  assert.equal(prepared.length,1);
  assert.equal(prepared[0].kind,'create_whatsapp');
  assert.equal(prepared[0].input.videoId,videoId);
@@ -309,7 +312,8 @@ test('video received through Sócio can prepare a R$ 6 WhatsApp campaign in Soro
  const approved=await speakToAdSkill(pool,actor,{message:'pode criar',runId:first.runId},opts);
  assert.equal(approved.status,'completed');
  assert.equal(executed.length,1);
- assert.match(approved.message,/PAUSADOS/);
+ assert.match(approved.message,/pausados/i);
+ assert(!/\d{6,}/.test(approved.message),'the owner must not receive raw Meta IDs');
  const replay=await speakToAdSkill(pool,actor,{message:'pode criar',runId:first.runId},opts);
  assert.equal(replay.status,'completed');
  assert.equal(executed.length,1);

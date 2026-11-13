@@ -32,17 +32,23 @@
   cancelAnimationFrame(raf);
   const tick=()=>{
    if(disposed){return;}
+   const fromAssistant=speaking&&analyser&&freq;
    let raw=0;
-   if(analyser&&freq){
+   if(fromAssistant){
     analyser.getByteFrequencyData(freq);
     let sum=0,count=0;
     // Speech energy lives mostly under ~1.5 kHz; ignore the noisy top end.
     for(let i=1;i<Math.min(freq.length,64);i++){sum+=freq[i];count++;}
     raw=count?sum/(count*255):0;
+   }else if(voiceRequested&&voice?.active){
+    raw=Number(voice.getLevel?.())||0;
    }
    level+=(raw-level)*(raw>level?.42:.09);
    const target=Math.min(1,level*1.55);
-   amp+=(target-amp)*.32;
+   // Signed amplitude: the assistant's voice pushes the orb outward, the owner's
+   // voice pulls it inward, so the animation mirrors who is talking.
+   const signed=fromAssistant?target:-target;
+   amp+=(signed-amp)*.32;
    const s=stage();
    if(s){
     s.style.setProperty('--orb-amp',amp.toFixed(3));
@@ -56,6 +62,10 @@
  }
  function stopLevelLoop(){cancelAnimationFrame(raf);raf=0;level=0;amp=0;
   const s=stage();if(s){s.style.setProperty('--orb-amp','0');s.style.setProperty('--orb-scale','1');s.style.setProperty('--orb-glow','26px');s.style.setProperty('--orb-spin','1');}
+ }
+ // The microphone keeps driving the orb after the assistant finishes a reply.
+ function syncLevelLoop(){
+  if(voiceRequested&&voice?.active)startLevelLoop();else stopLevelLoop();
  }
  // ---------------------------------------------------------------- speaking
  function chunkText(text){
@@ -92,7 +102,7 @@
   // Aborting the fetch is not enough: the already-decoded buffer keeps playing
   // unless its source node is stopped, which is what makes barge-in feel deaf.
   if(activeSource){const source=activeSource;activeSource=null;try{source.stop();}catch{}try{source.disconnect();}catch{}}
-  speaking=false;stopLevelLoop();
+  speaking=false;syncLevelLoop();
   if(get('.orb-page')?.classList.contains('is-speaking'))setPhase(voiceRequested?'listening':'idle');
  }
  async function speak(text){
@@ -118,7 +128,7 @@
    if(!controller.signal.aborted)statusText('Voz indisponível · resposta por texto');
   }finally{
    if(ttsAbort===controller){
-    ttsAbort=null;speaking=false;stopLevelLoop();
+    ttsAbort=null;speaking=false;syncLevelLoop();
     if(get('.orb-page'))setPhase(voiceRequested?'listening':'idle');
    }
   }
@@ -200,7 +210,7 @@
   let runningShown=false,errorShown=false;
   EXEC_STAGES.forEach((stage,i)=>{
    const li=exec.items[i],id=ids[stage.id];
-   if(id){planUpdate(li,'done','Confere · ID '+String(id),stage.done);return;}
+   if(id){planUpdate(li,'done','Confirmado pela Meta',stage.done);return;}
    if(!runningShown&&failed&&!errorShown){
     runningShown=true;errorShown=true;
     planUpdate(li,'error',String(ids.error||'A Meta não confirmou esta etapa.').slice(0,150),'Não confirmado nesta etapa');
@@ -467,18 +477,18 @@
   try{
    await unlockAudio();
    startLevelLoop();
-  }catch(error){startingVoice=false;showCaption(error.message);return;}
+  }catch(error){startingVoice=false;stopLevelLoop();showCaption(error.message);return;}
   if(!navigator.mediaDevices?.getUserMedia||!globalThis.MediaRecorder){
-   startingVoice=false;showCaption('O microfone não está disponível neste navegador. Use o texto.');return;
+   startingVoice=false;stopLevelLoop();showCaption('O microfone não está disponível neste navegador. Use o texto.');return;
   }
   try{
    const [{createSocioVoiceSession},{newSemanticTurnBuffer}]=await Promise.all([
-    import('/socio-francisca-live.mjs?v=20261113c'),import('/socio-semantic-turn.mjs')
+    import('/socio-francisca-live.mjs?v=20261113d'),import('/socio-semantic-turn.mjs')
    ]);
    if(epoch!==voiceEpoch)return;
    const semantic=newSemanticTurnBuffer({maxWaitMs:16000,maxParts:3,maxChars:950});
    const session=createSocioVoiceSession({
-    silenceMs:1700,maxTurnMs:30000,minVoicedMs:340,
+    silenceMs:1900,maxTurnMs:45000,minVoicedMs:240,
     canInterrupt:()=>speaking,
     // Talking over the assistant only stops its audio. The caption, history and
     // the open campaign run stay exactly where they were, so the conversation

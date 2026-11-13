@@ -62,18 +62,20 @@
    if(!start)start=now;
    const t=reduced?0:(now-start)/1000;
    measure();
-   const amp=Math.max(0,Math.min(1,ampOf()));
+   // Negative amplitude pulls the mesh inward while the owner speaks; the
+   // assistant's own voice keeps the outward swell.
+   const amp=Math.max(-1,Math.min(1,ampOf())),power=Math.abs(amp);
    const cx=w/2,cy=h/2,side=Math.min(w,h),R=side*radius;
    ctx.setTransform(dpr,0,0,dpr,0,0);
    ctx.clearRect(0,0,w,h);
    const bloom=ctx.createRadialGradient(cx-R*.28,cy-R*.34,R*.04,cx,cy,R*1.55);
    if(light){
-    bloom.addColorStop(0,'rgba(120,170,255,'+(.16+amp*.12).toFixed(3)+')');
-    bloom.addColorStop(.46,'rgba(140,120,255,'+(.09+amp*.07).toFixed(3)+')');
+    bloom.addColorStop(0,'rgba(120,170,255,'+(.16+power*.12).toFixed(3)+')');
+    bloom.addColorStop(.46,'rgba(140,120,255,'+(.09+power*.07).toFixed(3)+')');
     bloom.addColorStop(1,'rgba(180,140,255,0)');
    }else{
-    bloom.addColorStop(0,'rgba(120,190,255,'+(.20+amp*.16).toFixed(3)+')');
-    bloom.addColorStop(.45,'rgba(88,110,255,'+(.10+amp*.10).toFixed(3)+')');
+    bloom.addColorStop(0,'rgba(120,190,255,'+(.20+power*.16).toFixed(3)+')');
+    bloom.addColorStop(.45,'rgba(88,110,255,'+(.10+power*.10).toFixed(3)+')');
     bloom.addColorStop(1,'rgba(60,40,120,0)');
    }
    ctx.fillStyle=bloom;ctx.fillRect(0,0,w,h);

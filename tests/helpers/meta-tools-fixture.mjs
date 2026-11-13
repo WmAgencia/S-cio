@@ -33,7 +33,8 @@ export async function metaToolsScenario(pool){
   if(path==='/act_123456/ads')return response({data:[{id:'554433',creative:{object_story_spec:{page_id:'445566'}}}]});
   if(path==='/act_123456')return response({id:'act_123456',currency:'BRL',amount_spent:'1234',spend_cap:'2000',business:{id:'777888'}});
   if(path==='/445566')return response({id:'445566',name:'Página existente na conta'});
-  if(path==='/1616096903323428')return response({id:'1616096903323428',status:{video_status:'ready'}});
+  if(path==='/1616096903323428')return response({id:'1616096903323428',status:{video_status:'ready'},
+  picture:'https://scontent.xx.fbcdn.net/v/poster.jpg?_nc_cat=1&oh=abc'});
   if(path==='/998877/adsets')return response({data:[{id:'121212',name:'Conjunto de teste',effective_status:'ACTIVE'}]});
   if(path==='/998877/ads')return response({data:[{id:'343434',name:'Anúncio de teste',effective_status:'ACTIVE'}]});
   if(path==='/998877/insights')return response({data:[{campaign_id:'998877',spend:'12.27',clicks:'488',impressions:'3098'}]});
@@ -209,6 +210,7 @@ export async function metaToolsScenario(pool){
  assert.equal(writes.at(-2).path,'/act_123456/adcreatives');
  const story=JSON.parse(writes.at(-2).body.object_story_spec);
  assert.equal(story.video_data.video_id,videoAd.videoId);
+ assert.match(story.video_data.image_url,/^https:\/\/scontent\./,'video creative needs a thumbnail');
  assert.equal(story.link_data,undefined);
  assert.equal(writes.at(-1).body.status,'PAUSED');
  assert.equal(videoMade.result.delivery,'PAUSED');

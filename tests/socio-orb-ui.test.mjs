@@ -13,8 +13,8 @@ const orb=read('public/socio-orb-ui.js');
 const mesh=read('public/socio-orb-mesh.js');
 
 test('the orb page ships as its own script with a production nav entry',()=>{
- assert.match(html,/<script src="\/socio-orb-ui\.js\?v=20261113k" defer><\/script>/);
- assert.match(html,/<script src="\/socio-orb-mesh\.js\?v=20261113a" defer><\/script>/);
+ assert.match(html,/<script src="\/socio-orb-ui\.js\?v=20261113l" defer><\/script>/);
+ assert.match(html,/<script src="\/socio-orb-mesh\.js\?v=20261113b" defer><\/script>/);
  assert(html.indexOf('/socio-orb-mesh.js')<html.indexOf('/socio-orb-ui.js'));
  assert(html.includes('<button data-view="orb" class="nav-item"><span class="nav-symbol">◉</span> Conversar com IA</button>'));
  assert(server.includes("'/socio-orb-ui.js'"));
@@ -139,7 +139,8 @@ test('the plan comes from the server and a campaign conversation keeps its run i
  assert(orb.includes('/api/thalita/progress?runId='));
  assert(orb.includes('Criando a campanha na Meta…'));
  assert(orb.includes('Conjunto de anúncios criado'));
- assert(orb.includes("'Confere · ID '"));
+ assert(orb.includes("planUpdate(li,'done','Confirmado pela Meta',stage.done)"));
+ assert(!orb.includes('Confere · ID'));
  assert(orb.includes('startProgressPolling(runId,execution,isActive)'));
  assert(orb.includes("String(result.skillId||'')==='ads.campaign.launch'"));
 });
@@ -148,10 +149,19 @@ test('barge-in stops the live audio source and the attachment leaves the orb fac
  assert(orb.includes('if(activeSource){const source=activeSource;activeSource=null;try{source.stop();}'));
  assert(orb.includes("get('#orbMediaChip')?.addEventListener('click',clearMedia)"));
  assert(orb.includes('class="orb-media-pill" type="button" id="orbMediaChip"'));
- assert(orb.includes('silenceMs:1700,maxTurnMs:30000,minVoicedMs:340'));
+ assert(orb.includes('silenceMs:1900,maxTurnMs:45000,minVoicedMs:240'));
  assert(!css.includes('.orb-media-chip{'));
  assert(css.includes('.orb-media-pill[hidden]{display:none!important}'));
  assert(/\.orb-transcript\{[^}]*background:rgba\(255,255,255,\.9\)/.test(css));
+});
+
+test('the orb pulls inward with the owner voice and swells outward when it speaks',()=>{
+ assert(orb.includes('raw=Number(voice.getLevel?.())||0'));
+ assert(orb.includes('const signed=fromAssistant?target:-target'));
+ assert(orb.includes('function syncLevelLoop(){'));
+ assert(!orb.includes('speaking=false;stopLevelLoop()'));
+ assert(mesh.includes('const amp=Math.max(-1,Math.min(1,ampOf())),power=Math.abs(amp)'));
+ assert(/\.16\+power\*\.12/.test(mesh));
 });
 
 test('a short answer the owner speaks is kept, only pure fillers are dropped',()=>{

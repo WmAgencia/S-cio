@@ -76,10 +76,7 @@ function campaignPlan(result){
   return {title:'Campanha pronta para aprovar',steps};
  }
  if(result.status==='completed'){
-  const ids=result.result?.result||{};
-  steps.push({title:'Criei a campanha na Meta',detail:[ids.campaignId?'Campanha '+ids.campaignId:null,
-   ids.adsetId?'conjunto '+ids.adsetId:null,ids.adId?'anúncio '+ids.adId:null].filter(Boolean).join(' · ')||
-   'Campanha criada pausada',status:'done'});
+  steps.push({title:'Criei a campanha na Meta',detail:'Campanha, conjunto e anúncio prontos',status:'done'});
   steps.push({title:'Tudo pausado',detail:'Nada veicula nem gasta até você ativar',status:'done'});
   return {title:'Campanha criada',steps};
  }

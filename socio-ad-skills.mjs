@@ -249,11 +249,10 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
    [run.id,status,JSON.stringify(executed),a.active_tenant_id]);
   return {skillId:'ads.campaign.launch',runId:run.id,status,brief:publicBrief(run.brief||{}),result:executed,
    message:status==='completed'?
-    'A Meta confirmou a criação. Campanha, conjunto e anúncio foram criados PAUSADOS. IDs: '+
-     [executed.result?.campaignId,executed.result?.adsetId,executed.result?.adId].filter(Boolean).join(', ')+
-     (pixelOutcome?.result?.pixelId?' · Pixel criado: '+pixelOutcome.result.pixelId+' (instalação no site pendente).':'')+
-     '. Para veicular, solicite ativação autorizada. O Pixel não é instalado automaticamente no site.' :
-    'Criação incompleta: confira o histórico e os IDs parciais da Meta antes de tentar novamente. '+String(executed.error||'').slice(0,120)};
+    'A Meta confirmou: campanha, conjunto e anúncio criados e pausados. Nada está veiculando e nenhum valor será gasto até você ativar.'+
+     (pixelOutcome?.result?.pixelId?' O Pixel novo também foi criado, mas ainda precisa ser instalado no site.':'')+
+     ' Quando quiser começar, peça a ativação.' :
+    'A Meta não concluiu a criação da campanha. Nada foi publicado e nenhum valor foi gasto. Pode tentar de novo; se acontecer outra vez, me peça o diagnóstico técnico.'};
  }
  const brief=extractCampaignBrief(message,run.brief||{});
  // The last question asked decides how a short spoken answer is read.
@@ -330,13 +329,15 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   [run.id,JSON.stringify(brief),plan.id,pixelPlanId,a.active_tenant_id,a.user_id]);
  return {skillId:'ads.campaign.launch',runId:run.id,status:'ready',brief:publicBrief(brief),planId:plan.id,
   creativeVariants:creativeDrafts.variants,selectedCreativeStyle:creativeDrafts.variants[0].style,
-  message:'Preparei a campanha '+creative.name+'. Público: '+(brief.genders?.[0]===2?'mulheres, ':'')+
-   'maiores de 18 anos em '+(brief.countryCode?'todo o Brasil':brief.cityName)+'. Página: '+brief.pageId+'. Mídia: '+(brief.imageName||'criativo enviado')+'. Orçamento diário definido: R$ '+
-   (brief.dailyBudgetCents/100).toFixed(2).replace('.',',')+'/dia. Destino: '+
-   (brief.destination==='whatsapp'?'WhatsApp WA-AKG':'site')+'. '+
-   (pixelPlanId?'Um Pixel novo também está incluído na autorização, mas ainda precisará ser instalado no site. ':'' )+
-   'Texto: '+creative.message+' A Meta fará a revisão do anúncio. '+
-   "Responda 'pode criar' em até 15 minutos para eu criar a campanha PAUSADA, sem iniciar gastos.",
+  message:'Montei a campanha de '+brief.category+' para '+
+   [brief.genders?.[0]===1?'homens':brief.genders?.[0]===2?'mulheres':null,
+    brief.countryCode?'todo o Brasil':brief.cityName].filter(Boolean).join(' em ')+
+   ', com R$ '+(brief.dailyBudgetCents/100).toFixed(2).replace('.',',')+' por dia. O anúncio usa '+
+   (brief.videoId?'o vídeo que você enviou':brief.imageHash?'a foto que você enviou':brief.imageName||'o criativo enviado')+
+   ' e leva para '+(brief.destination==='whatsapp'?'o WhatsApp':'o site')+'. '+
+   (pixelPlanId?'Também vou criar um Pixel para medir os resultados do site; ele ainda precisa ser instalado. ':'' )+
+   'A Meta revisa o anúncio antes de publicar. '+
+   "Responda 'pode criar' em até 15 minutos para eu criar tudo pausado, sem gastar nada.",
   note:brief.destination==='whatsapp'?
    'Conversa WhatsApp não recebe Pixel. Atribuição dependerá de dados válidos do WA-AKG e da Meta.': 
    'Para medir compras no site, a instalação do Pixel, CAPI e eventos requer integração e consentimento próprios.'};

@@ -72,7 +72,7 @@
  }
  async function beginLiveVoice(){
   if(liveVoice||!state?.interview||state.interview.completed)return;
-  const {createSocioVoiceSession}=await import('/socio-francisca-live.mjs?v=20261113c');
+  const {createSocioVoiceSession}=await import('/socio-francisca-live.mjs?v=20261113d');
   const session=createSocioVoiceSession({
    canInterrupt:()=>speaking,
    onInterrupt:()=>{cancelSpeech();voiceState='hearing';updateVoiceStatus();},
