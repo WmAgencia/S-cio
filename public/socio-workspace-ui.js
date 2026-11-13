@@ -189,7 +189,8 @@
  const permissions=me=>new Set(me?.user?.permissions||[]);
  const can=(me,permission)=>me?.user?.platformOwner||permissions(me).has(permission);
  const selectedCurrency=(status)=>status?.selectedAccount?.currency||null;
- const kpi=(label,value,meta,icon='◈',tone='purple')=>'<article class="px-kpi"><div class="px-kpi-top"><span class="px-kpi-label">'+esc(label)+'</span><span class="px-kpi-icon '+tone+'">'+icon+'</span></div>'+
+ const kpiIcon=(name)=>globalThis.SocioIcons?.has(name)?globalThis.SocioIcons.svg(name):esc(name);
+ const kpi=(label,value,meta,icon='overview',tone='purple')=>'<article class="px-kpi"><div class="px-kpi-top"><span class="px-kpi-label">'+esc(label)+'</span><span class="px-kpi-icon '+tone+'">'+kpiIcon(icon)+'</span></div>'+
   '<strong class="px-kpi-number">'+esc(value)+'</strong><small>'+esc(meta)+'</small></article>';
  const empty=(text)=>'<p class="px-muted">'+esc(text)+'</p>';
  const chart=(points)=>{
@@ -543,10 +544,10 @@
    '</section>'+
    '<div class="ov-board">'+
     '<div class="ov-kpi-stack">'+
-     kpi('Conversas em aberto',number(d.openConversations),'Atendimento da empresa','▤')+
-     kpi('WhatsApps conectados',number(realWa),'Sessões vinculadas','◉','green')+
-     kpi('Mensagens hoje',number(d.messagesReceivedToday),'Recebidas · horário de Brasília','✉','blue')+
-     kpi('Campanhas ativas',metaReady?number(meta.activeCampaigns):'—','Situação atual da Meta','▦','blue')+
+     kpi('Conversas em aberto',number(d.openConversations),'Atendimento da empresa','inbox')+
+     kpi('WhatsApps conectados',number(realWa),'Sessões vinculadas','whatsapp','green')+
+     kpi('Mensagens hoje',number(d.messagesReceivedToday),'Recebidas · horário de Brasília','messages','blue')+
+     kpi('Campanhas ativas',metaReady?number(meta.activeCampaigns):'—','Situação atual da Meta','campaigns','indigo')+
     '</div>'+
     trafficRail+
    '</div>'+
@@ -763,12 +764,12 @@
      [['today','Hoje'],['last_7d','7 dias'],['last_30d','30 dias']].map(([v,l])=>
        '<button type="button" class="'+(period===v?'selected':'')+'" data-px-period="'+v+'" aria-pressed="'+(period===v)+'">'+l+'</button>').join('')+'</div>'+
    '<div class="px-kpi-grid px-marketing-kpi">'+
-    kpi('Investimento',hasData?money(data.spend,currency):'—','Período selecionado','R$')+
-    kpi('Cliques',hasData?number(data.clicks):'—','Contados pela Meta','⌁','blue')+
-    kpi('CPC',hasData&&data.clicks?money(data.spend/data.clicks,currency):'—','Gasto ÷ cliques','↗','green')+
-    kpi('CPA atribuído',hasData&&data.purchases?money(data.spend/data.purchases,currency):'—','Evento Purchase · não receita','◈')+
-    kpi('Campanhas ativas',data?.campaigns.ok?number(data.activeCampaigns):'—','Situação atual da Meta','▤','green')+
-    kpi('Anúncios ativos',data?.ads.ok?number(data.activeAds):'—','Situação atual dos anúncios','◉','blue')+
+    kpi('Investimento',hasData?money(data.spend,currency):'—','Período selecionado','money','green')+
+    kpi('Cliques',hasData?number(data.clicks):'—','Contados pela Meta','clicks','blue')+
+    kpi('CPC',hasData&&data.clicks?money(data.spend/data.clicks,currency):'—','Gasto ÷ cliques','trend','sky')+
+    kpi('CPA atribuído',hasData&&data.purchases?money(data.spend/data.purchases,currency):'—','Evento Purchase · não receita','target')+
+    kpi('Campanhas ativas',data?.campaigns.ok?number(data.activeCampaigns):'—','Situação atual da Meta','campaigns','indigo')+
+    kpi('Anúncios ativos',data?.ads.ok?number(data.activeAds):'—','Situação atual dos anúncios','ads','teal')+
    '</div>'+
    section(selectedAdset?'Anúncios do conjunto':selectedCampaign?'Conjuntos de anúncios':'Suas campanhas',
     selectedAdset?'Anúncios e criativos do conjunto selecionado':

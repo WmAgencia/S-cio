@@ -545,7 +545,15 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
     creative=await graph(c,'/'+c.account.id+'/adcreatives',creativePayload(null),'POST');
     result.welcomeMessageConfigured=false;
    }
-   if(numeric(creative.id)&&welcome&&result.welcomeMessageConfigured!==false)result.welcomeMessageConfigured=true;
+   if(numeric(creative.id)&&welcome&&result.welcomeMessageConfigured!==false){
+    // Meta accepts and silently drops the field on some creative types, so the
+    // Conversas section is only confirmed when the creative comes back with it.
+    try{
+     const saved=await graph(c,'/'+creative.id,{fields:'object_story_spec'});
+     const story=saved?.object_story_spec||{};
+     result.welcomeMessageConfigured=Boolean((story.link_data||story.video_data||{}).page_welcome_message);
+    }catch{result.welcomeMessageConfigured='unconfirmed';}
+   }
    if(!numeric(creative.id))throw Object.assign(fail(503,'A Meta não retornou o ID do criativo.'),{uncertain:true});result.creativeId=creative.id;await progress();
    const ad=await graph(c,'/'+c.account.id+'/ads',{name:p.name+' · Anúncio',adset_id:adset.id,creative:{creative_id:creative.id},status:'PAUSED'},'POST');
    if(!numeric(ad.id))throw Object.assign(fail(503,'A Meta não retornou o ID do anúncio.'),{uncertain:true});result.adId=ad.id;result.delivery='PAUSED';await progress();

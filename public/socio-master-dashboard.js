@@ -11,8 +11,9 @@
   if(!value||!Number.isFinite(new Date(value).getTime()))return '—';
   return new Date(value).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'});
  };
+ const tileIcon=(name)=>globalThis.SocioIcons?.has(name)?globalThis.SocioIcons.svg(name):esc(name);
  const tile=(label,value,detail,icon,tone='purple')=>'<div class="master-kpi master-tone-'+tone+'">'+
-  '<span class="master-kpi-icon" aria-hidden="true">'+icon+'</span><div class="master-kpi-copy">'+
+  '<span class="master-kpi-icon" aria-hidden="true">'+tileIcon(icon)+'</span><div class="master-kpi-copy">'+
   '<small>'+esc(label)+'</small><strong>'+esc(value)+'</strong><span>'+esc(detail)+'</span></div></div>';
  const panel=(title,description,body,more='')=>'<section class="master-panel"><div class="master-panel-head"><div>'+
   '<h2>'+esc(title)+'</h2>'+(description?'<p>'+esc(description)+'</p>':'')+'</div>'+more+'</div>'+body+'</section>';
@@ -70,11 +71,11 @@
   return '<div class="master-page"><header class="master-hero"><div><span class="master-eyebrow">PAINEL MASTER · CONSECOM</span>'+
    '<h1>Visão geral do SaaS</h1><p>Acompanhe cadastros, planos e operação das empresas em um único lugar.</p></div>'+
    actions()+'</header>'+
-   '<div class="master-kpis">'+tile('Empresas cadastradas',int(total),'Total de ambientes','▦')+
-   tile('Contas ativas',int(active),'Status cadastral, não pagamento','✓','green')+
-   tile('Em teste',int(trial),'Período de avaliação','◷','amber')+
-   tile('Usuários cadastrados',int(team),'Somatório das equipes','♙','blue')+
-   tile('Contas pausadas',int(paused),'Ambientes com status pausado','Ⅱ','neutral')+'</div>'+
+   '<div class="master-kpis">'+tile('Empresas cadastradas',int(total),'Total de ambientes','admin')+
+   tile('Contas ativas',int(active),'Status cadastral, não pagamento','check','green')+
+   tile('Em teste',int(trial),'Período de avaliação','clock','amber')+
+   tile('Usuários cadastrados',int(team),'Somatório das equipes','team','blue')+
+   tile('Contas pausadas',int(paused),'Ambientes com status pausado','pause','neutral')+'</div>'+
    '<div class="master-main-grid">'+
    panel('Crescimento dos cadastros','Novas empresas nos últimos 12 meses',monthlyChart(tenants))+
    panel('Distribuição dos planos','Planos cadastrados, não assinaturas pagas',planChart(tenants),

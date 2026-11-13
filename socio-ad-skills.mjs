@@ -346,7 +346,8 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
    message:status==='completed'?
     'A Meta confirmou: campanha, conjunto e anúncio criados e pausados. Nada está veiculando e nenhum valor será gasto até você ativar.'+
      (executed.result?.welcomeMessageConfigured===true?' As mensagens de Conversas já estão configuradas no anúncio.':'')+
-     (executed.result?.welcomeMessageConfigured===false?' A Meta recusou a mensagem de boas-vindas nesta conta; as duas mensagens de Conversas continuam no plano para colar no Gerenciador de Anúncios.':'')+
+     (executed.result?.welcomeMessageConfigured===false?' A Meta não aplicou a mensagem de boas-vindas neste anúncio; as duas mensagens de Conversas continuam no plano para colar no Gerenciador de Anúncios.':'')+
+     (executed.result?.welcomeMessageConfigured==='unconfirmed'?' Não consegui confirmar se a Meta aplicou as mensagens de Conversas; confira o anúncio no Gerenciador — as duas mensagens seguem no plano.':'')+
      (pixelOutcome?.result?.pixelId?' O Pixel novo também foi criado, mas ainda precisa ser instalado no site.':'')+
      ' Quando quiser começar, peça a ativação.' :
     creationFailure(executed)};

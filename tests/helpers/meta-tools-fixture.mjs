@@ -10,6 +10,7 @@ import {recordMetaVideoUpload} from '../../ads-media.mjs';
 export async function metaToolsScenario(pool){
  const {actors,env,request:oauthRequest}=await officialPersistenceScenario(pool),a=actors[0];
  let writes=[],uncertain=false,fallbackPages=false,existingPixels=true;
+ const creatives=new Map();
  const response=data=>({ok:true,json:async()=>data});
  const request=async(url,options={})=>{
   const u=new URL(url),path=u.pathname.replace(/^\/v\d+\.0/,'');
@@ -18,8 +19,13 @@ export async function metaToolsScenario(pool){
    writes.push({path,body:Object.fromEntries(options.body)});
    if(uncertain)throw Error('Timeout after uncertain delivery');
    if(path.endsWith('/adimages'))return response({images:{fixture:{hash:'image-hash'}}});
-   return response(path==='/998877'?{success:true}:{id:String(900000+writes.length)});
+   const id=String(900000+writes.length);
+   if(path.endsWith('/adcreatives'))creatives.set(id,JSON.parse(writes.at(-1).body.object_story_spec||'{}'));
+   return response(path==='/998877'?{success:true}:{id});
   }
+  // The creative comes back exactly as Meta stored it, which is how the client
+  // confirms the Conversas section survived the write.
+  if(creatives.has(path.slice(1)))return response({id:path.slice(1),object_story_spec:creatives.get(path.slice(1))});
   if(path.endsWith('/promote_pages'))return response({data:fallbackPages?[]:[{id:'445566',name:'Página autorizada'}]});
   if(path.endsWith('/adcreatives'))return response({data:[{id:'334455',name:'Criativo da conta'}]});
   if(path.endsWith('/advideos'))return response({data:[{id:'112233',title:'Vídeo da conta'}]});
@@ -94,13 +100,14 @@ export async function metaToolsScenario(pool){
  // WhatsApp: use ONLY a WhatsApp number connected inside this tenant.
  await pool.query("INSERT INTO channels(id,tenant_id,label,phone,provider,status) VALUES($1,$2,'Vendas','5515999999999','waakg','connected')",
   [randomUUID(),a.active_tenant_id]);
- const wa={...input,whatsappPhone:'5515999999999'};
+ const wa={...input,whatsappPhone:'5515999999999',welcomeMessage:'Oi! Como podemos ajudar?',quickReply:'Quero saber mais.'};
  delete wa.url;
  const waPlan=await prepareAdsPlan(pool,a,'create_whatsapp',wa,opts);
  assert.equal(writes.length,4,'WhatsApp preflight cannot make Meta writes');
  const waResult=await executeAdsPlan(pool,a,waPlan.id,true,opts);
  assert.equal(waResult.status,'succeeded');
  assert.equal(writes.length,8);
+ assert.equal(waResult.result.welcomeMessageConfigured,true,'the Conversas section is confirmed by reading the creative back');
  assert.equal(writes[4].body.objective,'OUTCOME_ENGAGEMENT');
  assert.equal(writes[5].body.destination_type,'WHATSAPP');
  assert.equal(writes[5].body.optimization_goal,'CONVERSATIONS');

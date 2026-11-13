@@ -111,7 +111,8 @@ function heading(eyebrow,title,description,action=''){
  return '<div class="view-heading"><div><span class="eyebrow">'+e(eyebrow)+'</span><h1>'+e(title)+'</h1><p>'+e(description)+'</p></div>'+action+'</div>';
 }
 function empty(icon,title,description,action=''){
- return '<div class="empty"><div class="empty-icon">'+icon+'</div><h3>'+e(title)+'</h3><p>'+e(description)+'</p>'+action+'</div>';
+ const pictogram=globalThis.SocioIcons?.has(icon)?globalThis.SocioIcons.svg(icon):e(icon);
+ return '<div class="empty"><div class="empty-icon">'+pictogram+'</div><h3>'+e(title)+'</h3><p>'+e(description)+'</p>'+action+'</div>';
 }
 function badge(text,color='gray'){return '<span class="badge '+color+'">'+e(text)+'</span>';}
 function panel(title,description,body){return '<div class="card"><div class="panel-head"><div><h2>'+e(title)+'</h2>'+ (description?'<p>'+e(description)+'</p>':'')+'</div></div>'+body+'</div>';}
@@ -264,7 +265,7 @@ async function changeView(next,conversationId=null){
   if(next==='masterOverview'||next==='masterPlans')
    await globalThis.SocioMasterDashboard.render({root:view,api,me:state.me,navigate:changeView,
     mode:next==='masterPlans'?'plans':'overview'});
- }catch(error){view.innerHTML=empty('!', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
+ }catch(error){view.innerHTML=empty('alert', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
 }
 
 function chartNumber(value){const n=Number(value);return Number.isFinite(n)&&n>0?Math.round(n):0;}
@@ -519,7 +520,7 @@ async function channels(){
  '<button class="btn soft" type="button" id="waQrClose">Fechar QR Code</button></div>'+
  '</section><section class="card card-pad wa-list"><div class="wa-list-head"><div><h2>Seus números</h2>'+
  '<p>Gerencie os WhatsApps já vinculados ao espaço.</p></div><span class="badge gray">'+e(linked.length)+' total</span></div>'+
- '<div class="wa-number-list">'+(connectedList||empty('▣','Nenhum WhatsApp conectado','Gere o primeiro QR Code ao lado para começar.'))+'</div>'+
+ '<div class="wa-number-list">'+(connectedList||empty('whatsapp','Nenhum WhatsApp conectado','Gere o primeiro QR Code ao lado para começar.'))+'</div>'+
  (legacy.length?'<details class="wa-legacy"><summary>'+e(legacy.length)+' cadastro(s) antigos sem sessão QR</summary>'+
  '<p class="form-note">Estes cadastros não significam uma conexão ativa. Para autorizar um WhatsApp, use o QR Code.</p>'+
  '<div>'+legacy.map(c=>'<div class="wa-legacy-item">'+e(c.label)+' · '+e(c.phone)+'</div>').join('')+'</div></details>':'')+
@@ -793,7 +794,7 @@ async function products(selected=null){
    '<span>'+e(catalogPrice(p.price_cents))+'</span></div>'+
    '<span class="catalog-status '+(available?'yes':'no')+'">'+(available?'Ativo':'Indisponível')+'</span></button>';
  }).join('')+'</div>':
- empty('▦','Seu catálogo está vazio','Cadastre um produto para incluir preço, variações e fotos.');
+ empty('products','Seu catálogo está vazio','Cadastre um produto para incluir preço, variações e fotos.');
  const gallery=current?'<div class="catalog-gallery">'+current.media.map(m=>
   '<div class="catalog-gallery-item"><img src="'+e(m.url)+'" alt="'+e(m.alt||current.name)+'" loading="lazy">'+
   '<button type="button" data-delete-photo="'+e(m.id)+'" class="btn sm ghost">Remover</button></div>').join('')+'</div>':'';
@@ -1607,31 +1608,12 @@ async function admin(){
 }
 async function action(fn){try{await fn();}catch(err){toast(errMsg(err),true);}}
 
-const sidebarIcons={
- overview:'<rect x="3" y="3" width="8" height="8" rx="1.7"/><rect x="13" y="3" width="8" height="8" rx="1.7"/><rect x="3" y="13" width="8" height="8" rx="1.7"/><rect x="13" y="13" width="8" height="8" rx="1.7"/>',
- connections:'<rect x="3" y="4" width="8" height="6" rx="2"/><rect x="13" y="14" width="8" height="6" rx="2"/><path d="M11 7h3a4 4 0 0 1 4 4v2M13 17H9a4 4 0 0 1-4-4v-2"/>',
- inbox:'<path d="M4 4h16v12h-5l-3 3-3-3H4z"/><path d="M7 9h10M7 12h7"/>',
- instagram:'<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.6 6.7h.01"/>',
- reports:'<path d="M4 20V11m5 9V5m5 15v-7m5 7V8"/><path d="M2 21h20"/>',
- marketing:'<path d="M3 21V8l9-5 9 5v13M7 14v4M12 11v7M17 13v5"/>',
- channels:'<path d="M6 18c-2-1.7-3-4.1-3-6.6C3 6.6 6.7 3 12 3s9 3.6 9 8.4c0 4.5-3.7 8.6-9 8.6-1.6 0-3.2-.3-4.4-1L3 21z"/><path d="M9 9c.4 2.6 2.4 4.7 5 5l1.4-1.5"/>',
- products:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 10h18M10 3v18"/>',
- training:'<path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8m8.6 8.6 2.8 2.8M2 12h4m12 0h4M4.9 19.1l2.8-2.8m8.6-8.6 2.8-2.8"/><circle cx="12" cy="12" r="3.4"/>',
- agent:'<path d="m12 2 2.7 7.3L22 12l-7.3 2.7L12 22l-2.7-7.3L2 12l7.3-2.7z"/>',
- orb:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2"/>',
- settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1m10 10 2.1 2.1M4.9 19.1 7 17m10-10 2.1-2.1"/>',
- team:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-1c0-3.6 2.5-5 6-5s6 1.4 6 5v1z"/><path d="M17 5a3 3 0 0 1 0 6m1 4c2 .5 3 1.8 3 4v1"/>',
- admin:'<path d="M3 21V5l9-3 9 3v16M3 21h18M9 21v-5h6v5M7 9h2m6 0h2M7 13h2m6 0h2"/>',
- masterOverview:'<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/>',
- masterPlans:'<path d="M4 20V11m5 9V5m5 15v-7m5 7V8"/><path d="M2 21h20"/>',
- logout:'<path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M14 7l5 5-5 5M9 12h10"/>'
-};
 function initSidebarIcons(){
  $$('.nav-item[data-view],#logoutBtn').forEach(b=>{
   const kind=b.dataset.view||'logout';
   const holder=b.querySelector('.nav-symbol');
   if(!holder)return;
-  holder.innerHTML='<svg viewBox="0 0 24 24" role="img" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+(sidebarIcons[kind]||sidebarIcons.overview)+'</svg>';
+  holder.innerHTML=globalThis.SocioIcons?.svg(kind)||'';
   b.title=kind==='logout'?'Sair':titles[kind]||'Sócio';
   b.setAttribute('aria-label',b.title);
  });
@@ -1650,7 +1632,7 @@ function renderCommandItems(){
   (label.toLocaleLowerCase('pt-BR').includes(keyword)||key.includes(keyword)));
  const list=$('#commandList');
  list.innerHTML=names.length?names.map(([key,label])=>
-  '<button class="command-item" type="button" data-search-view="'+e(key)+'"><span class="command-item-icon">✳</span>'+
+  '<button class="command-item" type="button" data-search-view="'+e(key)+'"><span class="command-item-icon">'+(globalThis.SocioIcons?globalThis.SocioIcons.svg(globalThis.SocioIcons.has(key)?key:'sparkle'):'')+'</span>'+
   '<span>'+e(label)+'</span><span class="command-item-arrow">↗</span></button>').join(''):
   '<div class="command-empty">Nenhuma seção encontrada.</div>';
  list.querySelectorAll('[data-search-view]').forEach(b=>b.addEventListener('click',()=>{

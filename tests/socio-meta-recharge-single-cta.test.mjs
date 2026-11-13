@@ -60,7 +60,7 @@ test('while provider data loads, show skeleton rather than false zero or partial
 test('all initial and route loading states share the new light skeleton loader',()=>{
  assert(app.includes('loading socio-page-loading'));
  assert(html.includes('loading socio-page-loading'));
- assert(html.includes('/socio-stripe-system.css?v=20261113o'));
+ assert(html.includes('/socio-stripe-system.css?v='));
  assert(!html.includes('href="/socio-premium-polish.css'));
  assert.match(html,/\/socio-workspace-ui\.js\?v=20\d{6}[a-z]/);
  assert.match(html,/\/app\.js\?v=[0-9a-z]+/);

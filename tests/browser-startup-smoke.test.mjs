@@ -41,6 +41,8 @@ test('client startup initializes icons and reveals login on an unauthenticated v
    return {ok:url==='/api/bootstrap',status:url==='/api/bootstrap'?200:401,
     json:async()=>url==='/api/bootstrap'?{initialized:true}:{error:'Unauthenticated'}};
   }};
+ const icons=readFileSync(new URL('../public/socio-icons.js',import.meta.url),'utf8');
+ vm.runInNewContext(icons,context);
  assert.doesNotThrow(()=>vm.runInNewContext(code,context,{timeout:2500}));
  await new Promise(resolve=>setTimeout(resolve,20));
  assert.ok(calls>=2,'boot must call bootstrap and session API');
