@@ -21,7 +21,12 @@ test('Meta copy offers three distinct drafts grounded only in provided briefing'
  assert(!JSON.stringify(c).match(/garantia de venda|clientes garantidos|resultados comprovados/i));
  const actual=skillAdCopy(brief,'Loja Exemplo');
  assert.deepEqual(actual,primaryCreativeDraft(brief,'Loja Exemplo'));
- assert.deepEqual(Object.keys(actual).sort(),['headline','message','name']);
+ assert.deepEqual(Object.keys(actual).sort(),['description','headline','message','name']);
+ assert(c.variants.every(x=>x.description&&x.description.length<=60),'every draft carries a short description');
+ assert(c.variants.every(x=>x.welcomeMessage&&x.quickReply),'WhatsApp drafts carry the two Conversas messages');
+ assert(c.variants.every(x=>x.welcomeMessage.length<=160&&x.quickReply.length<=40));
+ const siteDraft=buildApprovedAdCreativeDrafts({category:'consertos automotivos',cityName:'Sorocaba',destination:'website'},'Oficina');
+ assert(siteDraft.variants.every(x=>!x.welcomeMessage&&!x.quickReply),'a site ad has no WhatsApp welcome message');
 });
 
 test('Campaign names use the real product and never a spoken fragment',()=>{

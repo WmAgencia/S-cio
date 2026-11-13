@@ -34,10 +34,14 @@ test('app routing exposes the orb view and tears it down on exit',()=>{
   app.includes("document.body?.classList?.remove('socio-orb-view');"));
 });
 
-test('the overview header carries no orb; the launcher and the menu keep the IA entry',()=>{
- assert(!overview.includes('data-px-orb'));
+test('the overview carries no orb and no title block; the launcher and the menu keep the IA entry',()=>{
+ const start=overview.indexOf('async function overview(');
+ const screen=overview.slice(start,overview.indexOf('async function marketing(',start));
+ assert(start>0&&screen.length>0);
+ assert(!screen.includes('data-px-orb'));
+ assert(!screen.includes('data-px-reload'),'the refresh button left with the title block; indicators refresh themselves');
+ assert(!screen.includes('px-page-heading'));
  assert(!overview.includes('px-orb-entry'));
- assert(overview.includes('<button class="btn soft" data-px-reload type="button">↻ Atualizar indicadores</button></div></div>'));
  assert(!css.includes('.px-orb-entry'));
 });
 

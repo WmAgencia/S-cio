@@ -5,12 +5,13 @@
 // the tenant, and only messages from that group are read.
 import {randomUUID,createHash} from 'node:crypto';
 import {gatewayCreateGroup,loadGroupMessages,getSessionStatus} from './waakg-adapter.mjs';
-import {sendGatewayMessage,mediaPayload} from './socio-outbound.mjs';
+import {sendGatewayMessage,sendGatewayInteractive,mediaPayload} from './socio-outbound.mjs';
 import {resolveSelectedOfficialAccount} from './meta-official.mjs';
 import {prepareAdsPlan,executeAdsPlan,uploadAdVideo} from './meta-ads-tools.mjs';
 import {downloadVerifiedWhatsAppVideo} from './socio-whatsapp-meta-video.mjs';
 import {groqResponse,groqReady} from './groq-client.mjs';
-import {runTrafficManager,approveTrafficDecisions} from './socio-traffic-manager.mjs';
+import {runTrafficManager,approveTrafficDecisions,resolveTrafficDecision,
+ listPendingDecisions,markDecisionNotified,decisionNotification} from './socio-traffic-manager.mjs';
 
 export const OWNER_GROUP_SUBJECT='Meu Sócio';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
@@ -90,6 +91,51 @@ export async function notifyOwner(pool,tenantId,text,{env=process.env,send=sendG
  return replyIn(group,text,{env,send});
 }
 
+const decisionButtons=id=>[
+ {text:'Sim',id:'socio:approve:'+id},
+ {text:'Não',id:'socio:dismiss:'+id},
+ {text:'Outro valor',id:'socio:amount:'+id}
+];
+
+// One question per recommendation, with clickable answers. Native buttons are
+// not guaranteed on every client, so the same question always carries the
+// numbered reply instructions as text.
+export async function notifyDecisionQuestion(pool,tenantId,decision,{env=process.env,
+ sendInteractive=sendGatewayInteractive,send=sendGatewayMessage}={}){
+ const group=await activeGroupFor(pool,tenantId);
+ if(!group)return {sent:false,reason:'no_group'};
+ const {title,body,footer}=decisionNotification(decision);
+ try{
+  const delivered=await sendInteractive({sessionId:group.session_id,jid:group.group_jid,
+   title,body,footer,buttons:decisionButtons(decision.id),env});
+  if(delivered?.sent)return {sent:true,interactive:true};
+ }catch{}
+ const fallback=[body,'',
+  'Responda SIM para aplicar, NÃO para recusar, ou envie o novo valor diário em reais (ex.: 10).'
+ ].join('\n');
+ return replyIn(group,fallback,{env,send});
+}
+
+async function latestNotifiedDecision(pool,tenantId){
+ const found=await pool.query(
+  "SELECT id,action FROM socio_traffic_decisions WHERE tenant_id=$1 AND status='awaiting_approval' "+
+  'AND notified_at IS NOT NULL ORDER BY notified_at DESC LIMIT 1',[tenantId]);
+ return found.rows[0]||null;
+}
+
+const interactiveReplyRe=/\[(?:Interactive|Button) Response\]\s*(socio:(?:approve|dismiss|amount):[0-9a-f-]{36})/i;
+const amountReplyRe=/^(?:r\$\s*)?(\d{1,6})(?:[.,](\d{1,2}))?$/i;
+// A button tap arrives as text, and a bare number is the owner answering with
+// another daily amount. Both are matched here and nowhere else.
+export function parseTrafficReply(value){
+ const text=clean(value,4000);
+ const button=text.match(interactiveReplyRe);
+ if(button)return {kind:'button',id:button[1]};
+ const amount=text.match(amountReplyRe);
+ if(amount)return {kind:'amount',cents:Math.round(Number(amount[1]+'.'+(amount[2]||'0'))*100)};
+ return null;
+}
+
 // ---------------------------------------------------------------------------
 // Dashboard surface
 // ---------------------------------------------------------------------------
@@ -100,6 +146,8 @@ const channelSelect=
  "g.ad_daily_budget_cents AS \"dailyBudgetCents\",g.ad_age_min AS \"ageMin\",g.ad_age_max AS \"ageMax\","+
  "g.ad_genders AS genders,g.whatsapp_destination AS \"destination\","+
  "g.last_video_id AS \"lastVideoId\",g.last_seen_at AS \"lastSeenAt\",g.created_at AS \"createdAt\","+
+ "g.ticket_cents AS \"ticketCents\",g.margin_percent::float AS \"marginPercent\","+
+ "g.autopilot_enabled AS \"autopilotEnabled\","+
  "ch.phone AS \"channelPhone\" "+
  "FROM socio_owner_groups g JOIN channels ch ON ch.id=g.channel_id AND ch.tenant_id=g.tenant_id ";
 
@@ -161,6 +209,20 @@ export async function updateOwnerChannelSettings(pool,actor,data){
   if(value&&!/^55[1-9]\d{9,10}$/.test(value))throw fail(422,'WhatsApp de destino inválido. Use DDI+DDD+número.');
   push('whatsapp_destination',value||null);
  }
+ if('ticketCents' in data){
+  const value=Number(data.ticketCents);
+  if(!Number.isInteger(value)||value<100||value>100000000)throw fail(422,'Valor médio da venda inválido.');
+  push('ticket_cents',value);
+ }
+ if('marginPercent' in data){
+  const value=Number(data.marginPercent);
+  if(!Number.isFinite(value)||value<=0||value>100)throw fail(422,'Margem de lucro inválida.');
+  push('margin_percent',Math.round(value*100)/100);
+ }
+ if('autopilotEnabled' in data){
+  if(typeof data.autopilotEnabled!=='boolean')throw fail(422,SETTINGS_ERROR);
+  push('autopilot_enabled',data.autopilotEnabled);
+ }
  if(!updates.length)throw fail(422,'Nada para atualizar.');
  const saved=await pool.query(
   'UPDATE socio_owner_groups SET '+updates.join(',')+',updated_at=now() WHERE tenant_id=$1 RETURNING id',values);
@@ -187,14 +249,27 @@ export async function retryOwnerGroup(pool,tenantId,{env=process.env,create=gate
  }
 }
 
-// 24/7 autopilot: same decisions the owner would trigger with TRAFEGO, sent
-// to the group when something was applied or needs approval.
+// 24/7 autopilot: the same review the owner triggers with TRAFEGO, but every
+// change is delivered as its own question with buttons. A decision is never
+// announced twice, and nothing is applied before the owner answers.
 export async function runOwnerTrafficAutopilot(pool,tenantId,{env=process.env,
- traffic=runTrafficManager,notify=notifyOwner}={}){
+ traffic=runTrafficManager,notify=notifyOwner,deliver=notifyDecisionQuestion,
+ listPending=listPendingDecisions,markNotified=markDecisionNotified}={}){
  const actor=await actorFor(pool,tenantId);
  const result=await traffic(pool,actor,{env});
- if(result.executed?.length||result.pending?.length)await notify(pool,tenantId,result.report,{env});
- return result;
+ let notified=0;
+ try{
+  const pending=await listPending(pool,tenantId,{limit:5});
+  for(const decision of pending.items){
+   if(decision.notifiedAt)continue;
+   const outcome=await deliver(pool,tenantId,decision,{env});
+   if(outcome?.sent&&await markNotified(pool,tenantId,decision.id))notified++;
+  }
+ }catch(error){
+  console.warn('[socio-traffic-notify]',String(error?.status||error?.code||'NOTIFY_ERROR').slice(0,40));
+ }
+ if(!notified&&result.executed?.length)await notify(pool,tenantId,result.report,{env});
+ return {...result,notified};
 }
 
 // ---------------------------------------------------------------------------
@@ -349,7 +424,8 @@ const failCommand=(pool,command,reply,code)=>pool.query(
 export async function processOwnerCommands(pool,{env=process.env,send=sendGatewayMessage,
  prepare=prepareAdsPlan,execute=executeAdsPlan,upload=uploadAdVideo,
  download=downloadVerifiedWhatsAppVideo,resolve=resolveSelectedOfficialAccount,
- copy=draftAdCopy,traffic=runTrafficManager,approveTraffic=approveTrafficDecisions}={}){
+ copy=draftAdCopy,traffic=runTrafficManager,approveTraffic=approveTrafficDecisions,
+ resolveDecision=resolveTrafficDecision}={}){
  await pool.query(
   "UPDATE socio_owner_commands SET state='received',updated_at=now() "+
   "WHERE state='working' AND updated_at<now()-interval '5 minutes' AND attempts<3");
@@ -369,7 +445,7 @@ export async function processOwnerCommands(pool,{env=process.env,send=sendGatewa
   return {processed:false};
  }
  try{
-  const handled=await handleCommand(pool,group,command,{env,send,prepare,execute,upload,download,resolve,copy,traffic,approveTraffic});
+  const handled=await handleCommand(pool,group,command,{env,send,prepare,execute,upload,download,resolve,copy,traffic,approveTraffic,resolveDecision});
   return {processed:true,kind:command.kind,handled};
  }catch(error){
   const code=String(error?.status||error?.code||'ERROR').slice(0,40);
@@ -396,6 +472,8 @@ async function handleCommand(pool,group,command,deps){
   return 'video';
  }
  const text=clean(command.body,4000);
+ const trafficReplyAnswer=parseTrafficReply(text);
+ if(trafficReplyAnswer)return trafficReply(pool,group,command,trafficReplyAnswer,deps);
  if(CONFIRM.test(text))return confirmPending(pool,group,command,deps);
  if(CANCEL.test(text))return cancelPending(pool,group,command,deps);
  if(ACTIVATE.test(text))return activateCampaign(pool,group,command,deps);
@@ -416,8 +494,10 @@ function helpText(group){
   '• Envie um vídeo — eu monto a campanha e peço sua confirmação.',
   '• CONFIRMA — cria a campanha que está esperando.',
   '• ATIVAR — liga a última campanha criada.',
-  '• TRÁFEGO — analisa as campanhas e otimiza dentro do limite automático.',
-  '• APROVAR — aplica as mudanças que estão esperando a sua autorização.',
+  '• TRÁFEGO — analisa as campanhas agora e me diz o que recomenda.',
+  '• APROVAR — aplica as recomendações que estão esperando você.',
+  '• SIM / NÃO — responde a última recomendação (os botões fazem o mesmo).',
+  '• Um número (ex.: 10) — troca o valor diário da recomendação para esse valor em reais.',
   '• CANCELAR — descarta a campanha antes de criar.',
   '• STATUS — mostra o que está pendente.',
   '• AJUDA — esta lista.',
@@ -441,7 +521,7 @@ async function statusReply(pool,group,command,deps){
  const approvals=await pool.query(
   "SELECT count(*)::int AS n FROM socio_traffic_decisions WHERE tenant_id=$1 AND status='awaiting_approval'",
   [group.tenant_id]);
- if(approvals.rows[0]?.n)lines.push('• '+approvals.rows[0].n+' mudança(s) de tráfego esperando APROVAR');
+ if(approvals.rows[0]?.n)lines.push('• '+approvals.rows[0].n+' recomendação(ões) esperando SIM, NÃO ou outro valor');
  if(!pending.rowCount)lines.push('• Nada pendente agora.');
  await done(pool,command);
  await replyIn(group,lines.join('\n'),deps);
@@ -472,11 +552,82 @@ async function cancelPending(pool,group,command,deps){
   "SELECT id FROM socio_owner_commands WHERE tenant_id=$1 AND group_id=$2 "+
   "AND state IN ('preparing','awaiting_confirmation') ORDER BY created_at DESC LIMIT 1",
   [group.tenant_id,group.id]);
- if(pending.rowCount)
+ if(pending.rowCount){
   await pool.query("UPDATE socio_owner_commands SET state='cancelled',updated_at=now() WHERE id=$1",[pending.rows[0].id]);
- await done(pool,command);
- await replyIn(group,pending.rowCount?'Campanha cancelada. Nada foi criado na Meta.':'Não havia campanha pendente.',deps);
+  await done(pool,command);
+  await replyIn(group,'Campanha cancelada. Nada foi criado na Meta.',deps);
+  return 'cancel';
+ }
+ const decision=await latestNotifiedDecision(pool,group.tenant_id);
+ if(!decision){
+  await done(pool,command);
+  await replyIn(group,'Não havia campanha nem recomendação pendente.',deps);
+  return 'cancel';
+ }
+ const resolved=await resolveLatestDecision(pool,group,decision,'dismiss','whatsapp',deps);
+ await done(pool,command,{context:{trafficDecision:decision.id,resolution:'dismiss'}});
+ await replyIn(group,resolved.ok
+  ?'Tudo bem. Não mexi na campanha. Vou continuar acompanhando.'
+  :'Não consegui registrar a recusa: '+(resolved.message||'tente novamente.'),deps);
  return 'cancel';
+}
+
+// Owner answered a recommendation. A tapped button names its own decision; a
+// bare amount applies to the question it was answering (the newest one asked).
+async function trafficReply(pool,group,command,answer,deps){
+ if(answer.kind==='amount'){
+  const decision=await latestNotifiedDecision(pool,group.tenant_id);
+  if(!decision)return null;
+  const resolved=await resolveLatestDecision(pool,group,decision,'custom','whatsapp_amount',deps,
+   {targetBudgetCents:answer.cents});
+  await done(pool,command,{context:{trafficDecision:decision.id,resolution:'custom',cents:answer.cents}});
+  await replyIn(group,resolved.ok?appliedText(resolved):
+   'Não consegui aplicar: '+(resolved.message||'tente novamente.'),deps);
+  return 'traffic_applied';
+ }
+ const match=answer.id.match(/^socio:(approve|dismiss|amount):([0-9a-f-]{36})$/i);
+ if(!match)return null;
+ const [,choice,decisionId]=match;
+ if(choice==='amount'){
+  const found=await pool.query(
+   "UPDATE socio_traffic_decisions SET notified_at=now() WHERE tenant_id=$1 AND id=$2 "+
+   "AND status='awaiting_approval' RETURNING id",[group.tenant_id,decisionId]);
+  if(!found.rowCount){
+   await done(pool,command);
+   await replyIn(group,'Essa recomendação já foi resolvida.',deps);
+   return 'traffic_stale';
+  }
+  await done(pool,command,{context:{trafficDecision:decisionId,resolution:'custom'}});
+  await replyIn(group,'Qual valor diário você quer? Responda só o número em reais (ex.: 10).',deps);
+  return 'traffic_amount';
+ }
+ const resolved=await resolveLatestDecision(pool,group,{id:decisionId},
+  choice==='approve'?'approve':'dismiss','whatsapp',deps);
+ await done(pool,command,{context:{trafficDecision:decisionId,
+  resolution:choice==='approve'?'approve':'dismiss'}});
+ if(choice==='dismiss')
+  await replyIn(group,resolved.ok?'Tudo bem. Não mexi na campanha. Vou continuar acompanhando.'
+   :'Não consegui registrar a recusa: '+(resolved.message||'tente novamente.'),deps);
+ else
+  await replyIn(group,resolved.ok?appliedText(resolved):
+   'Não consegui aplicar: '+(resolved.message||'tente novamente.'),deps);
+ return choice==='approve'?'traffic_applied':'traffic_dismissed';
+}
+
+function appliedText(resolved){
+ const target=resolved.action?.targetBudgetCents;
+ return target?'Feito. Orçamento diário atualizado para '+formatMoney(target)+' na Meta.'
+  :'Feito. Mudança aplicada na Meta.';
+}
+
+async function resolveLatestDecision(pool,group,decision,resolution,via,deps,extra={}){
+ const resolve=deps.resolveDecision||resolveTrafficDecision;
+ try{
+  const actor=await actorFor(pool,group.tenant_id);
+  return await resolve(pool,actor,{id:decision.id,resolution,via,env:deps.env,...extra});
+ }catch(error){
+  return {ok:false,message:clean(error?.message,200)};
+ }
 }
 
 // ---------------------------------------------------------------------------
@@ -651,9 +802,17 @@ async function confirmPending(pool,group,command,deps){
   "AND updated_at>now()-interval '20 minutes' ORDER BY created_at DESC LIMIT 1",
   [group.tenant_id,group.id]);
  if(!pending.rowCount){
-  await done(pool,command);
-  await replyIn(group,'Não tenho nenhuma campanha esperando confirmação agora.',deps);
-  return 'nothing_pending';
+  const decision=await latestNotifiedDecision(pool,group.tenant_id);
+  if(!decision){
+   await done(pool,command);
+   await replyIn(group,'Não tenho nenhuma campanha nem recomendação esperando confirmação agora.',deps);
+   return 'nothing_pending';
+  }
+  const resolved=await resolveLatestDecision(pool,group,decision,'approve','whatsapp',deps);
+  await done(pool,command,{context:{trafficDecision:decision.id,resolution:'approve'}});
+  await replyIn(group,resolved.ok?appliedText(resolved):
+   'Não consegui aplicar: '+(resolved.message||'tente novamente.'),deps);
+  return 'traffic_applied';
  }
  const target=pending.rows[0];
  const planId=target.context?.planId;
@@ -710,4 +869,5 @@ async function activateCampaign(pool,group,command,deps){
  return 'activation_prepared';
 }
 
-export const __test={messageKind,looksLikeCaption,helpText,formatMoney};
+export const __test={messageKind,looksLikeCaption,helpText,formatMoney,parseTrafficReply,
+ decisionButtons,notifyDecisionQuestion};

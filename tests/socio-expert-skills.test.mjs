@@ -30,6 +30,29 @@ test('expert SKILL.md catalog is allowlisted, useful, uniquely named and version
  assert.throws(()=>getExpertSkillGuide('../../.env'),{status:404});
  assert.throws(()=>getExpertSkillGuide('skills/meta-campaigns/SKILL.md'),{status:404});
 });
+test('the expert packs carry the professional curriculum, not just tool instructions',()=>{
+ const guide=id=>getExpertSkillGuide(id).instructions.toLowerCase();
+ const campaigns=guide('meta.campaigns');
+ for(const term of ['arquitetura','aprendizado','remarketing','criativos','nomenclatura','sobreposição'])
+  assert(campaigns.includes(term),'meta.campaigns: '+term);
+ const optimization=guide('meta.optimization');
+ for(const term of ['retorno marginal','fadiga de criativo','post-mortem','honestidade estatística','janelas de 7 dias'])
+  assert(optimization.includes(term),'meta.optimization: '+term);
+ const brief=guide('meta.campaigns.brief');
+ for(const term of ['conformidade no brasil','antes e depois','constatação'])
+  assert(brief.includes(term),'meta.campaigns.brief: '+term);
+ const tracking=guide('tracking.conversions');
+ for(const term of ['janela de atribuição','atribuição modelada','lgpd'])
+  assert(tracking.includes(term),'tracking.conversions: '+term);
+ const sales=guide('whatsapp.sales');
+ for(const term of ['tempo de primeira resposta','follow-up','opt-out'])
+  assert(sales.includes(term),'whatsapp.sales: '+term);
+ const reports=guide('marketing.reports');
+ for(const term of ['cadência','nunca afirmar','o que não sabemos'])
+  assert(reports.includes(term),'marketing.reports: '+term);
+ for(const skill of listExpertSkills())
+  assert(getExpertSkillGuide(skill.id).instructions.length<16000,skill.id+' exceeds the guide cap');
+});
 test('expert routing never silently turns Google Ads requests into Meta Ads',()=>{
  for(const prompt of ['Crie uma campanha no Google Ads','Quero anúncios do Google','Vamos usar Adwords','Preciso anunciar na rede de pesquisa',
    'Meta Ads e Google Ads no meu negócio']){

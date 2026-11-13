@@ -126,6 +126,20 @@
   budget.value=group.dailyBudgetCents?(group.dailyBudgetCents/100).toFixed(2).replace('.',','):'';
   field('Orçamento diário (R$)',budget,'Valor que a Meta pode gastar por dia quando a campanha estiver ativa.');
 
+  const ticket=el('input');ticket.type='text';ticket.inputMode='decimal';ticket.maxLength=12;
+  ticket.value=group.ticketCents?(group.ticketCents/100).toFixed(2).replace('.',','):'';
+  field('Valor médio da venda (R$)',ticket,'Quanto o cliente costuma gastar por compra ou atendimento fechado.');
+
+  const margin=el('input');margin.type='number';margin.min='1';margin.max='100';margin.step='1';
+  margin.value=group.marginPercent?String(group.marginPercent):'';
+  field('Margem de lucro (%)',margin,'Parte do valor da venda que sobra como lucro, já sem custo do produto.');
+
+  const autopilot=el('input');autopilot.type='checkbox';autopilot.checked=group.autopilotEnabled!==false;
+  const autopilotWrap=el('label');autopilotWrap.append(autopilot,
+   document.createTextNode(' Acompanhar as campanhas a cada 6 horas e me perguntar antes de cada mudança'));
+  field('Autopilot',autopilotWrap,
+   'Sem esta opção eu não analiso nem envio recomendações sozinho. Nada muda sem a sua resposta.');
+
   const ages=el('div');ages.className='owner-ages';
   const ageMin=el('input');ageMin.type='number';ageMin.min='18';ageMin.max='65';ageMin.value=String(group.ageMin||18);
   const ageMax=el('input');ageMax.type='number';ageMax.min='18';ageMax.max='65';ageMax.value=String(group.ageMax||65);
@@ -159,6 +173,11 @@
    if(city.key)payload.cityName=city.name;
    const cents=centsFrom(budget.value);
    if(Number.isFinite(cents))payload.dailyBudgetCents=cents;
+   const ticketCents=centsFrom(ticket.value);
+   if(Number.isFinite(ticketCents)&&ticketCents>0)payload.ticketCents=ticketCents;
+   const marginValue=Number(String(margin.value).replace(',','.'));
+   if(Number.isFinite(marginValue)&&marginValue>0)payload.marginPercent=marginValue;
+   payload.autopilotEnabled=autopilot.checked;
    payload.ageMin=Number(ageMin.value);payload.ageMax=Number(ageMax.value);
    payload.genders=genderBoxes.filter(box=>box.checked).map(box=>Number(box.value));
    if(destination.value.trim())payload.destination=destination.value.trim();

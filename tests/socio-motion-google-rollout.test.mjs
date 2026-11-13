@@ -42,13 +42,16 @@ test('Google UI flag and unified visual assets load in correct order',()=>{
  assert(html.indexOf('/socio-product-features.js')<html.indexOf('/socio-thalita-ui.js'));
  assert(html.indexOf('/socio-stripe-system.css')>html.indexOf('/socio-master.css'));
  assert(!html.includes('<script src="/socio-glass-motion.js'));
- assert.match(html,/\/socio-workspace-ui\.js\?v=20261112h/);
- assert.match(html,/\/app\.js\?v=20261113a/);
+ assert.match(html,/\/socio-workspace-ui\.js\?v=20\d{6}[a-z]/);
+ assert.match(html,/\/app\.js\?v=[0-9a-z]+/);
 });
 
-test('overview orders information from headline to budget, KPIs, Meta and reports',()=>{
- const p=workspace.slice(workspace.indexOf("root.innerHTML='<div class=\"px-workspace px-overview\">'+"));
- const order=['CENTRAL DE INTELIGÊNCIA','px-budget-top','px-kpi-grid',
+test('overview orders information from budget to KPIs and recommendations, Meta and reports',()=>{
+ const screenStart=workspace.indexOf('async function overview(');
+ const start=workspace.indexOf("root.innerHTML='<div class=\"px-workspace px-overview\">'+",screenStart);
+ const p=workspace.slice(start,workspace.indexOf('async function marketing(',screenStart));
+ assert(start>screenStart);
+ const order=['px-budget-top','ov-kpi-stack','trafficRail',
   'px-ad-performance','Atividade de conversas'];
  let at=-1;
  for(const marker of order){
@@ -56,10 +59,14 @@ test('overview orders information from headline to budget, KPIs, Meta and report
   assert(next>at,'misordered or missing '+marker);
   at=next;
  }
- assert(p.includes('trafficSection+'),'overview renders the autonomous traffic panel');
+ assert(!p.includes('CENTRAL DE INTELIGÊNCIA'),'the title block is gone; the numbers come first');
+ assert.equal(p.indexOf('px-page-heading'),-1,'the overview has no page heading');
+ assert(p.includes('data-px-traffic-review'),'overview renders the autonomous traffic rail');
  assert(!p.includes('Funil de atendimento'),'removed commerce funnel is gone from the overview');
- const preview=workspace.slice(workspace.indexOf("if(kind==='overview')"),workspace.indexOf("if(kind==='overview')")+1800);
- assert(preview.indexOf('CENTRAL DE INTELIGÊNCIA')<preview.indexOf('px-budget-top'));
+ const preview=workspace.slice(workspace.indexOf("if(kind==='overview')"),workspace.indexOf("if(kind==='overview')")+2600);
+ assert.equal(preview.indexOf('CENTRAL DE INTELIGÊNCIA'),-1,'the loading skeleton does not flash a heading that the loaded page does not have');
+ assert(preview.indexOf('px-budget-top')<preview.indexOf('ov-board'));
+ assert(preview.indexOf('ov-kpi-stack')<preview.indexOf('ov-rail'));
  assert.match(p,/Publicidade<\/h2>/);
  assert.match(p,/Custo por clique/);
  assert.match(p,/Cliques/);
@@ -121,7 +128,8 @@ test('disabled feature truly disappears from rendered overview and connections',
   return {};
  };
  await context.globalThis.SocioWorkspaceUI.overview({root,api,me,navigate:()=>{}});
- assert(root.innerHTML.includes('Visão geral'));
+ assert(root.innerHTML.includes('Recomendações'));
+ assert(root.innerHTML.includes('Conversas em aberto'));
  assert(root.innerHTML.includes('Publicidade'));
  assert(root.innerHTML.includes('Meta Ads'));
  assert(!root.innerHTML.includes('Google Ads'));

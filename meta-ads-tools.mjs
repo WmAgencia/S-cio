@@ -238,6 +238,11 @@ export function validateAdsPlan(kind,input){
  if(kind==='create'||kind==='create_whatsapp'){
   const whatsapp=kind==='create_whatsapp';
   const name=text(input.name,120),url=whatsapp?null:safeUrl(input.url),message=text(input.message,2200),headline=text(input.headline,120);
+  // Meta shows a description only under an image ad's link title; a video
+  // creative has no supported description field, so it is accepted for image ads.
+  const description=text(input.description,60);
+  if(String(input.description||'').trim()&&!description)
+   throw fail(422,'A descrição do anúncio precisa ter até 60 caracteres.');
   const phone=whatsapp?String(input.whatsappPhone||'').replace(/\D/g,''):null;
   const imageHash=text(input.imageHash,100),videoId=numeric(input.videoId)?String(input.videoId):null;
   const countryCode=input.countryCode==='BR'?'BR':null;
@@ -258,7 +263,7 @@ export function validateAdsPlan(kind,input){
    throw fail(422,'Campanha de WhatsApp precisa de objetivo de conversas.');
   const budgetMode=input.budgetMode===undefined?'adset':input.budgetMode;
   if(!['adset','campaign'].includes(budgetMode))throw fail(422,'Forma de orçamento inválida.');
-  return {name,url,whatsappPhone:phone,message,headline,pageId:input.pageId,
+  return {name,url,whatsappPhone:phone,message,headline,...(description&&!videoId?{description}:{}),pageId:input.pageId,
    ...(videoId?{videoId}:{imageHash}),
    ...(countryCode?{countryCode}:{cityKey:input.cityKey}),cityName:input.cityName.trim(),
    dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax,genders,objective,optimizationGoal,budgetMode};
@@ -279,12 +284,14 @@ export function validateAdsPlan(kind,input){
  }
  if(kind==='create_ad'){
   const name=text(input.name,120),url=safeUrl(input.url),message=text(input.message,2200),
-   headline=text(input.headline,120);
+   headline=text(input.headline,120),description=text(input.description,60);
   const imageHash=text(input.imageHash,100),videoId=numeric(input.videoId)?String(input.videoId):null;
+  if(String(input.description||'').trim()&&!description)
+   throw fail(422,'A descrição do anúncio precisa ter até 60 caracteres.');
   if(!name||!url||!message||!headline||!numeric(input.adsetId)||!numeric(input.pageId)||
     Number(Boolean(imageHash))+Number(Boolean(videoId))!==1)
    throw fail(422,'Escolha conjunto, Página, um vídeo importado OU uma imagem, link HTTPS, título e texto do anúncio.');
-  return {name,url,message,headline,adsetId:input.adsetId,pageId:input.pageId,
+  return {name,url,message,headline,...(description&&!videoId?{description}:{}),adsetId:input.adsetId,pageId:input.pageId,
    ...(videoId?{videoId}:{imageHash})};
  }
  if(!['status','rename','budget'].includes(kind)||!['campaign','adset','ad'].includes(input.entity)||!numeric(input.id))throw fail(422,'Selecione uma campanha, conjunto ou anúncio válido.');
@@ -423,7 +430,9 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
   summary={description:kind==='create_whatsapp'?
    'Criar campanha para mensagens WhatsApp com objetivo '+payload.objective+' e otimização '+payload.optimizationGoal+', conjunto, criativo e anúncio PAUSADOS. A verba fica em '+budgetWhere+'. A Meta precisa validar se o número está vinculado à Página. O WA-AKG continua sendo o canal de atendimento.':
    'Criar campanha para site com objetivo '+payload.objective+' e otimização '+payload.optimizationGoal+', conjunto, criativo e anúncio PAUSADOS. A verba fica em '+budgetWhere+'.',
-   account:c.account,name:payload.name,message:payload.message,headline:payload.headline,pageId:payload.pageId,imageHash:payload.imageHash,dailyBudgetCents:payload.dailyBudgetCents,
+   account:c.account,name:payload.name,message:payload.message,headline:payload.headline,
+   ...(payload.description?{description:payload.description}:{}),
+   pageId:payload.pageId,imageHash:payload.imageHash,dailyBudgetCents:payload.dailyBudgetCents,
    objective:payload.objective,optimizationGoal:payload.optimizationGoal,budgetMode:payload.budgetMode,
    destination:kind==='create_whatsapp'?'WhatsApp +'+payload.whatsappPhone:payload.url,city:payload.cityName,ageMin:payload.ageMin,ageMax:payload.ageMax};
  }else if(kind==='create_pixel'){
@@ -453,6 +462,7 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
    'Adicionar anúncio com VÍDEO previamente importado ao conjunto existente. Criativo e anúncio serão criados PAUSADOS; sem início de gastos.':
    'Adicionar anúncio com imagem a um conjunto existente da conta selecionada. Criativo e anúncio serão criados PAUSADOS.',
    account:c.account,name:payload.name,message:payload.message,headline:payload.headline,
+   ...(payload.description?{description:payload.description}:{}),
    pageId:payload.pageId,...(payload.videoId?{videoId:payload.videoId}:{imageHash:payload.imageHash}),
    destination:payload.url,adsetId:payload.adsetId};
  }else{
@@ -504,7 +514,7 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
       ...(p.videoThumbnailUrl?{image_url:p.videoThumbnailUrl}:{}),
       call_to_action:cta
      }}:{link_data:{image_hash:p.imageHash,link:destination,
-      message:p.message,name:p.headline,call_to_action:cta}})}
+      message:p.message,name:p.headline,...(p.description?{description:p.description}:{}),call_to_action:cta}})}
    },'POST');
    if(!numeric(creative.id))throw Object.assign(fail(503,'A Meta não retornou o ID do criativo.'),{uncertain:true});result.creativeId=creative.id;await progress();
    const ad=await graph(c,'/'+c.account.id+'/ads',{name:p.name+' · Anúncio',adset_id:adset.id,creative:{creative_id:creative.id},status:'PAUSED'},'POST');
@@ -546,6 +556,7 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
       call_to_action:{type:'LEARN_MORE',value:{link:p.url}}
      }}:{link_data:{
       image_hash:p.imageHash,link:p.url,message:p.message,name:p.headline,
+      ...(p.description?{description:p.description}:{}),
       call_to_action:{type:'LEARN_MORE',value:{link:p.url}}
      }})}},'POST');
    if(!numeric(creative.id))throw Object.assign(fail(503,'Não foi possível confirmar o criativo.'),{uncertain:true});

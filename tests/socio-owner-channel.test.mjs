@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
  OWNER_GROUP_SUBJECT,ownerDestination,missingOwnerSettings,provisionOwnerGroups,
- pollOwnerGroups,processOwnerCommands,readOwnerChannel,updateOwnerChannelSettings,draftAdCopy,__test
+ pollOwnerGroups,processOwnerCommands,readOwnerChannel,updateOwnerChannelSettings,draftAdCopy,
+ runOwnerTrafficAutopilot,__test
 } from '../socio-owner-channel.mjs';
 
 const tenantId='11111111-1111-4111-8111-111111111111';
@@ -205,7 +206,7 @@ test('CONFIRMA with nothing pending is answered, not executed',async()=>{
   prepare:async()=>{executed++;},execute:async()=>{executed++;}});
  assert.equal(result.handled,'nothing_pending');
  assert.equal(executed,0);
- assert.match(replies[0].text,/nenhuma campanha esperando/);
+ assert.match(replies[0].text,/nenhuma campanha nem recomenda/);
 });
 
 test('A confirmed proposal executes the plan and reports the created ids',async()=>{
@@ -284,6 +285,10 @@ test('Owner-channel settings are owner-only and strictly validated',async()=>{
  await assert.rejects(updateOwnerChannelSettings(pool(),owner,{ageMin:40,ageMax:30}),/idade/);
  await assert.rejects(updateOwnerChannelSettings(pool(),owner,{cityKey:'1234567'}),/cidade/);
  await assert.rejects(updateOwnerChannelSettings(pool(),owner,{genders:[1,3]}),/inválida/);
+ await assert.rejects(updateOwnerChannelSettings(pool(),owner,{ticketCents:50}),/venda/);
+ await assert.rejects(updateOwnerChannelSettings(pool(),owner,{marginPercent:150}),/Margem/);
+ await assert.rejects(updateOwnerChannelSettings(pool(),owner,{marginPercent:0}),/Margem/);
+ await assert.rejects(updateOwnerChannelSettings(pool(),owner,{autopilotEnabled:'sim'}),/Configuração/);
  await assert.rejects(updateOwnerChannelSettings(pool(),owner,{}),/Nada para atualizar/);
  const p=pool();
  await updateOwnerChannelSettings(p,owner,{destination:'55 11 98888-8888',genders:[1,2]});
@@ -309,4 +314,105 @@ test('Ad copy falls back to catalog data without inventing prices',async()=>{
  const empty=await draftAdCopy(stubPool(()=>({rowCount:0,rows:[]})),{tenantId,tenantName:'Studio Bela',env:{}});
  assert.equal(empty.headline,'Studio Bela');
  assert.match(empty.message,/WhatsApp/);
+});
+
+test('A recommendation answer is read from a button tap or a bare amount',()=>{
+ const {parseTrafficReply}=__test;
+ const id='77777777-7777-4777-8777-777777777777';
+ assert.deepEqual(parseTrafficReply('🔘 [Interactive Response] socio:approve:'+id),
+  {kind:'button',id:'socio:approve:'+id});
+ assert.deepEqual(parseTrafficReply('🔘 [Button Response] socio:dismiss:'+id),
+  {kind:'button',id:'socio:dismiss:'+id});
+ assert.deepEqual(parseTrafficReply('10'),{kind:'amount',cents:1000});
+ assert.deepEqual(parseTrafficReply('R$ 12,50'),{kind:'amount',cents:1250});
+ assert.deepEqual(parseTrafficReply('7.5'),{kind:'amount',cents:750});
+ assert.equal(parseTrafficReply('sim'),null,'SIM is handled by the command path');
+ assert.equal(parseTrafficReply('quero aumentar bastante'),null);
+ assert.equal(parseTrafficReply('socio:approve:not-an-id'),null);
+});
+
+test('A tapped SIM applies that exact recommendation through WhatsApp',async()=>{
+ const decisionId='77777777-7777-4777-8777-777777777777';
+ const answered=[];
+ const {replies,exec}=await recommendationRun({
+  command:'🔘 [Interactive Response] socio:approve:'+decisionId,decisionId});
+ const result=await exec({resolveDecision:async(pool,actor,options)=>{answered.push(options);
+  return {ok:true,applied:true,id:options.id,action:{targetBudgetCents:1000}};}});
+ assert.equal(result.handled,'traffic_applied');
+ assert.equal(answered.length,1);
+ assert.equal(answered[0].id,decisionId);
+ assert.equal(answered[0].resolution,'approve');
+ assert.equal(answered[0].via,'whatsapp');
+ assert.match(replies[0].text,/R\$\s10,00/);
+});
+
+async function recommendationRun({command,decisionId,extra}={}){
+ const replies=[];
+ const pool=stubPool((sql)=>{
+  if(/SET state='received'/.test(sql)||/error_code='STALLED'/.test(sql))return {rowCount:0,rows:[]};
+  if(/SET state='working',attempts/.test(sql))return {rowCount:1,rows:[claimCmd({body:command})]};
+  if(/SELECT g\.\*,ch\.phone AS channel_phone/.test(sql))return {rowCount:1,rows:[configured]};
+  if(/SELECT u\.id AS user_id/.test(sql))return {rowCount:1,rows:[{user_id:'u1',role:'owner',
+   platform_owner:false,active_tenant_id:tenantId,tenant_status:'active',features:{},tenant_name:'Loja'}]};
+  if(/state IN \('preparing','awaiting_confirmation'\)/.test(sql))return {rowCount:0,rows:[]};
+  if(/SELECT id,action FROM socio_traffic_decisions/.test(sql))return {rowCount:1,rows:[{id:decisionId,action:'scale'}]};
+  if(/UPDATE socio_traffic_decisions SET notified_at=now\(\)/.test(sql))return {rowCount:1,rows:[{id:decisionId}]};
+  return {rowCount:1,rows:[]};
+ });
+ const send=async payload=>{replies.push(payload);return {sent:true};};
+ return {replies,pool,exec:opts=>processOwnerCommands(pool,{env,send,...extra,...opts})};
+}
+
+test('A bare number answers the pending question with that daily amount',async()=>{
+ const decisionId='88888888-8888-4888-8888-888888888888';
+ const {replies,exec}=await recommendationRun({command:'10',decisionId});
+ const answered=[];
+ const result=await exec({resolveDecision:async(pool,actor,options)=>{answered.push(options);
+  return {ok:true,applied:true,id:options.id,action:{targetBudgetCents:1000}};}});
+ assert.equal(result.handled,'traffic_applied');
+ assert.equal(answered[0].resolution,'custom');
+ assert.equal(answered[0].via,'whatsapp_amount');
+ assert.equal(answered[0].targetBudgetCents,1000);
+ assert.match(replies[0].text,/R\$\s10,00/);
+});
+
+test('Outro valor asks for the number and then applies it',async()=>{
+ const decisionId='99999999-9999-4999-8999-999999999999';
+ const {replies,pool,exec}=await recommendationRun({command:'🔘 [Interactive Response] socio:amount:'+decisionId,
+  decisionId});
+ const result=await exec({resolveDecision:async()=>{throw new Error('must not apply yet');}});
+ assert.equal(result.handled,'traffic_amount');
+ assert.match(replies[0].text,/Qual valor diário/);
+ const bumped=pool.calls.find(c=>/UPDATE socio_traffic_decisions SET notified_at=now\(\)/.test(c.sql));
+ assert.equal(bumped.args[1],decisionId);
+});
+
+test('NÃO with no campaign pending dismisses the latest recommendation',async()=>{
+ const decisionId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const {replies,exec}=await recommendationRun({command:'Não',decisionId});
+ const answered=[];
+ const result=await exec({resolveDecision:async(pool,actor,options)=>{answered.push(options);
+  return {ok:true,dismissed:true,id:options.id};}});
+ assert.equal(result.handled,'cancel');
+ assert.equal(answered[0].resolution,'dismiss');
+ assert.match(replies[0].text,/Não mexi na campanha/);
+});
+
+test('The autopilot asks once per recommendation and never repeats it',async()=>{
+ const pending=[{id:'b1',notifiedAt:null},{id:'b2',notifiedAt:new Date()}];
+ const delivered=[],marked=[];
+ const pool=stubPool(sql=>{
+  if(/SELECT u\.id AS user_id/.test(sql))return {rowCount:1,rows:[{user_id:'u1',role:'owner',
+   platform_owner:false,active_tenant_id:tenantId,tenant_status:'active',features:{},tenant_name:'Loja'}]};
+  return {rowCount:1,rows:[]};
+ });
+ const result=await runOwnerTrafficAutopilot(pool,tenantId,{
+  traffic:async()=>({executed:[],pending:[{}],report:'relatório'}),
+  listPending:async()=>({items:pending}),
+  deliver:async(poolArg,tenantArg,decision)=>{delivered.push(decision.id);return {sent:true};},
+  markNotified:async(poolArg,tenantArg,id)=>{marked.push(id);return {id};},
+  notify:async()=>{throw new Error('must not send a second summary');}});
+ assert.deepEqual(delivered,['b1'],'only the question never asked is sent');
+ assert.deepEqual(marked,['b1']);
+ assert.equal(result.notified,1);
 });

@@ -1,6 +1,8 @@
 // Pure, read-only traffic diagnostics: only observed Meta statuses and metrics.
 // Never labels a click as a paid order or a WhatsApp conversation.
 // No execution functions or access to ad accounts live here.
+import {buildFunnelLadder} from './socio-funnel-diagnostics.mjs';
+
 const amount=x=>{const n=Number(x);return Number.isFinite(n)&&n>=0?n:null;};
 const integer=x=>{const n=amount(x);return n===null?null:Math.floor(n);};
 const code=x=>typeof x==='string'&&/^\d{4,30}$/.test(x)?x:null;
@@ -11,7 +13,7 @@ const reviewStatuses=new Set(['PENDING_REVIEW','IN_PROCESS']);
 const notice=(priority,code,label,evidence,recommendation)=>({priority,code,label,evidence,recommendation});
 
 export function diagnoseMetaTraffic({insights=[],ads=[],period='last_7d',currency='BRL',
- insightsHasMore=false,adsHasMore=false,adsUnavailable=false}={}){
+ insightsHasMore=false,adsHasMore=false,adsUnavailable=false,economics=null}={}){
  if(!Array.isArray(insights)||!Array.isArray(ads))throw Object.assign(new Error('Dados de diagnóstico inválidos.'),{status:422});
  const byCampaign=new Map();
  for(const row of insights.slice(0,100)){
@@ -66,7 +68,11 @@ export function diagnoseMetaTraffic({insights=[],ads=[],period='last_7d',currenc
    recommendations:c.notices.map(x=>x.recommendation)};
  });
  diagnostics.sort((a,b)=>a.priority-b.priority||(b.spend||0)-(a.spend||0)||a.id.localeCompare(b.id));
+ const funnel=buildFunnelLadder({insights,economics,period,currency});
+ const ladderByCampaign=new Map(funnel.campaigns.map(c=>[c.campaignId,c]));
+ for(const row of diagnostics)row.funnel=ladderByCampaign.get(row.id)||null;
  return {period,currency,diagnostics:diagnostics.slice(0,30),totalCampaigns:diagnostics.length,
+  funnel,
   alerts:diagnostics.reduce((n,c)=>n+c.adIssues.length,0),
   partial:Boolean(insightsHasMore||adsHasMore),
   adsUnavailable:Boolean(adsUnavailable),
@@ -84,7 +90,12 @@ export function formatMetaTrafficDiagnosis(result,{max=5}={}){
    ', '+c.impressions+' impressões e '+c.clicks+' cliques. ':'métricas não retornadas neste período. ')+
    (n?n.label+': '+n.evidence+' Próximo passo: '+n.recommendation:
     'Sem alerta suficiente para recomendar alteração. Confirme leads e vendas antes de otimizar.'));
+  if(c.funnel?.culprit)lines.push('Funil de '+c.name+': a primeira etapa abaixo do parâmetro é '+
+   c.funnel.culprit.label+'. '+(c.funnel.culprit.recommendation||''));
  }
+ if(result.funnel?.economics?.valid)lines.push('Limite econômico da conta: alvo de '+
+  new Intl.NumberFormat('pt-BR',{style:'currency',currency:result.currency}).format(result.funnel.economics.targetCpaCents/100)+
+  ' por venda e corte a partir de '+new Intl.NumberFormat('pt-BR',{style:'currency',currency:result.currency}).format(result.funnel.economics.killCpaCents/100)+'.');
  if(result.partial||result.totalCampaigns>rows.length)
   lines.push('Atenção: o resultado pode ser parcial; consulte as próximas páginas antes de comparar tudo.');
  if(result.adsUnavailable)lines.push('Não foi possível confirmar os status dos anúncios; rejeições não foram avaliadas.');

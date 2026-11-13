@@ -1,0 +1,135 @@
+/* Sócio's recommendation cards. They float above the orb, never on top of it. */
+.socio-autopilot{
+ position:fixed;right:18px;bottom:150px;z-index:60;
+ display:flex;flex-direction:column;gap:10px;
+ width:min(380px,calc(100vw - 36px));
+ pointer-events:none;
+}
+.socio-autopilot>*{pointer-events:auto;}
+/* On the overview the recommendations already live in the right column. */
+.socio-autopilot.is-suppressed{display:none;}
+
+.socio-autopilot-card{
+ position:relative;overflow:hidden;
+ background:var(--surface,#fff);color:var(--ink,#25262c);
+ border:1px solid var(--line,#e8e8e6);border-radius:18px;
+ padding:17px 18px 16px;
+ box-shadow:0 24px 60px -18px rgba(48,42,120,.28),0 2px 8px rgba(30,31,39,.06);
+ transform-origin:100% 100%;
+ animation:socio-autopilot-in .58s cubic-bezier(.16,1,.3,1) both;
+}
+.socio-autopilot-card::before{
+ content:"";position:absolute;inset:0 0 auto;height:3px;
+ background:linear-gradient(90deg,#7b6cf6,#c3a6ff 45%,#6fd6c0);
+ background-size:200% 100%;
+ animation:socio-autopilot-sheen 2.4s ease-out .15s both;
+}
+.socio-autopilot-card::after{
+ content:"";position:absolute;top:0;bottom:0;left:-60%;width:45%;
+ background:linear-gradient(105deg,transparent,rgba(255,255,255,.55),transparent);
+ transform:skewX(-14deg);pointer-events:none;
+ animation:socio-autopilot-glint .95s ease-out .22s both;
+}
+
+.socio-autopilot-card strong{
+ display:flex;align-items:center;gap:7px;
+ font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+ font-weight:700;color:#6b5dd3;margin-bottom:9px;
+ animation:socio-autopilot-rise .5s cubic-bezier(.16,1,.3,1) .06s both;
+}
+.socio-autopilot-card strong::before{
+ content:"";width:7px;height:7px;border-radius:50%;
+ background:#6b5dd3;box-shadow:0 0 0 0 rgba(107,93,211,.55);
+ animation:socio-autopilot-pulse 1.9s ease-out .4s infinite;
+ flex:0 0 auto;
+}
+.socio-autopilot-card p{
+ margin:0 0 9px;line-height:1.46;font-size:14px;
+ animation:socio-autopilot-rise .5s cubic-bezier(.16,1,.3,1) .11s both;
+}
+.socio-autopilot-card small{
+ display:block;opacity:.74;margin-bottom:12px;line-height:1.42;font-size:12px;
+ animation:socio-autopilot-rise .5s cubic-bezier(.16,1,.3,1) .16s both;
+}
+
+.socio-autopilot-actions{
+ display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+ animation:socio-autopilot-rise .5s cubic-bezier(.16,1,.3,1) .21s both;
+}
+.socio-autopilot-card .btn{
+ transition:transform .16s cubic-bezier(.2,.9,.3,1.2),box-shadow .16s ease,background-color .16s ease,opacity .16s ease;
+}
+.socio-autopilot-card .btn:hover:not(:disabled){transform:translateY(-1px);}
+.socio-autopilot-card .btn:active:not(:disabled){transform:translateY(0) scale(.965);}
+.socio-autopilot-card .btn:disabled{opacity:.55;}
+
+.socio-autopilot-amount{display:flex;gap:8px;margin-top:10px;}
+.socio-autopilot-amount[hidden]{display:none;}
+.socio-autopilot-amount:not([hidden]){animation:socio-autopilot-rise .34s cubic-bezier(.16,1,.3,1) both;}
+.socio-autopilot-amount input{
+ flex:1;min-width:0;padding:9px 11px;border-radius:11px;
+ border:1px solid var(--line,#e8e8e6);background:var(--bg,#f7f7f4);
+ color:inherit;font:inherit;
+ transition:border-color .16s ease,box-shadow .16s ease;
+}
+.socio-autopilot-amount input:focus{
+ outline:none;border-color:#8b7cf7;box-shadow:0 0 0 3px rgba(123,108,246,.16);
+}
+
+.socio-autopilot-card .socio-autopilot-note{font-size:12.5px;opacity:.82;margin:10px 0 0;}
+.socio-autopilot-card .socio-autopilot-note.is-error{color:#af3a50;opacity:1;}
+
+.socio-autopilot-card.is-done{
+ animation:socio-autopilot-done .52s cubic-bezier(.2,.9,.3,1.25) both;
+ border-color:#a8e0cd;
+}
+.socio-autopilot-card.is-leaving{
+ animation:socio-autopilot-out .32s cubic-bezier(.4,0,.7,.2) forwards;
+}
+
+@keyframes socio-autopilot-in{
+ 0%{transform:translate3d(0,8px,0) scale(.955) rotate(-.9deg);}
+ 100%{transform:translate3d(0,0,0) scale(1) rotate(0);}
+}
+@keyframes socio-autopilot-rise{
+ from{transform:translateY(7px);}
+ to{transform:none;}
+}
+@keyframes socio-autopilot-done{
+ 0%{transform:scale(1);}
+ 38%{transform:scale(1.02);}
+ 100%{transform:scale(1);}
+}
+@keyframes socio-autopilot-out{
+ to{opacity:0;transform:translate3d(0,12px,0) scale(.96);}
+}
+@keyframes socio-autopilot-sheen{
+ from{background-position:0 0;}
+ to{background-position:100% 0;}
+}
+@keyframes socio-autopilot-glint{
+ 0%{left:-60%;opacity:0;}
+ 25%{opacity:1;}
+ 100%{left:120%;opacity:0;}
+}
+@keyframes socio-autopilot-pulse{
+ 0%{box-shadow:0 0 0 0 rgba(107,93,211,.5);}
+ 70%{box-shadow:0 0 0 9px rgba(107,93,211,0);}
+ 100%{box-shadow:0 0 0 0 rgba(107,93,211,0);}
+}
+
+@media(max-width:900px){
+ .socio-autopilot{bottom:120px;right:12px;width:calc(100vw - 24px);}
+}
+@media(prefers-reduced-motion:reduce){
+ .socio-autopilot-card,
+ .socio-autopilot-card::before,
+ .socio-autopilot-card::after,
+ .socio-autopilot-card strong,
+ .socio-autopilot-card strong::before,
+ .socio-autopilot-card p,
+ .socio-autopilot-card small,
+ .socio-autopilot-actions,
+ .socio-autopilot-amount{animation:none!important;}
+ .socio-autopilot-card .btn{transition:none!important;}
+}

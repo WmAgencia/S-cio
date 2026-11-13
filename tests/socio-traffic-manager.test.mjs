@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
  TRAFFIC_LIMITS,decideTrafficActions,budgetChangeDecision,formatTrafficReport,
- runTrafficManager,approveTrafficDecisions,listTrafficDecisions
+ runTrafficManager,approveTrafficDecisions,listTrafficDecisions,
+ trafficQuestion,resolveTrafficDecision,listPendingDecisions,markDecisionNotified,
+ recordTrafficReview,reviewIsDue,decisionNotification
 } from '../socio-traffic-manager.mjs';
 import {broadenedTargeting} from '../meta-ads-tools.mjs';
 
@@ -183,7 +185,7 @@ test('runTrafficManager records the decision, applies it and reports the result'
    return {rowCount:0,rows:[]};
   return {rowCount:1,rows:[]};
  });
- const result=await runTrafficManager(pool,actor,{env,
+ const result=await runTrafficManager(pool,actor,{env,alwaysAsk:false,
   read:trafficRead(),
   resolve:async()=>({id:'act_1234567890'}),
   prepare:async(p,a,kind,input)=>{prepared.push({kind,input});return {id:planId};},
@@ -241,7 +243,7 @@ test('An execution failure is recorded and reported, never hidden',async()=>{
   if(/SELECT id FROM socio_traffic_decisions/.test(sql))return {rowCount:0,rows:[]};
   return {rowCount:1,rows:[]};
  });
- const result=await runTrafficManager(pool,actor,{env,
+ const result=await runTrafficManager(pool,actor,{env,alwaysAsk:false,
   read:trafficRead(),
   resolve:async()=>({id:'1234567890'}),
   prepare:async()=>({id:planId}),
@@ -280,4 +282,129 @@ test('listTrafficDecisions bounds the requested limit',async()=>{
  assert.equal(pool.calls[0].args[1],50);
  await listTrafficDecisions(pool,tenantId,{limit:0});
  assert.equal(pool.calls[1].args[1],20);
+});
+
+const decisionRow=(overrides={})=>({id:'55555555-5555-4555-8555-555555555555',action:'scale',
+ entity:'adset',entityId:'2001',entityName:'Conjunto',campaignId:'1001',reason:'winner_scale',
+ explanation:'Subir o orçamento.',evidence:{},withinAutonomy:true,status:'awaiting_approval',
+ currentBudgetCents:600,targetBudgetCents:720,question:'Posso?',createdAt:new Date(),
+ accountId:'act_1234567890',...overrides});
+
+const decisionPool=(row)=>({calls:[],query:async function(sql,args=[]){
+ this.calls.push({sql,args});
+ if(/^SELECT id,action,entity/.test(sql.trim())&&/id=\$2/.test(sql))
+  return row?{rowCount:1,rows:[row]}:{rowCount:0,rows:[]};
+ if(/status='executing'/.test(sql)||/status='dismissed'/.test(sql))return {rowCount:1,rows:[{id:row?.id}]};
+ return {rowCount:1,rows:[]};
+}});
+
+test('Every change asks the owner first, even inside the automatic envelope',async()=>{
+ const pool=stubPool(sql=>{
+  if(/SELECT id FROM socio_traffic_decisions WHERE tenant_id=\$1 AND action=\$2/.test(sql))
+   return {rowCount:0,rows:[]};
+  return {rowCount:1,rows:[]};
+ });
+ let prepared=0;
+ const result=await runTrafficManager(pool,actor,{env,
+  read:trafficRead(),
+  resolve:async()=>({id:'act_1234567890'}),
+  prepare:async()=>{prepared++;return {id:planId};},
+  execute:async()=>({status:'succeeded'})});
+ assert.equal(prepared,0,'nothing is executed before the owner answers');
+ assert.equal(result.executed.length,0);
+ assert.equal(result.pending.length,1);
+ const insert=pool.calls.find(c=>/INSERT INTO socio_traffic_decisions/.test(c.sql));
+ assert.equal(insert.args[12],'awaiting_approval');
+ assert.match(insert.args[15],/Posso pausá-lo\?/);
+ assert.match(result.report,/precisam da sua autorização/);
+});
+
+test('The question names the ad, the campaign and both amounts',()=>{
+ const q=trafficQuestion({action:'scale',entityName:'Conjunto 2001',
+  campaignName:'Bolos caseiros',currentBudgetCents:600,targetBudgetCents:1000});
+ assert.match(q,/Conjunto 2001 da campanha "Bolos caseiros"/);
+ assert.match(q,/aumentar o valor diário de R\$\s6,00 para R\$\s10,00/);
+ const approval=trafficQuestion({action:'approval_request',entityName:'Conjunto',
+  currentBudgetCents:1000,targetBudgetCents:1200,requestedBudgetCents:3000});
+ assert.match(approval,/R\$\s30,00/);
+ const notif=decisionNotification({question:q,explanation:'Dentro do limite automático.'});
+ assert.ok(notif.body.startsWith(q));
+ assert.match(notif.body,/Dentro do limite automático/);
+ assert.equal(notif.footer,'Sócio · Meta Ads');
+});
+
+test('Approving one decision applies exactly the amount the owner chose',async()=>{
+ const applied=[];
+ const row=decisionRow();
+ const pool=decisionPool(row);
+ const result=await resolveTrafficDecision(pool,actor,{id:row.id,resolution:'approve',
+  targetBudgetCents:1000,
+  prepare:async(p,a,kind,input)=>{applied.push({kind,input});return {id:planId};},
+  execute:async()=>({status:'succeeded',result:{id:'2001'}})});
+ assert.deepEqual(applied,[{kind:'budget',input:{entity:'adset',dailyBudgetCents:1000,id:'2001'}}]);
+ assert.equal(result.applied,true);
+ const claim=pool.calls.find(c=>/status='executing'/.test(c.sql));
+ assert.equal(claim.args[2],1000,'the custom amount is persisted with the decision');
+ assert.equal(claim.args[3],'system');
+});
+
+test('Dismissing a decision closes it and never executes',async()=>{
+ const row=decisionRow();
+ const pool=decisionPool(row);
+ let prepared=0;
+ const result=await resolveTrafficDecision(pool,actor,{id:row.id,resolution:'dismiss',
+  prepare:async()=>{prepared++;return {id:planId};}});
+ assert.equal(result.dismissed,true);
+ assert.equal(prepared,0);
+ const update=pool.calls.find(c=>/status='dismissed'/.test(c.sql));
+ assert.equal(update.args[2],'system');
+});
+
+test('An already answered decision cannot be applied twice',async()=>{
+ const pool=decisionPool(decisionRow({status:'done'}));
+ await assert.rejects(resolveTrafficDecision(pool,actor,{id:'55555555-5555-4555-8555-555555555555',
+  resolution:'approve'}),/já foi respondida/);
+ const lost=decisionPool(null);
+ await assert.rejects(resolveTrafficDecision(lost,actor,{id:'55555555-5555-4555-8555-555555555555',
+  resolution:'dismiss'}),/não encontrada/);
+});
+
+test('Another value is rejected on a non-budget decision and out of range amounts',async()=>{
+ const pause=decisionRow({action:'pause',entity:'ad',entityId:'3002',currentBudgetCents:null,
+  targetBudgetCents:null});
+ await assert.rejects(resolveTrafficDecision(decisionPool(pause),actor,{id:pause.id,
+  resolution:'approve',targetBudgetCents:5000}),/Só mudanças de orçamento/);
+ const scale=decisionRow();
+ await assert.rejects(resolveTrafficDecision(decisionPool(scale),actor,{id:scale.id,
+  resolution:'approve',targetBudgetCents:50}),/entre R\$\s1,00/);
+});
+
+test('Only undelivered pending decisions are returned and notification is recorded once',async()=>{
+ const pool=stubPool(sql=>{
+  if(/status='awaiting_approval'/.test(sql)&&/^SELECT id,action,entity/.test(sql.trim()))
+   return {rowCount:1,rows:[decisionRow()]};
+  if(/notified_at IS NULL/.test(sql))return {rowCount:1,rows:[{id:'x'}]};
+  return {rowCount:0,rows:[]};
+ });
+ const pending=await listPendingDecisions(pool,tenantId,{limit:5000});
+ assert.equal(pending.items.length,1);
+ assert.equal(pool.calls[0].args[1],50);
+ const marked=await markDecisionNotified(pool,tenantId,'55555555-5555-4555-8555-555555555555');
+ assert.equal(marked.notified,true);
+});
+
+test('A review is due only after six hours',async()=>{
+ const now=Date.parse('2026-11-13T12:00:00Z');
+ const at=new Date('2026-11-13T07:00:00Z');
+ const pool=stubPool(()=>({rowCount:1,rows:[{at}]}));
+ assert.equal(await reviewIsDue(pool,tenantId,'act_1234567890',{now}),false);
+ assert.equal(await reviewIsDue(pool,tenantId,'act_1234567890',{now:now+3600*1000}),true);
+ const empty=stubPool(()=>({rowCount:1,rows:[{at:null}]}));
+ assert.equal(await reviewIsDue(empty,tenantId,'act_1234567890',{now}),true);
+ await recordTrafficReview(pool,tenantId,'act_1234567890',{decisions:2,pending:1,
+  summary:{campaigns:1}});
+ const insert=pool.calls.at(-1);
+ assert.match(insert.sql,/INSERT INTO socio_traffic_reviews/);
+ assert.equal(insert.args[4],2);
+ assert.equal(insert.args[5],1);
 });

@@ -2,6 +2,7 @@
 // No automatic activation/spend. WA-AKG remains the WhatsApp provider.
 // No ChatGPT connector tokens or arbitrary Graph endpoints.
 import {buildApprovedAdCreativeDrafts,primaryCreativeDraft,plausibleProduct} from './socio-creative-studio.mjs';
+import {composeAdCopy} from './socio-ad-copywriter.mjs';
 import {randomUUID} from 'node:crypto';
 import {requirePermission} from './team-permissions.mjs';
 import {assertApiFeature} from './tenant-features.mjs';
@@ -391,8 +392,11 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
    note:brief.destination==='whatsapp'?
     'Para conversas WhatsApp, a origem pode ser apenas indicativa conforme os dados do WA-AKG; não existe Pixel instalado dentro do WhatsApp.':null};
  }
- // Check promotional claims before preparing even a paused Meta action.
- const creativeDrafts=buildApprovedAdCreativeDrafts(brief,a.tenant_name);
+ // The copy is planned before the paused Meta action: the model writes it, the
+ // studio checks it, and an unsafe or unavailable answer falls back to the
+ // templated floor instead of blocking the campaign.
+ const creativeDrafts=await (opts.composeCopy||composeAdCopy)({brief,tenantName:a.tenant_name,
+  env:opts.env||process.env,fetchImpl:opts.fetchImpl});
  if(creativeDrafts.reviewRequired){
   brief.category=null;
   await pool.query("UPDATE socio_skill_runs SET brief=$2::jsonb,updated_at=now() WHERE id=$1 AND tenant_id=$3 AND user_id=$4 AND status='collecting'",
@@ -402,7 +406,10 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
    creativeReviewRequired:true};
  }
  // Meta validates actual page/image/city ownership during prepareAdsPlan.
- const creative=skillAdCopy(brief,a.tenant_name);
+ // The plan carries the same first draft the owner is shown, description included.
+ const draft=creativeDrafts.variants[0];
+ const creative={name:creativeDrafts.name,headline:draft.headline,
+  description:draft.description,message:draft.message};
  const design=campaignDesign(brief);
  const input={...creative,pageId:brief.pageId,...(brief.videoId?{videoId:brief.videoId}:{imageHash:brief.imageHash}),cityName:brief.cityName,
   ...(brief.countryCode?{countryCode:brief.countryCode}:{cityKey:brief.cityKey}),dailyBudgetCents:brief.dailyBudgetCents,ageMin:18,ageMax:65,
@@ -431,9 +438,14 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
  const explanation=planExplanation(brief,design)||('Montei a campanha de '+brief.category+'. ');
  return {skillId:'ads.campaign.launch',runId:run.id,status:'ready',brief:publicBrief(brief),planId:plan.id,design:design||null,
   creativeVariants:creativeDrafts.variants,selectedCreativeStyle:creativeDrafts.variants[0].style,
+  copyProvider:creativeDrafts.copyProvider||'template',copyNote:creativeDrafts.copyNote||null,
   message:explanation+
    (pixelPlanId?'Também vou criar um Pixel para medir os resultados do site; ele ainda precisa ser instalado. ':'' )+
-   'A Meta revisa o anúncio antes de publicar. '+
+   '\n\nComo o anúncio vai aparecer:\n'+
+   'Título: '+draft.headline+'\nTexto principal: '+draft.message+
+   (draft.description?'\nDescrição: '+draft.description:'')+
+   (draft.welcomeMessage?'\nBoas-vindas no WhatsApp: '+draft.welcomeMessage+'\nMensagem pronta: '+draft.quickReply:'')+
+   '\n\nA Meta revisa o anúncio antes de publicar. '+
    "Responda 'pode criar' em até 15 minutos para eu criar tudo pausado, sem gastar nada.",
   note:brief.destination==='whatsapp'?
    'Conversa WhatsApp não recebe Pixel. Atribuição dependerá de dados válidos do WA-AKG e da Meta.': 

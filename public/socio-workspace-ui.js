@@ -74,15 +74,20 @@
    // Final-geometry placeholders: no white default cards, wrong balances or
    // empty rectangles while ad providers and company KPIs are loading.
    root.innerHTML='<div class="px-workspace px-overview px-overview-loading" aria-busy="true">'+
-    '<div class="px-page-heading"><div><span class="px-eyebrow">CENTRAL DE INTELIGÊNCIA</span>'+
-    '<h1>Visão geral</h1><p>Preparando os indicadores da sua empresa</p></div></div>'+
     '<section class="px-budget-top"><div class="px-budget-top-heading"><strong>Controle de verba</strong></div>'+
     '<div class="px-budget-top-grid">'+Array.from({length:googleAdsVisible()?2:1},()=>'<article class="px-budget-account px-load-card" aria-hidden="true">'+
       '<div class="px-load-brand">'+skeleton+skeleton+'</div>'+
       '<div class="px-load-metrics">'+skeleton+skeleton+skeleton+'</div>'+
       '</article>').join('')+'</div></section>'+
-    '<div class="px-kpi-grid">'+Array.from({length:6},()=>'<article class="px-kpi px-load-card" aria-hidden="true">'+
+    '<div class="ov-board">'+
+     '<div class="ov-kpi-stack">'+Array.from({length:4},()=>'<article class="px-kpi px-load-card" aria-hidden="true">'+
       skeleton+skeleton+skeleton+'</article>').join('')+'</div>'+
+     '<div class="ov-rail"><div class="ov-rail-inner">'+
+      '<div class="ov-rail-head"><div><span class="ov-rail-eyebrow">SÓCIO</span><h2>Recomendações</h2></div></div>'+
+      '<div class="ov-rec-list">'+Array.from({length:2},()=>'<article class="ov-rec px-load-card" aria-hidden="true">'+
+       skeleton+skeleton+skeleton+'</article>').join('')+'</div>'+
+     '</div></div>'+
+    '</div>'+
     '<p class="px-load-status" role="status">Consultando dados confirmados da empresa…</p>'+
     '</div>';
    return;
@@ -356,7 +361,7 @@
    ads&&googleAdsVisible()?googleOverview():Promise.resolve({ok:false}),
    ads?cached(api,'/api/marketing/tools/finance',45000):Promise.resolve({ok:false}),
    ads?cached(api,'/api/marketing/browser/status',30000):Promise.resolve({ok:false}),
-   ads?cached(api,'/api/marketing/traffic?limit=4',30000):Promise.resolve({ok:false}),
+   ads?cached(api,'/api/marketing/traffic?limit=12',30000):Promise.resolve({ok:false}),
   ];
   // First paint: operational counts render as soon as the fast own-company APIs
   // finish. Meta, finance and Google continue separately (sometimes >2 seconds).
@@ -403,18 +408,48 @@
   const featuredIsRanked=Boolean(meta?.best);
   const trafficLabels={pause:'Pausar anúncio',scale:'Aumentar orçamento',broaden_audience:'Ampliar público',duplicate_campaign:'Duplicar campanha',hold:'Sem ação'};
   const trafficStatusLabels={awaiting_approval:'Aguardando aprovação',executing:'Aplicando',done:'Aplicado',failed:'Falhou',skipped:'Ignorado'};
-  const trafficItems=traffic?.ok&&Array.isArray(traffic.data?.items)?traffic.data.items.slice(0,4):[];
   const trafficPending=traffic?.ok&&Array.isArray(traffic.data?.items)?
    traffic.data.items.filter(item=>item.status==='awaiting_approval').length:0;
-  const trafficSection=section('Tráfego automático','Decisões do Sócio sobre as campanhas, com a razão de cada ajuste',
-   (trafficItems.length?'<div class="px-traffic-list">'+trafficItems.map(item=>
-     '<div class="px-traffic-item"><div class="px-traffic-item-head"><strong>'+esc(trafficLabels[item.action]||item.action)+'</strong>'+
-      '<span class="px-traffic-status '+(item.status||'')+'">'+esc(trafficStatusLabels[item.status]||item.status||'')+'</span></div>'+
-     '<small>'+esc(item.entityName||item.entityId||'')+'</small><p>'+esc(item.explanation||'')+'</p></div>').join('')+'</div>':
-     empty(traffic?.ok?'Nenhuma decisão registrada ainda.':'Decisões de tráfego indisponíveis agora.'))+
-   '<div class="px-traffic-actions"><button type="button" class="btn sm soft" data-px-traffic-review>Analisar agora</button>'+
-    (trafficPending?'<button type="button" class="btn sm primary" data-px-traffic-approve>Aprovar '+trafficPending+' pendente(s)</button>':'')+
-   '</div><p class="px-traffic-feedback" data-px-traffic-feedback role="status" aria-live="polite"></p>');
+  // The recommendation rail on the right of the overview: everything Sócio asked
+  // and everything it already did. Pending items breathe slowly; answered ones
+  // are grey and quiet, so the eye goes to what still needs a decision.
+  const recAnswerLabel={done:'Aplicado',failed:'Falhou',skipped:'Ignorado',dismissed:'Recusado',
+   executing:'Aplicando'};
+  const recCard=item=>{
+   const pending=item.status==='awaiting_approval';
+   const state=pending?'is-pending':(item.status==='done'?'is-done':'is-muted');
+   const status=pending?'Aguardando você':(recAnswerLabel[item.status]||trafficStatusLabels[item.status]||item.status||'');
+   return '<article class="ov-rec '+state+'" data-rec-id="'+esc(item.id)+'">'+
+    '<div class="ov-rec-head"><span class="ov-rec-action">'+esc(trafficLabels[item.action]||item.action||'Ajuste')+'</span>'+
+     '<span class="ov-rec-status">'+esc(status)+'</span></div>'+
+    '<p class="ov-rec-question">'+esc(item.question||item.reason||item.explanation||'Ajuste na campanha')+'</p>'+
+    (item.explanation?'<small class="ov-rec-detail">'+esc(item.explanation)+'</small>':'')+
+    (pending?'<div class="ov-rec-actions" role="group" aria-label="Responder recomendação">'+
+      '<button type="button" class="btn sm primary" data-rec-answer="approve">Sim</button>'+
+      '<button type="button" class="btn sm soft" data-rec-answer="dismiss">Não</button>'+
+      '<button type="button" class="btn sm soft" data-rec-other>Outro valor</button></div>'+
+     '<div class="ov-rec-amount" hidden><input type="text" inputmode="decimal" maxlength="12" '+
+      'placeholder="Valor diário em reais" aria-label="Valor diário em reais" value="'+
+      (item.targetBudgetCents?(item.targetBudgetCents/100).toFixed(2).replace('.',','):'')+'">'+
+      '<button type="button" class="btn sm primary" data-rec-apply>Aplicar</button></div>':'')+
+    '<p class="ov-rec-note" role="status" aria-live="polite" hidden></p></article>';
+  };
+  const trafficList=traffic?.ok&&Array.isArray(traffic.data?.items)?traffic.data.items:[];
+  const pendingItems=trafficList.filter(item=>item.status==='awaiting_approval').slice(0,3);
+  const settledItems=trafficList.filter(item=>item.status!=='awaiting_approval').slice(0,6);
+  const trafficRail='<aside class="ov-rail" aria-label="Recomendações de tráfego">'+
+   '<div class="ov-rail-inner">'+
+    '<div class="ov-rail-head"><div><span class="ov-rail-eyebrow">SÓCIO</span><h2>Recomendações</h2></div>'+
+     (trafficPending?'<span class="ov-rail-count">'+trafficPending+'</span>':'')+'</div>'+
+    '<div class="ov-rec-list">'+
+     (traffic?.ok?
+      ((pendingItems.length||settledItems.length)?pendingItems.concat(settledItems).map(recCard).join(''):
+       '<p class="ov-rail-empty">Nada para decidir agora. O Sócio revisa as campanhas a cada 6 horas.</p>'):
+      '<p class="ov-rail-empty">'+esc(traffic?.reason||'Recomendações indisponíveis agora.')+'</p>')+
+    '</div>'+
+    '<div class="ov-rail-foot"><button type="button" class="btn sm soft" data-px-traffic-review>Analisar agora</button>'+
+     '<span class="ov-rail-feedback" data-px-traffic-feedback role="status" aria-live="polite"></span></div>'+
+   '</div></aside>';
   // A prepaid balance is not the Meta account's "balance" (often payable),
   // nor the daily campaign budget. Do not infer prepaid credit from spend.
   const budgetHeaderItem=(provider,label,brand,connected,spent,currency,billing)=>{
@@ -499,9 +534,6 @@
   };
 
   root.innerHTML='<div class="px-workspace px-overview">'+
-   '<div class="px-page-heading"><div><span class="px-eyebrow">CENTRAL DE INTELIGÊNCIA</span><h1>Visão geral</h1><p>Operação, atendimento e publicidade da sua empresa em um único painel.</p></div>'+
-    '<div class="px-heading-actions">'+
-     '<button class="btn soft" data-px-reload type="button">↻ Atualizar indicadores</button></div></div>'+
    '<section class="px-budget-top" aria-label="Verba disponível nas contas publicitárias">'+
     '<div class="px-budget-top-heading"><strong>Controle de verba</strong></div>'+
     '<div class="px-budget-top-grid">'+
@@ -509,11 +541,14 @@
      (googleAdsVisible()?budgetHeaderItem('google_ads','Google Ads','google',googleReady,googleMicros,googleCode):'')+
     '</div>'+
    '</section>'+
-   '<div class="px-kpi-grid">'+
-    kpi('Conversas em aberto',number(d.openConversations),'Atendimento da empresa','▤')+
-    kpi('WhatsApps conectados',number(realWa),'Sessões vinculadas','◉','green')+
-    kpi('Mensagens hoje',number(d.messagesReceivedToday),'Recebidas · horário de Brasília','✉','blue')+
-    kpi('Campanhas ativas',metaReady?number(meta.activeCampaigns):'—','Situação atual da Meta','▦','blue')+
+   '<div class="ov-board">'+
+    '<div class="ov-kpi-stack">'+
+     kpi('Conversas em aberto',number(d.openConversations),'Atendimento da empresa','▤')+
+     kpi('WhatsApps conectados',number(realWa),'Sessões vinculadas','◉','green')+
+     kpi('Mensagens hoje',number(d.messagesReceivedToday),'Recebidas · horário de Brasília','✉','blue')+
+     kpi('Campanhas ativas',metaReady?number(meta.activeCampaigns):'—','Situação atual da Meta','▦','blue')+
+    '</div>'+
+    trafficRail+
    '</div>'+
    '<p class="px-live-indicator"><span class="px-live-dot"></span>'+(progressive?'Indicadores da empresa disponíveis · consultando anúncios em segundo plano':'Atualização automática a cada 60 segundos · indicadores retornados pelos provedores')+'</p>'+
    '<section class="px-ad-performance" aria-label="Desempenho da Meta Ads">'+
@@ -549,7 +584,6 @@
      empty('Nenhuma campanha encontrada na conta Meta selecionada.'),
      '<button class="btn sm soft" data-px-marketing type="button">Ver Meta Ads</button>')+
    '</div>'+
-   trafficSection+
    section('Seus WhatsApps','Números conectados disponíveis para o atendimento',
     connectedWa.length?'<div class="px-wa-overview-list">'+connectedWa.slice(0,8).map(w=>
      '<div><span class="px-live-dot on"></span><div><strong>'+esc(w.label||'WhatsApp')+'</strong><small>'+esc(w.phone||'Número vinculado')+'</small></div><span class="px-status on">Conectado</span></div>').join('')+
@@ -573,9 +607,6 @@
    }).catch(()=>{});
   }
 
-  root.querySelector('[data-px-reload]')?.addEventListener('click',()=>{
-   getCache.clear();overview({root,api,me,navigate,activityRange:range});
-  });
   root.querySelectorAll('[data-px-chart-range]').forEach(button=>button.addEventListener('click',()=>
    overview({root,api,me,navigate,activityRange:button.dataset.pxChartRange})));
   const trafficFeedback=root.querySelector('[data-px-traffic-feedback]');
@@ -588,16 +619,46 @@
      result.actions.length+' decisão(ões) encontradas.':'Nenhum ajuste necessário com a amostra atual.');
    }catch(error){trafficFeedback.textContent=String(error?.message||'Não foi possível analisar agora.');}
   });
-  root.querySelector('[data-px-traffic-approve]')?.addEventListener('click',async()=>{
-   if(!trafficFeedback)return;
-   if(!confirm('Aplicar na Meta as mudanças aguardando aprovação?'))return;
-   trafficFeedback.textContent='Aplicando mudanças aprovadas…';
-   try{
-    const result=await api('/api/marketing/traffic/approve','POST',{});
-    trafficFeedback.textContent=result.report||((result.applied||[]).length+' mudança(s) aplicada(s).');
-    getCache.clear();
-    await overview({root,api,me,navigate,activityRange:range});
-   }catch(error){trafficFeedback.textContent=String(error?.message||'Não foi possível aplicar agora.');}
+  // Answer a recommendation from the rail itself, with the same three choices
+  // the pop-up and the WhatsApp question offer.
+  const centsFrom=value=>{
+   const clean=String(value||'').replace(/[^\d.,]/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.');
+   const amount=Number(clean);
+   return Number.isFinite(amount)?Math.round(amount*100):NaN;
+  };
+  root.querySelectorAll('.ov-rec[data-rec-id]').forEach(card=>{
+   const note=card.querySelector('.ov-rec-note');
+   const say=(text,error=false)=>{
+    if(!note)return;
+    note.hidden=!text;note.textContent=text;note.classList.toggle('is-error',!!error);
+   };
+   const buttons=[...card.querySelectorAll('button')];
+   const answer=async payload=>{
+    buttons.forEach(button=>{button.disabled=true;});
+    try{
+     const result=await api('/api/marketing/traffic/decision','POST',{id:card.dataset.recId,...payload});
+     card.classList.remove('is-pending','is-muted');card.classList.add('is-done');
+     say(result?.dismissed?'Tudo bem. Não mexi na campanha.':'Feito. Mudança aplicada.');
+     getCache.clear();
+     setTimeout(()=>{overview({root,api,me,navigate,activityRange:range});},1400);
+    }catch(error){
+     buttons.forEach(button=>{button.disabled=false;});
+     say('Não consegui aplicar: '+String(error?.message||'tente novamente.'),true);
+    }
+   };
+   card.querySelectorAll('[data-rec-answer]').forEach(button=>button.addEventListener('click',()=>
+    answer({resolution:button.dataset.recAnswer})));
+   card.querySelector('[data-rec-other]')?.addEventListener('click',event=>{
+    const amount=card.querySelector('.ov-rec-amount');
+    if(amount)amount.hidden=false;
+    amount?.querySelector('input')?.focus();
+    event.currentTarget.hidden=true;
+   });
+   card.querySelector('[data-rec-apply]')?.addEventListener('click',()=>{
+    const cents=centsFrom(card.querySelector('.ov-rec-amount input')?.value);
+    if(!Number.isFinite(cents)||cents<100){say('Informe um valor diário válido em reais (ex.: 10).',true);return;}
+    answer({resolution:'approve',targetBudgetCents:cents});
+   });
   });
 
   // With a previously authorized billing browser, read the Meta wallet on
