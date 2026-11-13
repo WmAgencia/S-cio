@@ -9,7 +9,12 @@
  let audioContext=null,analyser=null,freq=null,raf=0,amp=0,level=0,activeSource=null;
  let speaking=false,ttsAbort=null,queryAbort=null,runId=null,runEpoch=0;
  let history=[],media=null,mediaUpload=null,busy=false,disposed=false,greeting='Olá! Como posso te ajudar hoje?';
- const get=sel=>instance?.querySelector(sel);
+ // Which answer the open campaign is waiting for; only "media" auto-continues,
+ // otherwise a dropped file would be read as the city or the budget.
+ let pendingSlot=null,dragHole=null;
+ // The orb page is the bound root itself, so a plain querySelector could never
+ // find it; every phase class lives on that very element.
+ const get=sel=>!instance?null:instance.matches(sel)?instance:instance.querySelector(sel);
  const stage=()=>get('#orbStage');
  // Kept for screen readers only; the page never shows routine status pills.
  const statusText=message=>{const el=get('#orbStatus');if(el)el.textContent=String(message)};
@@ -138,7 +143,11 @@
   const box=get('#orbTranscript');if(!box)return;
   const line=document.createElement('p');
   line.className='orb-line '+role;
-  line.textContent=String(text||'').slice(0,1200);
+  const content=String(text||'').slice(0,1600);
+  // The campaign plan arrives as bullet lines; collapsing them into one
+  // paragraph would hide the structure the owner is being asked to approve.
+  if(content.includes('\n'))line.classList.add('multiline');
+  line.textContent=content;
   box.replaceChildren(line);
   requestAnimationFrame(()=>line.classList.add('in'));
   box.scrollTop=box.scrollHeight;
@@ -303,7 +312,7 @@
   media=file;
   const list=get('#orbSteps');
   if(!list)return;
-  let finish;mediaUpload=new Promise(resolve=>finish=resolve);
+  let finish,ok=false;mediaUpload=new Promise(resolve=>finish=resolve);
   const li=planAdd(list,file.kind==='image'?'Enviando foto para a biblioteca':'Enviando vídeo para a biblioteca',
    {status:'running',detail:'Validando arquivo…'});
   mediaCard(li,file,'running','Validando arquivo…');
@@ -331,12 +340,27 @@
     file.meta={mediaId:reserved.id,videoId:uploaded.videoId};
     mediaCard(li,file,'done',(uploaded.ready===false?'Vídeo enviado · a Meta ainda está processando':'Vídeo pronto na biblioteca da Meta')+' · '+sizeLabel(file.size));
    }
+   ok=true;
   }catch(error){
    mediaCard(li,file,'error',String(error.message||'Não foi possível enviar a mídia.').slice(0,160));
    clearMedia();
   }finally{
    mediaUpload=null;finish();
+   if(ok)mediaAttached(file);
   }
+ }
+ // A dropped or attached file is not a one-off upload: it joins the
+ // conversation and, when the owner is building an ad, becomes its creative.
+ function mediaAttached(file){
+  const foto=file.kind==='image',kind=foto?'Foto':'Vídeo';
+  const note=kind+(foto?' anexada':' anexado')+' à conversa: '+String(file.name||'').slice(0,60)+'.';
+  history.push({role:'user',text:note},
+   {role:'assistant',text:kind+' '+(foto?'anexada':'anexado')+' à conversa. Quando você pedir um anúncio, '+(foto?'ela':'ele')+' entra como criativo.'});
+  if(history.length>10)history=history.slice(-10);
+  showCaption(note+(runId&&pendingSlot==='media'?'':' Quando você pedir o anúncio, '+(foto?'ela':'ele')+' entra como criativo.'),'user');
+  // The campaign is waiting for exactly this file: continue the same run so the
+  // owner does not have to repeat that the attachment is the creative.
+  if(runId&&pendingSlot==='media'&&!busy)void runTurn('Anexei o criativo do anúncio.',{hidden:true});
  }
  const sizeLabel=bytes=>bytes>=1048576?(bytes/1048576).toFixed(1).replace('.',',')+' MB':
   Math.max(1,Math.round(bytes/1024))+' KB';
@@ -359,7 +383,10 @@
   if(busy){statusText('Aguarde o pedido atual terminar');return;}
   const file={raw,kind:image?'image':'video',name:raw.name||'mídia',
    preview:URL.createObjectURL(raw),size:raw.size};
+  dragHole=null;
   swallow(file,event);
+  // The swallow ends in the orb's own dots drawing a quick check.
+  window.setTimeout(()=>{if(!disposed)orbRenderer?.playCheck?.();},760);
   void uploadMedia(file);
  }
  // ------------------------------------------------------------------- turns
@@ -391,14 +418,14 @@
   li.querySelector('.orb-step-body')?.append(actions);
   li.scrollIntoView({block:'nearest',behavior:'smooth'});
  }
- async function runTurn(text,{fromVoice=false}={}){
+ async function runTurn(text,{fromVoice=false,hidden=false}={}){
   const message=String(text||'').trim();
   if(!message||busy)return;
   const epoch=++runEpoch;
   const isActive=()=>!disposed&&epoch===runEpoch;
   busy=true;
   const input=get('#orbInput');if(input)input.value='';
-  if(!fromVoice)showCaption(message,'user');
+  if(!fromVoice&&!hidden)showCaption(message,'user');
   // Confirming a ready campaign is the one turn that writes to Meta, so it gets
   // the live execution log instead of the generic reading step.
   const confirming=Boolean(runId)&&/^(pode criar|pode fazer|confirmo|autorizo|aprovo(?: a campanha)?|sim[,. ]+pode criar|sim[,. ]+confirmo)[.! ]*$/i.test(message);
@@ -421,6 +448,7 @@
    // The campaign conversation continues while the skill still needs answers
    // or waits for "pode criar"; dropping the id is what lost the context.
    runId=result.runId&&(result.status==='ready'||result.status==='collecting')?result.runId:null;
+   pendingSlot=result.status==='collecting'&&String(result.skillId||'')==='ads.campaign.launch'?String(result.slot||'')||null:null;
    const answer=String(result.message||'Consulta concluída.');
    const planned=renderPlan(result.plan);
    if(!planned)planUpdate(read,'done',queryDetail(result));
@@ -546,7 +574,7 @@
  // The dotted-mesh renderer lives in /socio-orb-mesh.js so the orb page and
  // the dashboard entry draw the exact same object.
  function createOrbRenderer(canvas){
-  return globalThis.SocioOrbMesh?.create(canvas,{amp:ampNow,light:true})??null;
+  return globalThis.SocioOrbMesh?.create(canvas,{amp:ampNow,light:true,hole:()=>dragHole})??null;
  }
  let orbRenderer=null;
  const ampNow=()=>amp;
@@ -569,21 +597,36 @@
   const s=stage();
   if(!s)return;
   let dragDepth=0;
+  // The part of the orb under the pointer opens into a donut. The radius fades
+  // out near the rim so the hole only exists where the orb actually is.
+  const trackHole=event=>{
+   const canvas=get('#orbCanvas');
+   if(!canvas){dragHole=null;return;}
+   const rect=canvas.getBoundingClientRect();
+   if(!rect.width||!rect.height){dragHole=null;return;}
+   const x=event.clientX-rect.left,y=event.clientY-rect.top;
+   const side=Math.min(rect.width,rect.height),reach=side*.52;
+   const d=Math.hypot(x-rect.width/2,y-rect.height/2);
+   const fade=1-Math.max(0,d-reach*.6)/(reach*.4);
+   dragHole={x,y,r:d>=reach?0:side*.165*Math.min(1,fade)};
+  };
   s.addEventListener('dragenter',event=>{
    if(!event.dataTransfer)return;
    event.preventDefault();dragDepth++;
    get('.orb-page')?.classList.add('is-dragging');
+   trackHole(event);
   });
   s.addEventListener('dragover',event=>{
    if(!event.dataTransfer)return;
    event.preventDefault();event.dataTransfer.dropEffect='copy';
+   trackHole(event);
   });
   s.addEventListener('dragleave',()=>{
    dragDepth=Math.max(0,dragDepth-1);
-   if(!dragDepth)get('.orb-page')?.classList.remove('is-dragging');
+   if(!dragDepth){get('.orb-page')?.classList.remove('is-dragging');dragHole=null;}
   });
   s.addEventListener('drop',event=>{
-   event.preventDefault();dragDepth=0;
+   event.preventDefault();dragDepth=0;dragHole=null;
    get('.orb-page')?.classList.remove('is-dragging');
    const raw=event.dataTransfer?.files?.[0];
    acceptFile(raw,event);
@@ -604,7 +647,7 @@
   if(audioContext&&audioContext.state!=='closed')Promise.resolve(audioContext.close()).catch(()=>{});
   audioContext=null;analyser=null;freq=null;
   instance?.remove();instance=null;api=null;csrf=null;navigate=null;
-  history=[];runId=null;busy=false;
+  history=[];runId=null;busy=false;pendingSlot=null;dragHole=null;
  }
  function render({root,api:client,csrfToken,navigate:go,me}={}){
   dispose();disposed=false;

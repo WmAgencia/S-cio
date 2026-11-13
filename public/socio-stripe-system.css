@@ -2043,17 +2043,21 @@ body.socio-orb-view #appShell .app-main{background:transparent!important}
  text-wrap:balance;
 }
 .orb-line.in{opacity:1;transform:none}
+.orb-line.multiline{
+ display:block;-webkit-line-clamp:unset;white-space:pre-line;text-align:left;text-wrap:pretty;
+ max-height:min(46vh,360px);overflow:auto;pointer-events:auto;overscroll-behavior:contain;
+}
 .orb-line.user{color:#667085;font-weight:600;font-size:clamp(13px,1.2vw,15px)}
 .orb-line.user::before{content:"\201C";opacity:.55}
 .orb-line.user::after{content:"\201D";opacity:.55}
 .orb-drop-hint{
- position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.96);
+ position:absolute;left:50%;top:22px;transform:translate(-50%,-6px) scale(.96);
  margin:0;padding:12px 20px;border-radius:999px;pointer-events:none;z-index:4;
  background:#fff;border:1px dashed rgba(96,93,236,.5);color:#4b47c8;
  font-size:14px;font-weight:650;box-shadow:0 16px 40px rgba(16,24,40,.14),0 0 24px rgba(96,93,236,.08);
  opacity:0;transition:opacity .2s ease,transform .2s ease;
 }
-.is-dragging .orb-drop-hint{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.is-dragging .orb-drop-hint{opacity:1;transform:translate(-50%,0) scale(1)}
 .orb-media-pill{
  display:inline-flex;align-items:center;gap:7px;flex:0 0 auto;max-width:200px;
  padding:4px 10px 4px 4px;border-radius:999px;border:1px solid #e5e7eb;background:#fff;
