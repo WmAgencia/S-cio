@@ -1,7 +1,7 @@
 // Conversational owner-only advertising skill runner.
 // No automatic activation/spend. WA-AKG remains the WhatsApp provider.
 // No ChatGPT connector tokens or arbitrary Graph endpoints.
-import {buildApprovedAdCreativeDrafts,primaryCreativeDraft} from './socio-creative-studio.mjs';
+import {buildApprovedAdCreativeDrafts,primaryCreativeDraft,plausibleProduct} from './socio-creative-studio.mjs';
 import {randomUUID} from 'node:crypto';
 import {requirePermission} from './team-permissions.mjs';
 import {assertApiFeature} from './tenant-features.mjs';
@@ -36,6 +36,11 @@ export function isConfirmation(message){
 // plain words, and the original sentence stays available as the detail.
 function ownerCause(error){
  const raw=String(error||'').trim();
+ // 1885183: the advertising app itself was still in development mode, so Meta
+ // accepted the campaign and the ad set but refused every creative. Nothing the
+ // owner says can fix it, so the message must name the real cause.
+ if(/1885183|modo de desenvolvimento|development mode/i.test(raw))
+  return 'o aplicativo que cria os anúncios estava em modo de desenvolvimento na Meta, e nesse modo a Meta bloqueia a criação de anúncios. Isso já foi corrigido na configuração da conta; pode tentar novamente.';
  if(/link/i.test(raw)&&/WHATSAPP_MESSAGE/i.test(raw))
   return 'o bot\u00e3o do an\u00fancio apontava para um endere\u00e7o, e a Meta s\u00f3 aceita o destino WhatsApp nesse tipo de an\u00fancio.';
  if(/image_hash|image_url/i.test(raw)&&/video_data/i.test(raw))
@@ -75,15 +80,8 @@ function unsureAnswer(normal){
  return /\b(nao sei|nao entendi|nao lembro|nao tenho|nao faco ideia|depois|mais tarde|outra hora)\b/.test(normal);
 }
 // "Meus produtos" or "um item do catálogo" says where to look, not what to
-// advertise; keep the question open instead of storing a placeholder.
-function subjectOf(value){
- return String(value||'').replace(/^(?:(?:o|a|os|as|um|uma|meu|minha|meus|minhas|nosso|nossa|nossos|nossas|esse|essa|este|esta|isso)\s+)+/i,'').trim();
-}
-function vagueSubject(value){
- const v=clean(subjectOf(value));
- if(/^(?:produtos?|servicos?|itens?|coisas?|catalogo|qualquer(?: coisa)?|algo)$/.test(v))return true;
- return /\b(?:do|no|meu|meus|nosso|nossos)\s+catalogo\b/.test(v);
-}
+// advertise; plausibleProduct keeps the question open instead of storing a
+// placeholder.
 function spokenMoney(normal){
  const word=new RegExp('\\b('+moneyWordPattern+')\\b').exec(normal);
  if(word)return moneyWords[word[1]];
@@ -130,9 +128,12 @@ export function extractCampaignBrief(text,previous={}){
   const value=String(product?.[1]||'').replace(/[<>\r\n]/g,' ')
    .replace(/\b(?:direto\s+)?(?:pro|para\s+o|no|pelo)\s+(?:meu\s+|minha\s+)?(?:whatsapp|zap|site|link)\b/gi,' ')
    .replace(/\s+/g,' ').trim().replace(/\s+aqui$/i,'');
-  const subject=subjectOf(value);
-  if(value.length>=3&&value.length<=70&&!vagueSubject(subject))result.category=subject;
+  const accepted=plausibleProduct(value);
+  if(accepted)result.category=accepted;
  }
+ // A category stored by an earlier turn may itself be a conversational fragment;
+ // drop it instead of carrying a bad name into the campaign.
+ if(result.category&&!plausibleProduct(result.category))delete result.category;
 
  if(/\b(mulheres|publico feminino|para mulheres)\b/.test(normal)||category==='moda feminina')result.genders=[2];
  if(/\b(homens|publico masculino|para homens)\b/.test(normal))result.genders=[1];
@@ -353,8 +354,9 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
  const bare=message.trim().replace(/[.!]$/,'');
  if(runId&&run.brief&&!run.brief?.category&&!brief.category){
   const candidate=bare.replace(/[<>\r\n]/g,' ').replace(/\s+/g,' ');
-  if(candidate.length>=3&&candidate.length<=70&&!unsureAnswer(normalized)&&!vagueSubject(candidate)&&!/\b(R\$|orcamento|campanha|pode criar|autorizo)\b/i.test(candidate))
-   brief.category=subjectOf(candidate);
+  const product=plausibleProduct(candidate);
+  if(product&&!unsureAnswer(normalized)&&!/\b(R\$|orcamento|campanha|pode criar|autorizo)\b/i.test(candidate))
+   brief.category=product;
  }
  if(runId&&run.brief&&!brief.dailyBudgetCents&&(asked==='budget'||(run.brief.category&&run.brief.cityName))){
   const n=asked==='budget'?spokenMoney(normalized):
@@ -366,7 +368,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
    brief.countryCode='BR';brief.cityName='todo o Brasil';delete brief.cityKey;
   }else if(bare.length>=3&&bare.length<=75&&!unsureAnswer(normalized)&&
    !/^\d|[.:]|^(pode criar|pode fazer|confirmo|autorizo|aprovo|sim)\b/i.test(bare)&&
-   !/\b(whatsapp|site|zap|campanha|reais|pixel|orcamento)\b/i.test(clean(bare))){
+   !/\b(whatsapp|site|zap|campanha|reais|pixel|orcamento|socio)\b/i.test(clean(bare))){
    brief.cityName=bare;
   }
  }

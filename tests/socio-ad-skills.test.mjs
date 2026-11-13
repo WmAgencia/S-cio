@@ -413,6 +413,23 @@ test('a failed creation explains the real cause and a retry prepares the campaig
  assert.equal(approved.status,'completed');
  assert.match(approved.message,/pausados/i);
 });
+test('a creative blocked because the Meta app was in development mode names that cause',async()=>{
+ const pool=fakePool();
+ const opts={resolve,read:async(db,a,kind)=>kind==='images'?{items:[]}:read(db,a,kind),
+  prepare:async()=>({id:randomUUID()}),
+  execute:async()=>({status:'failed',
+   error:'(#100) Ad creative creation failed. error_subcode: 1885183. The app is in development mode.',
+   result:{campaignId:'120260294640850386',adsetId:'120260294641030386'}})};
+ const first=await speakToAdSkill(pool,actor,{
+  message:'Crie um anúncio para WhatsApp, em Sorocaba, gastando 6 reais por dia, com esse vídeo',
+  videoId:'1824013938791734'},opts);
+ await speakToAdSkill(pool,actor,{message:'serviços de publicidade',runId:first.runId},opts);
+ const failed=await speakToAdSkill(pool,actor,{message:'pode criar',runId:first.runId},opts);
+ assert.equal(failed.status,'failed');
+ assert.match(failed.message,/modo de desenvolvimento/,'the owner learns the app was not published');
+ assert.doesNotMatch(failed.message,/motivo claro|1885183|development mode/,'no developer text reaches the owner');
+ assert.match(failed.message,/pausados/);
+});
 test('campaign accepts either video or image, never both and not unrecognized video IDs',()=>{
  const base={name:'Criativo teste',message:'Texto legítimo',headline:'Título',
   pageId:'123456789',whatsappPhone:'5515999999999',
