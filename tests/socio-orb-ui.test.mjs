@@ -43,6 +43,20 @@ test('the overview entry is the orb itself, not a plain button',()=>{
  assert(overview.includes("querySelector('[data-px-orb]')?.addEventListener('click',()=>navigate('orb'))"));
 });
 
+test('the floating launcher is the orb itself and opens the IA page',()=>{
+ const dock=read('public/socio-thalita-ui.js');
+ assert(dock.includes('<button class="thalita-orb" type="button" data-thalita-orb aria-label="Conversar com IA">'));
+ assert(dock.includes('<canvas class="thalita-orb-canvas" aria-hidden="true"></canvas>'));
+ assert(!dock.includes('px-assistant-fab'));
+ assert(dock.includes("globalThis.SocioOrbMesh?.create(get('.thalita-orb-canvas'),{light:true,density:.34,radius:.40,point:.011})"));
+ assert(dock.includes("fab.addEventListener('click',()=>navigate?.('orb'))"));
+ assert(app.includes('globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf,navigate:changeView})'));
+ assert.match(css,/\.thalita-orb\{/);
+ assert.match(css,/\.thalita-orb-canvas\{/);
+ assert.match(css,/body\.socio-orb-view #socioThalitaDock\{display:none!important\}/);
+ assert(!/\.thalita-orb\{[^}]*background:(?!none)/.test(css),'the launcher must stay frameless');
+});
+
 test('orb module parses and exposes only render and dispose',()=>{
  const sandbox={globalThis:{}};
  vm.runInNewContext(orb,sandbox,{filename:'socio-orb-ui.js'});

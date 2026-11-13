@@ -6,7 +6,7 @@ const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const html=read('public/index.html'),css=read('public/socio-stripe-system.css'),app=read('public/app.js'),server=read('server.mjs');
 
 test('One canonical light stylesheet is loaded last and served with no 404',()=>{
- assert(html.includes('/socio-stripe-system.css?v=20261113m'));
+ assert(html.includes('/socio-stripe-system.css?v=20261113n'));
  assert(server.includes("'/socio-stripe-system.css'"));
  assert(html.indexOf('/socio-stripe-system.css')>html.indexOf('/socio-master.css'));
  assert(!html.includes('<script src="/socio-glass-motion.js'));

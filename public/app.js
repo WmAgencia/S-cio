@@ -170,7 +170,7 @@ async function boot(){
     if(typeof history==='object')history.replaceState(null,'',location.pathname);
    }
    if(isMasterView())globalThis.SocioThalitaUI?.unmount();
-   else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf});
+   else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf,navigate:changeView});
    await changeView(state.view);
    if(googleOAuth==='connected')toast('Conta Google autorizada. Selecione a conta de anúncios em Conexões.');
    if(officialOAuth==='authorized')toast('Meta autorizada. Selecione a conta de anúncios em Conexões.');
@@ -1700,7 +1700,7 @@ async function switchWorkspace(mode){
   view.classList.add('socio-workspace-enter');
   setTimeout(()=>view.classList.remove('socio-workspace-enter'),760);
   if(isMasterView())globalThis.SocioThalitaUI?.unmount();
-  else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf});
+  else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf,navigate:changeView});
   await changeView(nextMode==='master'?'masterOverview':'overview');
   updateWorkspaceUrl();
  }catch(error){toast(errMsg(error),true);}
