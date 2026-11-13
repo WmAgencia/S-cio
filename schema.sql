@@ -624,7 +624,7 @@ CREATE TABLE IF NOT EXISTS ads_media (
  source text NOT NULL CHECK(source IN ('chat','whatsapp','mcp')),
  object_key text NOT NULL UNIQUE,
  content_type text NOT NULL CHECK(content_type IN ('video/mp4','video/quicktime')),
- status text NOT NULL DEFAULT 'reserved' CHECK(status IN ('reserved','uploading','ready','failed')),
+ status text NOT NULL DEFAULT 'reserved' CHECK(status IN ('reserved','uploading','ready','failed','expired')),
  bytes bigint CHECK(bytes IS NULL OR bytes BETWEEN 512 AND 94371840),
  sha256 text CHECK(sha256 IS NULL OR length(sha256)=64),
  created_at timestamptz NOT NULL DEFAULT now(),
@@ -633,6 +633,10 @@ CREATE TABLE IF NOT EXISTS ads_media (
  FOREIGN KEY(tenant_id,created_by) REFERENCES users(tenant_id,id)
 );
 CREATE INDEX IF NOT EXISTS ads_media_tenant_time ON ads_media(tenant_id,created_at DESC);
+-- Entregue à Meta, o objeto é apagado do bucket privado; a linha vira histórico.
+ALTER TABLE ads_media DROP CONSTRAINT IF EXISTS ads_media_status_check;
+ALTER TABLE ads_media ADD CONSTRAINT ads_media_status_check
+ CHECK(status IN ('reserved','uploading','ready','failed','expired'));
 -- Prova de que um vídeo da biblioteca Meta foi enviado por ESTA empresa nesta
 -- conta de anúncios. Junto do recibo do canal do dono, é o que autoriza um
 -- anúncio em vídeo a usar o vídeo. Sem recibo, o vídeo é recusado.
@@ -648,6 +652,8 @@ CREATE TABLE IF NOT EXISTS socio_ads_meta_video_uploads (
 );
 CREATE INDEX IF NOT EXISTS socio_ads_meta_video_uploads_tenant_idx
  ON socio_ads_meta_video_uploads(tenant_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS socio_ads_meta_video_uploads_media_idx
+ ON socio_ads_meta_video_uploads(media_id);
 CREATE TABLE IF NOT EXISTS ads_media_mcp_tokens (
  id uuid PRIMARY KEY,
  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,

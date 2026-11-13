@@ -60,7 +60,7 @@ import {createTrackingSite,listTrackingSites,enableTrackingSite,receiveSignedSit
 import {integrationReadiness} from './socio-integrations-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
-import {reserveAdVideo,listAdVideos,storeAdVideo,readAdVideoBytes,recordMetaVideoUpload,adVideoExportUrl,resolveSignedAsset,serveSignedVideo,importWhatsAppAdVideo,createMediaMcpToken,revokeMediaMcpTokens,MAX_AD_VIDEO_BYTES} from './ads-media.mjs';
+import {reserveAdVideo,listAdVideos,storeAdVideo,readAdVideoBytes,recordMetaVideoUpload,purgeDeliveredAdVideos,adVideoExportUrl,resolveSignedAsset,serveSignedVideo,importWhatsAppAdVideo,createMediaMcpToken,revokeMediaMcpTokens,MAX_AD_VIDEO_BYTES} from './ads-media.mjs';
 import {handleAdsMediaMcp} from './ads-media-mcp.mjs';
 import {handleMediaOAuth} from './ads-media-oauth.mjs';
 import {createMetaBrowser} from './meta-browser.mjs';
@@ -2241,6 +2241,23 @@ async function main(){
  void purgeConversationTopics();
  const memoryPurgeWorker=setInterval(purgeConversationTopics,3600000);
  memoryPurgeWorker.unref();
+ // Delivered ad videos are deleted from the private bucket after the retention
+ // window; the Meta account keeps the copy used by the ad. Log only counts.
+ let adVideoPurgeBusy=false;
+ const purgeAdVideos=async()=>{
+  if(adVideoPurgeBusy||workersBlocked())return;
+  adVideoPurgeBusy=true;
+  try{
+   const result=await purgeDeliveredAdVideos(pool);
+   if(result.expired||result.failed)
+    console.info('[socio-ads-media-purge]',JSON.stringify({expired:result.expired,failed:result.failed}));
+  }catch(error){
+   console.warn('[socio-ads-media-purge]',String(error?.code||error?.status||'PURGE_ERROR').slice(0,35));
+  }finally{adVideoPurgeBusy=false;}
+ };
+ void purgeAdVideos();
+ const adVideoPurgeWorker=setInterval(purgeAdVideos,6*3600000);
+ adVideoPurgeWorker.unref();
  // AI only attempts replies if explicitly enabled, agent enabled and each
  // conversation handed over. Claims are durable to avoid duplicate messages.
  let replyBusy=false;
