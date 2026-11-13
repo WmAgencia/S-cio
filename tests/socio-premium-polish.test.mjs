@@ -7,7 +7,7 @@ const html=read('public/index.html'),css=read('public/socio-stripe-system.css'),
   thalita=read('public/socio-thalita-ui.js'),workspace=read('public/socio-workspace-ui.js');
 
 test('one canonical design system is loaded after structural module styles',()=>{
- assert.match(html,/\/socio-stripe-system\.css\?v=20261112e/);
+ assert.match(html,/\/socio-stripe-system\.css\?v=20261113k/);
  assert(html.indexOf('/socio-stripe-system.css')>html.indexOf('/socio-executive.css'));
  assert(server.includes("'/socio-stripe-system.css'"));
  assert(!html.includes('href="/socio-premium-polish.css'));

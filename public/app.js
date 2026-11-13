@@ -28,7 +28,7 @@ function workspaceFromLocation(){
 function initialWorkspaceView(){
  const part=typeof location==='object'?String(location.hash||'').replace(/^#\//,''):'';
  if(state.workspace==='master')return workspaceRoutes[part]||'masterOverview';
- return ['overview','inbox','connections','marketing','products','training','team','settings'].includes(part)?part:'overview';
+ return ['overview','orb','inbox','connections','marketing','products','training','team','settings'].includes(part)?part:'overview';
 }
 function updateWorkspaceUrl(){
  if(typeof history!=='object'||typeof location!=='object'||!state.me)return;
@@ -36,18 +36,25 @@ function updateWorkspaceUrl(){
  if(location.pathname+location.search+location.hash!==next)history.replaceState(null,'',next);
 }
 function syncMasterSwitch(){
- const button=$('#masterProductionSwitch'),label=$('#masterSwitchLabel');
- if(!button||!label)return;
  const visible=isPrimaryMaster(),master=isMasterView();
  document.body?.classList?.toggle('socio-is-master',master);
  document.body?.classList?.toggle('socio-is-production',!master);
  const shell=$('#appShell');
  if(shell)shell.dataset.workspace=master?'master':'production';
+ const switcher=$('#workspaceSwitcher');
+ if(switcher){
+  switcher.classList.toggle('hidden',!visible);
+  switcher.dataset.active=master?'master':'production';
+  switcher.querySelectorAll('[data-workspace-target]').forEach(button=>{
+   const active=button.dataset.workspaceTarget===(master?'master':'production');
+   button.setAttribute('aria-selected',String(active));
+   button.tabIndex=active?0:-1;
+  });
+ }
  const kind=$('#workspaceKind');
  if(kind)kind.textContent=master?'ADMINISTRAÇÃO MASTER':'AMBIENTE DE PRODUÇÃO';
  const pill=document.querySelector('.top-pill');
  if(pill)pill.innerHTML='<i></i> '+(master?'Painel Master · SaaS':'Ambiente de produção');
- button.classList.toggle('hidden',!visible);
  const production=$('#productionNav'),admin=$('#masterNav');
  for(const [nav,hide] of [[production,master],[admin,!master]]){
   if(!nav)continue;
@@ -55,19 +62,19 @@ function syncMasterSwitch(){
   nav.setAttribute('aria-hidden',String(hide));
   nav.inert=hide;
  }
+ $('#productionMenuLabel')?.classList.toggle('hidden',master);
  document.querySelector('.sidebar-bottom [data-view="settings"]')?.classList.toggle('hidden',master);
  if(!visible)return;
- label.textContent=master?'Ir para Produção':'Ir para Master';
- button.title=label.textContent;button.setAttribute('aria-label',label.textContent);
- const workspace=$('#workspaceName'),initial=$('#workspaceInitial');
+ const workspace=$('#workspaceName'),initial=$('#workspaceInitial'),crumb=$('#crumbRoot');
  if(workspace)workspace.textContent=master?'Sócio · Plataforma':state.me?.tenant?.name||'Seu espaço';
  if(initial)initial.textContent=master?'M':(state.me?.tenant?.name?.[0]||'S').toUpperCase();
+ if(crumb)crumb.textContent=master?'Master':'Sócio';
  const role=$('#userRole');
  if(role)role.textContent=master?'Administração da plataforma':'Ambiente da empresa';
 }
 
 const viewAvailable=key=>!featureView[key]||featureAvailable(featureView[key])||key==='team'&&ownAccountAvailable();
-const titles={overview:'Visão geral',inbox:'WhatsApp',connections:'Conexões',marketing:'Meta Ads',products:'Produtos e serviços',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',settings:'Configurações da conta',admin:'Empresas',masterOverview:'Dashboard Master',masterPlans:'Planos e métricas'};
+const titles={overview:'Visão geral',orb:'Conversar com IA',inbox:'WhatsApp',connections:'Conexões',marketing:'Meta Ads',products:'Produtos e serviços',training:'Inteligência Artificial',agent:'Meu Sócio',team:'Equipe',settings:'Configurações da conta',admin:'Empresas',masterOverview:'Dashboard',masterPlans:'Planos e métricas'};
 const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=cent=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cent||0)/100);
 const date=v=>v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'—';
@@ -132,8 +139,6 @@ async function boot(){
    $('#userChip').textContent=me.user.name.split(/\s+/).slice(0,2).map(v=>v[0]).join('').toUpperCase();
    $('#userName').textContent=me.user.name;
    $('#userRole').textContent=me.user.platformOwner?'Administrador master':me.user.role==='owner'?'Proprietário':'Equipe da empresa';
-   // The Master menu belongs to its own workspace; keep company tools hidden in production.
-   $('#adminNav')?.classList.add('hidden');
    syncMasterSwitch();
    $('#teamNav')?.classList.toggle('hidden',!(me.user.permissions||[]).includes('account.manage')&&!me.user.platformOwner);
    const access=new Set(me.user.permissions||[]);
@@ -227,6 +232,8 @@ async function changeView(next,conversationId=null){
  globalThis.SocioFlowImages?.dispose();
  globalThis.SocioMetaBrowser?.dispose();
  globalThis.SocioMetaLocal?.dispose();
+ if(next!=='orb')globalThis.SocioOrbUI?.dispose();
+ document.body?.classList?.toggle('socio-orb-view',next==='orb');
  state.view=next;
  syncMasterSwitch();
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
@@ -234,6 +241,9 @@ async function changeView(next,conversationId=null){
  updateWorkspaceUrl();
  setLoading();
  try{
+  if(next==='orb'&&globalThis.SocioOrbUI){
+   await globalThis.SocioOrbUI.render({root:view,api,me:state.me,csrfToken:state.csrf,navigate:changeView});
+  }
   if(next==='overview')await overview();
    if(next==='connections'){
     await globalThis.SocioWorkspaceUI.connections({root:view,api,me:state.me,navigate:changeView});
@@ -1606,6 +1616,7 @@ const sidebarIcons={
  products:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 10h18M10 3v18"/>',
  training:'<path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8m8.6 8.6 2.8 2.8M2 12h4m12 0h4M4.9 19.1l2.8-2.8m8.6-8.6 2.8-2.8"/><circle cx="12" cy="12" r="3.4"/>',
  agent:'<path d="m12 2 2.7 7.3L22 12l-7.3 2.7L12 22l-2.7-7.3L2 12l7.3-2.7z"/>',
+ orb:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2"/>',
  settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1m10 10 2.1 2.1M4.9 19.1 7 17m10-10 2.1-2.1"/>',
  team:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-1c0-3.6 2.5-5 6-5s6 1.4 6 5v1z"/><path d="M17 5a3 3 0 0 1 0 6m1 4c2 .5 3 1.8 3 4v1"/>',
  admin:'<path d="M3 21V5l9-3 9 3v16M3 21h18M9 21v-5h6v5M7 9h2m6 0h2M7 13h2m6 0h2"/>',
@@ -1667,22 +1678,51 @@ document.addEventListener('keydown',event=>{
  if(event.key==='Escape'&&!$('#commandOverlay').classList.contains('hidden'))closeCommand();
 });
 initSidebarIcons();
-$('#masterProductionSwitch')?.addEventListener('click',()=>action(async()=>{
+async function switchWorkspace(mode){
  if(!isPrimaryMaster())return;
- const button=$('#masterProductionSwitch');
- if(button.disabled)return;
- button.disabled=true;
+ const nextMode=mode==='master'?'master':'production';
+ if(nextMode===state.workspace)return;
+ const switcher=$('#workspaceSwitcher');
+ if(switcher?.dataset.busy==='true')return;
+ if(switcher)switcher.dataset.busy='true';
+ const root=document.documentElement;
+ root.classList.add('socio-workspace-switching');
  try{
-  // Same login; a full page reinitialization separates the two workspaces.
   // Master always opens on the platform owner's home tenant, not a customer.
-  const nextMode=isMasterView()?'production':'master';
   const homeTenantId=state.me.user.homeTenantId;
-  if(state.me.tenant.id!==homeTenantId){
+  if(nextMode==='master'&&state.me.tenant.id!==homeTenantId){
    await api('/api/admin/switch','POST',{tenantId:homeTenantId});
+   state.me=await api('/api/me');state.csrf=state.me.csrf;
   }
-  location.assign(workspaceUrl(nextMode));
- }finally{button.disabled=false;syncMasterSwitch();}
-}));
+  state.workspace=nextMode;
+  view.classList.remove('socio-workspace-enter');
+  void view.offsetWidth;
+  view.classList.add('socio-workspace-enter');
+  setTimeout(()=>view.classList.remove('socio-workspace-enter'),760);
+  if(isMasterView())globalThis.SocioThalitaUI?.unmount();
+  else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf});
+  await changeView(nextMode==='master'?'masterOverview':'overview');
+  updateWorkspaceUrl();
+ }catch(error){toast(errMsg(error),true);}
+ finally{
+  if(switcher)delete switcher.dataset.busy;
+  syncMasterSwitch();
+  setTimeout(()=>root.classList.remove('socio-workspace-switching'),640);
+ }
+}
+$('#workspaceSwitcher')?.addEventListener('click',event=>{
+ const target=event.target.closest?.('[data-workspace-target]');
+ if(target)switchWorkspace(target.dataset.workspaceTarget);
+});
+$('#workspaceSwitcher')?.addEventListener('keydown',event=>{
+ if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+ const tabs=$$('#workspaceSwitcher [data-workspace-target]');
+ const current=tabs.indexOf(document.activeElement);
+ event.preventDefault();
+ const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:
+  (current+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+ tabs[next]?.focus();
+});
 
 const loginPassword=$('#loginPassword'),togglePassword=$('#togglePassword'),capsWarning=$('#capsWarning');
 togglePassword.addEventListener('click',()=>{
@@ -1722,5 +1762,5 @@ $$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{
  if(b.dataset.view==='training')state.aiTab='training';
  changeView(b.dataset.view);
 }));
-$('#logoutBtn').addEventListener('click',async()=>{globalThis.SocioWorkspaceUI?.clearCache();globalThis.SocioThalitaUI?.unmount();try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
+$('#logoutBtn').addEventListener('click',async()=>{globalThis.SocioWorkspaceUI?.clearCache();globalThis.SocioThalitaUI?.unmount();globalThis.SocioOrbUI?.dispose();document.body?.classList?.remove('socio-orb-view');try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
 boot();

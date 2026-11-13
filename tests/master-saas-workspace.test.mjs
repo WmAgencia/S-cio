@@ -18,7 +18,8 @@ test('separate Master and production sidebars stay behind primary-owner permissi
  assert.match(app,/syncMasterSwitch\(\)/);
  assert.match(app,/const homeTenantId=state\.me\.user\.homeTenantId/);
  assert.match(app,/await api\('\/api\/admin\/switch','POST',\{tenantId:homeTenantId\}\)/);
- assert.match(app,/location\.assign\(workspaceUrl\(nextMode\)\)/);
+ assert.match(app,/async function switchWorkspace\(mode\)/);
+ assert.match(app,/await changeView\(nextMode==='master'\?'masterOverview':'overview'\)/);
  assert.doesNotMatch(html,/data-view="sales"/);
 });
 

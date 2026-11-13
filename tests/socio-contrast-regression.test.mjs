@@ -18,7 +18,7 @@ const ratio=(a,b)=>{
 };
 
 test('canonical contrast layer loads after every structural stylesheet',()=>{
- assert.match(html,/\/socio-stripe-system\.css\?v=20261112e/);
+ assert.match(html,/\/socio-stripe-system\.css\?v=20261113k/);
  assert(server.includes("'/socio-stripe-system.css'"));
  assert(html.indexOf('/socio-stripe-system.css')>html.indexOf('/socio-master.css'));
  assert(!html.includes('href="/socio-contrast-audit.css'));
