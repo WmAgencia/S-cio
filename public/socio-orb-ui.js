@@ -8,7 +8,7 @@
  let voice=null,startingVoice=false,voiceRequested=false,voiceEpoch=0;
  let audioContext=null,analyser=null,freq=null,raf=0,amp=0,level=0,activeSource=null;
  let speaking=false,ttsAbort=null,queryAbort=null,runId=null,runEpoch=0;
- let history=[],media=null,busy=false,disposed=false,greeting='Olá! Como posso te ajudar hoje?';
+ let history=[],media=null,mediaUpload=null,busy=false,disposed=false,greeting='Olá! Como posso te ajudar hoje?';
  const get=sel=>instance?.querySelector(sel);
  const stage=()=>get('#orbStage');
  // Kept for screen readers only; the page never shows routine status pills.
@@ -157,10 +157,11 @@
   const done=[...list.children].filter(x=>['done','error','waiting'].includes(x.dataset.status)).length;
   const counter=get('#orbPlanCount');if(counter)counter.textContent=done+'/'+list.children.length;
  }
- function planUpdate(li,status,detail){
+ function planUpdate(li,status,detail,title){
   if(!li)return;
   li.dataset.status=status;
   if(detail!==undefined){const small=li.querySelector('small');if(small)small.textContent=String(detail);}
+  if(title!==undefined){const strong=li.querySelector('strong');if(strong)strong.textContent=String(title);}
   planCount(li.parentElement);
  }
  // The server plans the work for this specific request; the page only presents it.
@@ -175,6 +176,59 @@
   }
   planCount(list);
   return list;
+ }
+ // The skill writes one step id at a time after Meta confirms it; this log
+ // mirrors that, so the page never invents a stage that did not happen.
+ const EXEC_STAGES=[
+  {id:'campaignId',running:'Criando a campanha na Meta…',done:'Campanha criada'},
+  {id:'adsetId',running:'Criando o conjunto de anúncios…',done:'Conjunto de anúncios criado'},
+  {id:'creativeId',running:'Criando o criativo do anúncio…',done:'Criativo criado'},
+  {id:'adId',running:'Criando o anúncio…',done:'Anúncio criado'}
+ ];
+ function executionLog(list){
+  planAdd(list,'Planejamento e copy conferidos',{status:'done',
+   detail:'Público, orçamento e texto aprovados por você'});
+  const items=EXEC_STAGES.map(stage=>planAdd(list,stage.running,{status:'pending',detail:'Na fila'}));
+  planUpdate(items[0],'running','Preparando o envio para a Meta…');
+  return {list,items,finished:false};
+ }
+ function renderExecution(exec,progress){
+  if(!exec)return;
+  const ids=progress?.result&&typeof progress.result==='object'?progress.result:{};
+  const finished=progress?.planStatus==='succeeded'||progress?.runStatus==='completed';
+  const failed=progress?.planStatus==='failed'||progress?.planStatus==='uncertain'||progress?.runStatus==='failed';
+  let runningShown=false,errorShown=false;
+  EXEC_STAGES.forEach((stage,i)=>{
+   const li=exec.items[i],id=ids[stage.id];
+   if(id){planUpdate(li,'done','Confere · ID '+String(id),stage.done);return;}
+   if(!runningShown&&failed&&!errorShown){
+    runningShown=true;errorShown=true;
+    planUpdate(li,'error',String(ids.error||'A Meta não confirmou esta etapa.').slice(0,150),'Não confirmado nesta etapa');
+    return;
+   }
+   if(!runningShown&&!finished){
+    runningShown=true;planUpdate(li,'running','Enviando para a Meta agora…',stage.running);return;
+   }
+   planUpdate(li,'pending','Na fila',stage.running);
+  });
+  if(finished&&!exec.finished){
+   exec.finished=true;
+   planAdd(exec.list,'Tudo pausado',{status:'done',detail:'Nada veicula nem gasta até você ativar'});
+  }
+  planCount(exec.list);
+ }
+ function startProgressPolling(runId,exec,isActive){
+  const controller=new AbortController();let stopped=false;
+  const tick=async()=>{
+   if(stopped||!isActive())return;
+   let progress=null;
+   try{progress=await api('/api/thalita/progress?runId='+encodeURIComponent(runId),'GET',undefined,{},{signal:controller.signal});}catch{}
+   if(stopped||!isActive())return;
+   if(progress)renderExecution(exec,progress);
+   window.setTimeout(tick,900);
+  };
+  tick();
+  return {stop(){stopped=true;controller.abort();}};
  }
  function planHide(){
   const panel=get('#orbPlanPanel');if(!panel)return;
@@ -239,6 +293,7 @@
   media=file;
   const list=get('#orbSteps');
   if(!list)return;
+  let finish;mediaUpload=new Promise(resolve=>finish=resolve);
   const li=planAdd(list,file.kind==='image'?'Enviando foto para a biblioteca':'Enviando vídeo para a biblioteca',
    {status:'running',detail:'Validando arquivo…'});
   mediaCard(li,file,'running','Validando arquivo…');
@@ -250,7 +305,7 @@
     file.meta={imageHash:result.hash};
     mediaCard(li,file,'done','Foto publicada na biblioteca da Meta · '+sizeLabel(file.size));
    }else{
-    if(file.size>90*1024*1024)throw Error('Vídeos acima de 90 MB não podem ser enviados pela orbe.');
+    if(file.size>64*1024*1024)throw Error('Vídeos acima de 64 MB não podem ser enviados para a Meta.');
     if(file.size<512)throw Error('O arquivo parece vazio ou corrompido.');
     mediaCard(li,file,'running','Reservando espaço na biblioteca…');
     const reserved=await api('/api/ads-media/reserve','POST',{filename:file.raw.name||'video.mp4'});
@@ -261,12 +316,16 @@
      body:file.raw});
     const answer=await resp.json().catch(()=>({}));
     if(!resp.ok)throw Error(answer.error||'Falha no envio do vídeo.');
-    file.meta={mediaId:reserved.id};
-    mediaCard(li,file,'done','Vídeo guardado na biblioteca da empresa · '+sizeLabel(file.size));
+    mediaCard(li,file,'running','Preparando o vídeo na biblioteca da Meta…');
+    const uploaded=await api('/api/ads-media/'+reserved.id+'/meta','POST',{});
+    file.meta={mediaId:reserved.id,videoId:uploaded.videoId};
+    mediaCard(li,file,'done','Vídeo pronto na biblioteca da Meta · '+sizeLabel(file.size));
    }
   }catch(error){
    mediaCard(li,file,'error',String(error.message||'Não foi possível enviar a mídia.').slice(0,160));
    clearMedia();
+  }finally{
+   mediaUpload=null;finish();
   }
  }
  const sizeLabel=bytes=>bytes>=1048576?(bytes/1048576).toFixed(1).replace('.',',')+' MB':
@@ -297,6 +356,7 @@
  function mediaRef(){
   if(!media?.meta)return {};
   if(media.kind==='image'&&media.meta.imageHash)return {imageHash:media.meta.imageHash};
+  if(media.kind==='video'&&media.meta.videoId)return {videoId:media.meta.videoId};
   return {};
  }
  function confirmCard(list,confirmation,answer){
@@ -329,15 +389,24 @@
   busy=true;
   const input=get('#orbInput');if(input)input.value='';
   if(!fromVoice)showCaption(message,'user');
-  const list=planReset('Entendendo o seu pedido');
-  const read=planAdd(list,'Lendo o pedido',{status:'running',
+  // Confirming a ready campaign is the one turn that writes to Meta, so it gets
+  // the live execution log instead of the generic reading step.
+  const confirming=Boolean(runId)&&/^(pode criar|pode fazer|confirmo|autorizo|aprovo(?: a campanha)?|sim[,. ]+pode criar|sim[,. ]+confirmo)[.! ]*$/i.test(message);
+  const list=planReset(confirming?'Criando sua campanha na Meta':'Entendendo o seu pedido');
+  const execution=confirming?executionLog(list):null;
+  const read=confirming?null:planAdd(list,'Lendo o pedido',{status:'running',
    detail:media?'Instrução e criativo anexado':'Lendo o que você precisa'});
+  const progressPoll=execution?startProgressPolling(runId,execution,isActive):null;
   setPhase('thinking');
   const controller=new AbortController();queryAbort=controller;
   try{
+   // Never let a short answer outrun the attachment: the skill would ask for
+   // media that is still being uploaded.
+   if(mediaUpload)await mediaUpload;
    const result=await api('/api/thalita/ask','POST',{
     message,runId,history:history.slice(-6),...mediaRef()
    },{},{signal:controller.signal});
+   progressPoll?.stop();
    if(!isActive())return;
    // The campaign conversation continues while the skill still needs answers
    // or waits for "pode criar"; dropping the id is what lost the context.
@@ -357,9 +426,17 @@
    else setPhase(voiceRequested?'listening':'idle');
   }catch(error){
    if(!isActive())return;
+   progressPoll?.stop();
+   if(execution&&!execution.finished){
+    const failedStep=execution.items.find(x=>x.dataset.status==='error')||execution.items.find(x=>x.dataset.status==='running')||execution.items[0];
+    if(failedStep.dataset.status!=='error'){
+     planUpdate(failedStep,'error',String(error.message||'Falha ao executar.').slice(0,150),'Não confirmado nesta etapa');
+    }
+   }
    planUpdate(read,'error',String(error.message||'Falha ao consultar.').slice(0,160));
    showCaption('Não foi possível concluir: '+String(error.message||'erro inesperado'));
   }finally{
+   progressPoll?.stop();
    if(queryAbort===controller)queryAbort=null;
    if(epoch===runEpoch){busy=false;if(!speaking)setPhase(voiceRequested?'listening':'idle');}
   }

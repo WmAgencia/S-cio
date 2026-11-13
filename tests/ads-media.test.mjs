@@ -4,7 +4,7 @@ import {Readable} from 'node:stream';
 import {
  reserveAdVideo,listAdVideos,findVideo,storeAdVideo,adVideoExportUrl,adVideoUploadLink,
  resolveSignedAsset,serveSignedVideo,createMediaMcpToken,revokeMediaMcpTokens,authenticateMediaMcp,
- importWhatsAppAdVideo,MAX_AD_VIDEO_BYTES
+ importWhatsAppAdVideo,readAdVideoBytes,MAX_AD_VIDEO_BYTES
 } from '../ads-media.mjs';
 import {handleAdsMediaMcp} from '../ads-media-mcp.mjs';
 import {readFile} from 'node:fs/promises';
@@ -98,6 +98,15 @@ test('MP4 armazenado privado usa URL HMAC expirada e suporta Range do Meta downl
  assert.equal(response.headers['Content-Range'],'bytes 0-15/1800');
  assert.equal(response.data.toString('ascii',4,8),'ftyp');
  await assert.rejects(serveSignedVideo(p,a.id,expires,signature,{method:'GET',headers:{range:'bytes=2000-3000'}},res(),env),{status:416});
+});
+test('video stashed for Meta is only readable once the upload is ready',async()=>{
+ const p=new Pool(),a=await reserveAdVideo(p,actor,'meta.mp4');
+ await assert.rejects(readAdVideoBytes(p,T,a.id,{env}),{status:409});
+ await assert.rejects(readAdVideoBytes(p,OTHER,a.id,{env}),{status:404});
+ await storeAdVideo(p,T,a.id,Readable.from([video()]),{env,declaredBytes:1800});
+ const out=await readAdVideoBytes(p,T,a.id,{env});
+ assert.equal(out.bytes.length,1800);
+ assert.equal(out.mime,'video/mp4');
 });
 test('ticket upload só vale para mídia reservada e não permite download',async()=>{
  const p=new Pool(),result=await adVideoUploadLink(p,actor,'anuncio.mp4',env);

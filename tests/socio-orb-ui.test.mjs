@@ -13,7 +13,7 @@ const orb=read('public/socio-orb-ui.js');
 const mesh=read('public/socio-orb-mesh.js');
 
 test('the orb page ships as its own script with a production nav entry',()=>{
- assert.match(html,/<script src="\/socio-orb-ui\.js\?v=20261113h" defer><\/script>/);
+ assert.match(html,/<script src="\/socio-orb-ui\.js\?v=20261113i" defer><\/script>/);
  assert.match(html,/<script src="\/socio-orb-mesh\.js\?v=20261113a" defer><\/script>/);
  assert(html.indexOf('/socio-orb-mesh.js')<html.indexOf('/socio-orb-ui.js'));
  assert(html.includes('<button data-view="orb" class="nav-item"><span class="nav-symbol">◉</span> Conversar com IA</button>'));
@@ -135,6 +135,14 @@ test('the plan comes from the server and a campaign conversation keeps its run i
  assert(orb.includes('renderPlan(result.plan)'));
  assert(orb.includes("runId=result.runId&&(result.status==='ready'||result.status==='collecting')?result.runId:null"));
  assert(orb.includes('imageHash:media.meta.imageHash'));
+ assert(orb.includes("'/api/ads-media/'+reserved.id+'/meta'"));
+ assert(orb.includes('videoId:media.meta.videoId'));
+ assert(orb.includes('if(mediaUpload)await mediaUpload'));
+ assert(orb.includes('/api/thalita/progress?runId='));
+ assert(orb.includes('Criando a campanha na Meta…'));
+ assert(orb.includes('Conjunto de anúncios criado'));
+ assert(orb.includes("'Confere · ID '"));
+ assert(orb.includes('startProgressPolling(runId,execution,isActive)'));
  assert(orb.includes("String(result.skillId||'')==='ads.campaign.launch'"));
 });
 

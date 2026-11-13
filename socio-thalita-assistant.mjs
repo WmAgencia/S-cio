@@ -67,6 +67,9 @@ function campaignPlan(result){
    brief.dailyBudgetCents?'R$ '+(brief.dailyBudgetCents/100).toFixed(2).replace('.',',')+'/dia':null]
    .filter(Boolean).join(' · ');
   steps.push({title:'Defini público, orçamento e criativo',detail:audience||'Público e orçamento definidos',status:'done'});
+  const copy=Array.isArray(result.creativeVariants)&&result.creativeVariants[0]||{};
+  steps.push({title:'Escrevi o texto do anúncio',status:'done',
+   detail:[copy.headline,copy.message].filter(Boolean).join(' · ').slice(0,190)||'Texto do anúncio pronto'});
   steps.push({title:'Montei campanha, conjunto e anúncio',detail:'Tudo pausado até a sua autorização',status:'done'});
   steps.push({title:'Aguardando sua confirmação',detail:"Responda “pode criar” para eu enviar à Meta",status:'waiting'});
   return {title:'Campanha pronta para aprovar',steps};

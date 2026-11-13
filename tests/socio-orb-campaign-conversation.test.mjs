@@ -55,4 +55,6 @@ test('a campaign reply only keeps a run id while the skill still needs the user'
    message:'Responda pode criar para eu criar a campanha PAUSADA.'})});
  assert.equal(result.plan.title,'Campanha pronta para aprovar');
  assert.equal(result.plan.steps.at(-1).status,'waiting');
+ assert(result.plan.steps.some(step=>step.title==='Escrevi o texto do anúncio'),
+  'the planning log must show that the copy was written');
 });

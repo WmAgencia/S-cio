@@ -12,8 +12,27 @@ import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
 const bad=(status,message)=>Object.assign(new Error(message),{status});
 const digits=x=>String(x||'').replace(/\D/g,'');
 const uuid=x=>typeof x==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(x);
-const moneyWords=Object.freeze({um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,quinze:15,vinte:20,trinta:30,quarenta:40,cinquenta:50,cem:100});
+const moneyWords=Object.freeze({um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,
+ onze:11,doze:12,treze:13,catorze:14,quatorze:14,quinze:15,dezesseis:16,dezessete:17,dezoito:18,dezenove:19,
+ vinte:20,trinta:30,quarenta:40,cinquenta:50,cem:100});
+const moneyWordPattern='um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|catorze|quatorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta|cem';
 const clean=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+// A campaign can target a whole country; "cidade" is not a mandatory slot.
+function wantsCountrywide(normal){
+ return /\b(brasil inteiro|todo o brasil|em todo brasil|de norte a sul|pais inteiro|todo o pais|territorio nacional|cobertura nacional|nacional)\b/.test(normal)||
+  normal==='brasil';
+}
+// "Não sei" is not a product, a city or a budget; keep the question open instead
+// of storing the non-answer in the brief.
+function unsureAnswer(normal){
+ return /\b(nao sei|nao entendi|nao lembro|nao tenho|nao faco ideia|depois|mais tarde|outra hora)\b/.test(normal);
+}
+function spokenMoney(normal){
+ const word=new RegExp('\\b('+moneyWordPattern+')\\b').exec(normal);
+ if(word)return moneyWords[word[1]];
+ const digits=normal.match(/\b(\d{1,6}(?:[.,]\d{1,2})?)\b/);
+ return digits?Number(digits[1].replace(',','.')):null;
+}
 export const SOCIO_AD_SKILLS=Object.freeze([
  {id:'ads.campaign.launch',label:'Planejar campanhas por conversa',availability:'assisted',channel:'panel'},
  {id:'ads.pixel.setup',label:'Criar e conferir pixels oficiais',availability:'reviewed',channel:'panel'},
@@ -30,15 +49,19 @@ export function extractCampaignBrief(text,previous={}){
  const result={...previous};
  const amount=original.match(/(?:R\$\s*|(?:gastando|investir|orcamento(?: de)?|budget de)\s*)(\d{1,6}(?:[.,]\d{1,2})?)/i)
   ||original.match(/(\d{1,6}(?:[.,]\d{1,2})?)\s*(?:reais|real)\s*(?:por dia|ao dia|diari[oa]s?)/i);
- const amountWords=normal.match(/\b(um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|quinze|vinte|trinta|quarenta|cinquenta|cem)\s+reais?\s*(?:por dia|ao dia|diari[oa]s?)\b/);
+ const amountWords=normal.match(new RegExp('\\b('+moneyWordPattern+')\\s+reais?\\s*(?:por dia|ao dia|diari[oa]s?)\\b'));
  if(amount||amountWords){
   const numeric=amount?Number(amount[1].replace(',','.')):moneyWords[amountWords[1]];
   if(!Number.isFinite(numeric)||numeric<1||numeric>100000)throw bad(422,'Informe um orçamento diário de R$ 1 a R$ 100.000.');
   result.dailyBudgetCents=Math.round(numeric*100);
  }
- const city=original.match(/\bem\s+(.{3,75}?)(?=\s+(?:gastando|investindo|por\s+(?:dia|R\$|\d+)|com\s+orcamento|com\s+R\$|e\s+gastando|no\s+(?:whatsapp|site|zap))|[,.;]|$)/i)||
-  original.match(/\bpara\s+(.{3,75}?)(?=\s+(?:gastando|investindo|por\s+dia|com\s+orcamento|com\s+R\$)|[,.;]|$)/i);
- if(city&&city[1].trim().length>=3)result.cityName=city[1].trim();
+ if(wantsCountrywide(normal)){
+  result.countryCode='BR';result.cityName='todo o Brasil';delete result.cityKey;
+ }else{
+  const city=original.match(/\bem\s+(.{3,75}?)(?=\s+(?:gastando|investindo|por\s+(?:dia|R\$|\d+)|com\s+orcamento|com\s+R\$|e\s+gastando|no\s+(?:whatsapp|site|zap))|[,.;]|$)/i)||
+   original.match(/\bpara\s+(.{3,75}?)(?=\s+(?:gastando|investindo|por\s+dia|com\s+orcamento|com\s+R\$)|[,.;]|$)/i);
+  if(city&&city[1].trim().length>=3&&!wantsCountrywide(clean(city[1]))){result.cityName=city[1].trim();delete result.countryCode;}
+ }
  const category=/\b(roupas?\s+feminin[ao]s?|moda\s+feminina|vestidos?|blusas?\s+femininas?)\b/.test(normal)?'moda feminina':
   /\b(roupas?\s+masculinas?|moda\s+masculina)\b/.test(normal)?'moda masculina':
   /\b(tenis|calcados?|sapatos?)\b/.test(normal)?'calçados':null;
@@ -81,34 +104,63 @@ function authorize(a){
  assertApiFeature(a.features,'/api/agent');
  if(a.tenant_status==='paused')throw bad(403,'Empresa pausada.');
 }
+// Returns the next missing slot so a short spoken answer can be read in the
+// context of the question that was just asked.
 function promptFor(brief,resources){
- if(!brief.category)return 'Qual produto ou serviço você quer anunciar?';
- if(!brief.cityName)return 'Em qual cidade você quer encontrar clientes?';
- if(!brief.dailyBudgetCents)return 'Qual é o investimento máximo por dia? Por exemplo, R$ 6 por dia.';
- if(!brief.destination)return 'Quer receber os interessados pelo WhatsApp ou enviar para um site?';
+ if(!brief.category)return {slot:'category',message:'Qual produto ou serviço você quer anunciar?'};
+ if(!brief.cityName&&!brief.countryCode)return {slot:'city',
+  message:'Quer anunciar em todo o Brasil ou em uma cidade? Se for uma cidade, escreva cidade e estado. Exemplo: Sorocaba, SP.'};
+ if(!brief.dailyBudgetCents)return {slot:'budget',message:'Qual é o investimento máximo por dia? Por exemplo, R$ 6 por dia.'};
+ if(!brief.destination)return {slot:'destination',message:'Quer receber os interessados pelo WhatsApp ou enviar para um site?'};
  if(brief.destination==='whatsapp'&&!brief.whatsappPhone)
-  return resources.channels?.length?'Qual número de WhatsApp devo usar? '+resources.channels.map(x=>x.label+' ('+x.phone+')').join('; '):
-   'Conecte primeiro o WhatsApp da sua empresa pelo WA-AKG, para eu preparar um anúncio de conversas.';
- if(brief.destination==='website'&&!brief.url)return 'Me envie o link HTTPS do site ou da loja para o anúncio.';
- if(!brief.pageId)return resources.pages?.length?
+  return {slot:'whatsapp',message:resources.channels?.length?'Qual número de WhatsApp devo usar? '+resources.channels.map(x=>x.label+' ('+x.phone+')').join('; '):
+   'Conecte primeiro o WhatsApp da sua empresa pelo WA-AKG, para eu preparar um anúncio de conversas.'};
+ if(brief.destination==='website'&&!brief.url)return {slot:'url',message:'Me envie o link HTTPS do site ou da loja para o anúncio.'};
+ if(!brief.pageId)return {slot:'page',message:resources.pages?.length?
   'Qual Página do Facebook devo utilizar? '+resources.pages.slice(0,5).map(x=>x.name+' (página '+x.id+')').join('; '):
-  'A Meta não retornou uma Página autorizada. Conecte uma Página à sua conta de anúncios.';
- if(!brief.imageHash&&!brief.videoId)return 'Me envie uma foto ou um vídeo do produto. O arquivo precisa ser importado na biblioteca Meta da sua empresa.';
- if(!brief.cityKey)return 'Não consegui confirmar essa cidade na Meta. Escreva o nome completo da cidade e do estado.';
+  'A Meta não retornou uma Página autorizada. Conecte uma Página à sua conta de anúncios.'};
+ if(!brief.imageHash&&!brief.videoId)return {slot:'media',message:'Me envie uma foto ou um vídeo do produto. O arquivo precisa ser importado na biblioteca Meta da sua empresa.'};
+ if(!brief.countryCode&&!brief.cityKey)return {slot:'cityKey',message:'Não consegui confirmar essa cidade na Meta. Escreva o nome completo da cidade e do estado.'};
  return null;
 }
+const clarifyFor=(slot,message)=>({
+ category:'Ainda não identifiquei o produto. Escreva só o produto ou serviço, por exemplo: sistema de gestão.',
+ city:'Ainda não identifiquei o local. Escreva cidade e estado, por exemplo: Sorocaba, SP — ou responda "todo o Brasil".',
+ budget:'Ainda não entendi o valor. Escreva só o número por dia, por exemplo: 12.',
+ media:'Ainda não recebi o arquivo. Envie a foto ou o vídeo pelo botão de anexo; ele precisa terminar o envio antes da aprovação.'
+}[slot]||message);
 function publicBrief(b){
  return {category:b.category||null,cityName:b.cityName||null,dailyBudgetCents:b.dailyBudgetCents||null,
   destination:b.destination||null,genders:Array.isArray(b.genders)?b.genders:[],hasPhoto:Boolean(b.imageHash),hasVideo:Boolean(b.videoId),
-  pageId:b.pageId||null,imageName:b.imageName||null,whatsappPhone:b.whatsappPhone||null,url:b.url||null,cityKey:b.cityKey||null};
+  pageId:b.pageId||null,imageName:b.imageName||null,whatsappPhone:b.whatsappPhone||null,url:b.url||null,
+  cityKey:b.cityKey||null,countryCode:b.countryCode||null};
+}
+// Live execution log for the orb: the step ids are written by executeAdsPlan
+// right after each Meta call, so the page can report real progress instead of
+// guessing when a stage finished.
+export async function readCampaignProgress(pool,a,runId){
+ requirePermission(a,'marketing.read');
+ assertApiFeature(a.features,'/api/agent');
+ if(!uuid(runId))throw bad(422,'Conversa inválida.');
+ const q=await pool.query(
+  'SELECT r.status AS run_status,r.brief,p.status AS plan_status,p.result '+
+  'FROM socio_skill_runs r LEFT JOIN meta_ads_plans p ON p.id=r.plan_id AND p.tenant_id=r.tenant_id '+
+  'WHERE r.id=$1 AND r.tenant_id=$2 AND r.user_id=$3',
+  [runId,a.active_tenant_id,a.user_id]);
+ const row=q.rows[0];
+ if(!row)throw bad(404,'Conversa não encontrada.');
+ return {runId,runStatus:row.run_status,planStatus:row.plan_status||null,
+  result:row.result&&typeof row.result==='object'?row.result:{},brief:publicBrief(row.brief||{})};
 }
 async function enrich(pool,a,brief,{read=readAdsTool,options={}}={}){
  const resources={pages:[],images:[],channels:[]};
  // Only the selected authorized Meta ad account is ever read.
- if(!brief.cityName||!brief.category||!brief.dailyBudgetCents)return {brief,resources};
- const city=await read(pool,a,'cities',{query:brief.cityName},options);
- const chosen=chooseMetaCity(city.items,brief.cityName);
- if(chosen){brief.cityKey=String(chosen.key);brief.cityName=String(chosen.name);}
+ if((!brief.cityName&&!brief.countryCode)||!brief.category||!brief.dailyBudgetCents)return {brief,resources};
+ if(!brief.countryCode){
+  const city=await read(pool,a,'cities',{query:brief.cityName},options);
+  const chosen=chooseMetaCity(city.items,brief.cityName);
+  if(chosen){brief.cityKey=String(chosen.key);brief.cityName=String(chosen.name);}
+ }
  if(!brief.destination){
   const channels=await pool.query("SELECT label,phone FROM channels WHERE tenant_id=$1 AND provider='waakg' AND status='connected' ORDER BY label LIMIT 10",[a.active_tenant_id]);
   resources.channels=channels.rows;
@@ -204,36 +256,40 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
     'Criação incompleta: confira o histórico e os IDs parciais da Meta antes de tentar novamente. '+String(executed.error||'').slice(0,120)};
  }
  const brief=extractCampaignBrief(message,run.brief||{});
- if(runId&&!run.brief?.category&&!brief.category){
-  const candidate=message.trim().replace(/[<>\r\n]/g,' ').replace(/\s+/g,' ');
-  if(candidate.length>=3&&candidate.length<=70&&!/\b(R\$|orcamento|campanha|pode criar|autorizo)\b/i.test(candidate))
+ // The last question asked decides how a short spoken answer is read.
+ const asked=runId?run.brief?.asked:null;
+ const bare=message.trim().replace(/[.!]$/,'');
+ if(runId&&run.brief&&!run.brief?.category&&!brief.category){
+  const candidate=bare.replace(/[<>\r\n]/g,' ').replace(/\s+/g,' ');
+  if(candidate.length>=3&&candidate.length<=70&&!unsureAnswer(normalized)&&!/\b(R\$|orcamento|campanha|pode criar|autorizo)\b/i.test(candidate))
    brief.category=candidate;
  }
- // Spoken answers are short: "6" is the daily budget, "Sorocaba" is the city.
- if(runId&&run.brief&&!brief.dailyBudgetCents&&run.brief.category&&run.brief.cityName){
-  const bare=message.trim().replace(/[.!]$/,'');
-  const numeric=/^(?:R\$\s*)?(\d{1,6}(?:[.,]\d{1,2})?)$/i.exec(bare);
-  if(numeric){
-   const n=Number(numeric[1].replace(',','.'));
-   if(n>=1&&n<=100000)brief.dailyBudgetCents=Math.round(n*100);
-  }
+ if(runId&&run.brief&&!brief.dailyBudgetCents&&(asked==='budget'||(run.brief.category&&run.brief.cityName))){
+  const n=asked==='budget'?spokenMoney(normalized):
+   (/^(?:R\$\s*)?(\d{1,6}(?:[.,]\d{1,2})?)$/i.test(bare)?Number(bare.replace(/[^\d.,]/g,'').replace(',','.')):null);
+  if(Number.isFinite(n)&&n>=1&&n<=100000)brief.dailyBudgetCents=Math.round(n*100);
  }
- if(runId&&run.brief&&!brief.cityName&&run.brief.category){
-  const bare=message.trim().replace(/[.!]$/,'');
-  if(bare.length>=3&&bare.length<=75&&
+ if(runId&&run.brief&&!brief.cityName&&!brief.countryCode&&(asked==='city'||run.brief.category)){
+  if(wantsCountrywide(normalized)){
+   brief.countryCode='BR';brief.cityName='todo o Brasil';delete brief.cityKey;
+  }else if(bare.length>=3&&bare.length<=75&&!unsureAnswer(normalized)&&
    !/^\d|[.:]|^(pode criar|pode fazer|confirmo|autorizo|aprovo|sim)\b/i.test(bare)&&
-   !/\b(whatsapp|site|zap|campanha|reais|pixel|orcamento)\b/i.test(clean(bare)))
+   !/\b(whatsapp|site|zap|campanha|reais|pixel|orcamento)\b/i.test(clean(bare))){
    brief.cityName=bare;
+  }
  }
  if(imageHash){delete brief.videoId;brief.imageHash=imageHash;brief.imageName='Foto enviada nesta conversa';}
  if(videoId){delete brief.imageHash;brief.videoId=String(videoId);brief.imageName='Vídeo importado nesta conta Meta';}
  const {resources}=await enrich(pool,a,brief,{read:opts.read||readAdsTool,options:opts});
  const prompt=promptFor(brief,resources);
  if(prompt){
+  brief.asked=prompt.slot;
   await pool.query(
    "UPDATE socio_skill_runs SET brief=$2::jsonb,updated_at=now() WHERE id=$1 AND tenant_id=$3 AND user_id=$4 AND status='collecting'",
    [run.id,JSON.stringify(brief),a.active_tenant_id,a.user_id]);
-  return {skillId:'ads.campaign.launch',runId:run.id,status:'collecting',brief:publicBrief(brief),message:prompt,
+  const repeat=run.brief?.asked===prompt.slot;
+  return {skillId:'ads.campaign.launch',runId:run.id,status:'collecting',brief:publicBrief(brief),
+   message:repeat?clarifyFor(prompt.slot,prompt.message):prompt.message,
    note:brief.destination==='whatsapp'?
     'Para conversas WhatsApp, a origem pode ser apenas indicativa conforme os dados do WA-AKG; não existe Pixel instalado dentro do WhatsApp.':null};
  }
@@ -250,7 +306,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
  // Meta validates actual page/image/city ownership during prepareAdsPlan.
  const creative=skillAdCopy(brief,a.tenant_name);
  const input={...creative,pageId:brief.pageId,...(brief.videoId?{videoId:brief.videoId}:{imageHash:brief.imageHash}),cityName:brief.cityName,
-  cityKey:brief.cityKey,dailyBudgetCents:brief.dailyBudgetCents,ageMin:18,ageMax:65,
+  ...(brief.countryCode?{countryCode:brief.countryCode}:{cityKey:brief.cityKey}),dailyBudgetCents:brief.dailyBudgetCents,ageMin:18,ageMax:65,
   ...(brief.genders?.length?{genders:brief.genders}:{}),
   ...(brief.destination==='whatsapp'?{whatsappPhone:brief.whatsappPhone}:{url:brief.url})};
  const kind=brief.destination==='whatsapp'?'create_whatsapp':'create';
@@ -275,7 +331,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
  return {skillId:'ads.campaign.launch',runId:run.id,status:'ready',brief:publicBrief(brief),planId:plan.id,
   creativeVariants:creativeDrafts.variants,selectedCreativeStyle:creativeDrafts.variants[0].style,
   message:'Preparei a campanha '+creative.name+'. Público: '+(brief.genders?.[0]===2?'mulheres, ':'')+
-   'maiores de 18 anos em '+brief.cityName+'. Página: '+brief.pageId+'. Mídia: '+(brief.imageName||'criativo enviado')+'. Orçamento diário definido: R$ '+
+   'maiores de 18 anos em '+(brief.countryCode?'todo o Brasil':brief.cityName)+'. Página: '+brief.pageId+'. Mídia: '+(brief.imageName||'criativo enviado')+'. Orçamento diário definido: R$ '+
    (brief.dailyBudgetCents/100).toFixed(2).replace('.',',')+'/dia. Destino: '+
    (brief.destination==='whatsapp'?'WhatsApp WA-AKG':'site')+'. '+
    (pixelPlanId?'Um Pixel novo também está incluído na autorização, mas ainda precisará ser instalado no site. ':'' )+

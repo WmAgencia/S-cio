@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {extractCampaignBrief,chooseMetaCity,skillAdCopy,speakToAdSkill,SOCIO_AD_SKILLS} from '../socio-ad-skills.mjs';
+import {extractCampaignBrief,chooseMetaCity,skillAdCopy,speakToAdSkill,readCampaignProgress,SOCIO_AD_SKILLS} from '../socio-ad-skills.mjs';
 import {validateAdsPlan} from '../meta-ads-tools.mjs';
 const tenant=randomUUID(),user=randomUUID();
 const actor={active_tenant_id:tenant,user_id:user,tenant_name:'Loja exemplo',role:'owner',
@@ -132,6 +132,76 @@ test('non-fashion businesses can answer a simple product question conversational
  assert.equal(replied.status,'collecting');
  assert.equal(replied.brief.category,'Bolos caseiros');
  assert.match(replied.message,/foto/i);
+});
+test('"Brasil inteiro" is remembered and never asked back as a city',async()=>{
+ const pool=fakePool(),prepared=[];
+ const noImages=async(p,a,kind)=>kind==='images'?{items:[]}:read(p,a,kind);
+ const opts={resolve,read:noImages,prepare:async(_p,_a,kind,input)=>{prepared.push({kind,input});return{id:randomUUID()};}};
+ const started=await speakToAdSkill(pool,actor,{
+  message:'Quero divulgar o sistema sócio para o Brasil inteiro gastando seis reais por dia'},opts);
+ assert.equal(started.status,'collecting');
+ assert.equal(started.brief.countryCode,'BR');
+ assert.equal(started.brief.cityName,'todo o Brasil');
+ assert.equal(started.brief.dailyBudgetCents,600);
+ assert.match(started.message,/foto ou um vídeo/);
+ assert(!/cidade|estado/i.test(started.message),'countrywide brief must not ask for a city again');
+ const ready=await speakToAdSkill(pool,actor,{
+  message:'Acabei de enviar o vídeo',runId:started.runId,videoId:'123456789012345'},opts);
+ assert.equal(ready.status,'ready');
+ assert.equal(prepared.length,1);
+ assert.equal(prepared[0].kind,'create_whatsapp');
+ assert.equal(prepared[0].input.countryCode,'BR');
+ assert.equal(prepared[0].input.cityName,'todo o Brasil');
+ assert.equal(prepared[0].input.cityKey,undefined);
+ assert.equal(prepared[0].input.videoId,'123456789012345');
+ assert.equal(validateAdsPlan(prepared[0].kind,prepared[0].input).countryCode,'BR');
+ assert.match(ready.message,/todo o Brasil/);
+});
+test('a spoken budget answer is read in the context of the budget question',async()=>{
+ const pool=fakePool(),prepared=[];
+ const noImages=async(p,a,kind)=>kind==='images'?{items:[]}:read(p,a,kind);
+ const opts={resolve,read:noImages,prepare:async(_p,_a,kind,input)=>{prepared.push(input);return{id:randomUUID()};}};
+ const started=await speakToAdSkill(pool,actor,{message:'Quero divulgar o sistema sócio em Sorocaba'},opts);
+ assert.equal(started.status,'collecting');
+ assert.match(started.message,/investimento máximo por dia/i);
+ const budget=await speakToAdSkill(pool,actor,{message:'pode ser doze reais por dia',runId:started.runId},opts);
+ assert.equal(budget.brief.dailyBudgetCents,1200);
+ assert.match(budget.message,/foto ou um vídeo/);
+ const barePool=fakePool();
+ const bareStart=await speakToAdSkill(barePool,actor,{message:'Quero divulgar o sistema sócio em Sorocaba'},opts);
+ const bareAnswer=await speakToAdSkill(barePool,actor,{message:'12',runId:bareStart.runId},opts);
+ assert.equal(bareAnswer.brief.dailyBudgetCents,1200);
+});
+test('repeating a question clarifies the expected answer instead of accepting a non-answer',async()=>{
+ const pool=fakePool(),opts={resolve,read};
+ const started=await speakToAdSkill(pool,actor,{
+  message:'Quero divulgar o sistema sócio gastando seis reais por dia'},opts);
+ assert.equal(started.status,'collecting');
+ assert.match(started.message,/todo o Brasil ou em uma cidade/i);
+ const repeated=await speakToAdSkill(pool,actor,{message:'Não sei ainda',runId:started.runId},opts);
+ assert.equal(repeated.status,'collecting');
+ assert.equal(repeated.brief.cityName,null);
+ assert.match(repeated.message,/Ainda não identifiquei o local/);
+});
+test('execution progress reports only the owned run and the stages Meta already confirmed',async()=>{
+ const runId=randomUUID();
+ const progressPool={query:async(sql,params)=>{
+  if(!sql.includes('FROM socio_skill_runs r'))throw Error('Unexpected SQL: '+sql.slice(0,80));
+  const owned=params[0]===runId&&params[1]===tenant&&params[2]===user;
+  return {rowCount:owned?1:0,rows:owned?[{
+   run_status:'executing',plan_status:'running',
+   brief:{category:'sistema de gestão',countryCode:'BR',imageHash,asked:'media'},
+   result:{campaignId:'900001',adsetId:'900002'}}]:[]};
+ }};
+ const out=await readCampaignProgress(progressPool,actor,runId);
+ assert.equal(out.runStatus,'executing');
+ assert.equal(out.planStatus,'running');
+ assert.equal(out.result.campaignId,'900001');
+ assert.equal(out.result.adId,undefined,'a stage only appears after Meta confirms it');
+ assert.equal(out.brief.countryCode,'BR');
+ await assert.rejects(readCampaignProgress(progressPool,{...actor,active_tenant_id:randomUUID()},runId),e=>e.status===404);
+ await assert.rejects(readCampaignProgress(progressPool,{...actor,role:'agent'},runId),e=>e.status===403);
+ await assert.rejects(readCampaignProgress(progressPool,actor,'nao-e-uuid'),e=>e.status===422);
 });
 test('missing Meta connection, permissions and currency stop orchestration',async()=>{
  const pool=fakePool();

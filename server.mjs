@@ -1,9 +1,9 @@
-import {readAdsTool,readSelectedAdMedia,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
+import {readAdsTool,readSelectedAdMedia,uploadAdImage,uploadAdVideo,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
 import {listTenantVideoChannels,findLastOutgoingVideo,importLastOutgoingVideo} from './socio-whatsapp-meta-video.mjs';
 import {runVideoPilotOnce} from './socio-whatsapp-meta-video-pilot.mjs';
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {previewMetaCommand} from './meta-ads-commands.mjs';
-import {SOCIO_AD_SKILLS} from './socio-ad-skills.mjs';
+import {SOCIO_AD_SKILLS,readCampaignProgress} from './socio-ad-skills.mjs';
 import {listExpertSkills,getExpertSkillGuide} from './socio-expert-skills.mjs';
 import {speakToSocioSkill} from './socio-skill-router.mjs';
 import {processOwnerSkillInbox} from './socio-owner-skill-inbox.mjs';
@@ -60,7 +60,7 @@ import {createTrackingSite,listTrackingSites,enableTrackingSite,receiveSignedSit
 import {integrationReadiness} from './socio-integrations-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
-import {reserveAdVideo,listAdVideos,storeAdVideo,adVideoExportUrl,resolveSignedAsset,serveSignedVideo,importWhatsAppAdVideo,createMediaMcpToken,revokeMediaMcpTokens,MAX_AD_VIDEO_BYTES} from './ads-media.mjs';
+import {reserveAdVideo,listAdVideos,storeAdVideo,readAdVideoBytes,adVideoExportUrl,resolveSignedAsset,serveSignedVideo,importWhatsAppAdVideo,createMediaMcpToken,revokeMediaMcpTokens,MAX_AD_VIDEO_BYTES} from './ads-media.mjs';
 import {handleAdsMediaMcp} from './ads-media-mcp.mjs';
 import {handleMediaOAuth} from './ads-media-oauth.mjs';
 import {createMetaBrowser} from './meta-browser.mjs';
@@ -771,10 +771,17 @@ async function handle(req,res){
   const {data}=await body(req,2000);
   return json(res,201,await reserveAdVideo(pool,a,String(data.filename||''),'chat'));
  }
- const adsFile=pathname.match(/^\/api\/ads-media\/([0-9a-f-]{36})\/(upload|export)$/i);
+ const adsFile=pathname.match(/^\/api\/ads-media\/([0-9a-f-]{36})\/(upload|export|meta)$/i);
  if(adsFile&&method==='POST'){
   requirePermission(a,'marketing.manage');
   if(adsFile[2]==='export')return json(res,200,await adVideoExportUrl(pool,a.active_tenant_id,adsFile[1]));
+  if(adsFile[2]==='meta'){
+   if(!await limiter('sim','ads-meta-video:'+a.active_tenant_id,3600000,20))throw fail(429,'Limite de envios para a Meta atingido.');
+   const stored=await readAdVideoBytes(pool,a.active_tenant_id,adsFile[1]);
+   const uploaded=await uploadAdVideo(pool,a,stored);
+   await audit(a,'ads.media.meta_uploaded',{mediaId:adsFile[1],videoId:uploaded.videoId});
+   return json(res,201,uploaded);
+  }
   const bytes=Number(req.headers['content-length']||0);
   if(bytes>MAX_AD_VIDEO_BYTES)throw fail(413,'Vídeo maior que 90 MB.');
   if(!['video/mp4','video/quicktime','application/octet-stream'].includes(String(req.headers['content-type'])))throw fail(422,'Envie MP4 ou MOV.');
@@ -999,6 +1006,12 @@ async function handle(req,res){
    imageHash:data.imageHash,videoId:data.videoId});
   await audit(a,'thalita.chat',{status:result.status,readOnly:result.readOnly===true,executed:result.executed===true});
   return json(res,200,result);
+ }
+ if(method==='GET'&&pathname==='/api/thalita/progress'){
+  assertApiFeature(a.features,'/api/agent');
+  if(!await limiter('sim','thalita-progress:'+a.active_tenant_id,60000,180))throw fail(429,'Aguarde antes de consultar novamente.');
+  const runId=new URL(req.url,'http://local').searchParams.get('runId');
+  return json(res,200,await readCampaignProgress(pool,a,runId));
  }
  if(method==='POST'&&pathname==='/api/thalita/confirm'){
   assertApiFeature(a.features,'/api/agent');

@@ -213,9 +213,10 @@ export function validateAdsPlan(kind,input){
   const name=text(input.name,120),url=whatsapp?null:safeUrl(input.url),message=text(input.message,2200),headline=text(input.headline,120);
   const phone=whatsapp?String(input.whatsappPhone||'').replace(/\D/g,''):null;
   const imageHash=text(input.imageHash,100),videoId=numeric(input.videoId)?String(input.videoId):null;
+  const countryCode=input.countryCode==='BR'?'BR':null;
   if(!name||(!whatsapp&&!url)||(whatsapp&&!/^55[1-9][0-9]{9,10}$/.test(phone))||!message||!headline||!numeric(input.pageId)||
-    Number(Boolean(imageHash))+Number(Boolean(videoId))!==1||!numeric(input.cityKey)||!text(input.cityName,100)||!money(input.dailyBudgetCents))
-   throw fail(422,'Preencha nome, página, vídeo importado OU imagem, cidade, link HTTPS/WhatsApp, texto, título e orçamento diário (de 1 a 100.000 na moeda da conta).');
+    Number(Boolean(imageHash))+Number(Boolean(videoId))!==1||(!numeric(input.cityKey)&&!countryCode)||!text(input.cityName,100)||!money(input.dailyBudgetCents))
+   throw fail(422,'Preencha nome, página, vídeo importado OU imagem, cidade ou Brasil inteiro, link HTTPS/WhatsApp, texto, título e orçamento diário (de 1 a 100.000 na moeda da conta).');
   const ageMin=Number(input.ageMin||18),ageMax=Number(input.ageMax||65);
   if(!Number.isInteger(ageMin)||!Number.isInteger(ageMax)||ageMin<18||ageMax>65||ageMin>ageMax)throw fail(422,'Faixa etária inválida.');
   const genders=input.genders===undefined?[]:input.genders;
@@ -223,7 +224,8 @@ export function validateAdsPlan(kind,input){
      new Set(genders).size!==genders.length)throw fail(422,'Segmentação de gênero inválida.');
   return {name,url,whatsappPhone:phone,message,headline,pageId:input.pageId,
    ...(videoId?{videoId}:{imageHash}),
-   cityKey:input.cityKey,cityName:input.cityName.trim(),dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax,genders};
+   ...(countryCode?{countryCode}:{cityKey:input.cityKey}),cityName:input.cityName.trim(),
+   dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax,genders};
 
  }
  if(kind==='create_pixel'){
@@ -326,10 +328,14 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
     [a.active_tenant_id,payload.whatsappPhone]);
    if(!channel.rowCount)throw fail(422,'Este número WhatsApp não está conectado ao WA-AKG da sua empresa.');
   }
-  const locations=await graph(c,'/search',{type:'adgeolocation',location_types:['city'],country_code:'BR',q:payload.cityName,limit:100});
-  const city=(locations.data||[]).find(x=>String(x.key)===payload.cityKey);
-  if(!city)throw fail(422,'Pesquise e selecione novamente a cidade desejada.');
-  payload.cityName=[city.name,city.region,city.country_name].filter(Boolean).join(' · ');
+  if(payload.countryCode){
+   payload.cityName='Brasil inteiro';
+  }else{
+   const locations=await graph(c,'/search',{type:'adgeolocation',location_types:['city'],country_code:'BR',q:payload.cityName,limit:100});
+   const city=(locations.data||[]).find(x=>String(x.key)===payload.cityKey);
+   if(!city)throw fail(422,'Pesquise e selecione novamente a cidade desejada.');
+   payload.cityName=[city.name,city.region,city.country_name].filter(Boolean).join(' · ');
+  }
   summary={description:kind==='create_whatsapp'?
    'Criar campanha para mensagens WhatsApp, conjunto, criativo e anúncio PAUSADOS. A Meta precisa validar se o número está vinculado à Página. O WA-AKG continua sendo o canal de atendimento.':
    'Criar campanha de tráfego para site, conjunto, criativo e anúncio. Todos serão criados PAUSADOS.',
@@ -399,7 +405,8 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
     billing_event:'IMPRESSIONS',optimization_goal:whatsapp?'CONVERSATIONS':'LINK_CLICKS',
     bid_strategy:'LOWEST_COST_WITHOUT_CAP',destination_type:whatsapp?'WHATSAPP':'WEBSITE',
     ...(whatsapp?{promoted_object:{page_id:p.pageId,whatsapp_phone_number:p.whatsappPhone}}:{}),
-    targeting:{geo_locations:{cities:[{key:p.cityKey}]},age_min:p.ageMin,age_max:p.ageMax,...(p.genders?.length?{genders:p.genders}:{})},status:'PAUSED'},'POST');
+    targeting:{geo_locations:p.countryCode?{countries:[p.countryCode]}:{cities:[{key:p.cityKey}]},
+     age_min:p.ageMin,age_max:p.ageMax,...(p.genders?.length?{genders:p.genders}:{})},status:'PAUSED'},'POST');
    if(!numeric(adset.id))throw Object.assign(fail(503,'A Meta não retornou o ID do conjunto.'),{uncertain:true});result.adsetId=adset.id;await progress();
    const chatLink='https://wa.me/'+p.whatsappPhone;
    const destination=whatsapp?chatLink:p.url;

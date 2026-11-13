@@ -128,6 +128,17 @@ export async function storeAdVideo(pool,tenantId,mediaId,readable,{env=process.e
  }finally{if(tmp)await unlink(tmp.file).catch(()=>{});}
 }
 const memoryAssets=new Map();
+export async function readAdVideoBytes(pool,tenantId,id,{env=process.env}={}){
+ const row=await findVideo(pool,tenantId,id);
+ if(row.status!=='ready')throw err(409,'O vídeo ainda não terminou o envio.');
+ if(env.NODE_ENV==='test'&&env.SOCIO_STORAGE_DRIVER==='memory'){
+  const bytes=memoryAssets.get(row.object_key);if(!bytes)throw err(404,'Mídia não encontrada.');
+  return {bytes,mime:row.content_type};
+ }
+ const {client,sdk}=await store(env);
+ const result=await client.send(new sdk.GetObjectCommand({Bucket:env.SOCIO_S3_BUCKET,Key:row.object_key}));
+ return {bytes:Buffer.from(await result.Body.transformToByteArray()),mime:row.content_type};
+}
 export async function adVideoExportUrl(pool,tenantId,id,env=process.env){
  const row=await findVideo(pool,tenantId,id);
  if(row.status!=='ready')throw err(409,'Vídeo não está pronto.');
