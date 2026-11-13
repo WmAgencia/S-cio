@@ -345,6 +345,8 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   return {skillId:'ads.campaign.launch',runId:run.id,status,brief:publicBrief(run.brief||{}),result:executed,
    message:status==='completed'?
     'A Meta confirmou: campanha, conjunto e anúncio criados e pausados. Nada está veiculando e nenhum valor será gasto até você ativar.'+
+     (executed.result?.welcomeMessageConfigured===true?' As mensagens de Conversas já estão configuradas no anúncio.':'')+
+     (executed.result?.welcomeMessageConfigured===false?' A Meta recusou a mensagem de boas-vindas nesta conta; as duas mensagens de Conversas continuam no plano para colar no Gerenciador de Anúncios.':'')+
      (pixelOutcome?.result?.pixelId?' O Pixel novo também foi criado, mas ainda precisa ser instalado no site.':'')+
      ' Quando quiser começar, peça a ativação.' :
     creationFailure(executed)};
@@ -409,7 +411,8 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
  // The plan carries the same first draft the owner is shown, description included.
  const draft=creativeDrafts.variants[0];
  const creative={name:creativeDrafts.name,headline:draft.headline,
-  description:draft.description,message:draft.message};
+  description:draft.description,message:draft.message,
+  ...(brief.destination==='whatsapp'&&draft.welcomeMessage?{welcomeMessage:draft.welcomeMessage,quickReply:draft.quickReply}:{})};
  const design=campaignDesign(brief);
  const input={...creative,pageId:brief.pageId,...(brief.videoId?{videoId:brief.videoId}:{imageHash:brief.imageHash}),cityName:brief.cityName,
   ...(brief.countryCode?{countryCode:brief.countryCode}:{cityKey:brief.cityKey}),dailyBudgetCents:brief.dailyBudgetCents,ageMin:18,ageMax:65,

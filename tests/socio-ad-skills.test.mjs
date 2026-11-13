@@ -343,7 +343,13 @@ test('video received through Sócio can prepare a R$ 6 WhatsApp campaign in Soro
  assert.equal(prepared[0].input.objective,'OUTCOME_ENGAGEMENT');
  assert.equal(prepared[0].input.optimizationGoal,'CONVERSATIONS');
  assert.equal(prepared[0].input.budgetMode,'adset');
- assert.equal(validateAdsPlan('create_whatsapp',prepared[0].input).videoId,videoId);
+ assert(prepared[0].input.welcomeMessage,'the Conversas greeting travels with the plan');
+ assert(prepared[0].input.welcomeMessage.length<=160);
+ assert(prepared[0].input.quickReply.length<=40);
+ const kept=validateAdsPlan('create_whatsapp',prepared[0].input);
+ assert.equal(kept.welcomeMessage,prepared[0].input.welcomeMessage);
+ assert.equal(kept.quickReply,prepared[0].input.quickReply);
+ assert.equal(kept.videoId,videoId);
  assert.equal(executed.length,0);
  const denied=await speakToAdSkill(pool,actor,{message:'não autorizei',runId:first.runId},opts);
  assert.equal(denied.status,'ready');assert.equal(executed.length,0);

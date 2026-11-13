@@ -244,6 +244,10 @@ export function validateAdsPlan(kind,input){
   if(String(input.description||'').trim()&&!description)
    throw fail(422,'A descrição do anúncio precisa ter até 60 caracteres.');
   const phone=whatsapp?String(input.whatsappPhone||'').replace(/\D/g,''):null;
+  // The "Conversas" section of a click-to-WhatsApp ad is configured on the
+  // creative itself; both texts are optional so an old plan still prepares.
+  const welcomeMessage=whatsapp?text(input.welcomeMessage,160):null;
+  const quickReply=whatsapp&&welcomeMessage?text(input.quickReply,40):null;
   const imageHash=text(input.imageHash,100),videoId=numeric(input.videoId)?String(input.videoId):null;
   const countryCode=input.countryCode==='BR'?'BR':null;
   if(!name||(!whatsapp&&!url)||(whatsapp&&!/^55[1-9][0-9]{9,10}$/.test(phone))||!message||!headline||!numeric(input.pageId)||
@@ -264,7 +268,7 @@ export function validateAdsPlan(kind,input){
   const budgetMode=input.budgetMode===undefined?'adset':input.budgetMode;
   if(!['adset','campaign'].includes(budgetMode))throw fail(422,'Forma de orçamento inválida.');
   return {name,url,whatsappPhone:phone,message,headline,...(description&&!videoId?{description}:{}),pageId:input.pageId,
-   ...(videoId?{videoId}:{imageHash}),
+   ...(videoId?{videoId}:{imageHash}),...(welcomeMessage?{welcomeMessage,quickReply}:{}),
    ...(countryCode?{countryCode}:{cityKey:input.cityKey}),cityName:input.cityName.trim(),
    dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax,genders,objective,optimizationGoal,budgetMode};
 
@@ -478,6 +482,19 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
  await pool.query("INSERT INTO meta_ads_plans(id,tenant_id,user_id,account_id,kind,payload,summary,status,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,'ready',now()+interval '15 minutes')",[id,a.active_tenant_id,a.user_id,c.account.id,kind,JSON.stringify(payload),JSON.stringify(summary)]);
  return {id,summary,requiresConfirmation:true};
 }
+// The ad's "Conversas" section is carried by the creative: the greeting the
+// person sees when the chat opens, plus the message pre-filled for them to send.
+export function whatsappWelcomeMessage(welcome,quickReply){
+ const greeting=text(welcome,160);
+ if(!greeting)return null;
+ const message={text:greeting};
+ const textFormat={message};
+ if(text(quickReply,40)){
+  textFormat.customer_action_type='autofill_message';
+  message.autofill_message={content:text(quickReply,40)};
+ }
+ return JSON.stringify({type:'VISUAL_EDITOR',version:2,landing_screen_type:'welcome_message',media_type:'text',text_format:textFormat});
+}
 export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
  permit(a,true);if(confirmed!==true||typeof planId!=='string'||!/^[a-f0-9-]{36}$/.test(planId))throw fail(422,'Revise e confirme a operação antes de executar.');
  const c=await context(pool,a,options,true);
@@ -506,16 +523,29 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
    // Click-to-WhatsApp ads reject any `link` in the call to action: Meta only
    // accepts app_destination there, and the creative carries the wa.me URL.
    const cta=whatsapp?{type:'WHATSAPP_MESSAGE',value:{app_destination:'WHATSAPP'}}:{type:'LEARN_MORE',value:{link:destination}};
-   const creative=await graph(c,'/'+c.account.id+'/adcreatives',{
+   const welcome=whatsapp?whatsappWelcomeMessage(p.welcomeMessage,p.quickReply):null;
+   const creativePayload=withWelcome=>({
     name:p.name+' · Criativo',
     object_story_spec:{page_id:p.pageId,
      ...(p.videoId?{video_data:{
       video_id:p.videoId,title:p.headline,message:p.message,
       ...(p.videoThumbnailUrl?{image_url:p.videoThumbnailUrl}:{}),
+      ...(withWelcome?{page_welcome_message:withWelcome}:{}),
       call_to_action:cta
      }}:{link_data:{image_hash:p.imageHash,link:destination,
-      message:p.message,name:p.headline,...(p.description?{description:p.description}:{}),call_to_action:cta}})}
-   },'POST');
+      message:p.message,name:p.headline,...(p.description?{description:p.description}:{}),
+      ...(withWelcome?{page_welcome_message:withWelcome}:{}),call_to_action:cta}})}
+   });
+   let creative;
+   try{creative=await graph(c,'/'+c.account.id+'/adcreatives',creativePayload(welcome),'POST');}
+   catch(error){
+    // A rejected welcome message must not cost the owner the campaign: the ad is
+    // created without it and the two texts stay available to paste.
+    if(!welcome||error.uncertain)throw error;
+    creative=await graph(c,'/'+c.account.id+'/adcreatives',creativePayload(null),'POST');
+    result.welcomeMessageConfigured=false;
+   }
+   if(numeric(creative.id)&&welcome&&result.welcomeMessageConfigured!==false)result.welcomeMessageConfigured=true;
    if(!numeric(creative.id))throw Object.assign(fail(503,'A Meta não retornou o ID do criativo.'),{uncertain:true});result.creativeId=creative.id;await progress();
    const ad=await graph(c,'/'+c.account.id+'/ads',{name:p.name+' · Anúncio',adset_id:adset.id,creative:{creative_id:creative.id},status:'PAUSED'},'POST');
    if(!numeric(ad.id))throw Object.assign(fail(503,'A Meta não retornou o ID do anúncio.'),{uncertain:true});result.adId=ad.id;result.delivery='PAUSED';await progress();

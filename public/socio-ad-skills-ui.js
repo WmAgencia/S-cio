@@ -293,7 +293,7 @@
      }).join('\n\n');
      add('Prévia dos textos',drafts+'\n\nO plano atual usa a opção 1. As outras são referências para revisar ou criar outro pedido; não serão publicadas automaticamente.'+
       (answer.copyNote?'\n\n'+answer.copyNote:'')+
-      (answer.creativeVariants[0]?.welcomeMessage?'\n\nAs duas mensagens de Conversas acompanham o pedido para você colar na seção Conversas do anúncio, no Gerenciador de Anúncios. O Sócio não altera essa configuração pela API da Meta.':''));
+      (answer.creativeVariants[0]?.welcomeMessage?'\n\nAs duas mensagens de Conversas vão configuradas no próprio anúncio: a saudação é o que a pessoa vê ao abrir a conversa e a mensagem pronta fica preenchida para ela enviar.':''));
     }
     if(answer.note)add('Rastreamento',answer.note);
     if(['completed','failed','action_required'].includes(answer.status)){
