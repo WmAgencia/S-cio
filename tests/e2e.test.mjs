@@ -390,7 +390,10 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(passwordChanged.result.allSessionsRevoked,true);
  const otherSessionRevoked=await call('/api/me','GET',undefined,anotherSession.cookie.split(';')[0]);
  assert.equal(otherSessionRevoked.status,401,'Password rotation invalidates other sessions');
- assert.equal((await call('/api/me','GET',undefined,activeCookie)).status,200,'Current session survives own password change');
+ assert.equal((await call('/api/me','GET',undefined,activeCookie)).status,401,'The pre-change cookie is revoked too');
+ // The response carries a fresh session for this device, so the user stays signed in.
+ const rotatedCookie=passwordChanged.cookie.split(';')[0];
+ assert.equal((await call('/api/me','GET',undefined,rotatedCookie)).status,200,'Password change reissues the current session');
  assert.equal((await call('/api/login','POST',{email:'agent-phase4@example.test',password:'SenhaAtendente2026!'})).status,401);
  assert.equal((await call('/api/login','POST',{email:'agent-phase4@example.test',password:'SenhaNova2026!MuitoForte'})).status,200);
 
