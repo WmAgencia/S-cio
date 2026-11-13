@@ -1,4 +1,4 @@
-import {readAdsTool,readSelectedAdMedia,uploadAdImage,uploadAdVideo,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
+import {readAdsTool,readSelectedAdMedia,uploadAdImage,uploadAdVideo,waitForAdVideoReady,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
 import {listTenantVideoChannels,findLastOutgoingVideo,importLastOutgoingVideo} from './socio-whatsapp-meta-video.mjs';
 import {runVideoPilotOnce} from './socio-whatsapp-meta-video-pilot.mjs';
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
@@ -60,7 +60,7 @@ import {createTrackingSite,listTrackingSites,enableTrackingSite,receiveSignedSit
 import {integrationReadiness} from './socio-integrations-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
-import {reserveAdVideo,listAdVideos,storeAdVideo,readAdVideoBytes,adVideoExportUrl,resolveSignedAsset,serveSignedVideo,importWhatsAppAdVideo,createMediaMcpToken,revokeMediaMcpTokens,MAX_AD_VIDEO_BYTES} from './ads-media.mjs';
+import {reserveAdVideo,listAdVideos,storeAdVideo,readAdVideoBytes,recordMetaVideoUpload,adVideoExportUrl,resolveSignedAsset,serveSignedVideo,importWhatsAppAdVideo,createMediaMcpToken,revokeMediaMcpTokens,MAX_AD_VIDEO_BYTES} from './ads-media.mjs';
 import {handleAdsMediaMcp} from './ads-media-mcp.mjs';
 import {handleMediaOAuth} from './ads-media-oauth.mjs';
 import {createMetaBrowser} from './meta-browser.mjs';
@@ -778,9 +778,12 @@ async function handle(req,res){
   if(adsFile[2]==='meta'){
    if(!await limiter('sim','ads-meta-video:'+a.active_tenant_id,3600000,20))throw fail(429,'Limite de envios para a Meta atingido.');
    const stored=await readAdVideoBytes(pool,a.active_tenant_id,adsFile[1]);
-   const uploaded=await uploadAdVideo(pool,a,stored);
+   const uploaded=await uploadAdVideo(pool,a,stored,{title:'Criativo enviado pelo Sócio'});
+   await recordMetaVideoUpload(pool,{tenantId:a.active_tenant_id,mediaId:adsFile[1],userId:a.user_id,
+    accountId:uploaded.accountId,videoId:uploaded.videoId});
    await audit(a,'ads.media.meta_uploaded',{mediaId:adsFile[1],videoId:uploaded.videoId});
-   return json(res,201,uploaded);
+   const ready=await waitForAdVideoReady(pool,a,uploaded.videoId,{timeoutMs:20000}).catch(()=>({ready:false}));
+   return json(res,201,{...uploaded,ready:Boolean(ready.ready),videoStatus:ready.status||''});
   }
   const bytes=Number(req.headers['content-length']||0);
   if(bytes>MAX_AD_VIDEO_BYTES)throw fail(413,'Vídeo maior que 90 MB.');

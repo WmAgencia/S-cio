@@ -2163,24 +2163,7 @@ body.socio-orb-view #appShell #view .orb-page .orb-composer input::placeholder{c
 .orb-send:active{transform:scale(.96)}
 .orb-send svg{width:18px;height:18px}
 
-/* Dashboard entry: the orb itself is the button */
 .px-heading-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.px-orb-entry{
- display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:none;padding:0;
- font:inherit;cursor:pointer;border-radius:16px;outline-offset:4px;
-}
-.px-orb-entry-field{
- position:relative;display:grid;place-items:center;width:84px;height:84px;
- transition:transform .26s cubic-bezier(.22,.82,.2,1);
-}
-.px-orb-entry:hover .px-orb-entry-field{transform:scale(1.07)}
-.px-orb-entry:active .px-orb-entry-field{transform:scale(.97)}
-.px-orb-entry-canvas{width:100%;height:100%;display:block;pointer-events:none}
-.px-orb-entry-label{
- font-size:12.5px;font-weight:700;color:#605dec;letter-spacing:.01em;white-space:nowrap;
- transition:color .18s ease;
-}
-.px-orb-entry:hover .px-orb-entry-label{color:#4338ca}
 
 /* Floating launcher: the orb alone, with no pill behind it. */
 .thalita-orb{
@@ -2224,11 +2207,10 @@ body.socio-orb-view #socioThalitaDock{display:none!important}
  .orb-field{width:min(300px,72vw)}
  .orb-line{-webkit-line-clamp:4}
  .px-heading-actions{width:100%;justify-content:flex-start}
- .px-orb-entry-field{width:70px;height:70px}
 }
 @media(prefers-reduced-motion:reduce){
  .orb-mic-btn[aria-pressed="true"] svg,.orb-step,.orb-line{animation:none!important}
- .orb-canvas,.px-orb-entry-field{transform:none!important}
- .orb-plan-panel,.orb-back,.orb-btn,.orb-send,.orb-attach,.px-orb-entry-field{transition:none!important}
+ .orb-canvas{transform:none!important}
+ .orb-plan-panel,.orb-back,.orb-btn,.orb-send,.orb-attach{transition:none!important}
  .orb-step[data-status="running"] .orb-step-mark::after{animation-duration:2.4s}
 }

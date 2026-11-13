@@ -6,6 +6,7 @@ import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from
 import {officialPersistenceScenario} from './meta-official-fixture.mjs';
 import {selectOfficialAccount} from '../../meta-official.mjs';
 import {readAdsTool,prepareAdsPlan,executeAdsPlan,uploadAdImage,inspectOfficialCampaign} from '../../meta-ads-tools.mjs';
+import {recordMetaVideoUpload} from '../../ads-media.mjs';
 export async function metaToolsScenario(pool){
  const {actors,env,request:oauthRequest}=await officialPersistenceScenario(pool),a=actors[0];
  let writes=[],uncertain=false,fallbackPages=false,existingPixels=true;
@@ -217,5 +218,18 @@ export async function metaToolsScenario(pool){
  await assert.rejects(prepareAdsPlan(pool,a,'create_ad',
   {...videoAd,videoId:'999999999999'},opts),{status:403});
  await assert.rejects(prepareAdsPlan(pool,{...a,active_tenant_id:randomUUID()},'create_ad',videoAd,opts));
+ // A video the owner sent to the orb is authorized by its media-bridge receipt
+ // even without a WhatsApp import row, and a video with no receipt at all is
+ // still refused.
+ await pool.query("DELETE FROM socio_whatsapp_meta_video_imports WHERE tenant_id=$1 AND meta_video_id=$2",
+  [a.active_tenant_id,'1616096903323428']);
+ await assert.rejects(prepareAdsPlan(pool,a,'create_ad',videoAd,opts),{status:403});
+ const receipt=await recordMetaVideoUpload(pool,{tenantId:a.active_tenant_id,mediaId:randomUUID(),
+  userId:a.user_id,accountId:'act_123456',videoId:'1616096903323428'});
+ assert.equal(receipt.videoId,'1616096903323428');
+ const orbPlan=await prepareAdsPlan(pool,a,'create_ad',videoAd,opts);
+ assert.equal(orbPlan.summary.videoId,'1616096903323428');
+ await assert.rejects(recordMetaVideoUpload(pool,{tenantId:a.active_tenant_id,mediaId:randomUUID(),
+  userId:a.user_id,accountId:'sem_conta',videoId:'1616096903323428'}),{status:422},'invalid account');
 
 }

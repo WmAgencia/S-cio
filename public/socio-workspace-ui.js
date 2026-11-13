@@ -501,9 +501,6 @@
   root.innerHTML='<div class="px-workspace px-overview">'+
    '<div class="px-page-heading"><div><span class="px-eyebrow">CENTRAL DE INTELIGÊNCIA</span><h1>Visão geral</h1><p>Operação, atendimento e publicidade da sua empresa em um único painel.</p></div>'+
     '<div class="px-heading-actions">'+
-     '<button class="px-orb-entry" data-px-orb type="button" aria-label="Conversar com IA">'+
-      '<span class="px-orb-entry-field" aria-hidden="true"><canvas class="px-orb-entry-canvas"></canvas></span>'+
-      '<span class="px-orb-entry-label">Conversar com IA</span></button>'+
      '<button class="btn soft" data-px-reload type="button">↻ Atualizar indicadores</button></div></div>'+
    '<section class="px-budget-top" aria-label="Verba disponível nas contas publicitárias">'+
     '<div class="px-budget-top-heading"><strong>Controle de verba</strong></div>'+
@@ -576,8 +573,6 @@
    }).catch(()=>{});
   }
 
-  root.querySelector('[data-px-orb]')?.addEventListener('click',()=>navigate('orb'));
-  globalThis.SocioOrbMesh?.create(root.querySelector('.px-orb-entry-canvas'),{light:true,density:.34,radius:.40,point:.011});
   root.querySelector('[data-px-reload]')?.addEventListener('click',()=>{
    getCache.clear();overview({root,api,me,navigate,activityRange:range});
   });

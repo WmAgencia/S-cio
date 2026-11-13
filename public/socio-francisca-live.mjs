@@ -1,7 +1,7 @@
 // Hands-free, turn-based browser voice interaction. A user explicitly starts the
 // microphone, a small VAD detects the end of each utterance, and the same source
 // stays connected until they close the call. No recording is retained on disk; transcript requires human review.
-export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},onInterrupt=()=>{},canInterrupt=()=>false,silenceMs=2100,maxTurnMs=45000,minVoicedMs=650}){
+export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},onInterrupt=()=>{},canInterrupt=()=>false,silenceMs=1800,maxTurnMs=45000,minVoicedMs=380}){
  let active=false,stream=null,context=null,analyser=null,source=null,timer=null,recorder=null;
  let startedAt=0,lastSpeechAt=0,speechStartedAt=0,ambient=.003,finishing=false,processing=false;
  let generation=0,chunks=[],mime='',samples=null,bargeStarted=0,bargeCandidate=false,voicedMs=0,lastPollAt=0,turnAbort=null,startingCandidate=0,lastAssistantSoundAt=0;
@@ -57,17 +57,21 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
    state('hearing');
   }catch(error){onError('Falha ao iniciar a gravação: '+(error.message||error));stop();}
  }
+ // RMS alone cannot tell soft speech from a steady room hum: a quiet voice has
+ // a low average but a clear peak, which is what the recogniser needs.
  function level(){
-  if(!analyser||!samples)return 0;
+  if(!analyser||!samples)return {rms:0,peak:0};
   if(analyser.getFloatTimeDomainData){
    analyser.getFloatTimeDomainData(samples);
-   let sum=0;for(let i=0;i<samples.length;i++)sum+=samples[i]*samples[i];
-   return Math.sqrt(sum/samples.length);
+   let sum=0,peak=0;
+   for(let i=0;i<samples.length;i++){const v=samples[i];sum+=v*v;const a=Math.abs(v);if(a>peak)peak=a;}
+   return {rms:Math.sqrt(sum/samples.length),peak};
   }
   const bytes=new Uint8Array(analyser.fftSize);
   analyser.getByteTimeDomainData(bytes);
-  let sum=0;for(const b of bytes){const d=(b-128)/128;sum+=d*d;}
-  return Math.sqrt(sum/bytes.length);
+  let sum=0,peak=0;
+  for(const b of bytes){const d=(b-128)/128;sum+=d*d;const a=Math.abs(d);if(a>peak)peak=a;}
+  return {rms:Math.sqrt(sum/bytes.length),peak};
  }
  function discardTurn(){
   if(recorder){const old=recorder;old.onstop=null;try{old.stop();}catch{}recorder=null;}
@@ -77,20 +81,20 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
  function poll(){
   if(!active||finishing)return;
   if(document.hidden){stop();return;}
-  const rms=level(),now=Date.now(),delta=lastPollAt?Math.min(170,now-lastPollAt):85;
+  const {rms,peak}=level(),now=Date.now(),delta=lastPollAt?Math.min(170,now-lastPollAt):85;
   lastPollAt=now;
   // Never record an echo while the assistant is speaking. A stronger,
   // sustained voice can interrupt without launching phantom STT requests.
   const assistantSpeaking=canInterrupt();
   if(assistantSpeaking)lastAssistantSoundAt=now;
   if(processing||assistantSpeaking){
-   const userSpeech=assistantSpeaking&&rms>Math.max(.062,ambient*5.2);
+   const userSpeech=assistantSpeaking&&rms>Math.max(.048,ambient*4.4);
    if(userSpeech){
     // Record from the first voiced frame: when the interruption is confirmed the
     // opening words must survive, otherwise the reply starts mid-sentence.
     if(!bargeStarted){bargeStarted=now;bargeCandidate=true;record(true);}
     if(recorder){lastSpeechAt=now;voicedMs+=delta;}
-    if(now-bargeStarted>=750){
+    if(now-bargeStarted>=650){
      bargeStarted=0;bargeCandidate=false;
      try{onInterrupt();}catch(error){onError(error?.message||'Falha ao interromper');}
      // A pending transcription must never race with the interruption.
@@ -107,15 +111,16 @@ export function createSocioVoiceSession({onTurn,onState=()=>{},onError=()=>{},on
   }
   // Suppress speaker echo trailing the end of TTS playback.
   if(lastAssistantSoundAt&&now-lastAssistantSoundAt<800)return;
-  // RMS is not true speech recognition. Treat isolated peaks as noise,
-  // require sustained activity, and reject short/noisy recordings.
-  const threshold=Math.max(.020,ambient*3.0);
-  const loud=rms>threshold;
-  if(!loud)ambient=Math.max(.003,Math.min(.04,ambient*.992+rms*.008));
+  // A soft voice must count as speech. Require both enough average energy and a
+  // real peak so the room's steady hum still never opens a turn, and let the
+  // ambient floor adapt quickly to a noisy place.
+  const threshold=Math.max(.011,ambient*2.6);
+  const loud=rms>threshold&&peak>Math.max(.055,threshold*3.5);
+  if(!loud)ambient=Math.max(.002,Math.min(.05,ambient*.97+rms*.03));
   if(loud){
    if(!recorder){
     if(!startingCandidate)startingCandidate=now;
-    if(now-startingCandidate>=220)record();
+    if(now-startingCandidate>=120)record();
    }
    if(recorder){lastSpeechAt=now;voicedMs+=delta;}
   }else if(!recorder)startingCandidate=0;

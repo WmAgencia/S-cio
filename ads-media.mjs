@@ -139,6 +139,19 @@ export async function readAdVideoBytes(pool,tenantId,id,{env=process.env}={}){
  const result=await client.send(new sdk.GetObjectCommand({Bucket:env.SOCIO_S3_BUCKET,Key:row.object_key}));
  return {bytes:Buffer.from(await result.Body.transformToByteArray()),mime:row.content_type};
 }
+// Receipt that a media-bridge video reached the Meta library of THIS tenant's
+// selected account. Ad creation refuses any video without a receipt here or in
+// socios's WhatsApp import ledger.
+export async function recordMetaVideoUpload(pool,{tenantId,mediaId,userId,accountId,videoId}){
+ if(!validTenant(tenantId)||!uuid.test(String(mediaId))||!uuid.test(String(userId))||
+  !/^act_\d{4,30}$/.test(String(accountId))||!/^\d{4,30}$/.test(String(videoId)))
+  throw err(422,'Recibo de vídeo inválido.');
+ await pool.query(
+  "INSERT INTO socio_ads_meta_video_uploads(id,tenant_id,media_id,user_id,account_id,meta_video_id) "+
+  "VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(tenant_id,account_id,meta_video_id) DO NOTHING",
+  [randomUUID(),tenantId,mediaId,userId,accountId,String(videoId)]);
+ return {mediaId,videoId:String(videoId),accountId};
+}
 export async function adVideoExportUrl(pool,tenantId,id,env=process.env){
  const row=await findVideo(pool,tenantId,id);
  if(row.status!=='ready')throw err(409,'Vídeo não está pronto.');

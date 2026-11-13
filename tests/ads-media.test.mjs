@@ -4,7 +4,7 @@ import {Readable} from 'node:stream';
 import {
  reserveAdVideo,listAdVideos,findVideo,storeAdVideo,adVideoExportUrl,adVideoUploadLink,
  resolveSignedAsset,serveSignedVideo,createMediaMcpToken,revokeMediaMcpTokens,authenticateMediaMcp,
- importWhatsAppAdVideo,readAdVideoBytes,MAX_AD_VIDEO_BYTES
+ importWhatsAppAdVideo,readAdVideoBytes,recordMetaVideoUpload,MAX_AD_VIDEO_BYTES
 } from '../ads-media.mjs';
 import {handleAdsMediaMcp} from '../ads-media-mcp.mjs';
 import {readFile} from 'node:fs/promises';
@@ -163,4 +163,21 @@ test('front e rotas mostram biblioteca separada da criação e aprovação da Me
  assert.ok(html.includes('/ads-media-ui.js'));
  assert.ok(frontend.includes('fetch('));
  assert.ok(!frontend.includes('sk_live_'));
+});
+test('o vídeo enviado pelo orbe ganha recibo da conta Meta e entradas inválidas são recusadas',async()=>{
+ const inserted=[];
+ const pool={query:async(sql,args=[])=>{(inserted.push(sql));
+  assert.match(sql,/INSERT INTO socio_ads_meta_video_uploads/);
+  assert.match(sql,/ON CONFLICT\(tenant_id,account_id,meta_video_id\) DO NOTHING/);
+  return {rowCount:1};}};
+ const receipt=await recordMetaVideoUpload(pool,{tenantId:T,mediaId:OTHER,userId:USER,
+  accountId:'act_123456789',videoId:'1616096903323428'});
+ assert.deepEqual(receipt,{mediaId:OTHER,videoId:'1616096903323428',accountId:'act_123456789'});
+ assert.equal(inserted.length,1);
+ for(const bad of [{accountId:'123456'},{videoId:'abc'},{mediaId:'nope'},{tenantId:'x'}]){
+  const calls=inserted.length;
+  await assert.rejects(recordMetaVideoUpload(pool,{tenantId:T,mediaId:OTHER,userId:USER,
+   accountId:'act_123456789',videoId:'1616096903323428',...bad}),{status:422});
+  assert.equal(inserted.length,calls,'invalid receipt never reaches the database');
+ }
 });

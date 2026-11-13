@@ -111,6 +111,13 @@ test('noise-gated VAD stops all input tracks and removes document listeners',asy
  for(let i=0;i<30;i++){amplitude=.002;now+=85;callback?.();}
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(turns.length,1);
+ // A quiet voice has a low average but a real peak: it must still open a turn.
+ const startsBeforeQuiet=recorderStarts;
+ for(let i=0;i<20;i++){amplitude=.06;now+=85;callback?.();}
+ assert(recorderStarts>startsBeforeQuiet,'soft speech must be heard');
+ for(let i=0;i<30;i++){amplitude=.002;now+=85;callback?.();}
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(turns.length,2);
  session.stop();
  assert.equal(session.active,false);
  assert.equal(trackStops,1,'recording track must physically stop');

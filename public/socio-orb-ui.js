@@ -319,7 +319,7 @@
     mediaCard(li,file,'running','Preparando o vídeo na biblioteca da Meta…');
     const uploaded=await api('/api/ads-media/'+reserved.id+'/meta','POST',{});
     file.meta={mediaId:reserved.id,videoId:uploaded.videoId};
-    mediaCard(li,file,'done','Vídeo pronto na biblioteca da Meta · '+sizeLabel(file.size));
+    mediaCard(li,file,'done',(uploaded.ready===false?'Vídeo enviado · a Meta ainda está processando':'Vídeo pronto na biblioteca da Meta')+' · '+sizeLabel(file.size));
    }
   }catch(error){
    mediaCard(li,file,'error',String(error.message||'Não foi possível enviar a mídia.').slice(0,160));
@@ -473,12 +473,12 @@
   }
   try{
    const [{createSocioVoiceSession},{newSemanticTurnBuffer}]=await Promise.all([
-    import('/socio-francisca-live.mjs?v=20261113a'),import('/socio-semantic-turn.mjs')
+    import('/socio-francisca-live.mjs?v=20261113b'),import('/socio-semantic-turn.mjs')
    ]);
    if(epoch!==voiceEpoch)return;
    const semantic=newSemanticTurnBuffer({maxWaitMs:16000,maxParts:3,maxChars:950});
    const session=createSocioVoiceSession({
-    silenceMs:1500,maxTurnMs:30000,minVoicedMs:500,
+    silenceMs:1700,maxTurnMs:30000,minVoicedMs:340,
     canInterrupt:()=>speaking,
     // Talking over the assistant only stops its audio. The caption, history and
     // the open campaign run stay exactly where they were, so the conversation
@@ -498,7 +498,12 @@
      const resp=await fetch('/api/thalita/transcribe',{method:'POST',credentials:'same-origin',
       headers:{'Content-Type':blob.type.split(';')[0],'X-CSRF-Token':csrf},body:blob,signal});
      const data=await resp.json().catch(()=>({}));
-     if(!resp.ok)throw Error(data.error||'Transcrição indisponível');
+     if(!resp.ok){
+      const message=String(data.error||'Transcrição indisponível');
+      // A stray sound or a breath is not an error to report: keep listening.
+      if(resp.status===422&&/identifiquei|detectei fala/i.test(message)){setPhase('listening');return;}
+      throw Error(message);
+     }
      if(signal?.aborted||turnEpoch!==voiceEpoch||!voiceRequested||voice!==session)return;
      const text=String(data.text||'').trim();
      if(!meaningful(text)){setPhase('listening');return;}
@@ -520,9 +525,12 @@
    if(epoch===voiceEpoch){stopVoice();showCaption('Não foi possível usar o microfone: '+String(error.message||'').slice(0,120));}
   }finally{if(epoch===voiceEpoch)startingVoice=false;}
  }
+ // Short answers are real answers. Only pure fillers are dropped, otherwise
+ // "sim", "não", "ok" and "obrigado" would vanish between the owner and the orb.
  function meaningful(text){
-  const normalized=String(text||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[!?.,]/g,'').trim();
-  return normalized.length>=3&&!/^(?:e ai\s*)+$|^(?:oi|ola|hum|aham|ta|ok|obrigado|e|ai|sim|nao)$/.test(normalized);
+  const normalized=String(text||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase()
+   .replace(/[^a-z0-9]+/g,' ').trim();
+  return normalized.length>=2&&!/^(?:e|e ai|oi+|ola|hum+|hmm+|aham|aha|ah+|eh+|mmm+|uh+|ta|tchau)$/.test(normalized);
  }
  // ------------------------------------------------------------ orb renderer
  // The dotted-mesh renderer lives in /socio-orb-mesh.js so the orb page and

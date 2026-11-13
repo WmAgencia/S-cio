@@ -633,6 +633,21 @@ CREATE TABLE IF NOT EXISTS ads_media (
  FOREIGN KEY(tenant_id,created_by) REFERENCES users(tenant_id,id)
 );
 CREATE INDEX IF NOT EXISTS ads_media_tenant_time ON ads_media(tenant_id,created_at DESC);
+-- Prova de que um vídeo da biblioteca Meta foi enviado por ESTA empresa nesta
+-- conta de anúncios. Junto do recibo do canal do dono, é o que autoriza um
+-- anúncio em vídeo a usar o vídeo. Sem recibo, o vídeo é recusado.
+CREATE TABLE IF NOT EXISTS socio_ads_meta_video_uploads (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ media_id uuid NOT NULL,
+ user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ account_id text NOT NULL CHECK (account_id ~ '^act_[0-9]{4,30}$'),
+ meta_video_id text NOT NULL CHECK (meta_video_id ~ '^[0-9]{4,30}$'),
+ created_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(tenant_id,account_id,meta_video_id)
+);
+CREATE INDEX IF NOT EXISTS socio_ads_meta_video_uploads_tenant_idx
+ ON socio_ads_meta_video_uploads(tenant_id,created_at DESC);
 CREATE TABLE IF NOT EXISTS ads_media_mcp_tokens (
  id uuid PRIMARY KEY,
  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,

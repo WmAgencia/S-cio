@@ -294,6 +294,26 @@ export function broadenedTargeting(targeting){
  out.age_min=18;out.age_max=65;
  return out;
 }
+// Meta processes uploaded videos asynchronously: right after an upload the
+// asset is 'processing' for a few seconds. Poll instead of failing a campaign
+// that would succeed on its own.
+async function pollVideoReady(c,videoId,{timeoutMs=12000,intervalMs=1500}={}){
+ const deadline=Date.now()+timeoutMs;
+ let status='';
+ for(;;){
+  let video;
+  try{video=await graph(c,'/'+videoId,{fields:'id,status'});}
+  catch{return {ready:false,status:'unknown'};}
+  status=String((typeof video?.status==='object'?video.status.video_status:video?.status)||'').toLowerCase();
+  if(String(video?.id)===videoId&&status==='ready')return {ready:true,status};
+  if(['error','failed','invalid'].includes(status)||Date.now()>=deadline)return {ready:false,status};
+  await new Promise(resolve=>setTimeout(resolve,intervalMs));
+ }
+}
+export async function waitForAdVideoReady(pool,a,videoId,options={}){
+ const c=await context(pool,a,options,true);
+ return pollVideoReady(c,String(videoId),{timeoutMs:options.timeoutMs??40000});
+}
 async function validateAssets(c,payload,pool){
  const pages=await availablePages(c);
  if(!(pages.data||[]).some(p=>p.id===payload.pageId))throw fail(403,'Página não autorizada para esta conta.');
@@ -304,16 +324,18 @@ async function validateAssets(c,payload,pool){
   if(!pool)throw fail(503,'Não foi possível validar a origem do vídeo.');
   const ownedVideo=await pool.query(
    "SELECT id FROM socio_whatsapp_meta_video_imports WHERE tenant_id=$1 "+
-   "AND account_id=$2 AND meta_video_id=$3 AND status='uploaded' LIMIT 1",
+   "AND account_id=$2 AND meta_video_id=$3 AND status='uploaded' "+
+   "UNION ALL "+
+   "SELECT id FROM socio_ads_meta_video_uploads WHERE tenant_id=$1 "+
+   "AND account_id=$2 AND meta_video_id=$3 LIMIT 1",
    [c.tenantId,c.account.id,payload.videoId]);
   if(!ownedVideo.rowCount)throw fail(403,'Vídeo não foi importado e confirmado nesta conta da empresa.');
-  let video;
-  try{video=await graph(c,'/'+payload.videoId,{fields:'id,status'});}
-  catch{throw fail(409,'Não foi possível confirmar se o vídeo terminou de processar na Meta.');}
-  const status=typeof video?.status==='object'?video.status.video_status:video?.status;
-  if(String(video?.id)!==payload.videoId||String(status||'').toLowerCase()!=='ready')
-   throw fail(409,'A Meta ainda não confirmou que o vídeo está pronto. Verifique a biblioteca antes de criar o anúncio.');
-  return;
+  const check=await pollVideoReady(c,payload.videoId,{timeoutMs:12000});
+  if(check.ready)return;
+  if(check.status==='unknown')throw fail(409,'Não foi possível confirmar se o vídeo terminou de processar na Meta.');
+  if(['error','failed','invalid'].includes(check.status))
+   throw fail(409,'A Meta recusou o processamento deste vídeo. Envie outro arquivo.');
+  throw fail(409,'A Meta ainda não confirmou que o vídeo está pronto. Verifique a biblioteca antes de criar o anúncio.');
  }
  const images=await graph(c,'/'+c.account.id+'/adimages',{fields:'hash,name',hashes:[payload.imageHash],limit:100});
  if(!(images.data||[]).some(i=>i.hash===payload.imageHash))throw fail(403,'Imagem não encontrada nesta conta. Atualize a biblioteca.');

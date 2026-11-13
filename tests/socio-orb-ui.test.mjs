@@ -13,7 +13,7 @@ const orb=read('public/socio-orb-ui.js');
 const mesh=read('public/socio-orb-mesh.js');
 
 test('the orb page ships as its own script with a production nav entry',()=>{
- assert.match(html,/<script src="\/socio-orb-ui\.js\?v=20261113i" defer><\/script>/);
+ assert.match(html,/<script src="\/socio-orb-ui\.js\?v=20261113j" defer><\/script>/);
  assert.match(html,/<script src="\/socio-orb-mesh\.js\?v=20261113a" defer><\/script>/);
  assert(html.indexOf('/socio-orb-mesh.js')<html.indexOf('/socio-orb-ui.js'));
  assert(html.includes('<button data-view="orb" class="nav-item"><span class="nav-symbol">◉</span> Conversar com IA</button>'));
@@ -34,13 +34,11 @@ test('app routing exposes the orb view and tears it down on exit',()=>{
   app.includes("document.body?.classList?.remove('socio-orb-view');"));
 });
 
-test('the overview entry is the orb itself, not a plain button',()=>{
- assert(overview.includes('data-px-orb'));
- assert(overview.includes('Conversar com IA'));
- assert(overview.includes('<span class="px-orb-entry-field" aria-hidden="true"><canvas class="px-orb-entry-canvas"></canvas></span>'));
- assert(!overview.includes('class="btn orb-cta"'));
- assert(overview.includes("globalThis.SocioOrbMesh?.create(root.querySelector('.px-orb-entry-canvas'),{light:true,density:.34,radius:.40,point:.011})"));
- assert(overview.includes("querySelector('[data-px-orb]')?.addEventListener('click',()=>navigate('orb'))"));
+test('the overview header carries no orb; the launcher and the menu keep the IA entry',()=>{
+ assert(!overview.includes('data-px-orb'));
+ assert(!overview.includes('px-orb-entry'));
+ assert(overview.includes('<button class="btn soft" data-px-reload type="button">↻ Atualizar indicadores</button></div></div>'));
+ assert(!css.includes('.px-orb-entry'));
 });
 
 test('the floating launcher is the orb itself and opens the IA page',()=>{
@@ -101,7 +99,7 @@ test('orb page shows a plan with per-step spinner, check and title',()=>{
 
 test('orb visual language is defined in the design system',()=>{
  for(const selector of ['.orb-page','.orb-field','.orb-aura','.orb-canvas',
-  '.orb-plan-panel','.orb-composer','.px-orb-entry','.px-orb-entry-canvas','#view:has(> .orb-page)']){
+  '.orb-plan-panel','.orb-composer','#view:has(> .orb-page)']){
   assert(css.includes(selector),selector+' should be styled');
  }
  assert(css.includes('body.socio-orb-view #socioThalitaDock{display:none!important}'));
@@ -150,10 +148,32 @@ test('barge-in stops the live audio source and the attachment leaves the orb fac
  assert(orb.includes('if(activeSource){const source=activeSource;activeSource=null;try{source.stop();}'));
  assert(orb.includes("get('#orbMediaChip')?.addEventListener('click',clearMedia)"));
  assert(orb.includes('class="orb-media-pill" type="button" id="orbMediaChip"'));
- assert(orb.includes('silenceMs:1500,maxTurnMs:30000,minVoicedMs:500'));
+ assert(orb.includes('silenceMs:1700,maxTurnMs:30000,minVoicedMs:340'));
  assert(!css.includes('.orb-media-chip{'));
  assert(css.includes('.orb-media-pill[hidden]{display:none!important}'));
  assert(/\.orb-transcript\{[^}]*background:rgba\(255,255,255,\.9\)/.test(css));
+});
+
+test('a short answer the owner speaks is kept, only pure fillers are dropped',()=>{
+ const match=orb.match(/function meaningful\(text\)\{[\s\S]*?\n \}/);
+ assert(match,'meaningful() must exist');
+ const sandbox={};
+ vm.runInNewContext(match[0]+'\nglobalThis.meaningful=meaningful;',sandbox);
+ const meaningful=sandbox.meaningful;
+ for(const text of ['sim','não','nao','ok','pode criar','Sim, pode criar.','vamos','tudo certo','aumenta o orçamento'])
+  assert.equal(meaningful(text),true,JSON.stringify(text));
+ for(const text of ['','hum','aham','ah','eh','mmm','uh','oi','olá','e aí',"...",'...'])
+  assert.equal(meaningful(text),false,JSON.stringify(text));
+});
+
+test('a breath is not reported as a transcription error to the owner',()=>{
+ assert(orb.includes("if(resp.status===422&&/identifiquei|detectei fala/i.test(message)){setPhase('listening');return;}"));
+});
+
+test('the orb waits for the Meta video instead of failing the owner',()=>{
+ assert(server.includes('waitForAdVideoReady(pool,a,uploaded.videoId'));
+ assert(server.includes('recordMetaVideoUpload(pool,{tenantId:a.active_tenant_id'));
+ assert(server.includes("title:'Criativo enviado pelo Sócio'"));
 });
 
 test('app.js still parses after the orb wiring',()=>{
