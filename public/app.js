@@ -1414,9 +1414,9 @@ async function admin(){
   '<p>Consulte o CNPJ para preencher os dados públicos automaticamente.</p></div>'+
   '<button type="button" class="socio-popup-close" id="companyClose" aria-label="Fechar cadastro">×</button></div>'+
   '<form id="tenantForm" class="form-stack">'+
-   '<div class="socio-cnpj-lookup"><label>CNPJ (opcional)<input name="cnpj" maxlength="18" placeholder="00.000.000/0000-00" inputmode="numeric"></label>'+
+   '<div class="socio-cnpj-lookup"><label>CNPJ ou CPF (opcional)<input name="cnpj" maxlength="18" placeholder="00.000.000/0000-00" inputmode="numeric"></label>'+
    '<button type="button" class="btn soft" id="lookupCnpj">Buscar CNPJ</button></div>'+
-   '<p class="form-note" id="cnpjFeedback" role="status">A consulta é pública e pode ficar indisponível. Todos os dados podem ser preenchidos manualmente.</p>'+
+   '<p class="form-note" id="cnpjFeedback" role="status">O CNPJ preenche os dados públicos automaticamente. CPF não tem consulta pública — preencha manualmente. O teste de 7 dias vale uma vez por CPF/CNPJ, telefone e e-mail.</p>'+
    '<label>Nome da empresa<input name="company" required maxlength="120" placeholder="Ex.: Pizzaria Bella"></label>'+
    '<div class="catalog-pair"><label>Razão social<input name="legalName" maxlength="200"></label>'+
    '<label>Nome fantasia<input name="tradeName" maxlength="200"></label></div>'+
@@ -1504,26 +1504,46 @@ async function admin(){
  $('#newCompany').addEventListener('click',open);
  $('#companyClose').addEventListener('click',close);
  modal.addEventListener('click',ev=>{if(ev.target===modal)close();});
- $('#lookupCnpj').addEventListener('click',async()=>{
-  const cnpj=form.elements.cnpj.value.replace(/\D/g,'');
+ const taxDigits=()=>globalThis.SocioTrialInput.taxIdDigits(form.elements.cnpj.value);
+ const cpfIsValid=value=>globalThis.SocioTrialInput.cpfIsValid(value);
+ let lookupTimer=null,lookedUp=null;
+ const lookupCnpj=async()=>{
+  const cnpj=taxDigits();
   const feedback=$('#cnpjFeedback'),btn=$('#lookupCnpj');
-  if(cnpj.length!==14){feedback.textContent='Digite os 14 dígitos do CNPJ.';return;}
+  if(cnpj.length!==14){feedback.textContent='Digite o CNPJ (14 dígitos) ou o CPF (11 dígitos).';return;}
+  if(cnpj===lookedUp&&publicProfile)return;
   btn.disabled=true;feedback.textContent='Buscando dados públicos do CNPJ...';
   try{
    const result=await api('/api/admin/cnpj?number='+encodeURIComponent(cnpj));
-   publicProfile=result;
-   form.elements.company.value=result.company||result.legalName||'';
+   lookedUp=cnpj;publicProfile=result;
+   if(!form.elements.company.value)form.elements.company.value=result.company||result.legalName||'';
    form.elements.legalName.value=result.legalName||'';
    form.elements.tradeName.value=result.tradeName||'';
-   form.elements.companyPhone.value=result.phone||'';
-   form.elements.companyEmail.value=result.email||'';
+   if(!form.elements.companyPhone.value)form.elements.companyPhone.value=result.phone||'';
+   if(!form.elements.companyEmail.value)form.elements.companyEmail.value=result.email||'';
    const a=result.address||{};
    form.elements.companyAddress.value=[a.street,a.number,a.additional,a.neighborhood,a.city,a.state,a.postalCode].filter(Boolean).join(', ');
    feedback.textContent='Dados encontrados: '+(result.legalName||result.company)+'. Confira e complete o acesso do responsável.';
-  }catch(error){publicProfile=null;feedback.textContent=errMsg(error)+' Você pode preencher manualmente.';}
+  }catch(error){publicProfile=null;lookedUp=null;feedback.textContent=errMsg(error)+' Você pode preencher manualmente.';}
   finally{btn.disabled=false;}
+ };
+ $('#lookupCnpj').addEventListener('click',lookupCnpj);
+ form.elements.cnpj.addEventListener('input',()=>{
+  publicProfile=null;clearTimeout(lookupTimer);
+  const digits=taxDigits(),feedback=$('#cnpjFeedback');
+  if(digits.length===11){
+   feedback.textContent=cpfIsValid(digits)?
+    'CPF válido. Não há consulta pública de CPF: preencha os dados da empresa manualmente.':
+    'CPF inválido; confira os 11 dígitos.';
+   return;
+  }
+  if(digits.length!==14){
+   if(digits)feedback.textContent='Digite todo o CNPJ (14 dígitos) ou o CPF (11 dígitos).';
+   return;
+  }
+  feedback.textContent='Buscando dados públicos do CNPJ...';
+  lookupTimer=setTimeout(lookupCnpj,400);
  });
- form.elements.cnpj.addEventListener('input',()=>{publicProfile=null;});
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();
   const data=formValues(form);
@@ -1533,8 +1553,10 @@ async function admin(){
     commercialEmail:data.companyEmail,commercialPhone:data.companyPhone}:
    {commercialEmail:data.companyEmail,commercialPhone:data.companyPhone};
   await action(async()=>{
-   await api('/api/admin/tenants','POST',data);
-   toast('Empresa cadastrada e ambiente criado com isolamento.');
+   const created=await api('/api/admin/tenants','POST',data);
+   toast(created?.trial?.granted?
+    'Empresa cadastrada. Teste grátis de '+created.trial.days+' dias liberado.':
+    'Empresa cadastrada sem teste grátis: o CPF/CNPJ, telefone ou e-mail já usou o período de teste.');
    close();await admin();
   });
  });

@@ -38,6 +38,7 @@ import {getSocioInterview,startSocioInterview,advanceSocioInterview,resetSocioIn
 import {synthesizeCachedThalitaVoice,prewarmThalitaAcknowledgements,SOCIO_TRAINING_VOICE} from './socio-training-tts.mjs';
 import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
+import {normalizeTaxId,validCpf,taxIdType as taxIdTypeOf,claimTrial,trialEndFrom,readTrial} from './socio-trial.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
 import {processLiveInboxSync} from './inbox-live-sync.mjs';
 import {processNextAiReply,buildAiInstructions} from './ai-replies.mjs';
@@ -297,7 +298,7 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/socio-semantic-turn.mjs','/socio-workspace-ui.js','/socio-thalita-ui.js','/socio-executive.css','/socio-glass-motion.css','/socio-glass-motion.js','/socio-glass-enforced.css','/socio-premium-polish.css','/socio-contrast-audit.css','/socio-product-features.js','/socio-entry-motion.js','/socio-motion-refined.css','/socio-luminous-glass.css','/socio-stripe-system.css','/socio-master.css','/socio-master-dashboard.js','/meta-billing-ui.js','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/owner-channel-ui.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/socio-semantic-turn.mjs','/socio-workspace-ui.js','/socio-thalita-ui.js','/socio-executive.css','/socio-glass-motion.css','/socio-glass-motion.js','/socio-glass-enforced.css','/socio-premium-polish.css','/socio-contrast-audit.css','/socio-product-features.js','/socio-entry-motion.js','/socio-motion-refined.css','/socio-luminous-glass.css','/socio-stripe-system.css','/socio-master.css','/socio-master-dashboard.js','/meta-billing-ui.js','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/owner-channel-ui.js','/trial-input.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
   res.writeHead(200,{'Content-Type':(file.endsWith('.js')||file.endsWith('.mjs'))?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
@@ -1927,7 +1928,7 @@ async function handle(req,res){
  }
  if(method==='GET'&&pathname==='/api/admin/tenants'){
   needPlatform(a);
-  const r=await query("SELECT t.id,t.name,t.slug,t.plan,t.status,t.cnpj,t.legal_name,t.trade_name,t.features,t.created_at,(SELECT count(*)::int FROM users u WHERE u.tenant_id=t.id) AS members FROM tenants t ORDER BY t.created_at DESC");
+  const r=await query("SELECT t.id,t.name,t.slug,t.plan,t.status,t.cnpj,t.legal_name,t.trade_name,t.features,t.created_at,t.trial_ends_at,t.tax_id_type,(SELECT count(*)::int FROM users u WHERE u.tenant_id=t.id) AS members FROM tenants t ORDER BY t.created_at DESC");
   return json(res,200,r.rows);
  }
  const editMasterTenant=pathname.match(/^\/api\/admin\/tenants\/([a-f0-9-]{36})$/i);
@@ -1961,9 +1962,13 @@ async function handle(req,res){
  if(method==='POST'&&pathname==='/api/admin/tenants'){
   needPlatform(a);const {data}=await body(req);
   if(!validText(data.company,120)||!validText(data.ownerName,100)||!emailOk(data.ownerEmail)||!['essencial','equipe','voz'].includes(data.plan||'essencial'))throw fail(422,'Dados da empresa inválidos.');
-  const rawCnpj=String(data.cnpj||'').trim();
-  const companyCnpj=rawCnpj?normalizeCnpj(rawCnpj):null;
-  if(rawCnpj&&!validCnpj(companyCnpj))throw fail(422,'CNPJ inválido.');
+  const rawTaxId=String(data.cnpj||data.cpf||'').trim();
+  const companyTaxIdType=rawTaxId?taxIdTypeOf(rawTaxId):null;
+  const companyCnpj=rawTaxId&&companyTaxIdType==='cnpj'?normalizeCnpj(rawTaxId):null;
+  const companyVatId=rawTaxId?normalizeTaxId(rawTaxId):null;
+  if(rawTaxId&&companyTaxIdType==='cnpj'&&!validCnpj(companyCnpj))throw fail(422,'CNPJ inválido.');
+  if(rawTaxId&&companyTaxIdType==='cpf'&&!validCpf(companyVatId))throw fail(422,'CPF inválido.');
+  if(rawTaxId&&!companyTaxIdType)throw fail(422,'Informe um CNPJ de 14 ou um CPF de 11 dígitos.');
   const candidate=typeof data.companyProfile==='object'&&data.companyProfile&&!Array.isArray(data.companyProfile)?
    data.companyProfile:{};
   const addr=candidate.address&&typeof candidate.address==='object'&&!Array.isArray(candidate.address)?candidate.address:{};
@@ -1982,14 +1987,21 @@ async function handle(req,res){
   const raw=String(data.ownerPhone||'').trim(),phone=raw?normalizeLoginPhone(raw):null;
   if(raw&&!phone)throw fail(422,'Número do responsável inválido. Informe o DDD.');
   const hash=await hashPassword(data.ownerPassword),tenant=id(),user=id(),client=await pool.connect();
+  let trialGranted=false,trialEndsAt=null;
   try{
    await client.query('BEGIN');
-   await client.query("INSERT INTO tenants(id,name,slug,plan,status,cnpj,legal_name,trade_name,company_profile,features) VALUES($1,$2,$3,$4,'trial',$5,$6,$7,$8,$9)",[tenant,data.company.trim(),slugify(data.company)+'-'+tenant.slice(0,6),data.plan||'essencial',companyCnpj,legalName,tradeName,JSON.stringify(companyProfile),JSON.stringify(features)]);
+   await client.query("INSERT INTO tenants(id,name,slug,plan,status,cnpj,legal_name,trade_name,company_profile,features,tax_id,tax_id_type) VALUES($1,$2,$3,$4,'trial',$5,$6,$7,$8,$9,$10,$11)",[tenant,data.company.trim(),slugify(data.company)+'-'+tenant.slice(0,6),data.plan||'essencial',companyCnpj,legalName,tradeName,JSON.stringify(companyProfile),JSON.stringify(features),companyVatId,companyTaxIdType]);
+   const claim=await claimTrial(client,tenant,{taxId:companyVatId,phone,email:data.ownerEmail});
+   trialGranted=claim.granted;
+   trialEndsAt=claim.granted?trialEndFrom():new Date();
+   await client.query('UPDATE tenants SET trial_ends_at=$2 WHERE id=$1',[tenant,trialEndsAt]);
    await client.query('INSERT INTO users(id,tenant_id,email,phone,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6,$7)',[user,tenant,data.ownerEmail.trim().toLowerCase(),phone,data.ownerName.trim(),hash,'owner']);
    await client.query('INSERT INTO agents(tenant_id) VALUES($1)',[tenant]);
    await client.query('COMMIT');
   }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
-  await audit(a,'tenant.created',{tenantId:tenant});return json(res,201,{id:tenant});
+  await audit(a,'tenant.created',{tenantId:tenant,trialGranted});
+  return json(res,201,{id:tenant,trial:{granted:trialGranted,endsAt:trialEndsAt.toISOString(),
+   days:trialGranted?7:0}});
  }
  if(method==='POST'&&pathname==='/api/admin/switch'){
   needPlatform(a);const {data}=await body(req);

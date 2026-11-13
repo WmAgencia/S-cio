@@ -1067,6 +1067,20 @@ CREATE TABLE IF NOT EXISTS socio_billing_webhook_events (
 );
 CREATE INDEX IF NOT EXISTS socio_billing_events_recent_idx ON socio_billing_webhook_events(received_at DESC);
 
+-- One free trial per business identity. Values are HMAC digests, never the raw
+-- CPF, CNPJ, phone or e-mail; the trial window lives on the tenant row.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tax_id text;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tax_id_type text CHECK (tax_id_type IS NULL OR tax_id_type IN ('cnpj','cpf'));
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at timestamptz;
+UPDATE tenants SET trial_ends_at=created_at+interval '7 days' WHERE trial_ends_at IS NULL;
+CREATE TABLE IF NOT EXISTS socio_trial_claims (
+ kind text NOT NULL CHECK (kind IN ('tax_id','phone','email')),
+ value_hash char(64) NOT NULL,
+ tenant_id uuid REFERENCES tenants(id) ON DELETE SET NULL,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY (kind,value_hash)
+);
+
 
 -- Official Google Ads OAuth: callback state is one-use, session-bound and encrypted.
 -- Read-only account discovery does not authorize any campaign mutation.

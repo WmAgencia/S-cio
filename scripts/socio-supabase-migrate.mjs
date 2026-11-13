@@ -11,7 +11,7 @@ export const TABLES=Object.freeze([
  'conversation_ui_state','message_ui_state','socio_conversation_memory','training_auto_runs',
  'message_outbox','ai_reply_attempts','wa_tracking_links','wa_lead_attributions','meta_report_schedules','meta_report_runs','socio_skill_runs','socio_owner_skill_receipts','socio_owner_media_receipts','socio_whatsapp_meta_video_imports','socio_whatsapp_meta_video_pilot_jobs',
  'socio_owner_groups','socio_owner_commands','socio_traffic_decisions',
- 'socio_billing_accounts','socio_billing_webhook_events','socio_google_ads_states',
+ 'socio_billing_accounts','socio_billing_webhook_events','socio_trial_claims','socio_google_ads_states',
  'socio_google_ads_grants','socio_tracking_sites','socio_tracking_events','rate_limits'
 ]);
 const validName=v=>/^[a-z][a-z0-9_]*$/.test(v);

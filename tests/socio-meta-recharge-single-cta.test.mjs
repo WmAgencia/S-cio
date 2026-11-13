@@ -63,7 +63,7 @@ test('all initial and route loading states share the new light skeleton loader',
  assert(html.includes('/socio-stripe-system.css?v=20261112e'));
  assert(!html.includes('href="/socio-premium-polish.css'));
  assert(html.includes('/socio-workspace-ui.js?v=20261112f'));
- assert(html.includes('/app.js?v=20261112g'));
+ assert(html.includes('/app.js?v=20261113a'));
  assert(css.includes('.loading.socio-page-loading'));
  assert(css.includes('.socio-loading-title'));
 });

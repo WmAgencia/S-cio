@@ -43,7 +43,7 @@ test('Google UI flag and unified visual assets load in correct order',()=>{
  assert(html.indexOf('/socio-stripe-system.css')>html.indexOf('/socio-master.css'));
  assert(!html.includes('<script src="/socio-glass-motion.js'));
  assert.match(html,/\/socio-workspace-ui\.js\?v=20261112f/);
- assert.match(html,/\/app\.js\?v=20261112g/);
+ assert.match(html,/\/app\.js\?v=20261113a/);
 });
 
 test('overview orders information from headline to budget, KPIs, Meta and reports',()=>{
