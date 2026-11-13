@@ -170,7 +170,9 @@ async function boot(){
     if(typeof history==='object')history.replaceState(null,'',location.pathname);
    }
    if(isMasterView())globalThis.SocioThalitaUI?.unmount();
-   else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf});
+   else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf,navigate:changeView});
+   if(isMasterView())globalThis.SocioAutopilotUI?.dispose();
+   else globalThis.SocioAutopilotUI?.start({api,me:state.me});
    await changeView(state.view);
    if(googleOAuth==='connected')toast('Conta Google autorizada. Selecione a conta de anúncios em Conexões.');
    if(officialOAuth==='authorized')toast('Meta autorizada. Selecione a conta de anúncios em Conexões.');
@@ -204,7 +206,7 @@ async function boot(){
    }
    if(marketingStatus==='failed')toast('Não foi possível concluir autorização. Confira a conta e tente novamente.',true);
    if(marketingStatus==='cancelled')toast('Autorização cancelada; nenhuma conta foi alterada.');
-  }catch(error){state.me=null;state.csrf='';setupAuth(bootstrap.initialized);}
+  }catch(error){state.me=null;state.csrf='';globalThis.SocioAutopilotUI?.dispose();setupAuth(bootstrap.initialized);}
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
 async function changeView(next,conversationId=null){
@@ -1700,7 +1702,9 @@ async function switchWorkspace(mode){
   view.classList.add('socio-workspace-enter');
   setTimeout(()=>view.classList.remove('socio-workspace-enter'),760);
   if(isMasterView())globalThis.SocioThalitaUI?.unmount();
-  else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf});
+  else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf,navigate:changeView});
+  if(isMasterView())globalThis.SocioAutopilotUI?.dispose();
+  else globalThis.SocioAutopilotUI?.start({api,me:state.me});
   await changeView(nextMode==='master'?'masterOverview':'overview');
   updateWorkspaceUrl();
  }catch(error){toast(errMsg(error),true);}
@@ -1762,5 +1766,5 @@ $$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{
  if(b.dataset.view==='training')state.aiTab='training';
  changeView(b.dataset.view);
 }));
-$('#logoutBtn').addEventListener('click',async()=>{globalThis.SocioWorkspaceUI?.clearCache();globalThis.SocioThalitaUI?.unmount();globalThis.SocioOrbUI?.dispose();document.body?.classList?.remove('socio-orb-view');try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
+$('#logoutBtn').addEventListener('click',async()=>{globalThis.SocioWorkspaceUI?.clearCache();globalThis.SocioThalitaUI?.unmount();globalThis.SocioAutopilotUI?.dispose();globalThis.SocioOrbUI?.dispose();document.body?.classList?.remove('socio-orb-view');try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
 boot();

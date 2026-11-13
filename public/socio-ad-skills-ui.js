@@ -280,11 +280,20 @@
     runId=answer.runId;
     add('Sócio IA',answer.message||'Solicitação registrada.');
     if(answer.status==='ready'&&Array.isArray(answer.creativeVariants)&&answer.creativeVariants.length){
-     const drafts=answer.creativeVariants.slice(0,3).map((draft,i)=>
-      (i+1)+(i===0?' (selecionada para criação)':' (alternativa para revisão)')+
-      ': '+String(draft.headline||'').slice(0,120)+' — '+String(draft.message||'').slice(0,500)
-     ).join('\n\n');
-     add('Prévia dos textos',drafts+'\n\nO plano atual usa a opção 1. As outras são referências para revisar ou criar outro pedido; não serão publicadas automaticamente.');
+     const drafts=answer.creativeVariants.slice(0,3).map((draft,i)=>{
+      const lines=[(i+1)+(i===0?' (selecionada para criação)':' (alternativa para revisão)')+':'];
+      const field=(label,value,limit)=>{if(value)lines.push(label+': '+String(value).slice(0,limit));};
+      field('Título',draft.headline,120);
+      field('Descrição',draft.description,60);
+      field('Texto principal',draft.message,500);
+      field('Mensagem de boas-vindas (Conversas)',draft.welcomeMessage,160);
+      field('Mensagem pronta (Conversas)',draft.quickReply,40);
+      field('Por que funciona',draft.why,140);
+      return lines.join('\n');
+     }).join('\n\n');
+     add('Prévia dos textos',drafts+'\n\nO plano atual usa a opção 1. As outras são referências para revisar ou criar outro pedido; não serão publicadas automaticamente.'+
+      (answer.copyNote?'\n\n'+answer.copyNote:'')+
+      (answer.creativeVariants[0]?.welcomeMessage?'\n\nAs duas mensagens de Conversas vão configuradas no próprio anúncio: a saudação é o que a pessoa vê ao abrir a conversa e a mensagem pronta fica preenchida para ela enviar.':''));
     }
     if(answer.note)add('Rastreamento',answer.note);
     if(['completed','failed','action_required'].includes(answer.status)){

@@ -32,7 +32,7 @@ test('stage1 does not silently activate ads or claim pixel tracking on WhatsApp'
  const tools=contentOf('../meta-ads-tools.mjs'),skills=contentOf('../socio-ad-skills.mjs');
  assert.match(tools,/status:'PAUSED'/);
  assert.match(skills,/campanha PAUSADA|campanha PAUSADOS|criados PAUSADOS|PAUSADOS/);
- assert.match(skills,/Pixel não é instalado automaticamente/);
+ assert.match(skills,/Pixel[^.]*ainda precisa ser instalado/);
  assert.match(skills,/Conversa WhatsApp não recebe Pixel/);
  assert.doesNotMatch(socioCompactSalesGuide(),/R\$\s*550/);
 });

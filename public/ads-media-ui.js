@@ -26,7 +26,7 @@ async function load(){
   row.style.cssText='display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:13px 0;border-bottom:1px solid #eae1e8';
   const label=document.createElement('strong');label.textContent=item.filename;
   const small=document.createElement('span');small.style.cssText='font-size:11px;color:#8d7b88';
-  small.textContent=(item.status==='ready'?'Pronto':item.status)+' · '+item.source+
+  small.textContent=(item.status==='ready'?'Pronto':item.status==='expired'?'Enviado à Meta':item.status)+' · '+item.source+
    (item.bytes?' · '+(item.bytes/1048576).toFixed(1)+' MB':'');
   row.append(label,small);
   if(item.status==='ready'&&canManage){

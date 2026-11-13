@@ -12,6 +12,8 @@ const text=(v,max=200)=>typeof v==='string'&&v.trim()&&v.length<=max?v.trim():nu
 const numeric=v=>typeof v==='string'&&/^\d{4,30}$/.test(v);
 const money=v=>Number.isSafeInteger(v)&&v>=100&&v<=10000000;
 const safeUrl=v=>{try{const u=new URL(v);return u.protocol==='https:'&&!u.username&&!u.password&&u.href.length<=1800?u.href:null;}catch{return null;}};
+// Meta's video thumbnail CDN URLs carry long signed query strings.
+const safeThumbnail=v=>{try{const u=new URL(v);return u.protocol==='https:'&&!u.username&&!u.password&&u.href.length<=4096?u.href:null;}catch{return null;}};
 function permit(a,write=false){requirePermission(a,write?'marketing.manage':'marketing.read');assertApiFeature(a.features,'/api/marketing/tools');if(a.tenant_status==='paused')throw fail(403,'Empresa pausada.');}
 async function context(pool,a,options={},write=false){
  permit(a,write);const account=await resolveSelectedOfficialAccount(pool,a,options);
@@ -23,7 +25,7 @@ async function context(pool,a,options={},write=false){
  return {account,token:secret.token,options,tenantId:a.active_tenant_id};
 }
 async function graph(c,path,params={},method='GET'){
- if(!/^\/(act_\d+|\d+|search)(\/(campaigns|adsets|ads|adcreatives|adimages|adspixels|insights|promote_pages|previews|copies))?$/.test(path))throw fail(422,'Operação Meta inválida.');
+ if(!/^\/(act_\d+|\d+|search)(\/(campaigns|adsets|ads|adcreatives|adimages|adspixels|insights|promote_pages|previews|copies|thumbnails))?$/.test(path))throw fail(422,'Operação Meta inválida.');
  const cfg=officialConfig(c.options.env||process.env),url=new URL('https://graph.facebook.com/'+cfg.version+path);
  const body=new URLSearchParams();
  for(const [k,v] of Object.entries(params))body.set(k,typeof v==='object'?JSON.stringify(v):String(v));
@@ -206,24 +208,69 @@ export async function uploadAdVideo(pool,a,video,options={}){
   title:options.title||'Criativo enviado pelo WhatsApp'});
 }
 
+// Objective plus optimization must match what the owner asked to achieve.
+// Awareness omits destination_type; WhatsApp always optimizes for conversations.
+const PLAN_OBJECTIVES=Object.freeze({
+ OUTCOME_ENGAGEMENT:['CONVERSATIONS'],
+ OUTCOME_TRAFFIC:['LINK_CLICKS','LANDING_PAGE_VIEWS'],
+ OUTCOME_AWARENESS:['REACH']
+});
+// Builds the campaign and adset bodies from the stored plan so the objective
+// chosen for the owner reaches Meta unchanged and cannot drift from the copy.
+export function campaignStructurePayloads(p,campaignId=null){
+ const whatsapp=Boolean(p.whatsappPhone);
+ const objective=p.objective||(whatsapp?'OUTCOME_ENGAGEMENT':'OUTCOME_TRAFFIC');
+ const optimizationGoal=p.optimizationGoal||(whatsapp?'CONVERSATIONS':'LINK_CLICKS');
+ const campaignBudget=p.budgetMode==='campaign';
+ const campaign={name:p.name,objective,special_ad_categories:[],status:'PAUSED',
+  ...(campaignBudget?{daily_budget:p.dailyBudgetCents}:{is_adset_budget_sharing_enabled:false})};
+ const adset={name:p.name+' · Público',campaign_id:campaignId,
+  ...(campaignBudget?{}:{daily_budget:p.dailyBudgetCents}),
+  billing_event:'IMPRESSIONS',optimization_goal:optimizationGoal,bid_strategy:'LOWEST_COST_WITHOUT_CAP',
+  ...(objective==='OUTCOME_AWARENESS'?{}:{destination_type:whatsapp?'WHATSAPP':'WEBSITE'}),
+  ...(whatsapp?{promoted_object:{page_id:p.pageId,whatsapp_phone_number:p.whatsappPhone}}:{}),
+  targeting:{geo_locations:p.countryCode?{countries:[p.countryCode]}:{cities:[{key:p.cityKey}]},
+   age_min:p.ageMin,age_max:p.ageMax,...(p.genders?.length?{genders:p.genders}:{})},status:'PAUSED'};
+ return {campaign,adset};
+}
 export function validateAdsPlan(kind,input){
  if(!input||typeof input!=='object'||Array.isArray(input))throw fail(422,'Operação inválida.');
  if(kind==='create'||kind==='create_whatsapp'){
   const whatsapp=kind==='create_whatsapp';
   const name=text(input.name,120),url=whatsapp?null:safeUrl(input.url),message=text(input.message,2200),headline=text(input.headline,120);
+  // Meta shows a description only under an image ad's link title; a video
+  // creative has no supported description field, so it is accepted for image ads.
+  const description=text(input.description,60);
+  if(String(input.description||'').trim()&&!description)
+   throw fail(422,'A descrição do anúncio precisa ter até 60 caracteres.');
   const phone=whatsapp?String(input.whatsappPhone||'').replace(/\D/g,''):null;
+  // The "Conversas" section of a click-to-WhatsApp ad is configured on the
+  // creative itself; both texts are optional so an old plan still prepares.
+  const welcomeMessage=whatsapp?text(input.welcomeMessage,160):null;
+  const quickReply=whatsapp&&welcomeMessage?text(input.quickReply,40):null;
   const imageHash=text(input.imageHash,100),videoId=numeric(input.videoId)?String(input.videoId):null;
+  const countryCode=input.countryCode==='BR'?'BR':null;
   if(!name||(!whatsapp&&!url)||(whatsapp&&!/^55[1-9][0-9]{9,10}$/.test(phone))||!message||!headline||!numeric(input.pageId)||
-    Number(Boolean(imageHash))+Number(Boolean(videoId))!==1||!numeric(input.cityKey)||!text(input.cityName,100)||!money(input.dailyBudgetCents))
-   throw fail(422,'Preencha nome, página, vídeo importado OU imagem, cidade, link HTTPS/WhatsApp, texto, título e orçamento diário (de 1 a 100.000 na moeda da conta).');
+    Number(Boolean(imageHash))+Number(Boolean(videoId))!==1||(!numeric(input.cityKey)&&!countryCode)||!text(input.cityName,100)||!money(input.dailyBudgetCents))
+   throw fail(422,'Preencha nome, página, vídeo importado OU imagem, cidade ou Brasil inteiro, link HTTPS/WhatsApp, texto, título e orçamento diário (de 1 a 100.000 na moeda da conta).');
   const ageMin=Number(input.ageMin||18),ageMax=Number(input.ageMax||65);
   if(!Number.isInteger(ageMin)||!Number.isInteger(ageMax)||ageMin<18||ageMax>65||ageMin>ageMax)throw fail(422,'Faixa etária inválida.');
   const genders=input.genders===undefined?[]:input.genders;
   if(!Array.isArray(genders)||genders.length>2||genders.some(g=>g!==1&&g!==2)||
      new Set(genders).size!==genders.length)throw fail(422,'Segmentação de gênero inválida.');
-  return {name,url,whatsappPhone:phone,message,headline,pageId:input.pageId,
-   ...(videoId?{videoId}:{imageHash}),
-   cityKey:input.cityKey,cityName:input.cityName.trim(),dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax,genders};
+  const objective=input.objective===undefined?(whatsapp?'OUTCOME_ENGAGEMENT':'OUTCOME_TRAFFIC'):input.objective;
+  const allowed=PLAN_OBJECTIVES[objective];
+  if(!allowed)throw fail(422,'Objetivo de campanha inválido.');
+  const optimizationGoal=input.optimizationGoal===undefined?allowed[0]:input.optimizationGoal;
+  if(!allowed.includes(optimizationGoal))throw fail(422,'Estratégia de campanha inválida para este objetivo.');
+  if(whatsapp&&objective!=='OUTCOME_ENGAGEMENT')
+   throw fail(422,'Campanha de WhatsApp precisa de objetivo de conversas.');
+  const budgetMode=input.budgetMode===undefined?'adset':input.budgetMode;
+  if(!['adset','campaign'].includes(budgetMode))throw fail(422,'Forma de orçamento inválida.');
+  return {name,url,whatsappPhone:phone,message,headline,...(description&&!videoId?{description}:{}),pageId:input.pageId,
+   ...(videoId?{videoId}:{imageHash}),...(welcomeMessage?{welcomeMessage,quickReply}:{}),
+   ...(countryCode?{countryCode}:{cityKey:input.cityKey}),cityName:input.cityName.trim(),
+   dailyBudgetCents:input.dailyBudgetCents,ageMin,ageMax,genders,objective,optimizationGoal,budgetMode};
 
  }
  if(kind==='create_pixel'){
@@ -241,12 +288,14 @@ export function validateAdsPlan(kind,input){
  }
  if(kind==='create_ad'){
   const name=text(input.name,120),url=safeUrl(input.url),message=text(input.message,2200),
-   headline=text(input.headline,120);
+   headline=text(input.headline,120),description=text(input.description,60);
   const imageHash=text(input.imageHash,100),videoId=numeric(input.videoId)?String(input.videoId):null;
+  if(String(input.description||'').trim()&&!description)
+   throw fail(422,'A descrição do anúncio precisa ter até 60 caracteres.');
   if(!name||!url||!message||!headline||!numeric(input.adsetId)||!numeric(input.pageId)||
     Number(Boolean(imageHash))+Number(Boolean(videoId))!==1)
    throw fail(422,'Escolha conjunto, Página, um vídeo importado OU uma imagem, link HTTPS, título e texto do anúncio.');
-  return {name,url,message,headline,adsetId:input.adsetId,pageId:input.pageId,
+  return {name,url,message,headline,...(description&&!videoId?{description}:{}),adsetId:input.adsetId,pageId:input.pageId,
    ...(videoId?{videoId}:{imageHash})};
  }
  if(!['status','rename','budget'].includes(kind)||!['campaign','adset','ad'].includes(input.entity)||!numeric(input.id))throw fail(422,'Selecione uma campanha, conjunto ou anúncio válido.');
@@ -292,6 +341,44 @@ export function broadenedTargeting(targeting){
  out.age_min=18;out.age_max=65;
  return out;
 }
+// Meta processes uploaded videos asynchronously: right after an upload the
+// asset is 'processing' for a few seconds. Poll instead of failing a campaign
+// that would succeed on its own.
+async function pollVideoReady(c,videoId,{timeoutMs=12000,intervalMs=1500}={}){
+ const deadline=Date.now()+timeoutMs;
+ let status='';
+ for(;;){
+  let video;
+  try{video=await graph(c,'/'+videoId,{fields:'id,status,picture'});}
+  catch{return {ready:false,status:'unknown'};}
+  status=String((typeof video?.status==='object'?video.status.video_status:video?.status)||'').toLowerCase();
+  if(String(video?.id)===videoId&&status==='ready')
+   return {ready:true,status,picture:safeThumbnail(video?.picture)};
+  if(['error','failed','invalid'].includes(status)||Date.now()>=deadline)return {ready:false,status};
+  await new Promise(resolve=>setTimeout(resolve,intervalMs));
+ }
+}
+// A video creative must carry a thumbnail (image_hash or image_url). Meta only
+// renders the `picture` field once processing ends, so fall back to the
+// thumbnails edge, preferring the one Meta marks as preferred.
+async function videoThumbnail(c,videoId,check){
+ if(!check.ready)return {ready:false,status:check.status,url:null};
+ if(check.picture)return {ready:true,status:check.status,url:check.picture};
+ try{
+  const thumbs=await graph(c,'/'+videoId+'/thumbnails',{fields:'uri,is_preferred,width,height'});
+  const candidates=(Array.isArray(thumbs?.data)?thumbs.data:[]).map(item=>({
+   url:safeThumbnail(item?.uri),preferred:item?.is_preferred===true,
+   area:(Number(item?.width)||0)*(Number(item?.height)||0)}))
+   .filter(item=>item.url);
+  candidates.sort((a,b)=>(Number(b.preferred)-Number(a.preferred))||(b.area-a.area));
+  if(candidates[0])return {ready:true,status:check.status,url:candidates[0].url};
+ }catch{}
+ return {ready:true,status:check.status,url:null};
+}
+export async function waitForAdVideoReady(pool,a,videoId,options={}){
+ const c=await context(pool,a,options,true);
+ return pollVideoReady(c,String(videoId),{timeoutMs:options.timeoutMs??40000});
+}
 async function validateAssets(c,payload,pool){
  const pages=await availablePages(c);
  if(!(pages.data||[]).some(p=>p.id===payload.pageId))throw fail(403,'Página não autorizada para esta conta.');
@@ -302,38 +389,55 @@ async function validateAssets(c,payload,pool){
   if(!pool)throw fail(503,'Não foi possível validar a origem do vídeo.');
   const ownedVideo=await pool.query(
    "SELECT id FROM socio_whatsapp_meta_video_imports WHERE tenant_id=$1 "+
-   "AND account_id=$2 AND meta_video_id=$3 AND status='uploaded' LIMIT 1",
+   "AND account_id=$2 AND meta_video_id=$3 AND status='uploaded' "+
+   "UNION ALL "+
+   "SELECT id FROM socio_ads_meta_video_uploads WHERE tenant_id=$1 "+
+   "AND account_id=$2 AND meta_video_id=$3 LIMIT 1",
    [c.tenantId,c.account.id,payload.videoId]);
   if(!ownedVideo.rowCount)throw fail(403,'Vídeo não foi importado e confirmado nesta conta da empresa.');
-  let video;
-  try{video=await graph(c,'/'+payload.videoId,{fields:'id,status'});}
-  catch{throw fail(409,'Não foi possível confirmar se o vídeo terminou de processar na Meta.');}
-  const status=typeof video?.status==='object'?video.status.video_status:video?.status;
-  if(String(video?.id)!==payload.videoId||String(status||'').toLowerCase()!=='ready')
+  const check=await pollVideoReady(c,payload.videoId,{timeoutMs:12000});
+  if(!check.ready){
+   if(check.status==='unknown')throw fail(409,'Não foi possível confirmar se o vídeo terminou de processar na Meta.');
+   if(['error','failed','invalid'].includes(check.status))
+    throw fail(409,'A Meta recusou o processamento deste vídeo. Envie outro arquivo.');
    throw fail(409,'A Meta ainda não confirmou que o vídeo está pronto. Verifique a biblioteca antes de criar o anúncio.');
-  return;
+  }
+  const thumb=await videoThumbnail(c,payload.videoId,check);
+  if(!thumb.url)
+   throw fail(409,'A Meta não gerou uma imagem de capa para este vídeo. Envie o vídeo novamente ou use uma foto.');
+  return {videoThumbnailUrl:thumb.url};
  }
  const images=await graph(c,'/'+c.account.id+'/adimages',{fields:'hash,name',hashes:[payload.imageHash],limit:100});
  if(!(images.data||[]).some(i=>i.hash===payload.imageHash))throw fail(403,'Imagem não encontrada nesta conta. Atualize a biblioteca.');
+ return {};
 }
 export async function prepareAdsPlan(pool,a,kind,input,options={}){
  const c=await context(pool,a,options,true),payload=validateAdsPlan(kind,input);
  let summary;
  if(kind==='create'||kind==='create_whatsapp'){
-  await validateAssets(c,payload,pool);
+  const assets=await validateAssets(c,payload,pool);
+  if(assets.videoThumbnailUrl)payload.videoThumbnailUrl=assets.videoThumbnailUrl;
   if(kind==='create_whatsapp'){
    const channel=await pool.query("SELECT id FROM channels WHERE tenant_id=$1 AND provider='waakg' AND phone=$2 AND status='connected' LIMIT 1",
     [a.active_tenant_id,payload.whatsappPhone]);
    if(!channel.rowCount)throw fail(422,'Este número WhatsApp não está conectado ao WA-AKG da sua empresa.');
   }
-  const locations=await graph(c,'/search',{type:'adgeolocation',location_types:['city'],country_code:'BR',q:payload.cityName,limit:100});
-  const city=(locations.data||[]).find(x=>String(x.key)===payload.cityKey);
-  if(!city)throw fail(422,'Pesquise e selecione novamente a cidade desejada.');
-  payload.cityName=[city.name,city.region,city.country_name].filter(Boolean).join(' · ');
+  if(payload.countryCode){
+   payload.cityName='Brasil inteiro';
+  }else{
+   const locations=await graph(c,'/search',{type:'adgeolocation',location_types:['city'],country_code:'BR',q:payload.cityName,limit:100});
+   const city=(locations.data||[]).find(x=>String(x.key)===payload.cityKey);
+   if(!city)throw fail(422,'Pesquise e selecione novamente a cidade desejada.');
+   payload.cityName=[city.name,city.region,city.country_name].filter(Boolean).join(' · ');
+  }
+  const budgetWhere=payload.budgetMode==='campaign'?'a campanha (CBO)':'o conjunto de anúncios (ABO)';
   summary={description:kind==='create_whatsapp'?
-   'Criar campanha para mensagens WhatsApp, conjunto, criativo e anúncio PAUSADOS. A Meta precisa validar se o número está vinculado à Página. O WA-AKG continua sendo o canal de atendimento.':
-   'Criar campanha de tráfego para site, conjunto, criativo e anúncio. Todos serão criados PAUSADOS.',
-   account:c.account,name:payload.name,message:payload.message,headline:payload.headline,pageId:payload.pageId,imageHash:payload.imageHash,dailyBudgetCents:payload.dailyBudgetCents,
+   'Criar campanha para mensagens WhatsApp com objetivo '+payload.objective+' e otimização '+payload.optimizationGoal+', conjunto, criativo e anúncio PAUSADOS. A verba fica em '+budgetWhere+'. A Meta precisa validar se o número está vinculado à Página. O WA-AKG continua sendo o canal de atendimento.':
+   'Criar campanha para site com objetivo '+payload.objective+' e otimização '+payload.optimizationGoal+', conjunto, criativo e anúncio PAUSADOS. A verba fica em '+budgetWhere+'.',
+   account:c.account,name:payload.name,message:payload.message,headline:payload.headline,
+   ...(payload.description?{description:payload.description}:{}),
+   pageId:payload.pageId,imageHash:payload.imageHash,dailyBudgetCents:payload.dailyBudgetCents,
+   objective:payload.objective,optimizationGoal:payload.optimizationGoal,budgetMode:payload.budgetMode,
    destination:kind==='create_whatsapp'?'WhatsApp +'+payload.whatsappPhone:payload.url,city:payload.cityName,ageMin:payload.ageMin,ageMax:payload.ageMax};
  }else if(kind==='create_pixel'){
   const pixels=await graph(c,'/'+c.account.id+'/adspixels',{fields:'id,name,last_fired_time',limit:100});
@@ -356,11 +460,13 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
    account:c.account,object:adset,changes:{targeting:'broadened',ageMin:18,ageMax:65}};
  }else if(kind==='create_ad'){
   await owned(c,payload.adsetId);
-  await validateAssets(c,payload,pool);
+  const assets=await validateAssets(c,payload,pool);
+  if(assets.videoThumbnailUrl)payload.videoThumbnailUrl=assets.videoThumbnailUrl;
   summary={description:payload.videoId?
    'Adicionar anúncio com VÍDEO previamente importado ao conjunto existente. Criativo e anúncio serão criados PAUSADOS; sem início de gastos.':
    'Adicionar anúncio com imagem a um conjunto existente da conta selecionada. Criativo e anúncio serão criados PAUSADOS.',
    account:c.account,name:payload.name,message:payload.message,headline:payload.headline,
+   ...(payload.description?{description:payload.description}:{}),
    pageId:payload.pageId,...(payload.videoId?{videoId:payload.videoId}:{imageHash:payload.imageHash}),
    destination:payload.url,adsetId:payload.adsetId};
  }else{
@@ -376,6 +482,19 @@ export async function prepareAdsPlan(pool,a,kind,input,options={}){
  await pool.query("INSERT INTO meta_ads_plans(id,tenant_id,user_id,account_id,kind,payload,summary,status,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,'ready',now()+interval '15 minutes')",[id,a.active_tenant_id,a.user_id,c.account.id,kind,JSON.stringify(payload),JSON.stringify(summary)]);
  return {id,summary,requiresConfirmation:true};
 }
+// The ad's "Conversas" section is carried by the creative: the greeting the
+// person sees when the chat opens, plus the message pre-filled for them to send.
+export function whatsappWelcomeMessage(welcome,quickReply){
+ const greeting=text(welcome,160);
+ if(!greeting)return null;
+ const message={text:greeting};
+ const textFormat={message};
+ if(text(quickReply,40)){
+  textFormat.customer_action_type='autofill_message';
+  message.autofill_message={content:text(quickReply,40)};
+ }
+ return JSON.stringify({type:'VISUAL_EDITOR',version:2,landing_screen_type:'welcome_message',media_type:'text',text_format:textFormat});
+}
 export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
  permit(a,true);if(confirmed!==true||typeof planId!=='string'||!/^[a-f0-9-]{36}$/.test(planId))throw fail(422,'Revise e confirme a operação antes de executar.');
  const c=await context(pool,a,options,true);
@@ -390,28 +509,43 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
  try{
   if(plan.kind==='create'||plan.kind==='create_whatsapp'){
    const whatsapp=plan.kind==='create_whatsapp';
-   await validateAssets(c,p,pool);
-   const campaign=await graph(c,'/'+c.account.id+'/campaigns',{name:p.name,objective:whatsapp?'OUTCOME_ENGAGEMENT':'OUTCOME_TRAFFIC',special_ad_categories:[],status:'PAUSED',is_adset_budget_sharing_enabled:false},'POST');
+   const assets=await validateAssets(c,p,pool);
+   if(assets.videoThumbnailUrl)p.videoThumbnailUrl=assets.videoThumbnailUrl;
+   const structure=campaignStructurePayloads(p);
+   const campaign=await graph(c,'/'+c.account.id+'/campaigns',structure.campaign,'POST');
    if(!numeric(campaign.id))throw Object.assign(fail(503,'A Meta não retornou o ID da campanha.'),{uncertain:true});
    result.campaignId=campaign.id;await progress();
-   const adset=await graph(c,'/'+c.account.id+'/adsets',{
-    name:p.name+' · Público',campaign_id:campaign.id,daily_budget:p.dailyBudgetCents,
-    billing_event:'IMPRESSIONS',optimization_goal:whatsapp?'CONVERSATIONS':'LINK_CLICKS',
-    bid_strategy:'LOWEST_COST_WITHOUT_CAP',destination_type:whatsapp?'WHATSAPP':'WEBSITE',
-    ...(whatsapp?{promoted_object:{page_id:p.pageId,whatsapp_phone_number:p.whatsappPhone}}:{}),
-    targeting:{geo_locations:{cities:[{key:p.cityKey}]},age_min:p.ageMin,age_max:p.ageMax,...(p.genders?.length?{genders:p.genders}:{})},status:'PAUSED'},'POST');
+   const adset=await graph(c,'/'+c.account.id+'/adsets',
+    campaignStructurePayloads(p,campaign.id).adset,'POST');
    if(!numeric(adset.id))throw Object.assign(fail(503,'A Meta não retornou o ID do conjunto.'),{uncertain:true});result.adsetId=adset.id;await progress();
    const chatLink='https://wa.me/'+p.whatsappPhone;
    const destination=whatsapp?chatLink:p.url;
-   const creative=await graph(c,'/'+c.account.id+'/adcreatives',{
+   // Click-to-WhatsApp ads reject any `link` in the call to action: Meta only
+   // accepts app_destination there, and the creative carries the wa.me URL.
+   const cta=whatsapp?{type:'WHATSAPP_MESSAGE',value:{app_destination:'WHATSAPP'}}:{type:'LEARN_MORE',value:{link:destination}};
+   const welcome=whatsapp?whatsappWelcomeMessage(p.welcomeMessage,p.quickReply):null;
+   const creativePayload=withWelcome=>({
     name:p.name+' · Criativo',
     object_story_spec:{page_id:p.pageId,
      ...(p.videoId?{video_data:{
       video_id:p.videoId,title:p.headline,message:p.message,
-      call_to_action:{type:whatsapp?'WHATSAPP_MESSAGE':'LEARN_MORE',value:{link:destination}}
+      ...(p.videoThumbnailUrl?{image_url:p.videoThumbnailUrl}:{}),
+      ...(withWelcome?{page_welcome_message:withWelcome}:{}),
+      call_to_action:cta
      }}:{link_data:{image_hash:p.imageHash,link:destination,
-      message:p.message,name:p.headline,call_to_action:{type:whatsapp?'WHATSAPP_MESSAGE':'LEARN_MORE',value:{link:destination}}}})}
-   },'POST');
+      message:p.message,name:p.headline,...(p.description?{description:p.description}:{}),
+      ...(withWelcome?{page_welcome_message:withWelcome}:{}),call_to_action:cta}})}
+   });
+   let creative;
+   try{creative=await graph(c,'/'+c.account.id+'/adcreatives',creativePayload(welcome),'POST');}
+   catch(error){
+    // A rejected welcome message must not cost the owner the campaign: the ad is
+    // created without it and the two texts stay available to paste.
+    if(!welcome||error.uncertain)throw error;
+    creative=await graph(c,'/'+c.account.id+'/adcreatives',creativePayload(null),'POST');
+    result.welcomeMessageConfigured=false;
+   }
+   if(numeric(creative.id)&&welcome&&result.welcomeMessageConfigured!==false)result.welcomeMessageConfigured=true;
    if(!numeric(creative.id))throw Object.assign(fail(503,'A Meta não retornou o ID do criativo.'),{uncertain:true});result.creativeId=creative.id;await progress();
    const ad=await graph(c,'/'+c.account.id+'/ads',{name:p.name+' · Anúncio',adset_id:adset.id,creative:{creative_id:creative.id},status:'PAUSED'},'POST');
    if(!numeric(ad.id))throw Object.assign(fail(503,'A Meta não retornou o ID do anúncio.'),{uncertain:true});result.adId=ad.id;result.delivery='PAUSED';await progress();
@@ -442,14 +576,17 @@ export async function executeAdsPlan(pool,a,planId,confirmed,options={}){
    await progress();
   }else if(plan.kind==='create_ad'){
    await owned(c,p.adsetId);
-   await validateAssets(c,p,pool);
+   const assets=await validateAssets(c,p,pool);
+   if(assets.videoThumbnailUrl)p.videoThumbnailUrl=assets.videoThumbnailUrl;
    const creative=await graph(c,'/'+c.account.id+'/adcreatives',{
     name:p.name+' · Criativo',object_story_spec:{page_id:p.pageId,
      ...(p.videoId?{video_data:{
       video_id:p.videoId,message:p.message,title:p.headline,
+      ...(p.videoThumbnailUrl?{image_url:p.videoThumbnailUrl}:{}),
       call_to_action:{type:'LEARN_MORE',value:{link:p.url}}
      }}:{link_data:{
       image_hash:p.imageHash,link:p.url,message:p.message,name:p.headline,
+      ...(p.description?{description:p.description}:{}),
       call_to_action:{type:'LEARN_MORE',value:{link:p.url}}
      }})}},'POST');
    if(!numeric(creative.id))throw Object.assign(fail(503,'Não foi possível confirmar o criativo.'),{uncertain:true});

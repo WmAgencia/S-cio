@@ -15,6 +15,7 @@ COPY backup-runner/watchdog.mjs ./backup-runner/watchdog.mjs
 COPY backup-runner/run.mjs ./backup-runner/run.mjs
 COPY backup-runner/restore.mjs ./backup-runner/restore.mjs
 COPY backup-runner/media.mjs ./backup-runner/media.mjs
+COPY backup-runner/media-keys.mjs ./backup-runner/media-keys.mjs
 COPY backup-runner/mysql.mjs ./backup-runner/mysql.mjs
 USER postgres
 CMD ["node","backup-runner/run.mjs"]

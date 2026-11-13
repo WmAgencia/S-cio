@@ -62,6 +62,46 @@ export async function sendGatewayMessage({sessionId,jid,text,media,env=process.e
 }
 export const sendGatewayText=({sessionId,jid,text,env=process.env,fetchImpl=fetch})=>
  sendGatewayMessage({sessionId,jid,text,env,fetchImpl});
+
+// WhatsApp quick-reply buttons. The gateway builds a native flow message; the
+// same three answers must also be delivered as numbered text, because native
+// buttons are not guaranteed on every client or device.
+export function interactivePayload({title='',body,footer='',buttons=[]}={}){
+ const cleanText=(value,max)=>String(value||'').replace(/[\u0000-\u0008\u000e-\u001f]/g,'').trim().slice(0,max);
+ const text=cleanText(body,1024);
+ if(!text)throw bad(422,'O texto do lembrete está vazio.');
+ const list=(Array.isArray(buttons)?buttons:[]).slice(0,3).map(button=>({
+  type:'quick_reply',
+  displayText:cleanText(button?.text,20),
+  id:cleanText(button?.id,120)
+ }));
+ if(!list.length)throw bad(422,'O lembrete precisa de pelo menos uma opção.');
+ if(list.some(button=>!button.displayText||!/^[A-Za-z0-9:_.-]{4,120}$/.test(button.id)))
+  throw bad(422,'Opção de resposta inválida.');
+ return {title:cleanText(title,60),body:text,footer:cleanText(footer,60),buttons:list};
+}
+export async function sendGatewayInteractive({sessionId,jid,title,body,footer,buttons,env=process.env,fetchImpl=fetch}){
+ if(!outboundEnabled(env))throw bad(503,'Envio de mensagens ainda não habilitado neste ambiente.');
+ if(!validSessionId(sessionId)||!outboundRecipient(jid))throw bad(422,'Destinatário inválido.');
+ const payload=interactivePayload({title,body,footer,buttons});
+ const url=gatewayBase(env)+'/api/messages/'+encodeURIComponent(sessionId)+'/'+
+  encodeURIComponent(jid)+'/interactive';
+ const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),25000);
+ try{
+  const response=await fetchImpl(url,{method:'POST',signal:ctrl.signal,
+   headers:{'x-api-key':env.WA_AKG_API_KEY,'content-type':'application/json','accept':'application/json'},
+   body:JSON.stringify(payload)});
+  if(!response.ok)throw bad(503,'O WhatsApp não confirmou o envio.');
+  const result=await response.json(),key=result?.data?.key;
+  if(result?.status!==true||typeof key?.id!=='string'||!key.id||key.fromMe!==true||
+     (key.remoteJid&&key.remoteJid!==jid))
+   throw bad(503,'Gateway não confirmou o identificador e o destinatário.');
+  return {sent:true,providerId:key.id.slice(0,160)};
+ }catch(error){
+  if(error.status)throw error;
+  throw bad(503,'Não foi possível confirmar o envio com o gateway.');
+ }finally{clearTimeout(timer);}
+}
 export async function deliverToConversation(pool,{tenantId,conversationId,userId=null,mode='human',
  text,clientRequestId,replyToId=null,env=process.env,getStatus=getSessionStatus,send=sendGatewayText}){
  if(!outboundEnabled(env))throw bad(503,'Envio indisponível até a validação de um WhatsApp conectado.');

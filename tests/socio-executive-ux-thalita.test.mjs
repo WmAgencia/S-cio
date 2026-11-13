@@ -58,6 +58,22 @@ test('Thalita reports connected WhatsApp status as database status, with no send
  assert.equal(answer.data.openConversations,4);
  assert(b.calls.every(x=>!/^INSERT INTO messages/i.test(x.sql)));
 });
+test('a campaign order that names WhatsApp reaches the campaign skill, not the channel status',async()=>{
+ const b=db();let seen=null;
+ const answer=await askThalita(b.pool,actor(),
+  {message:'Quero vender direto pro meu WhatsApp esse sistema aqui, gastando no máximo seis reais por dia'},{
+   marketing:async(_pool,_a,args)=>{seen=args;
+    return {status:'collecting',message:'Montei o plano completo da campanha.',
+     question:'Qual é o objetivo principal?',brief:{}};}
+  });
+ assert(seen,'the campaign order reached the campaign skill');
+ assert.match(seen.message,/vender direto pro meu WhatsApp/);
+ assert.doesNotMatch(answer.message,/Canais do seu espaço/);
+ assert.equal(answer.status,'collecting');
+ const waiting=answer.plan.steps.find(step=>step.title==='Preciso de uma definição');
+ assert.equal(waiting.detail,'Qual é o objetivo principal?');
+ assert.equal(b.calls.length,0,'no channel or catalog lookup was made');
+});
 test('Product price and stock edits demand one-use confirmation and always scope to tenant',async()=>{
  const b=db(),a=actor();
  const start=await askThalita(b.pool,a,{message:'Atualize o preço do produto Camiseta preta para R$ 159,90'});
@@ -106,6 +122,17 @@ test('Thalita reads authorized Meta and Google metrics, returning uncertainty in
  const failure=await askThalita(noSql,actorA,{message:'Qual o gasto na Meta Ads?'},{
   metaReport:async()=>{throw Error('CONNECTION_NOT_READY');}});
  assert.equal(failure.status,'unavailable');assert.doesNotMatch(failure.message,/gasto 0/);
+});
+test('a spoken campaign confirmation and a question about the failure stay inside the campaign',async()=>{
+ const noSql={query:async()=>{throw Error('The campaign skill owns this conversation');}};
+ const seen=[];
+ const marketing=async(_p,_a,req)=>{seen.push(req.message);return {runId:req.runId,status:'completed',message:'ok'};};
+ for(const message of ['ok, pode criar','Beleza, pode subir','o que aconteceu?','tentar de novo']){
+  const reply=await askThalita(noSql,actor(),{message,runId:'55555555-5555-4555-8555-555555555555'},{marketing});
+  assert.equal(reply.status,'completed');
+ }
+ assert.deepEqual(seen,['ok, pode criar','Beleza, pode subir','o que aconteceu?','tentar de novo'],
+  'voice confirmations and failure questions must reach the campaign skill');
 });
 test('The executive chart supports accessible 7/30/90 day display and assistant shortcuts',()=>{
  const root=file=>readFileSync(new URL('../'+file,import.meta.url),'utf8');

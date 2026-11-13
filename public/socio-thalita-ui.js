@@ -5,7 +5,8 @@
  let instance=null,api=null,me=null,csrf=null,busy=false,session=null,speaking=false,
   playbackContext=null,playbackSource=null,abort=null,finalize=null,turnRunId=null,voiceRequested=false,
   voiceEpoch=0,transcriptionAbort=null,queryEpoch=0,startingVoice=false,
-  activeQueryAbort=null,responseDisplayTimer=null,recentHistory=[],semanticFlow=null,lastShortVoice=null;
+  activeQueryAbort=null,responseDisplayTimer=null,recentHistory=[],semanticFlow=null,lastShortVoice=null,
+  navigate=null,orb=null;
  const get=sel=>instance?.querySelector(sel);
  // Audio output is unlocked by the explicit microphone click using a shared
  // Web Audio context. A new Audio().play() after asynchronous STT/LLM/TTS often
@@ -233,17 +234,17 @@
    }
   }finally{if(startingEpoch===voiceEpoch)startingVoice=false;}
  }
- function unmount(){closeVoice();instance?.remove();instance=null;api=null;me=null;csrf=null;turnRunId=null;recentHistory=[];}
- function mount({client,auth,csrfToken}){
+ function unmount(){closeVoice();orb?.stop?.();orb=null;navigate=null;instance?.remove();instance=null;api=null;me=null;csrf=null;turnRunId=null;recentHistory=[];}
+ function mount({client,auth,csrfToken,navigate:goTo}){
   if(!auth?.user||auth.tenant?.features?.ai===false){unmount();return;}
   if(instance){
    if(me?.tenant?.id!==auth?.tenant?.id){unmount();}
-   else{api=client;me=auth;csrf=csrfToken;return;}
+   else{api=client;me=auth;csrf=csrfToken;navigate=goTo;return;}
   }
-  api=client;me=auth;csrf=csrfToken;
+  api=client;me=auth;csrf=csrfToken;navigate=goTo;
   instance=document.createElement('div');instance.id='socioThalitaDock';instance.className='px-assistant-dock';
-  instance.innerHTML='<button class="px-assistant-fab" type="button" data-thalita-toggle aria-label="Abrir conversa com Thalita" aria-expanded="false">'+
-   '<span class="px-assistant-sigil">✳</span><span>Thalita</span></button>'+
+  instance.innerHTML='<button class="thalita-orb" type="button" data-thalita-orb aria-label="Conversar com IA">'+
+   '<canvas class="thalita-orb-canvas" aria-hidden="true"></canvas></button>'+
    '<section class="px-assistant-window hidden" aria-label="Assistente Thalita" role="dialog" aria-modal="false">'+
     '<header><span class="px-assistant-avatar">✳</span><div><strong>Thalita</strong><small>Assistente da sua empresa</small></div>'+
     '<button class="px-assistant-close" type="button" data-thalita-close aria-label="Fechar Thalita">×</button></header>'+
@@ -264,9 +265,12 @@
      '<div id="thalitaVoiceState" class="px-assistant-hint" role="status">Digite ou ligue a voz da Thalita.</div></form>'+
     '<p class="px-assistant-disclaimer">Ações exigem autorização e confirmação. Nenhum pagamento ou anúncio é criado silenciosamente.</p></section>';
   document.body.append(instance);
-  const panel=get('.px-assistant-window'),fab=get('[data-thalita-toggle]');
-  function show(open){if(!open)closeVoice();panel.classList.toggle('hidden',!open);fab.setAttribute('aria-expanded',String(open));if(open)get('#thalitaInput')?.focus();}
-  fab.addEventListener('click',()=>show(panel.classList.contains('hidden')));
+  // The launcher is the same dotted orb as the dashboard entry: no pill, no
+  // background. Clicking it opens the full "Conversar com IA" page.
+  orb=globalThis.SocioOrbMesh?.create(get('.thalita-orb-canvas'),{light:true,density:.34,radius:.40,point:.011})??null;
+  const panel=get('.px-assistant-window'),fab=get('[data-thalita-orb]');
+  function show(open){if(!open)closeVoice();panel.classList.toggle('hidden',!open);if(open)get('#thalitaInput')?.focus();}
+  fab.addEventListener('click',()=>navigate?.('orb'));
   get('[data-thalita-close]').addEventListener('click',()=>show(false));
   get('#thalitaForm').addEventListener('submit',ev=>{ev.preventDefault();run(get('#thalitaInput')?.value);});
   get('#thalitaInput').addEventListener('keydown',ev=>{

@@ -86,7 +86,7 @@ O Sócio agora pode criar sessões e mostrar QR por meio do gateway exclusivo, m
 3. Configure SETUP_TOKEN com pelo menos 32 caracteres criptograficamente aleatórios (visível apenas nas variáveis seguras do Railway). Nunca coloque esse token no repositório ou compartilhe publicamente.
 4. NODE_ENV=production.
 5. Gere domínio HTTPS Railway. No primeiro acesso, informe token, nome, empresa, e-mail e senha forte. Depois a instalação fica fechada para novas contas principais.
-6. Opcional: GROQ_API_KEY e GROQ_MODEL (padrão llama-3.3-70b-versatile) para o laboratório.
+6. Opcional: GROQ_API_KEY, GROQ_MODEL (planejamento e copy; padrão qwen/qwen3.8-27b) e GROQ_MODEL_CHAT (respostas automáticas; padrão openai/gpt-oss-20b).
 7. Opcional: META_WEBHOOK_VERIFY_TOKEN e META_APP_SECRET para o webhook Meta em /webhooks/whatsapp. O administrador precisa validar o Phone Number ID para associar cada número à empresa correta.
 
 ## Segurança e limites

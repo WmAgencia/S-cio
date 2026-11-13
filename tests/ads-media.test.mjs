@@ -4,7 +4,7 @@ import {Readable} from 'node:stream';
 import {
  reserveAdVideo,listAdVideos,findVideo,storeAdVideo,adVideoExportUrl,adVideoUploadLink,
  resolveSignedAsset,serveSignedVideo,createMediaMcpToken,revokeMediaMcpTokens,authenticateMediaMcp,
- importWhatsAppAdVideo,MAX_AD_VIDEO_BYTES
+ importWhatsAppAdVideo,readAdVideoBytes,recordMetaVideoUpload,MAX_AD_VIDEO_BYTES
 } from '../ads-media.mjs';
 import {handleAdsMediaMcp} from '../ads-media-mcp.mjs';
 import {readFile} from 'node:fs/promises';
@@ -99,6 +99,15 @@ test('MP4 armazenado privado usa URL HMAC expirada e suporta Range do Meta downl
  assert.equal(response.data.toString('ascii',4,8),'ftyp');
  await assert.rejects(serveSignedVideo(p,a.id,expires,signature,{method:'GET',headers:{range:'bytes=2000-3000'}},res(),env),{status:416});
 });
+test('video stashed for Meta is only readable once the upload is ready',async()=>{
+ const p=new Pool(),a=await reserveAdVideo(p,actor,'meta.mp4');
+ await assert.rejects(readAdVideoBytes(p,T,a.id,{env}),{status:409});
+ await assert.rejects(readAdVideoBytes(p,OTHER,a.id,{env}),{status:404});
+ await storeAdVideo(p,T,a.id,Readable.from([video()]),{env,declaredBytes:1800});
+ const out=await readAdVideoBytes(p,T,a.id,{env});
+ assert.equal(out.bytes.length,1800);
+ assert.equal(out.mime,'video/mp4');
+});
 test('ticket upload só vale para mídia reservada e não permite download',async()=>{
  const p=new Pool(),result=await adVideoUploadLink(p,actor,'anuncio.mp4',env);
  const link=new URL(result.uploadPage),expires=link.searchParams.get('expires'),sig=link.searchParams.get('signature');
@@ -154,4 +163,21 @@ test('front e rotas mostram biblioteca separada da criação e aprovação da Me
  assert.ok(html.includes('/ads-media-ui.js'));
  assert.ok(frontend.includes('fetch('));
  assert.ok(!frontend.includes('sk_live_'));
+});
+test('o vídeo enviado pelo orbe ganha recibo da conta Meta e entradas inválidas são recusadas',async()=>{
+ const inserted=[];
+ const pool={query:async(sql,args=[])=>{(inserted.push(sql));
+  assert.match(sql,/INSERT INTO socio_ads_meta_video_uploads/);
+  assert.match(sql,/ON CONFLICT\(tenant_id,account_id,meta_video_id\) DO NOTHING/);
+  return {rowCount:1};}};
+ const receipt=await recordMetaVideoUpload(pool,{tenantId:T,mediaId:OTHER,userId:USER,
+  accountId:'act_123456789',videoId:'1616096903323428'});
+ assert.deepEqual(receipt,{mediaId:OTHER,videoId:'1616096903323428',accountId:'act_123456789'});
+ assert.equal(inserted.length,1);
+ for(const bad of [{accountId:'123456'},{videoId:'abc'},{mediaId:'nope'},{tenantId:'x'}]){
+  const calls=inserted.length;
+  await assert.rejects(recordMetaVideoUpload(pool,{tenantId:T,mediaId:OTHER,userId:USER,
+   accountId:'act_123456789',videoId:'1616096903323428',...bad}),{status:422});
+  assert.equal(inserted.length,calls,'invalid receipt never reaches the database');
+ }
 });

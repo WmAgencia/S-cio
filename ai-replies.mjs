@@ -112,7 +112,7 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
    instructions:m.instructions,knowledge:m.knowledge_md,products:products.rows,question:m.body,continuity,knowledgeRetrieval});
   const result=await respond({instructions,
    input:context,
-   maxOutputTokens:500,env});
+   maxOutputTokens:500,purpose:'chat',env});
   const message=polishCustomerReply(result.reply,{hasConversation:continuity.hasAssistantReply,incoming:m.body,
    previousAssistant:history.rows.filter(x=>x.direction==='outbound').at(-1)?.body||''});
   if(!message){await finish('failed','EMPTY_RESPONSE');return {processed:true,failed:true};}

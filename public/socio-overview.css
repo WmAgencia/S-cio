@@ -1,0 +1,113 @@
+/*
+ * Overview board: the company indicators as one quiet column on the left, and
+ * Sócio's traffic recommendations on the right at the same height. Pending
+ * recommendations breathe slowly; answered ones stay grey and out of the way.
+ * Loaded before the canonical Stripe layer, so the rules that Stripe pins with
+ * !important are overridden with a more specific selector, never by load order.
+ */
+.ov-board{
+ display:grid;grid-template-columns:minmax(0,.82fr) minmax(0,1.18fr);
+ gap:14px;align-items:stretch;min-width:0;
+}
+
+.ov-kpi-stack{display:flex;flex-direction:column;gap:10px;min-width:0}
+
+body #appShell #view .px-overview .ov-kpi-stack .px-kpi{
+ min-height:0!important;padding:13px 16px!important;
+ border-radius:12px!important;gap:4px!important;
+}
+body #appShell #view .px-overview .ov-kpi-stack .px-kpi-number{
+ font-size:clamp(23px,2.6vw,29px)!important;
+}
+body #appShell #view .px-overview .ov-kpi-stack .px-kpi small{font-size:10.5px!important}
+
+/* ---- recommendation rail ---- */
+.ov-rail{position:relative;min-width:0}
+.ov-rail-inner{
+ position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;
+ background:#fff;border:1px solid var(--line,#e5e7eb);border-radius:12px;
+ box-shadow:var(--shadow,0 3px 16px rgba(27,39,60,.035));
+}
+.ov-rail-head{
+ display:flex;align-items:center;justify-content:space-between;gap:10px;
+ padding:13px 16px 11px;border-bottom:1px solid #eff1f5;
+}
+.ov-rail-eyebrow{font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;color:var(--purple,#605dec)}
+.ov-rail-head h2{margin:2px 0 0;font-size:15px;letter-spacing:-.025em;color:var(--ink,#202735)}
+.ov-rail-count{
+ min-width:24px;height:24px;padding:0 7px;border-radius:999px;
+ display:grid;place-items:center;background:var(--purple,#605dec);color:#fff;
+ font-size:11.5px;font-weight:700;letter-spacing:0;
+}
+.ov-rec-list{
+ flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+ display:flex;flex-direction:column;gap:10px;padding:12px;
+ scrollbar-width:thin;
+}
+.ov-rail-empty{margin:6px 2px;font-size:12.5px;line-height:1.5;color:var(--muted,#667085)}
+.ov-rail-foot{
+ display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+ padding:10px 14px;border-top:1px solid #eff1f5;
+}
+.ov-rail-feedback{font-size:11.5px;line-height:1.4;color:var(--muted,#667085);min-width:0}
+
+.ov-rec{
+ border:1px solid var(--line,#e5e7eb);border-radius:11px;background:#fff;
+ padding:11px 12px;min-width:0;transform-origin:50% 50%;
+}
+.ov-rec-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px}
+.ov-rec-action{
+ font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;font-weight:700;color:#6b5dd3;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ov-rec-status{
+ flex:0 0 auto;padding:2px 8px;border-radius:999px;
+ font-size:10.5px;font-weight:600;white-space:nowrap;
+ background:#f0efff;color:#4f46c9;
+}
+.ov-rec-question{margin:0;font-size:13px;line-height:1.45;color:var(--ink,#202735)}
+.ov-rec-detail{display:block;margin-top:4px;font-size:11.5px;line-height:1.42;color:var(--muted,#667085)}
+.ov-rec-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.ov-rec-amount{display:flex;gap:6px;margin-top:8px}
+.ov-rec-amount[hidden]{display:none}
+.ov-rec-amount input{
+ flex:1;min-width:0;padding:7px 9px;border-radius:9px;
+ border:1px solid var(--line,#e5e7eb);background:#fafbfc;color:inherit;
+ font:inherit;font-size:12.5px;transition:border-color .16s ease,box-shadow .16s ease;
+}
+.ov-rec-amount input:focus{outline:none;border-color:#8b7cf7;box-shadow:0 0 0 3px rgba(123,108,246,.16)}
+.ov-rec-note{margin:6px 0 0;font-size:11.5px;color:var(--muted,#667085)}
+.ov-rec-note.is-error{color:#ba3c49}
+.ov-rec-note[hidden]{display:none}
+
+/* Still waiting on the owner: a slow breath of colour, never a flash. */
+.ov-rec.is-pending{animation:ov-rec-breathe 6.8s ease-in-out infinite}
+.ov-rec.is-pending .ov-rec-status{background:#605dec;color:#fff}
+@keyframes ov-rec-breathe{
+ 0%,100%{
+  transform:scale(1);border-color:#e3e0ff;
+  box-shadow:0 0 0 0 rgba(96,93,236,0);
+ }
+ 50%{
+  transform:scale(1.013);border-color:#c9c3ff;
+  box-shadow:0 12px 28px -18px rgba(96,93,236,.55),0 0 0 1px rgba(96,93,236,.16);
+ }
+}
+
+/* Already answered: grey, quieter, out of the way. */
+.ov-rec.is-done,
+.ov-rec.is-muted{filter:grayscale(1);opacity:.62;background:#fbfbfc;border-color:#eceef2}
+.ov-rec.is-done .ov-rec-action,
+.ov-rec.is-muted .ov-rec-action{color:#667085}
+.ov-rec.is-done .ov-rec-status{background:#f2f3f6;color:#5d6a7e}
+
+@media(max-width:930px){
+ .ov-board{grid-template-columns:1fr}
+ .ov-rail{position:static}
+ .ov-rail-inner{position:static;max-height:none}
+ .ov-rec-list{max-height:440px}
+}
+
+@media(prefers-reduced-motion:reduce){
+ .ov-rec.is-pending{animation:none!important;border-color:#d9d5ff}
+}

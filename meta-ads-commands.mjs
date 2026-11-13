@@ -3,6 +3,7 @@
 import {prepareAdsPlan} from './meta-ads-tools.mjs';
 import {readMetaFinanceWithObservation} from './meta-billing-observations.mjs';
 import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
+import {wantsCampaignOrder} from './socio-campaign-brief.mjs';
 
 const normalize=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const invalid=(msg)=>Object.assign(new Error(msg),{status:422});
@@ -32,7 +33,8 @@ export function parseMetaCommand(text){
    label:'Consultar dados oficiais da conta Meta selecionada',willSpend:false};
  }
  if(/\b(relatorio|resultado|metricas|desempenho|gasto|analise|quanto gast)/.test(s)&&
-  !/\b(orcamento|alterar|mudar|definir|aumentar|reduzir)\b/.test(s)){
+  !/\b(orcamento|alterar|mudar|definir|aumentar|reduzir)\b/.test(s)&&
+  !wantsCampaignOrder(raw)){
   return {intent:'read',kind:'reports',input:{period,level:/\banuncio/.test(s)?'ad':/\bconjunto/.test(s)?'adset':'campaign',breakdown:'none'},
    label:'Consultar indicadores reais na conta Meta selecionada',willSpend:false};
  }

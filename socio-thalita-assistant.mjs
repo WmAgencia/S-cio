@@ -12,6 +12,8 @@ import {validateProduct} from './catalog.mjs';
 import {readAdsTool} from './meta-ads-tools.mjs';
 import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
 import {isMetaAdsIntent,isMetaOverviewIntent,metaPeriodForQuery,formatFriendlyMetaReport} from './socio-thalita-meta-summary.mjs';
+import {wantsCampaignOrder} from './socio-campaign-brief.mjs';
+import {isConfirmation} from './socio-ad-skills.mjs';
 import {readGoogleAdsCampaigns} from './socio-google-ads.mjs';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const pending=new Map();
@@ -41,7 +43,74 @@ function parseMoney(text){
  const n=Number(raw.replace(',','.'));
  return Number.isFinite(n)&&n>=0&&n<1000000?Math.round(n*100):null;
 }
+// Speech-to-text rarely names the platform. A request that names an ad and a
+// creation verb is an order to build the campaign, not a request for advice.
+function wantsCampaign(text){
+ const t=normalize(text);
+ if(!t||/\bgoogle\s*ads\b/.test(t))return false;
+ if(/^(?:como|me\s+(?:explica|ensina|mostra))\b/.test(t))return false;
+ const target=/\b(campanha|campanhas|anuncio|anuncios|anunciar|divulgar|impulsionar|turbinar|trafego pago)\b/.test(t);
+ if(!target)return false;
+ if(/\b(ver|veja|mostrar|mostra|listar|lista|quais|quantas?|analisar|analise|relatorio|desempenho|resultado|funcionando|estao)\b/.test(t))return false;
+ return /\b(?:cri[ae]r?|crie|mont[ae]r?|faz(?:er)?|faca|sub[ai]r|sobe|lan[cç](?:e|ar)|lancar|quero|preciso|pode|vamos|gera(?:r)?|monte)\b/.test(t);
+}
+function campaignPlan(result){
+ const brief=result.brief||{};
+ const media=brief.hasPhoto?'foto':brief.hasVideo?'vídeo':null;
+ const steps=[{title:'Entendi o seu pedido',
+  detail:[brief.category,media?'criativo de '+media:null].filter(Boolean).join(' · ')||'Pedido recebido',status:'done'}];
+ steps.push({title:'Conferi a conta Meta da empresa',detail:'Conta, Página e biblioteca verificadas',status:'done'});
+ if(result.status==='collecting'){
+  steps.push({title:'Preciso de uma definição',detail:String(result.question||result.message||'').slice(0,190),status:'waiting'});
+  return {title:'Planejando a campanha',steps};
+ }
+ if(result.status==='ready'){
+  const audience=[brief.cityName,brief.genders?.[0]===1?'homens':brief.genders?.[0]===2?'mulheres':null,
+   brief.dailyBudgetCents?'R$ '+(brief.dailyBudgetCents/100).toFixed(2).replace('.',',')+'/dia':null]
+   .filter(Boolean).join(' · ');
+  if(result.design?.objectiveLabel)steps.push({title:'Defini a estratégia da campanha',status:'done',
+   detail:result.design.objectiveLabel+' · verba no '+(result.design.budgetMode==='campaign'?'campanha (CBO)':'conjunto (ABO)')});
+  steps.push({title:'Defini público, orçamento e criativo',detail:audience||'Público e orçamento definidos',status:'done'});
+  const copy=Array.isArray(result.creativeVariants)&&result.creativeVariants[0]||{};
+  steps.push({title:'Escrevi o texto do anúncio',status:'done',
+   detail:[copy.headline,copy.message].filter(Boolean).join(' · ').slice(0,190)||'Texto do anúncio pronto'});
+  steps.push({title:'Montei campanha, conjunto e anúncio',detail:'Tudo pausado até a sua autorização',status:'done'});
+  steps.push({title:'Aguardando sua confirmação',detail:"Responda “pode criar” para eu enviar à Meta",status:'waiting'});
+  return {title:'Campanha pronta para aprovar',steps};
+ }
+ if(result.status==='completed'){
+  steps.push({title:'Criei a campanha na Meta',detail:'Campanha, conjunto e anúncio prontos',status:'done'});
+  steps.push({title:'Tudo pausado',detail:'Nada veicula nem gasta até você ativar',status:'done'});
+  return {title:'Campanha criada',steps};
+ }
+ if(result.status==='failed'){
+  steps.push({title:'A Meta não confirmou a criação',detail:String(result.message||'').slice(0,190),status:'error'});
+  return {title:'Campanha não criada',steps};
+ }
+ return {title:'Campanha',steps};
+}
+function answerPlan(result){
+ const steps=[{title:'Entendi o seu pedido',detail:'Mensagem lida',status:'done'}];
+ if(result.data?.source==='meta_ads')steps.push({title:'Consultei as campanhas na Meta',
+  detail:[Number(result.data.listedCampaigns||0)+' campanha(s)',Number(result.data.activeCampaigns||0)+' ativa(s)'].join(' · '),status:'done'});
+ else if(result.data?.products)steps.push({title:'Consultei o catálogo',
+  detail:Array.isArray(result.data.products)?result.data.products.length+' item(ns) conferidos':'Catálogo conferido',status:'done'});
+ else if(result.data?.metrics)steps.push({title:'Consultei os indicadores da empresa',detail:'Dados atualizados',status:'done'});
+ else if(result.data?.channelCount!==undefined)steps.push({title:'Conferi canais e conversas',detail:'Canais conferidos',status:'done'});
+ else steps.push({title:'Consultei os dados da empresa',detail:'Dados atualizados',status:'done'});
+ if(result.confirmation)steps.push({title:'Preparei a alteração',detail:String(result.confirmation.label||'').slice(0,170),status:'waiting'});
+ else steps.push({title:'Organizei a resposta',detail:'Pronta',status:'done'});
+ return {title:'Resposta preparada',steps};
+}
 export async function askThalita(pool,a,body={},opts={}){
+ const result=await askThalitaCore(pool,a,body,opts);
+ if(result&&typeof result==='object'&&!result.plan){
+  const json={...result,plan:result.skillId==='ads.campaign.launch'||result.brief?campaignPlan(result):answerPlan(result)};
+  return json;
+ }
+ return result;
+}
+async function askThalitaCore(pool,a,body={},opts={}){
  if(!parseTenantFeatures(a.features).ai)throw fail(403,'IA não habilitada para esta empresa.');
  const message=safeMessage(body.message);
  if(!message)throw fail(422,'Escreva uma pergunta de até 1.400 caracteres.');
@@ -52,6 +121,18 @@ export async function askThalita(pool,a,body={},opts={}){
  ).slice(-6).map(turn=>({role:turn.role,text:turn.text.trim().slice(0,350)})):[];
  const lower=normalize(message);
  const metaIntent=isMetaAdsIntent(lower)&&!/\bgoogle\s*ads\b/.test(lower);
+ // A full brief that includes "desempenho/resultado" is still an order to build
+ // the campaign. It must never fall through to an existing-campaign report.
+ const campaignOrder=wantsCampaignOrder(message);
+ // A running campaign conversation keeps the next short answer ("6", "Sorocaba",
+ // "pode criar") inside that conversation instead of starting a generic chat.
+ // The owner confirms by voice: "ok, pode criar", "beleza pode subir" and a bare
+ // "sim" all belong to the campaign they just heard. Questions about the failure
+ // and a retry request stay there too, instead of falling into generic chat.
+ const campaignFollowUp=Boolean(body.runId)&&
+  (isConfirmation(message)||
+   /^(?:o que (?:aconteceu|deu errado|foi)|por que|porque|qual (?:foi )?o (?:problema|erro)|diagnostico|analise tecnica|tentar de novo|tenta de novo|tente de novo)\b/.test(lower)||
+   message.trim().length<=70);
  const features=parseTenantFeatures(a.features);
  const readReports=()=>getExecutiveMetrics(pool,a);
  // Product write commands require EXACT unambiguous match and separate approval.
@@ -96,7 +177,11 @@ export async function askThalita(pool,a,body={},opts={}){
   }
  }
  // Answers come from the active tenant's stored records, never inferred from chat text.
- if(!metaIntent&&/\b(produtos?|catalogo|estoque|precos?|preco do produto)\b/.test(lower)&&features.catalog){
+ // A catalog lookup must not swallow a campaign order or the answer to "o que
+ // você quer anunciar?" — "meus produtos" describes the subject, not a lookup.
+ const catalogMention=/\b(produtos?|catalogo|estoque|precos?|preco do produto)\b/.test(lower)&&features.catalog;
+ const catalogQuestion=/^(?:quais|quant[oa]s?|me\s+(?:mostra|mostre|diga|diz|fala))\b|\?\s*$/.test(lower);
+ if(!metaIntent&&!campaignOrder&&catalogMention&&(!campaignFollowUp||catalogQuestion)){
   requirePermission(a,'catalog.read');
   const response=await pool.query(
    'SELECT id,name,price_cents,stock_quantity,active FROM products WHERE tenant_id=$1 ORDER BY name ASC LIMIT 150',
@@ -113,7 +198,9 @@ export async function askThalita(pool,a,body={},opts={}){
    data:{products:selected.map(p=>({id:p.id,name:p.name,priceCents:p.price_cents,
     stockQuantity:p.stock_quantity,active:p.active}))}};
  }
- if(!metaIntent&&/\b(whatsapp|whatsapps|numeros conectados|canais de atendimento|conversas em aberto)\b/.test(lower)&&features.whatsapp){
+ // "vender direto pro meu WhatsApp esse sistema" names the destination of a
+ // campaign, not a request for the channel status.
+ if(!metaIntent&&!campaignOrder&&!campaignFollowUp&&/\b(whatsapp|whatsapps|numeros conectados|canais de atendimento|conversas em aberto)\b/.test(lower)&&features.whatsapp){
   requirePermission(a,'inbox.read');
   const [channels,conversations]=await Promise.all([
    pool.query('SELECT label,phone,status FROM channels WHERE tenant_id=$1 ORDER BY label LIMIT 40',[a.active_tenant_id]),
@@ -129,14 +216,14 @@ export async function askThalita(pool,a,body={},opts={}){
    data:{channelCount:channels.rows.length,connectedInDatabase:connected.length,
     openConversations:Number(conversations.rows[0]?.n||0)}};
  }
- if(metaIntent){
+ if(metaIntent||wantsCampaign(message)||campaignFollowUp||campaignOrder){
   if(!features.meta_ads)return {status:'feature_disabled',executed:false,
    message:'Meta Ads está desativado para esta empresa. Sugestão: ative o módulo antes de consultar campanhas.'};
   // MetaEdge is a common speech-to-text rendering of "Meta Ads".
   // Campaign listings include inactive campaigns; metrics are period-scoped
   // and never replaced with WhatsApp/quote metrics.
   const changing=/\b(pausar|pause|desativar|desative|ativar|ative|criar|crie|editar|edite|alterar|altere|mudar|mude|aumentar|aumente|reduzir|reduza|excluir|exclua|deletar)\b/.test(lower);
-  if(!changing&&isMetaOverviewIntent(lower)){
+  if(metaIntent&&!changing&&!campaignOrder&&isMetaOverviewIntent(lower)){
    requirePermission(a,'marketing.read');
    try{
     const period=metaPeriodForQuery(lower);
@@ -154,7 +241,7 @@ export async function askThalita(pool,a,body={},opts={}){
   }
   if(!features.meta_ads)return {status:'feature_disabled',executed:false,message:'Meta Ads não está ativado para esta empresa.'};
   const asksForMetrics=/\b(gasto|gastos|cliques|cpc|cpa|metricas|desempenho|relatorio|resultado|investimento|campanhas ativas)\b/.test(lower);
-  if(asksForMetrics){
+  if(metaIntent&&asksForMetrics&&!campaignOrder){
    requirePermission(a,'marketing.read');
    try{
     const report=await (opts.metaReport||readAdsTool)(pool,a,'insights',{period:/\bhoje\b/.test(lower)?'today':'last_7d'});
@@ -174,8 +261,10 @@ export async function askThalita(pool,a,body={},opts={}){
     message:'Não consegui consultar as métricas reais da Meta Ads nesta empresa. Verifique a conexão em Conexões. '+String(error.message||'').slice(0,150)};}
   }
   requirePermission(a,'marketing.manage');
+  const imageHash=typeof body.imageHash==='string'&&/^[A-Za-z0-9_-]{8,100}$/.test(body.imageHash)?body.imageHash:null;
+  const videoId=typeof body.videoId==='string'&&/^\d{4,30}$/.test(body.videoId)?body.videoId:null;
   const r=await (opts.marketing||speakToSocioSkill)(pool,a,
-    {message,runId:body.runId||null},{});
+    {message,runId:body.runId||null,imageHash,videoId},{});
   return {...r,executed:r.executed===true};
  }
  if(/\b(google ads|campanhas google)\b/.test(lower)){
@@ -212,6 +301,7 @@ export async function askThalita(pool,a,body={},opts={}){
  const prospectorHistory=history.map(turn=>({role:turn.role,content:turn.text}));
  const plan=voiceReplyPlan(message,prospectorHistory);
  const answer=await (opts.chat||groqResponse)({
+  purpose:'planning',
   instructions:voiceStyleInstruction({heard:message,history:prospectorHistory})+'\n'+
    'O estilo de resposta vem do módulo Francisca do Prospector, mas você é a Thalita do Sócio. '+
    'Responda SOMENTE como orientação quando não houver uma ferramenta específica; jamais alegue ter executado alteração, mensagem, cobrança, anúncio ou acessado dados de clientes. '+

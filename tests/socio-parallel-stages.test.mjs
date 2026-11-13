@@ -21,9 +21,35 @@ test('Meta copy offers three distinct drafts grounded only in provided briefing'
  assert(!JSON.stringify(c).match(/garantia de venda|clientes garantidos|resultados comprovados/i));
  const actual=skillAdCopy(brief,'Loja Exemplo');
  assert.deepEqual(actual,primaryCreativeDraft(brief,'Loja Exemplo'));
- assert.deepEqual(Object.keys(actual).sort(),['headline','message','name']);
+ assert.deepEqual(Object.keys(actual).sort(),['description','headline','message','name']);
+ assert(c.variants.every(x=>x.description&&x.description.length<=60),'every draft carries a short description');
+ assert(c.variants.every(x=>x.welcomeMessage&&x.quickReply),'WhatsApp drafts carry the two Conversas messages');
+ assert(c.variants.every(x=>x.welcomeMessage.length<=160&&x.quickReply.length<=40));
+ const siteDraft=buildApprovedAdCreativeDrafts({category:'consertos automotivos',cityName:'Sorocaba',destination:'website'},'Oficina');
+ assert(siteDraft.variants.every(x=>!x.welcomeMessage&&!x.quickReply),'a site ad has no WhatsApp welcome message');
 });
 
+test('Campaign names use the real product and never a spoken fragment',()=>{
+ const tail=name=>name.replace(/^Sócio · /,'');
+ const fragment=buildApprovedAdCreativeDrafts(
+  {category:'Então, o sistema',cityName:'todo o Brasil',destination:'whatsapp',goal:'sales_whatsapp'},'Loja Exemplo').name;
+ assert.doesNotMatch(tail(fragment),/então|sistema|sócio/i,fragment);
+ assert.match(fragment,/Conversas no WhatsApp/);
+ assert.match(fragment,/todo o Brasil/);
+ const vocative=buildApprovedAdCreativeDrafts(
+  {category:'Sistema, sócio',cityName:'todo o Brasil',destination:'whatsapp'},'Loja Exemplo').name;
+ assert.doesNotMatch(tail(vocative),/sistema|sócio/i,vocative);
+ assert.match(vocative,/Conversas no WhatsApp/);
+ const generic=buildApprovedAdCreativeDrafts(
+  {category:'sistema',cityName:'todo o Brasil',destination:'whatsapp'},'Loja Exemplo').name;
+ assert.match(generic,/Conversas no WhatsApp/,'a generic word alone does not name the campaign');
+ assert.match(generic,/\d{2}\/\d{2}\/\d{4}/,'the day separates campaigns with the same product');
+ const real=buildApprovedAdCreativeDrafts(
+  {category:'bolos caseiros',cityName:'Sorocaba, SP',destination:'whatsapp'},'Loja Exemplo').name;
+ assert.match(real,/Bolos caseiros/);
+ assert.match(real,/Sorocaba, SP/);
+ assert.match(real,/Conversas no WhatsApp/);
+});
 test('Meta copy follows destination without misleading WhatsApp or Pixel claims',()=>{
  const site=buildApprovedAdCreativeDrafts({category:'consertos automotivos',cityName:'Sorocaba',destination:'website'},'Oficina');
  assert(site.variants.every(x=>/site/.test(x.message)));

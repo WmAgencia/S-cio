@@ -6,6 +6,7 @@ import {openMarketingSecret} from './marketing-integrations.mjs';
 import {requirePermission} from './team-permissions.mjs';
 import {assertApiFeature} from './tenant-features.mjs';
 import {diagnoseMetaTraffic} from './meta-traffic-diagnostics.mjs';
+import {computeAccountEconomics} from './socio-account-economics.mjs';
 
 const fail=(status,msg)=>Object.assign(new Error(msg),{status});
 export const META_REPORT_PERIODS=Object.freeze(['today','yesterday','last_7d','last_30d']);
@@ -122,9 +123,19 @@ export async function readAdvancedMetaTool(pool,a,kind,input={},options={}){
  if(kind==='conversion_report'){
   params.fields+=',action_values,cost_per_action_type,purchase_roas';
  }
+ if(kind==='diagnosis')params.fields+=',video_play_actions,video_thruplay_watched_actions';
  if(kind==='creative_report')params.level='ad';
  if(after)params.after=after;
- const result=await graph(c,'insights',params);
+ // Video metrics are not accepted at every level; the diagnosis still works
+ // without them, and the funnel then reports those rungs as unavailable.
+ let result;
+ if(kind==='diagnosis'){
+  try{result=await graph(c,'insights',params);}
+  catch{
+   const base={...params,fields:params.fields.replace(',video_play_actions,video_thruplay_watched_actions','')};
+   result=await graph(c,'insights',base);
+  }
+ }else result=await graph(c,'insights',params);
  if(!Array.isArray(result.data))throw fail(503,'A Meta não retornou um relatório válido.');
  const rows=result.data;
  const summary=summarizeMetaInsights(rows,{currency:c.account.currency,period:report.period,level:params.level});
@@ -136,9 +147,12 @@ export async function readAdvancedMetaTool(pool,a,kind,input={},options={}){
    if(!Array.isArray(adResponse.data))adsUnavailable=true;
    else{ads=adResponse.data;adsHasMore=Boolean(adResponse.paging?.next);}
   }catch{adsUnavailable=true;}
+  const economics=computeAccountEconomics({ticketCents:input.ticketCents,
+   marginPercent:input.marginPercent,targetCpaCents:input.targetCpaCents});
   diagnosis=diagnoseMetaTraffic({insights:rows,ads,period:report.period,
    currency:c.account.currency,insightsHasMore:Boolean(result.paging?.next),
-   adsHasMore,adsUnavailable});
+   adsHasMore,adsUnavailable,economics});
+  diagnosis.economics=economics;
  }
  return {kind,accountId:c.account.id,items:rows,summary,
   diagnostics:diagnosis?.diagnostics||null,diagnosis,

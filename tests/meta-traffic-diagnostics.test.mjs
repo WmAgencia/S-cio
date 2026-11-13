@@ -71,7 +71,7 @@ test('Meta optimization questions route to diagnosis; Google and WhatsApp report
  }
  assert.equal(selectExpertSkill('Analisa Google Ads e Meta Ads').id,'google.ads');
  assert.equal(selectExpertSkill('Quantas vendas no WhatsApp?').id,'whatsapp.sales');
- assert.equal(selectExpertSkill('Crie campanha feminina Sorocaba R$ 6 por dia').id,'meta.campaigns');
+ assert.equal(selectExpertSkill('Crie campanha feminina Sorocaba R$ 6 por dia').id,'meta.campaigns.brief');
 });
 test('conversational diagnosis reads only and never calls plan, approve or Meta write',async()=>{
  const pool={query:async()=>{throw new Error('Do not touch DB for injected read-only diagnosis')}};

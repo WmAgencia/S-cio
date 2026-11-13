@@ -93,6 +93,7 @@ function budgetChangeDecision({entity,entityId,entityName,campaignId,currentBudg
 // Pure decision engine: deterministic for the given metrics.
 export function decideTrafficActions(input={}){
  const limits={...TRAFFIC_LIMITS,...(input.limits||{})};
+ const alwaysAsk=input.alwaysAsk===true;
  const campaigns=Array.isArray(input.campaigns)?input.campaigns:[];
  const adsets=Array.isArray(input.adsets)?input.adsets:[];
  const ads=Array.isArray(input.ads)?input.ads:[];
@@ -131,8 +132,10 @@ export function decideTrafficActions(input={}){
   if(!(bestCtr>0))continue;
   if(m.ctr>bestCtr*limits.pauseCtrRatio)continue;
   if(m.spend<limits.minSpendCents/100)continue;
+  const campaignName=campaigns.find(row=>idOf(row.id)===idOf(ad.campaign_id))?.name||null;
   add({action:'pause',entity:'ad',entityId:adId,entityName:String(ad.name||'Anúncio').slice(0,100),
-   campaignId:idOf(ad.campaign_id),reason:'ad_low_ctr',
+   campaignId:idOf(ad.campaign_id),
+   campaignName:campaignName?String(campaignName).slice(0,100):null,reason:'ad_low_ctr',
    explanation:'Vou pausar este anúncio: ele entrega '+m.ctr.toFixed(2)+'% de cliques contra '+
     bestCtr.toFixed(2)+'% do melhor anúncio do mesmo conjunto, com '+money(Math.round(m.spend*100))+
     ' gastos. O orçamento fica no anúncio que mais gera cliques.',
@@ -151,6 +154,7 @@ export function decideTrafficActions(input={}){
   if(medianCpm!==null&&m.cpm>=medianCpm*limits.highCpmRatio&&broadenedTargeting(adset.targeting))
    add({action:'broaden_audience',entity:'adset',entityId:adsetId,
     entityName:String(adset.name||'Conjunto').slice(0,100),campaignId:idOf(adset.campaign_id),
+    campaignName:campaign?.name?String(campaign.name).slice(0,100):null,
     reason:'high_cpm',
     explanation:'O custo por mil impressões está em '+money(Math.round(m.cpm*100))+
      ', contra '+money(Math.round(medianCpm*100))+' da média das campanhas. Vou ampliar o público: '+
@@ -168,6 +172,7 @@ export function decideTrafficActions(input={}){
   if(actions.length>=limits.maxActions)continue;
   add({action:'scale',entity:'adset',entityId:adsetId,
    entityName:String(adset.name||'Conjunto').slice(0,100),campaignId:idOf(adset.campaign_id),
+   campaignName:campaign?.name?String(campaign.name).slice(0,100):null,
    reason:'winner_scale',currentBudgetCents:budget,targetBudgetCents:target,
    explanation:'Este conjunto entrega '+m.ctr.toFixed(2)+'% de cliques (média da conta '+
     medianCtr.toFixed(2)+'%). Vou subir o orçamento de '+money(budget)+' para '+money(target)+
@@ -187,6 +192,7 @@ export function decideTrafficActions(input={}){
   if(campaign){
    add({action:'duplicate_campaign',entity:'campaign',entityId:campaign.id,
     entityName:String(campaign.name||'Campanha').slice(0,100),campaignId:campaign.id,
+    campaignName:String(campaign.name||'').slice(0,100)||null,
     reason:'winner_test',
     explanation:'A campanha "'+String(campaign.name||'').slice(0,60)+'" tem '+
      best.ctr.toFixed(2)+'% de cliques, acima da média. Vou duplicá-la PAUSADA para você testar '+
@@ -198,10 +204,14 @@ export function decideTrafficActions(input={}){
  }
 
  actions.sort((a,b)=>a.priority-b.priority);
+ // "Pergunta sempre": every change reaches the owner as a question, including
+ // the ones inside the automatic envelope. withinAutonomy still records whether
+ // the change is inside the envelope, so the owner sees the difference.
+ const proposed=alwaysAsk?actions.map(action=>({...action,requiresApproval:true})):actions;
  if(!sampledCampaigns.length)
   notes.push('Ainda não há amostra suficiente (mínimo '+limits.minImpressions+' impressões e '+
    limits.minClicks+' cliques) para mudar nada com segurança.');
- return {actions,notes,readOnly:true,limits,
+ return {actions:proposed,notes,readOnly:true,limits,
   summary:{campaigns:campaigns.length,adsets:adsets.length,ads:ads.length,
    sampledCampaigns:sampledCampaigns.length,medianCpmCents:medianCpm===null?null:Math.round(medianCpm*100),
    medianCtrPercent:medianCtr}};
@@ -240,17 +250,43 @@ export function formatTrafficReport(result,{max=5}={}){
 const decisionColumns='id,action,entity,entity_id AS "entityId",entity_name AS "entityName",'+
  'campaign_id AS "campaignId",reason,explanation,evidence,within_autonomy AS "withinAutonomy",'+
  'status,current_budget_cents AS "currentBudgetCents",target_budget_cents AS "targetBudgetCents",'+
+ 'question,notified_at AS "notifiedAt",responded_at AS "respondedAt",resolved_via AS "resolvedVia",'+
  'created_at AS "createdAt"';
+
+// The exact question the owner sees. It names the ad and the campaign and, for
+// a budget change, both amounts, so the answer needs no extra context.
+export function trafficQuestion(action={}){
+ const entity=String(action.entityName||'').slice(0,80);
+ const campaign=String(action.campaignName||'').slice(0,80);
+ const where=entity&&campaign&&entity!==campaign
+  ?entity+' da campanha "'+campaign+'"'
+  :entity||(campaign?'campanha "'+campaign+'"':'conta');
+ if(action.action==='pause')
+  return 'Estamos com baixa performance no '+where+'. Posso pausá-lo?';
+ if(action.action==='scale'||action.action==='approval_request')
+  return 'Estamos tendo boa performance no '+where+'. Posso aumentar o valor diário de '+
+   money(action.currentBudgetCents)+' para '+
+   money(action.action==='approval_request'?(action.requestedBudgetCents??action.targetBudgetCents):action.targetBudgetCents)+
+   '?';
+ if(action.action==='broaden_audience')
+  return 'O custo por mil impressões está alto no '+where+'. Posso ampliar o público, '+
+   'removendo os interesses e abrindo a idade para 18–65?';
+ if(action.action==='duplicate_campaign')
+  return 'A campanha "'+(campaign||entity)+'" está acima da média. Posso duplicá-la PAUSADA '+
+   'para você testar outro criativo?';
+ return action.explanation||'Posso aplicar essa mudança?';
+}
 
 async function recordDecision(pool,tenantId,accountId,action,status){
  const id=randomUUID();
  await pool.query(
   "INSERT INTO socio_traffic_decisions(id,tenant_id,account_id,action,entity,entity_id,entity_name,"+
-  "campaign_id,reason,explanation,evidence,within_autonomy,status,current_budget_cents,target_budget_cents) "+
-  "VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)",
+  "campaign_id,reason,explanation,evidence,within_autonomy,status,current_budget_cents,target_budget_cents,question) "+
+  "VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)",
   [id,tenantId,accountId,action.action,action.entity,action.entityId,action.entityName||null,
    action.campaignId||null,action.reason,action.explanation,JSON.stringify(action.evidence||{}),
-   action.withinAutonomy===true,status,action.currentBudgetCents??null,action.targetBudgetCents??null]);
+   action.withinAutonomy===true,status,action.currentBudgetCents??null,action.targetBudgetCents??null,
+   String(action.question||trafficQuestion(action)).slice(0,600)]);
  return id;
 }
 
@@ -258,7 +294,7 @@ async function recentDuplicate(pool,tenantId,action,cooldownHours){
  const found=await pool.query(
   "SELECT id FROM socio_traffic_decisions WHERE tenant_id=$1 AND action=$2 AND entity_id=$3 "+
   "AND created_at>now()-($4||' hours')::interval "+
-  "AND status IN ('awaiting_approval','executing','done') LIMIT 1",
+  "AND status IN ('awaiting_approval','executing','done','dismissed') LIMIT 1",
   [tenantId,action.action,action.entityId,String(cooldownHours)]);
  return found.rowCount>0;
 }
@@ -282,9 +318,11 @@ export async function runTrafficManager(pool,actor,options={}){
  ]);
  const accountId=idOf(String(account?.id||'').replace(/^act_/,''));
  if(!accountId)throw Object.assign(new Error('Selecione a conta de anúncios Meta antes de otimizar o tráfego.'),{status:409});
+ // Sócio asks before every change. Only an explicit alwaysAsk:false restores
+ // silent execution inside the automatic envelope, and nothing calls it that way.
  const decision=decideTrafficActions({campaigns:campaigns.items,adsets:adsets.items,ads:ads.items,
   campaignInsights:campaignInsights.items,adsetInsights:adsetInsights.items,
-  adInsights:adInsights.items,limits});
+  adInsights:adInsights.items,limits,alwaysAsk:options.alwaysAsk!==false});
  const executed=[],pending=[],skipped=[];
  if(options.apply===false)return {accountId,period,decisions:decision.actions,notes:decision.notes,
   summary:decision.summary,executed,pending,skipped,limits,
@@ -367,6 +405,122 @@ export async function listTrafficDecisions(pool,tenantId,{limit=20}={}){
  const rows=await pool.query('SELECT '+decisionColumns+',result,error_code AS "errorCode" '+
   'FROM socio_traffic_decisions WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2',[tenantId,safe]);
  return {items:rows.rows};
+}
+
+const uuidRe=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const bad=(status,message)=>Object.assign(new Error(message),{status});
+const isBudgetAction=action=>action==='scale'||action==='approval_request';
+
+export async function listPendingDecisions(pool,tenantId,{limit=10}={}){
+ const safe=Math.max(1,Math.min(50,Number(limit)||10));
+ const rows=await pool.query('SELECT '+decisionColumns+',account_id AS "accountId" '+
+  "FROM socio_traffic_decisions WHERE tenant_id=$1 AND status='awaiting_approval' "+
+  'ORDER BY created_at DESC LIMIT $2',[tenantId,safe]);
+ return {items:rows.rows};
+}
+
+// Persist that the owner was actually told about this decision. Never re-ask a
+// decision that was already delivered.
+export async function markDecisionNotified(pool,tenantId,id){
+ const updated=await pool.query(
+  "UPDATE socio_traffic_decisions SET notified_at=now(),updated_at=now() "+
+  "WHERE tenant_id=$1 AND id=$2 AND status='awaiting_approval' AND notified_at IS NULL RETURNING id",
+  [tenantId,id]);
+ return {notified:updated.rowCount>0};
+}
+
+// The exact message the owner receives, with the question first and the
+// evidence second, in the same words the system pop-up shows.
+export function decisionNotification(action={}){
+ const question=String(action.question||trafficQuestion(action)).slice(0,600);
+ const detail=String(action.explanation||'').slice(0,700);
+ return {title:'Recomendação de tráfego',question,
+  body:question+(detail?'\n\n'+detail:''),
+  footer:'Sócio · Meta Ads'};
+}
+
+// Approve or dismiss ONE decision. A budget decision also accepts any daily
+// amount in cents ("outro valor"). The claim is atomic: two taps cannot apply
+// the same decision twice.
+export async function resolveTrafficDecision(pool,actor,{id,resolution,targetBudgetCents=null,
+ via='system',env=process.env,prepare=prepareAdsPlan,execute=executeAdsPlan}={}){
+ if(!uuidRe.test(String(id||'')))throw bad(422,'Recomendação inválida.');
+ if(!['approve','dismiss'].includes(resolution))throw bad(422,'Resposta inválida.');
+ if(!['system','whatsapp','whatsapp_amount'].includes(via))throw bad(422,'Origem inválida.');
+ const tenantId=actor.active_tenant_id;
+ const loaded=await pool.query('SELECT '+decisionColumns+',account_id AS "accountId" '+
+  'FROM socio_traffic_decisions WHERE tenant_id=$1 AND id=$2',[tenantId,id]);
+ if(!loaded.rowCount)throw bad(404,'Recomendação não encontrada.');
+ const row=loaded.rows[0];
+ if(row.status!=='awaiting_approval')throw bad(409,'Esta recomendação já foi respondida.');
+ if(resolution==='dismiss'){
+  const closed=await pool.query(
+   "UPDATE socio_traffic_decisions SET status='dismissed',responded_at=now(),resolved_via=$3,updated_at=now() "+
+   "WHERE tenant_id=$1 AND id=$2 AND status='awaiting_approval' RETURNING id",[tenantId,id,via]);
+  if(!closed.rowCount)throw bad(409,'Esta recomendação já foi respondida.');
+  return {ok:true,dismissed:true,id};
+ }
+ let target=row.targetBudgetCents;
+ if(targetBudgetCents!==null&&targetBudgetCents!==undefined){
+  if(!isBudgetAction(row.action))throw bad(422,'Só mudanças de orçamento aceitam outro valor.');
+  const cents=Math.round(Number(targetBudgetCents));
+  if(!Number.isInteger(cents)||cents<100||cents>100000000)
+   throw bad(422,'Informe um valor diário entre R$ 1,00 e R$ 1.000.000,00.');
+  target=cents;
+ }
+ const action={action:row.action,entity:row.entity,entityId:row.entityId,entityName:row.entityName,
+  campaignId:row.campaignId,reason:row.reason,explanation:row.explanation,evidence:row.evidence,
+  currentBudgetCents:row.currentBudgetCents,targetBudgetCents:target,requiresApproval:false};
+ const kind=planKind(action);
+ if(!kind)throw bad(422,'Ação não pode ser aplicada automaticamente.');
+ const claimed=await pool.query(
+  "UPDATE socio_traffic_decisions SET status='executing',target_budget_cents=$3,responded_at=now(),"+
+  "resolved_via=$4,updated_at=now() WHERE tenant_id=$1 AND id=$2 AND status='awaiting_approval' RETURNING id",
+  [tenantId,id,target,via]);
+ if(!claimed.rowCount)throw bad(409,'Esta recomendação já foi respondida.');
+ try{
+  const plan=await prepare(pool,actor,kind,planInput(action),{env});
+  await pool.query('UPDATE socio_traffic_decisions SET plan_id=$2,updated_at=now() WHERE id=$1',
+   [id,plan.id]);
+  const outcome=await execute(pool,actor,plan.id,true,{env});
+  const ok=outcome?.status==='succeeded';
+  await pool.query('UPDATE socio_traffic_decisions SET status=$2,result=$3,error_code=$4,updated_at=now() '+
+   'WHERE id=$1',[id,ok?'done':'failed',JSON.stringify(outcome?.result||{}),
+   ok?null:String(outcome?.status||'FAILED').slice(0,40)]);
+  if(!ok)throw bad(502,String(outcome?.error||'A Meta não confirmou a mudança.').slice(0,200));
+  return {ok:true,applied:true,id,action,result:outcome?.result||{}};
+ }catch(error){
+  await pool.query("UPDATE socio_traffic_decisions SET status='failed',error_code=$2,updated_at=now() "+
+   'WHERE id=$1 AND status<>\'done\'',[id,String(error?.status||error?.code||'ERROR').slice(0,40)]).catch(()=>{});
+  throw error.status?error:bad(502,'Não foi possível aplicar a mudança.');
+ }
+}
+
+// One row per scheduled review: the 6-hour gate and the audit trail.
+export async function recordTrafficReview(pool,tenantId,accountId,{status='done',decisions=0,pending=0,
+ summary={},errorCode=null}={}){
+ const id=randomUUID();
+ await pool.query(
+  'INSERT INTO socio_traffic_reviews(id,tenant_id,account_id,status,decisions,pending,summary,error_code) '+
+  'VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+  [id,tenantId,accountId,status,Math.max(0,Math.floor(Number(decisions)||0)),
+   Math.max(0,Math.floor(Number(pending)||0)),JSON.stringify(summary||{}),
+   errorCode?String(errorCode).slice(0,60):null]);
+ return id;
+}
+
+export async function lastReviewAt(pool,tenantId,accountId){
+ const found=await pool.query(
+  "SELECT max(created_at) AS at FROM socio_traffic_reviews WHERE tenant_id=$1 AND account_id=$2 AND status='done'",
+  [tenantId,accountId]);
+ const at=found.rows[0]?.at;
+ return at?new Date(at):null;
+}
+
+export async function reviewIsDue(pool,tenantId,accountId,{hours=6,now=Date.now()}={}){
+ const at=await lastReviewAt(pool,tenantId,accountId);
+ if(!at)return true;
+ return now-at.getTime()>=hours*3600*1000;
 }
 
 export {budgetChangeDecision};

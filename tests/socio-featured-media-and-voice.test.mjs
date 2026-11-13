@@ -76,5 +76,10 @@ test('Meta dashboard includes campaign thumbnail, ad video controls, swift navig
  assert.match(voice,/source\.start\(\)/);
  assert.match(voice,/Sou a Thalita/);
  assert.match(vad,/const assistantSpeaking=canInterrupt\(\)/);
- assert.match(vad,/now-bargeStarted>=750/);
+ assert.match(vad,/now-bargeStarted>=bargeMs/);
+ assert.match(vad,/bargeMs=360/,'interruption must confirm before a normal syllable gap resets it');
+ assert.match(vad,/if\(!bargeStarted\)\{bargeStarted=now;bargeCandidate=true;record\(\);\}/,
+  'barge-in records from the first voiced frame so the opening words are kept');
+ assert.match(vad,/if\(bargeCandidate\)\{bargeCandidate=false;discardTurn\(\);\}/,
+  'an unconfirmed barge candidate is discarded instead of becoming a turn');
 });

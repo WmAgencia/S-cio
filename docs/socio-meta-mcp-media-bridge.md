@@ -8,7 +8,8 @@ Não altera nem substitui o MCP oficial Meta Ads. Acrescenta um **MCP complement
 2. Selecione MP4 ou MOV até 90 MB, envie. O arquivo é mantido em S3 privado em ads-private/<tenant>/<uuid>/source.mp4 e ganha status ready.
 3. Gere **URL para Meta** (HTTPS, assinada HMAC-SHA256, expira em 20 minutos, suporta HEAD, Range/206). Cole-a no fluxo da ferramenta OFICIAL ads_creative_upload_media com upload_source=URL, media_type=VIDEO. Não persista o link em relatórios, GitHub ou logs.
 4. Após confirmação de upload e processamento pela Meta, use ads_create_creative e ads_create_ad no MCP oficial. A ativação por ads_activate_entity depende de autorização do proprietário e limites de gasto.
-5. ChatGPT/Codex clientes MCP compatíveis com Bearer podem conectar o segundo servidor em https://<socio>/mcp/ads-media. Gere a chave em Meta Ads no painel; a chave é exibida **uma vez**, dura 30 dias e pode ser revogada. A chave só permite operações de mídia do tenant: nunca chama a Meta ou aumenta gasto.
+5. Vídeos já entregues à Meta são apagados do bucket privado depois da janela de retenção (`SOCIO_AD_VIDEO_RETENTION_DAYS`, padrão 7 dias, entre 1 e 30). A cópia que o anúncio usa fica na conta de anúncios; a linha de `ads_media` permanece apenas como histórico com status `expired`. Vídeos sem recibo de entrega não são removidos por essa rotina.
+6. ChatGPT/Codex clientes MCP compatíveis com Bearer podem conectar o segundo servidor em https://<socio>/mcp/ads-media. Gere a chave em Meta Ads no painel; a chave é exibida **uma vez**, dura 30 dias e pode ser revogada. A chave só permite operações de mídia do tenant: nunca chama a Meta ou aumenta gasto.
 
 ## Ferramentas MCP expostas
 - ads_media_create_upload_link(filename) — cria ticket por 15 minutos e devolve página de upload por link.

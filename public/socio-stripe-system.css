@@ -1990,11 +1990,6 @@ body.socio-orb-view #appShell .app-main{background:transparent!important}
 }
 .orb-back:hover{transform:translateY(-1px);background:#fff;box-shadow:0 6px 18px rgba(16,24,40,.1)}
 .orb-back:active{transform:translateY(0) scale(.98)}
-.orb-status{
- font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#667085;
- padding:6px 13px;border-radius:999px;background:#fff;border:1px solid #e5e7eb;
- min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;box-shadow:0 1px 2px rgba(16,24,40,.04);
-}
 .orb-mic-btn{
  display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(96,93,236,.22);background:#fff;
  color:#4b47c8;border-radius:999px;padding:8px 15px 8px 12px;font:inherit;font-size:13px;font-weight:650;cursor:pointer;
@@ -2018,7 +2013,7 @@ body.socio-orb-view #appShell .app-main{background:transparent!important}
 .orb-aura{
  position:absolute;inset:-28%;border-radius:50%;pointer-events:none;
  background:radial-gradient(circle at 50% 50%,rgba(96,93,236,.16),rgba(124,93,255,.09) 44%,rgba(34,211,238,0) 72%);
- filter:blur(calc(24px + var(--orb-amp,0)*36px));opacity:calc(.7 + var(--orb-amp,0)*.3);
+ filter:blur(max(0px,calc(24px + var(--orb-amp,0)*36px)));opacity:calc(.7 + var(--orb-amp,0)*.3);
  transform:scale(calc(1 + var(--orb-amp,0)*.16));transition:transform .12s linear,filter .12s linear;
 }
 .orb-canvas{
@@ -2033,8 +2028,12 @@ body.socio-orb-view #appShell .app-main{background:transparent!important}
 .is-dragging .orb-canvas{transform:scale(1.06)}
 
 .orb-transcript{
- position:absolute;left:50%;bottom:112px;transform:translateX(-50%);width:min(720px,86vw);
+ position:absolute;left:50%;bottom:104px;transform:translateX(-50%);width:min(720px,86vw);
  text-align:center;pointer-events:none;z-index:2;
+ padding:15px 26px;border-radius:20px;
+ background:rgba(255,255,255,.9);border:1px solid rgba(229,231,235,.9);
+ box-shadow:0 18px 44px rgba(16,24,40,.1),0 1px 2px rgba(16,24,40,.05);
+ backdrop-filter:blur(18px);
 }
 .orb-page:has(.orb-plan-panel.visible) .orb-transcript{width:min(600px,calc(100% - 470px))}
 .orb-line{
@@ -2044,25 +2043,36 @@ body.socio-orb-view #appShell .app-main{background:transparent!important}
  text-wrap:balance;
 }
 .orb-line.in{opacity:1;transform:none}
+.orb-line.multiline{
+ display:block;-webkit-line-clamp:unset;white-space:pre-line;text-align:left;text-wrap:pretty;
+ max-height:min(46vh,360px);overflow:auto;pointer-events:auto;overscroll-behavior:contain;
+}
 .orb-line.user{color:#667085;font-weight:600;font-size:clamp(13px,1.2vw,15px)}
 .orb-line.user::before{content:"\201C";opacity:.55}
 .orb-line.user::after{content:"\201D";opacity:.55}
 .orb-drop-hint{
- position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.96);
+ position:absolute;left:50%;top:22px;transform:translate(-50%,-6px) scale(.96);
  margin:0;padding:12px 20px;border-radius:999px;pointer-events:none;z-index:4;
  background:#fff;border:1px dashed rgba(96,93,236,.5);color:#4b47c8;
  font-size:14px;font-weight:650;box-shadow:0 16px 40px rgba(16,24,40,.14),0 0 24px rgba(96,93,236,.08);
  opacity:0;transition:opacity .2s ease,transform .2s ease;
 }
-.is-dragging .orb-drop-hint{opacity:1;transform:translate(-50%,-50%) scale(1)}
-.orb-media-chip{
- position:absolute;left:50%;top:calc(50% + min(215px,35vw) + 12px);transform:translateX(-50%);
- margin:0;padding:6px 13px;border-radius:999px;background:#fff;
- border:1px solid #e5e7eb;color:#475467;
- font-size:12px;font-weight:600;white-space:nowrap;max-width:80vw;overflow:hidden;text-overflow:ellipsis;
- box-shadow:0 1px 2px rgba(16,24,40,.05);
+.is-dragging .orb-drop-hint{opacity:1;transform:translate(-50%,0) scale(1)}
+.orb-media-pill{
+ display:inline-flex;align-items:center;gap:7px;flex:0 0 auto;max-width:200px;
+ padding:4px 10px 4px 4px;border-radius:999px;border:1px solid #e5e7eb;background:#fff;
+ color:#475467;font:inherit;font-size:12px;font-weight:600;cursor:pointer;
+ transition:border-color .2s ease,background .2s ease,color .2s ease;
 }
-.orb-media-chip.ready{border-color:rgba(16,185,129,.35);background:rgba(16,185,129,.07);color:#047857}
+.orb-media-pill[hidden]{display:none!important}
+.orb-media-pill:hover{border-color:#d0d5dd;background:#f9fafb}
+.orb-media-pill[data-status="done"]{border-color:rgba(16,185,129,.35);background:rgba(16,185,129,.07);color:#047857}
+.orb-media-pill[data-status="error"]{border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.06);color:#b42318}
+.orb-media-thumb{width:26px;height:26px;border-radius:50%;object-fit:cover;flex:0 0 auto;display:block}
+.orb-media-thumb[hidden]{display:none}
+.orb-media-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orb-media-x{font-size:15px;line-height:1;opacity:.55;flex:0 0 auto}
+.orb-media-pill:hover .orb-media-x{opacity:.9}
 .orb-media-fly{
  position:absolute;width:148px;height:148px;border-radius:22px;overflow:hidden;z-index:5;pointer-events:none;
  box-shadow:0 24px 60px rgba(16,24,40,.24);border:2px solid rgba(96,93,236,.32);
@@ -2157,24 +2167,20 @@ body.socio-orb-view #appShell #view .orb-page .orb-composer input::placeholder{c
 .orb-send:active{transform:scale(.96)}
 .orb-send svg{width:18px;height:18px}
 
-/* Dashboard entry: the orb itself is the button */
 .px-heading-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.px-orb-entry{
- display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:none;padding:0;
- font:inherit;cursor:pointer;border-radius:16px;outline-offset:4px;
+
+/* Floating launcher: the orb alone, with no pill behind it. */
+.thalita-orb{
+ display:block;width:88px;height:88px;padding:0;border:0;background:none;cursor:pointer;
+ border-radius:50%;outline-offset:6px;
+ filter:drop-shadow(0 12px 26px rgba(74,58,180,.22));
+ transition:transform .26s cubic-bezier(.22,.82,.2,1),filter .26s ease;
 }
-.px-orb-entry-field{
- position:relative;display:grid;place-items:center;width:84px;height:84px;
- transition:transform .26s cubic-bezier(.22,.82,.2,1);
-}
-.px-orb-entry:hover .px-orb-entry-field{transform:scale(1.07)}
-.px-orb-entry:active .px-orb-entry-field{transform:scale(.97)}
-.px-orb-entry-canvas{width:100%;height:100%;display:block;pointer-events:none}
-.px-orb-entry-label{
- font-size:12.5px;font-weight:700;color:#605dec;letter-spacing:.01em;white-space:nowrap;
- transition:color .18s ease;
-}
-.px-orb-entry:hover .px-orb-entry-label{color:#4338ca}
+.thalita-orb:hover{transform:scale(1.06);filter:drop-shadow(0 16px 34px rgba(74,58,180,.3))}
+.thalita-orb:active{transform:scale(.97)}
+.thalita-orb-canvas{width:100%;height:100%;display:block;pointer-events:none}
+@media(max-width:900px){.thalita-orb{width:72px;height:72px}}
+body.socio-orb-view #socioThalitaDock{display:none!important}
 
 @keyframes orb-spin{to{transform:rotate(360deg)}}
 @keyframes orb-swallow{0%{transform:scale(1)}28%{transform:scale(.86)}55%{transform:scale(1.12)}100%{transform:scale(1)}}
@@ -2189,11 +2195,13 @@ body.socio-orb-view #appShell #view .orb-page .orb-composer input::placeholder{c
  .orb-stage{min-height:0;padding:8px 16px 100px}
  .orb-composer{width:calc(100% - 28px);bottom:16px;padding:6px 6px 6px 8px}
  .orb-transcript{bottom:90px;width:calc(100% - 40px)}
- .orb-page:has(.orb-plan-panel.visible) .orb-transcript{opacity:0;transition:opacity .2s ease}
+ .orb-page:has(.orb-plan-panel.visible) .orb-transcript{
+  top:66px;bottom:auto;width:calc(100% - 24px);padding:12px 16px;
+ }
  .orb-plan-panel{
   position:absolute;left:12px;right:12px;top:auto;bottom:88px;width:auto;max-height:46%;z-index:7;
  }
- .orb-media-chip{top:calc(50% + min(160px,30vw) + 10px)}
+ .orb-media-pill{max-width:132px}
 }
 @media(max-width:560px){
  .orb-top{padding:14px 14px 0;gap:8px}
@@ -2203,11 +2211,10 @@ body.socio-orb-view #appShell #view .orb-page .orb-composer input::placeholder{c
  .orb-field{width:min(300px,72vw)}
  .orb-line{-webkit-line-clamp:4}
  .px-heading-actions{width:100%;justify-content:flex-start}
- .px-orb-entry-field{width:70px;height:70px}
 }
 @media(prefers-reduced-motion:reduce){
  .orb-mic-btn[aria-pressed="true"] svg,.orb-step,.orb-line{animation:none!important}
- .orb-canvas,.px-orb-entry-field{transform:none!important}
- .orb-plan-panel,.orb-back,.orb-btn,.orb-send,.orb-attach,.px-orb-entry-field{transition:none!important}
+ .orb-canvas{transform:none!important}
+ .orb-plan-panel,.orb-back,.orb-btn,.orb-send,.orb-attach{transition:none!important}
  .orb-step[data-status="running"] .orb-step-mark::after{animation-duration:2.4s}
 }

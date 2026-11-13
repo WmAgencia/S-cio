@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {extractCampaignBrief,chooseMetaCity,skillAdCopy,speakToAdSkill,SOCIO_AD_SKILLS} from '../socio-ad-skills.mjs';
+import {extractCampaignBrief,chooseMetaCity,skillAdCopy,speakToAdSkill,readCampaignProgress,SOCIO_AD_SKILLS,isConfirmation} from '../socio-ad-skills.mjs';
 import {validateAdsPlan} from '../meta-ads-tools.mjs';
 const tenant=randomUUID(),user=randomUUID();
 const actor={active_tenant_id:tenant,user_id:user,tenant_name:'Loja exemplo',role:'owner',
@@ -39,6 +39,12 @@ function fakePool(){
   if(sql.startsWith("UPDATE socio_skill_runs SET status='executing'")){
    const row=runs.get(params[0]);if(!row||row.status!=='ready')return {rowCount:0,rows:[]};
    row.status='executing';return {rowCount:1,rows:[{...row}]};
+  }
+  if(sql.startsWith("UPDATE socio_skill_runs SET status='collecting',plan_id=NULL")){
+   const row=runs.get(params[0]);
+   if(!row||row.status!=='failed')return {rowCount:0,rows:[]};
+   row.status='collecting';row.plan_id=null;row.pixel_plan_id=null;row.result=null;
+   return {rowCount:1,rows:[{...row}]};
   }
   if(sql.startsWith('UPDATE socio_skill_runs SET status=$2,result=$3::jsonb')){
    const row=runs.get(params[0]);row.status=params[1];row.result=JSON.parse(params[2]);return {rowCount:1};
@@ -103,7 +109,7 @@ test('selected account + WA-AKG + page + qualified photo prepare a campaign, but
  assert.equal(no.status,'ready');assert.equal(actions.length,1);
  const confirmed=await speakToAdSkill(pool,actor,{message:'pode criar',runId:start.runId},options);
  assert.equal(confirmed.status,'completed');
- assert.match(confirmed.message,/PAUSADOS/);
+ assert.match(confirmed.message,/criados e pausados/i);
  assert.equal(actions.length,2);
  assert.equal(actions[1].confirmed,true);
  const replay=await speakToAdSkill(pool,actor,{message:'pode criar',runId:start.runId},options);
@@ -116,10 +122,24 @@ test('skill asks only for creative when assets do not match and lets owner provi
  const opts={resolve,read:noImages,prepare:async(p,a,kind,input)=>{prepared.push(input);return{id:randomUUID()};}};
  const start=await speakToAdSkill(pool,actor,{message:'Quero divulgar roupa feminina em Sorocaba gastando R$ 6 por dia'},opts);
  assert.equal(start.status,'collecting');
+ assert.equal(start.slot,'media','the page knows the run is waiting for the creative');
  assert.match(start.message,/foto/i);
  assert.equal(prepared.length,0,'No Meta write or plan when image is missing');
  const withImage=await speakToAdSkill(pool,actor,{message:'',runId:start.runId,imageHash},opts);
  assert.equal(withImage.status,'ready');
+ assert.equal(prepared.length,1);
+ assert.equal(prepared[0].imageHash,imageHash);
+});
+test('the automatic attachment message never replaces an answered slot',async()=>{
+ const pool=fakePool(),prepared=[];
+ const noImages=async(_p,_a,kind)=>kind==='images'?{items:[]}:read(_p,_a,kind);
+ const opts={resolve,read:noImages,prepare:async(_p,_a,kind,input)=>{prepared.push(input);return{id:randomUUID()};}};
+ const start=await speakToAdSkill(pool,actor,{message:'Quero divulgar roupa feminina em Sorocaba gastando R$ 6 por dia'},opts);
+ assert.equal(start.slot,'media');
+ const attached=await speakToAdSkill(pool,actor,{message:'Anexei o criativo do anúncio.',runId:start.runId,imageHash},opts);
+ assert.equal(attached.status,'ready');
+ assert.equal(attached.brief.cityName,'Sorocaba','the attachment notice is not read as a city');
+ assert.equal(attached.brief.dailyBudgetCents,600);
  assert.equal(prepared.length,1);
  assert.equal(prepared[0].imageHash,imageHash);
 });
@@ -132,6 +152,88 @@ test('non-fashion businesses can answer a simple product question conversational
  assert.equal(replied.status,'collecting');
  assert.equal(replied.brief.category,'Bolos caseiros');
  assert.match(replied.message,/foto/i);
+});
+test('any free description is a valid subject, with or without a catalog item',async()=>{
+ const pool=fakePool(),opts={resolve,read};
+ const started=await speakToAdSkill(pool,actor,{message:'Crie uma campanha em Sorocaba gastando R$ 6 por dia'},opts);
+ assert.match(started.message,/catálogo/);
+ assert.match(started.message,/outra coisa/);
+ const vague=await speakToAdSkill(pool,actor,{message:'meus produtos',runId:started.runId},opts);
+ assert.equal(vague.brief.category,null,'a placeholder must not become the advertised subject');
+ assert.match(vague.message,/Ainda não identifiquei o produto ou serviço/);
+ const free=await speakToAdSkill(pool,actor,{message:'meu curso de violão',runId:started.runId},opts);
+ assert.equal(free.brief.category,'curso de violão');
+ assert.match(free.message,/foto ou um vídeo/);
+});
+test('"Brasil inteiro" is remembered and never asked back as a city',async()=>{
+ const pool=fakePool(),prepared=[];
+ const noImages=async(p,a,kind)=>kind==='images'?{items:[]}:read(p,a,kind);
+ const opts={resolve,read:noImages,prepare:async(_p,_a,kind,input)=>{prepared.push({kind,input});return{id:randomUUID()};}};
+ const started=await speakToAdSkill(pool,actor,{
+  message:'Quero divulgar o sistema sócio para o Brasil inteiro gastando seis reais por dia'},opts);
+ assert.equal(started.status,'collecting');
+ assert.equal(started.brief.countryCode,'BR');
+ assert.equal(started.brief.cityName,'todo o Brasil');
+ assert.equal(started.brief.dailyBudgetCents,600);
+ assert.match(started.message,/foto ou um vídeo/);
+ assert(!/cidade|estado/i.test(started.message),'countrywide brief must not ask for a city again');
+ const ready=await speakToAdSkill(pool,actor,{
+  message:'Acabei de enviar o vídeo',runId:started.runId,videoId:'123456789012345'},opts);
+ assert.equal(ready.status,'ready');
+ assert.equal(prepared.length,1);
+ assert.equal(prepared[0].kind,'create_whatsapp');
+ assert.equal(prepared[0].input.countryCode,'BR');
+ assert.equal(prepared[0].input.cityName,'todo o Brasil');
+ assert.equal(prepared[0].input.cityKey,undefined);
+ assert.equal(prepared[0].input.videoId,'123456789012345');
+ assert.equal(validateAdsPlan(prepared[0].kind,prepared[0].input).countryCode,'BR');
+ assert.match(ready.message,/todo o Brasil/);
+});
+test('a spoken budget answer is read in the context of the budget question',async()=>{
+ const pool=fakePool(),prepared=[];
+ const noImages=async(p,a,kind)=>kind==='images'?{items:[]}:read(p,a,kind);
+ const opts={resolve,read:noImages,prepare:async(_p,_a,kind,input)=>{prepared.push(input);return{id:randomUUID()};}};
+ const started=await speakToAdSkill(pool,actor,{message:'Quero divulgar o sistema sócio em Sorocaba'},opts);
+ assert.equal(started.status,'collecting');
+ assert.match(started.message,/investimento máximo por dia/i);
+ const budget=await speakToAdSkill(pool,actor,{message:'pode ser doze reais por dia',runId:started.runId},opts);
+ assert.equal(budget.brief.dailyBudgetCents,1200);
+ assert.match(budget.message,/foto ou um vídeo/);
+ const barePool=fakePool();
+ const bareStart=await speakToAdSkill(barePool,actor,{message:'Quero divulgar o sistema sócio em Sorocaba'},opts);
+ const bareAnswer=await speakToAdSkill(barePool,actor,{message:'12',runId:bareStart.runId},opts);
+ assert.equal(bareAnswer.brief.dailyBudgetCents,1200);
+});
+test('repeating a question clarifies the expected answer instead of accepting a non-answer',async()=>{
+ const pool=fakePool(),opts={resolve,read};
+ const started=await speakToAdSkill(pool,actor,{
+  message:'Quero divulgar o sistema sócio gastando seis reais por dia'},opts);
+ assert.equal(started.status,'collecting');
+ assert.match(started.message,/todo o Brasil ou em uma cidade/i);
+ const repeated=await speakToAdSkill(pool,actor,{message:'Não sei ainda',runId:started.runId},opts);
+ assert.equal(repeated.status,'collecting');
+ assert.equal(repeated.brief.cityName,null);
+ assert.match(repeated.message,/Ainda não identifiquei o local/);
+});
+test('execution progress reports only the owned run and the stages Meta already confirmed',async()=>{
+ const runId=randomUUID();
+ const progressPool={query:async(sql,params)=>{
+  if(!sql.includes('FROM socio_skill_runs r'))throw Error('Unexpected SQL: '+sql.slice(0,80));
+  const owned=params[0]===runId&&params[1]===tenant&&params[2]===user;
+  return {rowCount:owned?1:0,rows:owned?[{
+   run_status:'executing',plan_status:'running',
+   brief:{category:'sistema de gestão',countryCode:'BR',imageHash,asked:'media'},
+   result:{campaignId:'900001',adsetId:'900002'}}]:[]};
+ }};
+ const out=await readCampaignProgress(progressPool,actor,runId);
+ assert.equal(out.runStatus,'executing');
+ assert.equal(out.planStatus,'running');
+ assert.equal(out.result.campaignId,'900001');
+ assert.equal(out.result.adId,undefined,'a stage only appears after Meta confirms it');
+ assert.equal(out.brief.countryCode,'BR');
+ await assert.rejects(readCampaignProgress(progressPool,{...actor,active_tenant_id:randomUUID()},runId),e=>e.status===404);
+ await assert.rejects(readCampaignProgress(progressPool,{...actor,role:'agent'},runId),e=>e.status===403);
+ await assert.rejects(readCampaignProgress(progressPool,actor,'nao-e-uuid'),e=>e.status===422);
 });
 test('missing Meta connection, permissions and currency stop orchestration',async()=>{
  const pool=fakePool();
@@ -158,13 +260,16 @@ test('website campaigns plan a Pixel only when none exists, and text approval cr
  assert.equal(prepared[0].kind,'create_pixel');
  assert.equal(prepared[1].kind,'create');
  assert.equal(prepared[1].input.url,'https://example.test');
+ assert.equal(prepared[1].input.objective,'OUTCOME_TRAFFIC');
+ assert.equal(prepared[1].input.optimizationGoal,'LANDING_PAGE_VIEWS');
+ assert.equal(prepared[1].input.budgetMode,'adset');
  assert.equal(executed.length,0);
- assert.match(ready.message,/Pixel novo/);
+ assert.match(ready.message,/vou criar um Pixel/);
  const result=await speakToAdSkill(pool,actor,{message:'pode criar',runId:initial.runId},opts);
  assert.equal(result.status,'completed');
  assert.equal(executed.length,2);
- assert.match(result.message,/Pixel criado: 1234567890/);
- assert.match(result.message,/PAUSADOS/);
+ assert.match(result.message,/Pixel novo também foi criado/);
+ assert.match(result.message,/criados e pausados/i);
 });
 test('when existing Pixel is visible, website skill reuses the account instead of creating a duplicate',async()=>{
  const pool=fakePool(),prepared=[];
@@ -225,6 +330,9 @@ test('video received through Sócio can prepare a R$ 6 WhatsApp campaign in Soro
  assert.equal(ready.status,'ready');
  assert.equal(ready.brief.hasVideo,true);
  assert.equal(ready.brief.hasPhoto,false);
+ assert.match(ready.message,/anúncio usa o vídeo que você enviou/);
+ assert(!/\d{6,}/.test(ready.message),'the owner must not receive raw Meta IDs');
+ assert(!/Página:|WA-AKG|Texto:/.test(ready.message));
  assert.equal(prepared.length,1);
  assert.equal(prepared[0].kind,'create_whatsapp');
  assert.equal(prepared[0].input.videoId,videoId);
@@ -232,17 +340,101 @@ test('video received through Sócio can prepare a R$ 6 WhatsApp campaign in Soro
  assert.equal(prepared[0].input.dailyBudgetCents,600);
  assert.equal(prepared[0].input.cityName,'Sorocaba');
  assert.equal(prepared[0].input.whatsappPhone,'5515999999999');
- assert.equal(validateAdsPlan('create_whatsapp',prepared[0].input).videoId,videoId);
+ assert.equal(prepared[0].input.objective,'OUTCOME_ENGAGEMENT');
+ assert.equal(prepared[0].input.optimizationGoal,'CONVERSATIONS');
+ assert.equal(prepared[0].input.budgetMode,'adset');
+ assert(prepared[0].input.welcomeMessage,'the Conversas greeting travels with the plan');
+ assert(prepared[0].input.welcomeMessage.length<=160);
+ assert(prepared[0].input.quickReply.length<=40);
+ const kept=validateAdsPlan('create_whatsapp',prepared[0].input);
+ assert.equal(kept.welcomeMessage,prepared[0].input.welcomeMessage);
+ assert.equal(kept.quickReply,prepared[0].input.quickReply);
+ assert.equal(kept.videoId,videoId);
  assert.equal(executed.length,0);
  const denied=await speakToAdSkill(pool,actor,{message:'não autorizei',runId:first.runId},opts);
  assert.equal(denied.status,'ready');assert.equal(executed.length,0);
  const approved=await speakToAdSkill(pool,actor,{message:'pode criar',runId:first.runId},opts);
  assert.equal(approved.status,'completed');
  assert.equal(executed.length,1);
- assert.match(approved.message,/PAUSADOS/);
+ assert.match(approved.message,/pausados/i);
+ assert(!/\d{6,}/.test(approved.message),'the owner must not receive raw Meta IDs');
  const replay=await speakToAdSkill(pool,actor,{message:'pode criar',runId:first.runId},opts);
  assert.equal(replay.status,'completed');
  assert.equal(executed.length,1);
+});
+test('a spoken confirmation is understood dressed up, and a negation never approves',async()=>{
+ assert.equal(isConfirmation('ok, pode criar'),true);
+ assert.equal(isConfirmation('Beleza, pode subir'),true);
+ assert.equal(isConfirmation('então manda ver'),true);
+ assert.equal(isConfirmation('sim'),true);
+ assert.equal(isConfirmation('sim, pode'),true);
+ assert.equal(isConfirmation('pode criar agora'),true,'trailing fillers from speech must not block it');
+ assert.equal(isConfirmation('não autorizei'),false);
+ assert.equal(isConfirmation('não pode criar'),false);
+ assert.equal(isConfirmation('ok'),false,'a filler alone never authorizes a write');
+ assert.equal(isConfirmation('ainda não'),false);
+ const pool=fakePool(),executed=[];
+ const opts={resolve,read,prepare:async()=>({id:randomUUID()}),
+  execute:async()=>{executed.push(1);return {status:'succeeded',result:{campaignId:'1',adsetId:'2',adId:'3',delivery:'PAUSED'}};}};
+ const first=await speakToAdSkill(pool,actor,{message:'Crie um anúncio para WhatsApp, em Sorocaba, gastando 6 reais por dia, com essa foto',imageHash},opts);
+ assert.equal(first.status,'collecting');
+ const ready=await speakToAdSkill(pool,actor,{message:'serviços de publicidade',runId:first.runId},opts);
+ assert.equal(ready.status,'ready');
+ assert.equal(executed.length,0);
+ const approved=await speakToAdSkill(pool,actor,{message:'ok, pode criar',runId:first.runId},opts);
+ assert.equal(approved.status,'completed','a spoken "ok, pode criar" must create the campaign');
+ assert.equal(executed.length,1);
+});
+test('a failed creation explains the real cause and a retry prepares the campaign again',async()=>{
+ const pool=fakePool(),prepared=[],outcomes=[
+  {status:'failed',error:'A Meta recusou a operação. Remova o parâmetro "link" do valor do tipo de chamada para ação WHATSAPP_MESSAGE.',
+   result:{campaignId:'120260294640850386',adsetId:'120260294641030386'}},
+  {status:'succeeded',result:{campaignId:'4',adsetId:'5',adId:'6',delivery:'PAUSED'}}
+ ];
+ const opts={resolve,read:async(db,a,kind)=>kind==='images'?{items:[]}:read(db,a,kind),
+  prepare:async(_p,_a,kind,input)=>{prepared.push({kind,input});return {id:randomUUID()};},
+  execute:async()=>outcomes.shift()};
+ const text='Crie um anúncio para WhatsApp, em Sorocaba, gastando 6 reais por dia, com esse vídeo';
+ const first=await speakToAdSkill(pool,actor,{message:text,videoId:'1824013938791734'},opts);
+ const ready=await speakToAdSkill(pool,actor,{message:'serviços de publicidade',runId:first.runId},opts);
+ assert.equal(ready.status,'ready');
+ const failed=await speakToAdSkill(pool,actor,{message:'pode criar',runId:first.runId},opts);
+ assert.equal(failed.status,'failed');
+ assert.match(failed.message,/destino WhatsApp/,'the owner hears the real cause in plain words');
+ assert.match(failed.message,/pausados/,'what was left on Meta is disclosed');
+ assert.doesNotMatch(failed.message,/diagnóstico técnico|WHATSAPP_MESSAGE|parâmetro/);
+ assert.equal(failed.result.result.campaignId,'120260294640850386','the partial creation is kept for a diagnosis');
+ assert.equal(prepared.length,1);
+ const diagnosis=await speakToAdSkill(pool,actor,{message:'o que aconteceu?',runId:first.runId},opts);
+ assert.equal(diagnosis.status,'failed');
+ assert.match(diagnosis.message,/destino WhatsApp/,'asking why repeats the cause instead of a definition');
+ assert.equal(prepared.length,1,'asking why never creates another plan');
+ const refused=await speakToAdSkill(pool,actor,{message:'não quero tentar de novo',runId:first.runId},opts);
+ assert.equal(refused.status,'failed','a negated retry must not recreate the campaign');
+ assert.equal(prepared.length,1);
+ const retried=await speakToAdSkill(pool,actor,{message:'tentar de novo',runId:first.runId},opts);
+ assert.equal(retried.status,'ready','a retry re-prepares the campaign with the same brief');
+ assert.equal(prepared.length,2);
+ const approved=await speakToAdSkill(pool,actor,{message:'pode criar',runId:first.runId},opts);
+ assert.equal(approved.status,'completed');
+ assert.match(approved.message,/pausados/i);
+});
+test('a creative blocked because the Meta app was in development mode names that cause',async()=>{
+ const pool=fakePool();
+ const opts={resolve,read:async(db,a,kind)=>kind==='images'?{items:[]}:read(db,a,kind),
+  prepare:async()=>({id:randomUUID()}),
+  execute:async()=>({status:'failed',
+   error:'(#100) Ad creative creation failed. error_subcode: 1885183. The app is in development mode.',
+   result:{campaignId:'120260294640850386',adsetId:'120260294641030386'}})};
+ const first=await speakToAdSkill(pool,actor,{
+  message:'Crie um anúncio para WhatsApp, em Sorocaba, gastando 6 reais por dia, com esse vídeo',
+  videoId:'1824013938791734'},opts);
+ await speakToAdSkill(pool,actor,{message:'serviços de publicidade',runId:first.runId},opts);
+ const failed=await speakToAdSkill(pool,actor,{message:'pode criar',runId:first.runId},opts);
+ assert.equal(failed.status,'failed');
+ assert.match(failed.message,/modo de desenvolvimento/,'the owner learns the app was not published');
+ assert.doesNotMatch(failed.message,/motivo claro|1885183|development mode/,'no developer text reaches the owner');
+ assert.match(failed.message,/pausados/);
 });
 test('campaign accepts either video or image, never both and not unrecognized video IDs',()=>{
  const base={name:'Criativo teste',message:'Texto legítimo',headline:'Título',
@@ -254,4 +446,34 @@ test('campaign accepts either video or image, never both and not unrecognized vi
  assert.throws(()=>validateAdsPlan('create_whatsapp',{...base,videoId:'invalid'}),{status:422});
  assert.throws(()=>validateAdsPlan('create_whatsapp',{...base,videoId:'1824013938791734',imageHash}),{status:422});
  assert.throws(()=>validateAdsPlan('create_whatsapp',base),{status:422});
+});
+test('the owner states only the objective and the Sócio designs the whole campaign',async()=>{
+ const pool=fakePool(),prepared=[];
+ const withoutImages=async(_p,_a,kind)=>kind==='images'?{items:[]}:read(_p,_a,kind);
+ const opts={resolve,read:withoutImages,prepare:async(_p,_a,kind,input)=>{prepared.push({kind,input});return{id:randomUUID()};}};
+ const text='Quero vender direto pro meu WhatsApp esse sistema aqui, gastando no máximo seis reais por dia';
+ const parsed=extractCampaignBrief(text);
+ assert.equal(parsed.category,'sistema');
+ assert.equal(parsed.destination,'whatsapp');
+ assert.equal(parsed.goal,'sales_whatsapp');
+ assert.equal(parsed.dailyBudgetCents,600);
+ const started=await speakToAdSkill(pool,actor,{message:text},opts);
+ assert.equal(started.status,'collecting');
+ assert.equal(started.brief.goal,'sales_whatsapp');
+ assert.match(started.message,/cidade/i);
+ const city=await speakToAdSkill(pool,actor,{message:'Sorocaba',runId:started.runId},opts);
+ assert.equal(city.status,'collecting');
+ assert.equal(city.brief.cityName,'Sorocaba');
+ assert.match(city.message,/Objetivo: Conversas no WhatsApp/);
+ assert.match(city.message,/ABO/);
+ assert.match(city.message,/Funil/);
+ assert.match(city.message,/arrastar o arquivo/i);
+ assert.equal(prepared.length,0,'the plan is shown before the creative is requested');
+ const ready=await speakToAdSkill(pool,actor,{message:'',runId:started.runId,imageHash},opts);
+ assert.equal(ready.status,'ready');
+ assert.equal(ready.design.objective,'OUTCOME_ENGAGEMENT');
+ assert.equal(ready.design.budgetMode,'adset');
+ assert.equal(prepared.length,1);
+ assert.deepEqual([prepared[0].kind,prepared[0].input.objective,prepared[0].input.optimizationGoal,prepared[0].input.budgetMode],
+  ['create_whatsapp','OUTCOME_ENGAGEMENT','CONVERSATIONS','adset']);
 });

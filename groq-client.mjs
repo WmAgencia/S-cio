@@ -2,15 +2,23 @@
  * This is https://api.groq.com — NOT xAI/Grok. Credentials stay server-side.
  */
 const BASE='https://api.groq.com/openai/v1';
-const DEFAULT_MODEL='openai/gpt-oss-120b';
-const fallbackModels=['llama-3.3-70b-versatile','openai/gpt-oss-20b'];
+// Planning, strategy and copy run on Qwen's top-scored Groq model. It is a
+// preview model, so the planning fallbacks stay on production models if Groq
+// withdraws it. Customer replies keep the fast production model.
+const DEFAULT_MODELS={planning:'qwen/qwen3.8-27b',chat:'openai/gpt-oss-20b'};
+const PURPOSE_ENV={planning:'GROQ_MODEL_PLANNING',chat:'GROQ_MODEL_CHAT'};
+const fallbackModels={
+ planning:['llama-3.3-70b-versatile','openai/gpt-oss-20b'],
+ chat:['openai/gpt-oss-120b','llama-3.3-70b-versatile']
+};
 const bad=(status,message)=>Object.assign(new Error(message),{status});
 export const groqReady=(env=process.env)=>typeof env.GROQ_API_KEY==='string'&&env.GROQ_API_KEY.trim().length>=20;
-export const groqModel=(env=process.env)=>{
- const name=String(env.GROQ_MODEL||DEFAULT_MODEL);
- return /^[a-z0-9_.\/-]{5,80}$/i.test(name)?name:DEFAULT_MODEL;
+export const groqModel=(env=process.env,purpose='planning')=>{
+ const tier=purpose==='chat'?'chat':'planning';
+ const name=String(env[PURPOSE_ENV[tier]]||(tier==='planning'?env.GROQ_MODEL:'')||DEFAULT_MODELS[tier]);
+ return /^[a-z0-9_.\/-]{5,80}$/i.test(name)?name:DEFAULT_MODELS[tier];
 };
-export async function groqResponse({instructions,input,maxOutputTokens=450,env=process.env,fetchImpl=fetch,timeoutMs=30000}){
+export async function groqResponse({instructions,input,maxOutputTokens=450,purpose='planning',env=process.env,fetchImpl=fetch,timeoutMs=30000}){
  if(!groqReady(env))throw bad(503,'GROQ_API_KEY não configurada para o Sócio.');
  if(typeof input!=='string'||!input.trim()||input.length>25000)throw bad(422,'Conteúdo de análise inválido.');
  if(typeof instructions!=='string'||instructions.length>25000)throw bad(422,'Instruções inválidas.');
@@ -32,11 +40,12 @@ export async function groqResponse({instructions,input,maxOutputTokens=450,env=p
   return {ok:true,reply:reply.trim(),model};
  };
  try{
-  let answer=await call(groqModel(env));
+  const primary=groqModel(env,purpose);
+  let answer=await call(primary);
   // Only try another model for unsupported/unavailable models, not for
   // authentication errors, 429 quotas, or transport failures.
   if(!answer.ok&&[400,404,422].includes(answer.status)){
-   for(const alt of fallbackModels.filter(x=>x!==groqModel(env))){
+   for(const alt of (fallbackModels[purpose==='chat'?'chat':'planning']).filter(x=>x!==primary)){
     answer=await call(alt);
     if(answer.ok||![400,404,422].includes(answer.status))break;
    }

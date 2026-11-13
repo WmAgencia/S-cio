@@ -2,7 +2,9 @@
 // SKILL.md is strategy/reference only. The server's RBAC and reviewed executors
 // remain the sole authority to change external accounts or send WhatsApp messages.
 import {readFileSync} from 'node:fs';
+import {wantsCampaignOrder} from './socio-campaign-brief.mjs';
 const CATALOG=Object.freeze([
+ {id:'meta.campaigns.brief',label:'Briefing de campanha do dono',platform:'meta',availability:'assisted',path:'skills/campaign-brief/SKILL.md',canExecute:true},
  {id:'meta.campaigns',label:'Especialista em campanhas Meta Ads',platform:'meta',availability:'assisted',path:'skills/meta-campaigns/SKILL.md',canExecute:true},
  {id:'google.ads',label:'Especialista em Google Ads',platform:'google',availability:'pending_oauth_api',path:'skills/google-ads/SKILL.md',canExecute:false},
  {id:'tracking.conversions',label:'Especialista em rastreamento e atribuição',platform:'tracking',availability:'pending_website_integration',path:'skills/tracking/SKILL.md',canExecute:false},
@@ -35,6 +37,9 @@ export function selectExpertSkill(message){
  if(text.length>1400)return {id:null,reason:'too_long'};
  const hasGoogle=google.test(text),hasMeta=meta.test(text);
  if(hasGoogle)return {id:'google.ads',reason:hasMeta?'multi_platform':'explicit_google'};
+ // An owner's build instruction outranks read-only diagnosis, even when the
+ // same sentence also mentions results or improvement.
+ if(wantsCampaignOrder(text))return {id:'meta.campaigns.brief',reason:'owner_brief'};
  if(whatsReport.test(text)||
   (/\b(whatsapp|zap|wa-akg)\b/.test(text)&&/\b(quantos|quantas|chegando|respondendo|responderam|taxa de resposta|vendas|leads|origem|atribui|rastre)\b/.test(text)&&
    !/\b(criar|crie|campanha|anuncio|anunciar)\b/.test(text)))

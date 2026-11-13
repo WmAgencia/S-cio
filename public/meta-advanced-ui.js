@@ -54,10 +54,15 @@
     }
     if(selected==='diagnosis'){
      const assessment=data.diagnosis;
+     const brl=cents=>(Number(cents||0)/100).toLocaleString('pt-BR',{style:'currency',currency:assessment?.currency||'BRL'});
      if(assessment){
       summary.append(E('p','Diagnóstico de '+assessment.totalCampaigns+' campanha(s); '+assessment.alerts+
        ' anúncio(s) com possível restrição. '+(assessment.partial?'Resultado parcial. ':'')+
        (assessment.adsUnavailable?'Não foi possível verificar o status dos anúncios.':'Status dos anúncios consultados quando disponíveis.')));
+      if(assessment.economics?.valid)summary.append(E('p','Limite econômico: alvo de '+brl(assessment.economics.targetCpaCents)+
+       ' por venda, corte a partir de '+brl(assessment.economics.killCpaCents)+', ROAS de equilíbrio '+
+       assessment.economics.breakEvenRoas.toFixed(2)+'x.'));
+      else summary.append(E('p','Sem valor de venda e margem informados não há limite de custo por venda; cliques não comprovam vendas.'));
      }
      if(!data.diagnostics?.length)list.append(E('p','Nenhuma campanha com métricas ou status neste período. Isso não comprova que a conta não possui campanhas.'));
      for(const d of data.diagnostics||[]){
@@ -69,6 +74,14 @@
       for(const notice of d.notices){
        card.append(E('p',notice.label+': '+notice.evidence),
         E('p','Próximo passo sugerido: '+notice.recommendation));
+      }
+      const ladder=d.funnel;
+      if(ladder){
+       const visible=ladder.rungs.filter(r=>r.status!=='unavailable');
+       if(visible.length)card.append(E('p','Funil: '+visible.map(r=>r.label+' '+
+        (r.unit==='cents'?brl(r.value):r.unit==='percent'?r.value+'%':r.value)).join(' · ')));
+       if(ladder.culprit)card.append(E('p','Primeira etapa abaixo do parâmetro: '+ladder.culprit.label+'. '+
+        (ladder.culprit.recommendation||'')));
       }
      }
     }

@@ -128,8 +128,74 @@ export async function storeAdVideo(pool,tenantId,mediaId,readable,{env=process.e
  }finally{if(tmp)await unlink(tmp.file).catch(()=>{});}
 }
 const memoryAssets=new Map();
+export async function readAdVideoBytes(pool,tenantId,id,{env=process.env}={}){
+ const row=await findVideo(pool,tenantId,id);
+ if(row.status==='expired')throw err(410,'O vídeo já foi enviado à Meta e não está mais disponível aqui.');
+ if(row.status!=='ready')throw err(409,'O vídeo ainda não terminou o envio.');
+ if(env.NODE_ENV==='test'&&env.SOCIO_STORAGE_DRIVER==='memory'){
+  const bytes=memoryAssets.get(row.object_key);if(!bytes)throw err(404,'Mídia não encontrada.');
+  return {bytes,mime:row.content_type};
+ }
+ const {client,sdk}=await store(env);
+ const result=await client.send(new sdk.GetObjectCommand({Bucket:env.SOCIO_S3_BUCKET,Key:row.object_key}));
+ return {bytes:Buffer.from(await result.Body.transformToByteArray()),mime:row.content_type};
+}
+// Receipt that a media-bridge video reached the Meta library of THIS tenant's
+// selected account. Ad creation refuses any video without a receipt here or in
+// socios's WhatsApp import ledger.
+export async function recordMetaVideoUpload(pool,{tenantId,mediaId,userId,accountId,videoId}){
+ if(!validTenant(tenantId)||!uuid.test(String(mediaId))||!uuid.test(String(userId))||
+  !/^act_\d{4,30}$/.test(String(accountId))||!/^\d{4,30}$/.test(String(videoId)))
+  throw err(422,'Recibo de vídeo inválido.');
+ await pool.query(
+  "INSERT INTO socio_ads_meta_video_uploads(id,tenant_id,media_id,user_id,account_id,meta_video_id) "+
+  "VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(tenant_id,account_id,meta_video_id) DO NOTHING",
+  [randomUUID(),tenantId,mediaId,userId,accountId,String(videoId)]);
+ return {mediaId,videoId:String(videoId),accountId};
+}
+export const AD_VIDEO_RETENTION_DAYS=7;
+export function adVideoRetentionDays(env=process.env){
+ const days=Number(env.SOCIO_AD_VIDEO_RETENTION_DAYS);
+ return Number.isSafeInteger(days)&&days>=1&&days<=30?days:AD_VIDEO_RETENTION_DAYS;
+}
+// The bucket copy exists only so Meta can fetch the video into the ad account.
+// Once the upload has a receipt and the retention window has passed, the object
+// is deleted and the row becomes history; nothing of the owner's is kept here.
+export async function purgeDeliveredAdVideos(pool,{env=process.env,limit=50,deleteObject}={}){
+ const days=adVideoRetentionDays(env);
+ const batch=Math.min(200,Math.max(1,Number(limit)||50));
+ const candidates=await pool.query(
+  "SELECT m.id,m.tenant_id,m.object_key FROM ads_media m "+
+  "WHERE m.status='ready' "+
+  "AND EXISTS(SELECT 1 FROM socio_ads_meta_video_uploads u "+
+  "WHERE u.tenant_id=m.tenant_id AND u.media_id=m.id) "+
+  "AND NOT EXISTS(SELECT 1 FROM socio_ads_meta_video_uploads u "+
+  "WHERE u.tenant_id=m.tenant_id AND u.media_id=m.id "+
+  "AND u.created_at>now()-($1::int * interval '1 day')) "+
+  "ORDER BY m.created_at LIMIT $2",[days,batch]);
+ let remove=deleteObject;
+ if(!remove){
+  if(env.NODE_ENV==='test'&&env.SOCIO_STORAGE_DRIVER==='memory'){
+   remove=async key=>{memoryAssets.delete(key);};
+  }else{
+   const {client,sdk}=await store(env);
+   remove=key=>client.send(new sdk.DeleteObjectCommand({Bucket:env.SOCIO_S3_BUCKET,Key:key}));
+  }
+ }
+ let expired=0,failed=0;
+ for(const row of candidates.rows){
+  try{
+   await remove(row.object_key);
+   await pool.query("UPDATE ads_media SET status='expired',updated_at=now() "+
+    "WHERE tenant_id=$1 AND id=$2 AND status='ready'",[row.tenant_id,row.id]);
+   expired+=1;
+  }catch{failed+=1;}
+ }
+ return {scanned:candidates.rows.length,expired,failed,days};
+}
 export async function adVideoExportUrl(pool,tenantId,id,env=process.env){
  const row=await findVideo(pool,tenantId,id);
+ if(row.status==='expired')throw err(410,'O vídeo já foi enviado à Meta e não está mais disponível aqui.');
  if(row.status!=='ready')throw err(409,'Vídeo não está pronto.');
  const expiry=Math.floor(Date.now()/1000)+PUBLIC_LINK_TTL;
  const token=sign(tenantId,id,'meta-fetch',expiry,env);
@@ -154,6 +220,7 @@ export async function resolveSignedAsset(pool,id,expiry,signature,purpose,env=pr
 }
 export async function serveSignedVideo(pool,id,expiry,signature,req,res,env=process.env){
  const row=await resolveSignedAsset(pool,id,expiry,signature,'meta-fetch',env);
+ if(row.status==='expired')throw err(404,'Mídia não disponível.');
  if(row.status!=='ready')throw err(404,'Mídia ainda não disponível.');
  if(!['GET','HEAD'].includes(req.method))throw err(405,'Método não permitido.');
  const size=Number(row.bytes);let start=0,end=size-1,partial=false;

@@ -1,9 +1,9 @@
-import {readAdsTool,readSelectedAdMedia,uploadAdImage,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
+import {readAdsTool,readSelectedAdMedia,uploadAdImage,uploadAdVideo,waitForAdVideoReady,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
 import {listTenantVideoChannels,findLastOutgoingVideo,importLastOutgoingVideo} from './socio-whatsapp-meta-video.mjs';
 import {runVideoPilotOnce} from './socio-whatsapp-meta-video-pilot.mjs';
 import {readAdvancedMetaTool,META_TOOL_CATALOG} from './meta-ads-advanced.mjs';
 import {previewMetaCommand} from './meta-ads-commands.mjs';
-import {SOCIO_AD_SKILLS} from './socio-ad-skills.mjs';
+import {SOCIO_AD_SKILLS,readCampaignProgress} from './socio-ad-skills.mjs';
 import {listExpertSkills,getExpertSkillGuide} from './socio-expert-skills.mjs';
 import {speakToSocioSkill} from './socio-skill-router.mjs';
 import {processOwnerSkillInbox} from './socio-owner-skill-inbox.mjs';
@@ -48,7 +48,8 @@ import {knowledgeV3Enabled,loadTenantApprovedKnowledge,retrieveApprovedKnowledge
 import {readConversationMemory,clearConversationMemory,purgeExpiredConversationMemories} from './socio-conversation-memory.mjs';
 import {reconcileConfirmedOutbox,outboundEnabled} from './socio-outbound.mjs';
 import {readOwnerChannel,updateOwnerChannelSettings,retryOwnerGroup,provisionOwnerGroups,pollOwnerGroups,processOwnerCommands,runOwnerTrafficAutopilot} from './socio-owner-channel.mjs';
-import {runTrafficManager,approveTrafficDecisions,listTrafficDecisions} from './socio-traffic-manager.mjs';
+import {runTrafficManager,approveTrafficDecisions,listTrafficDecisions,reviewIsDue,
+ recordTrafficReview,resolveTrafficDecision,listPendingDecisions} from './socio-traffic-manager.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
 import {getOperationalReadiness} from './operational-readiness.mjs';
 import {getTenantBusinessMonitor,getMasterSaasMonitor} from './socio-business-monitor.mjs';
@@ -60,7 +61,7 @@ import {createTrackingSite,listTrackingSites,enableTrackingSite,receiveSignedSit
 import {integrationReadiness} from './socio-integrations-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
-import {reserveAdVideo,listAdVideos,storeAdVideo,adVideoExportUrl,resolveSignedAsset,serveSignedVideo,importWhatsAppAdVideo,createMediaMcpToken,revokeMediaMcpTokens,MAX_AD_VIDEO_BYTES} from './ads-media.mjs';
+import {reserveAdVideo,listAdVideos,storeAdVideo,readAdVideoBytes,recordMetaVideoUpload,purgeDeliveredAdVideos,adVideoExportUrl,resolveSignedAsset,serveSignedVideo,importWhatsAppAdVideo,createMediaMcpToken,revokeMediaMcpTokens,MAX_AD_VIDEO_BYTES} from './ads-media.mjs';
 import {handleAdsMediaMcp} from './ads-media-mcp.mjs';
 import {handleMediaOAuth} from './ads-media-oauth.mjs';
 import {createMetaBrowser} from './meta-browser.mjs';
@@ -298,10 +299,10 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/socio-semantic-turn.mjs','/socio-workspace-ui.js','/socio-thalita-ui.js','/socio-orb-ui.js','/socio-orb-mesh.js','/socio-executive.css','/socio-glass-motion.css','/socio-glass-motion.js','/socio-glass-enforced.css','/socio-premium-polish.css','/socio-contrast-audit.css','/socio-product-features.js','/socio-entry-motion.js','/socio-motion-refined.css','/socio-luminous-glass.css','/socio-stripe-system.css','/socio-master.css','/socio-master-dashboard.js','/meta-billing-ui.js','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/owner-channel-ui.js','/trial-input.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/socio-semantic-turn.mjs','/socio-workspace-ui.js','/socio-thalita-ui.js','/socio-orb-ui.js','/socio-orb-mesh.js','/socio-executive.css','/socio-glass-motion.css','/socio-glass-motion.js','/socio-glass-enforced.css','/socio-premium-polish.css','/socio-contrast-audit.css','/socio-product-features.js','/socio-entry-motion.js','/socio-motion-refined.css','/socio-luminous-glass.css','/socio-stripe-system.css','/socio-master.css','/socio-master-dashboard.js','/meta-billing-ui.js','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/owner-channel-ui.js','/socio-autopilot-ui.js','/socio-autopilot.css','/socio-overview.css','/socio-new-recommendation.mp3','/trial-input.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
-  res.writeHead(200,{'Content-Type':(file.endsWith('.js')||file.endsWith('.mjs'))?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});
+  res.writeHead(200,{'Content-Type':(file.endsWith('.js')||file.endsWith('.mjs'))?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':file.endsWith('.mp3')?'audio/mpeg':'text/html; charset=utf-8','Cache-Control':'no-cache'});
   return res.end(content);
  }
  if(pathname==='/webhooks/whatsapp'&&method==='GET'){
@@ -574,6 +575,23 @@ async function handle(req,res){
   await audit(a,'marketing.traffic.approved',{applied:result.applied.length,failed:result.failed.length});
   return json(res,200,result);
  }
+ // One recommendation at a time, answered from the system pop-up with the same
+ // three choices the WhatsApp question offers.
+ if(pathname==='/api/marketing/traffic/pending'&&method==='GET'){
+  requirePermission(a,'marketing.read');
+  return json(res,200,await listPendingDecisions(pool,a.active_tenant_id));
+ }
+ if(pathname==='/api/marketing/traffic/decision'&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  if(!await limiter('sim','traffic-decision:'+a.user_id,60000,12))
+   throw fail(429,'Aguarde antes de responder outra recomendação.');
+  const {data}=await body(req,1200);
+  const result=await resolveTrafficDecision(pool,a,{id:data.id,resolution:data.resolution,
+   targetBudgetCents:data.targetBudgetCents??null,via:'system'});
+  await audit(a,'marketing.traffic.decision',{resolution:String(data.resolution||'').slice(0,20),
+   via:'system',applied:Boolean(result.applied)});
+  return json(res,200,result);
+ }
  if(pathname==='/api/marketing/skills/catalog'&&method==='GET'){
   requirePermission(a,'marketing.read');
   return json(res,200,{skills:SOCIO_AD_SKILLS,experts:listExpertSkills(),
@@ -771,10 +789,20 @@ async function handle(req,res){
   const {data}=await body(req,2000);
   return json(res,201,await reserveAdVideo(pool,a,String(data.filename||''),'chat'));
  }
- const adsFile=pathname.match(/^\/api\/ads-media\/([0-9a-f-]{36})\/(upload|export)$/i);
+ const adsFile=pathname.match(/^\/api\/ads-media\/([0-9a-f-]{36})\/(upload|export|meta)$/i);
  if(adsFile&&method==='POST'){
   requirePermission(a,'marketing.manage');
   if(adsFile[2]==='export')return json(res,200,await adVideoExportUrl(pool,a.active_tenant_id,adsFile[1]));
+  if(adsFile[2]==='meta'){
+   if(!await limiter('sim','ads-meta-video:'+a.active_tenant_id,3600000,20))throw fail(429,'Limite de envios para a Meta atingido.');
+   const stored=await readAdVideoBytes(pool,a.active_tenant_id,adsFile[1]);
+   const uploaded=await uploadAdVideo(pool,a,stored,{title:'Criativo enviado pelo Sócio'});
+   await recordMetaVideoUpload(pool,{tenantId:a.active_tenant_id,mediaId:adsFile[1],userId:a.user_id,
+    accountId:uploaded.accountId,videoId:uploaded.videoId});
+   await audit(a,'ads.media.meta_uploaded',{mediaId:adsFile[1],videoId:uploaded.videoId});
+   const ready=await waitForAdVideoReady(pool,a,uploaded.videoId,{timeoutMs:20000}).catch(()=>({ready:false}));
+   return json(res,201,{...uploaded,ready:Boolean(ready.ready),videoStatus:ready.status||''});
+  }
   const bytes=Number(req.headers['content-length']||0);
   if(bytes>MAX_AD_VIDEO_BYTES)throw fail(413,'Vídeo maior que 90 MB.');
   if(!['video/mp4','video/quicktime','application/octet-stream'].includes(String(req.headers['content-type'])))throw fail(422,'Envie MP4 ou MOV.');
@@ -995,9 +1023,16 @@ async function handle(req,res){
   assertApiFeature(a.features,'/api/agent');
   if(!await limiter('sim','thalita-chat:'+a.user_id,60000,16))throw fail(429,'Aguarde antes de consultar novamente.');
   const {data}=await body(req,2400);
-  const result=await askThalita(pool,a,{message:data.message,runId:data.runId});
+  const result=await askThalita(pool,a,{message:data.message,runId:data.runId,
+   imageHash:data.imageHash,videoId:data.videoId});
   await audit(a,'thalita.chat',{status:result.status,readOnly:result.readOnly===true,executed:result.executed===true});
   return json(res,200,result);
+ }
+ if(method==='GET'&&pathname==='/api/thalita/progress'){
+  assertApiFeature(a.features,'/api/agent');
+  if(!await limiter('sim','thalita-progress:'+a.active_tenant_id,60000,180))throw fail(429,'Aguarde antes de consultar novamente.');
+  const runId=new URL(req.url,'http://local').searchParams.get('runId');
+  return json(res,200,await readCampaignProgress(pool,a,runId));
  }
  if(method==='POST'&&pathname==='/api/thalita/confirm'){
   assertApiFeature(a.features,'/api/agent');
@@ -1753,7 +1788,7 @@ async function handle(req,res){
   });
   const hasConversation=history.some(turn=>turn.role==='assistant');
   const response=await groqResponse({
-   instructions:system,input:buildLabInput(history,data.message),maxOutputTokens:550
+   instructions:system,input:buildLabInput(history,data.message),maxOutputTokens:550,purpose:'chat'
   });
   const reply=polishCustomerReply(response.reply,{hasConversation,incoming:data.message,
    previousAssistant:history.filter(turn=>turn.role==='assistant').at(-1)?.content||''});
@@ -2166,24 +2201,39 @@ async function main(){
   }finally{ownerChannelBusy=false;}
  },8000);
  ownerChannelWorker.unref();
- // Autonomous traffic manager: every eligible tenant is reviewed at most once
- // per 45 minutes, and each individual change has its own cooldown. Opt-in.
+ // Autonomous traffic manager: Sócio reviews each account at most once every
+ // six hours and asks the owner before every change. The review ledger is the
+ // gate, so a restart never doubles a round. Opt-in.
+ const TRAFFIC_REVIEW_HOURS=6;
  let trafficBusy=false;
  const trafficWorker=setInterval(async()=>{
   if(trafficBusy||workersBlocked()||process.env.SOCIO_TRAFFIC_AUTOPILOT_ENABLED!=='true')return;
   trafficBusy=true;
   try{
    const tenants=await pool.query(
-    "SELECT g.tenant_id FROM socio_owner_groups g "+
-    "WHERE g.status='active' AND EXISTS(SELECT 1 FROM meta_official_account_selections s "+
-    "WHERE s.tenant_id=g.tenant_id) "+
-    "AND NOT EXISTS(SELECT 1 FROM socio_traffic_decisions d WHERE d.tenant_id=g.tenant_id "+
-    "AND d.created_at>now()-interval '45 minutes') "+
-    "ORDER BY g.created_at LIMIT 3");
+    "SELECT g.tenant_id,s.account_id FROM socio_owner_groups g "+
+    "JOIN meta_official_account_selections s ON s.tenant_id=g.tenant_id "+
+    "WHERE g.status='active' AND COALESCE(g.autopilot_enabled,true) "+
+    "ORDER BY g.created_at LIMIT 10");
    for(const row of tenants.rows){
-    try{await runOwnerTrafficAutopilot(pool,row.tenant_id);}
-    catch(error){
-     console.warn('[socio-traffic]',String(error?.status||error?.code||'TRAFFIC_ERROR').slice(0,40));
+    if(!/^act_[0-9]{4,30}$/.test(String(row.account_id||'')))continue;
+    try{
+     if(!await reviewIsDue(pool,row.tenant_id,row.account_id,{hours:TRAFFIC_REVIEW_HOURS}))continue;
+     // A failed round waits 30 minutes instead of retrying every tick.
+     const recentFailure=await pool.query(
+      "SELECT 1 FROM socio_traffic_reviews WHERE tenant_id=$1 AND account_id=$2 "+
+      "AND status='failed' AND created_at>now()-interval '30 minutes' LIMIT 1",
+      [row.tenant_id,row.account_id]);
+     if(recentFailure.rowCount)continue;
+     const result=await runOwnerTrafficAutopilot(pool,row.tenant_id);
+     await recordTrafficReview(pool,row.tenant_id,row.account_id,{
+      status:'done',decisions:result.decisions?.length||0,pending:result.pending?.length||0,
+      summary:result.summary||{}});
+    }catch(error){
+     const code=String(error?.status||error?.code||'TRAFFIC_ERROR').slice(0,40);
+     console.warn('[socio-traffic]',code);
+     await recordTrafficReview(pool,row.tenant_id,row.account_id,{status:'failed',
+      errorCode:code}).catch(()=>{});
     }
    }
   }catch(error){
@@ -2224,6 +2274,23 @@ async function main(){
  void purgeConversationTopics();
  const memoryPurgeWorker=setInterval(purgeConversationTopics,3600000);
  memoryPurgeWorker.unref();
+ // Delivered ad videos are deleted from the private bucket after the retention
+ // window; the Meta account keeps the copy used by the ad. Log only counts.
+ let adVideoPurgeBusy=false;
+ const purgeAdVideos=async()=>{
+  if(adVideoPurgeBusy||workersBlocked())return;
+  adVideoPurgeBusy=true;
+  try{
+   const result=await purgeDeliveredAdVideos(pool);
+   if(result.expired||result.failed)
+    console.info('[socio-ads-media-purge]',JSON.stringify({expired:result.expired,failed:result.failed}));
+  }catch(error){
+   console.warn('[socio-ads-media-purge]',String(error?.code||error?.status||'PURGE_ERROR').slice(0,35));
+  }finally{adVideoPurgeBusy=false;}
+ };
+ void purgeAdVideos();
+ const adVideoPurgeWorker=setInterval(purgeAdVideos,6*3600000);
+ adVideoPurgeWorker.unref();
  // AI only attempts replies if explicitly enabled, agent enabled and each
  // conversation handed over. Claims are durable to avoid duplicate messages.
  let replyBusy=false;

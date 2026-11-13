@@ -177,6 +177,10 @@ export async function transcribeSocioTraining(bytes,mime,{env=process.env,reques
  const extensions={'audio/webm':'webm','audio/ogg':'ogg','audio/mp4':'m4a','audio/mpeg':'mp3','audio/wav':'wav'};
  const data=new FormData();data.set('model','whisper-large-v3-turbo');data.set('language','pt');
  data.set('response_format','verbose_json');data.set('timestamp_granularities[]','segment');data.set('temperature','0');
+ // Domain vocabulary keeps short, accent-heavy answers from drifting into
+ // unrelated words ("anúncio" heard as "anuncio", "seis reais" as "seis reis").
+ data.set('prompt',String(env.SOCIO_STT_PROMPT||
+  'Conversa em português do Brasil sobre anúncios: campanha, conjunto de anúncios, público, cidade, orçamento diário em reais, WhatsApp, Página do Facebook, vídeo, foto, criar, pausar, ativar.').slice(0,600));
  data.set('file',new Blob([bytes],{type:mime}),'treinamento.'+extensions[mime]);
  let r;
  try{r=await request('https://api.groq.com/openai/v1/audio/transcriptions',{
@@ -187,7 +191,10 @@ export async function transcribeSocioTraining(bytes,mime,{env=process.env,reques
  const text=clean(json?.text,850);
  const plain=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
   .replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
- if(text.length<2||/^(?:e ai\s*){1,10}$/.test(plain)||/^(?:oi\s*){2,8}$/.test(plain))
+ // A one-word numeric answer ("6" to the daily-budget question) is a complete
+ // reply, not noise.
+ const shortAnswer=/^(?:r\$\s*)?\d{1,3}(?:[.,]\d{1,2})?$/i.test(text.trim());
+ if((text.length<2&&!shortAnswer)||/^(?:e ai\s*){1,10}$/.test(plain)||/^(?:oi\s*){2,8}$/.test(plain))
   throw err(422,'Não identifiquei uma solicitação clara. Pode continuar falando.');
  const segments=Array.isArray(json?.segments)?json.segments.filter(x=>x&&typeof x==='object'):[];
  // Whisper verbose_json exposes segment confidence. Silence/low-confidence

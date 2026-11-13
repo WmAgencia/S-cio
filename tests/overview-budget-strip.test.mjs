@@ -13,8 +13,8 @@ test('dashboard shows the headline first, then compact advertising budget and bu
  assert(header>0);
  const body=screen.slice(header,header+4000);
  assert(body.indexOf("px-budget-top")>=0);
- assert(body.indexOf("px-page-heading")<body.indexOf("px-budget-top"));
- assert(body.indexOf("px-budget-top")<body.indexOf("px-kpi-grid"));
+ assert.equal(body.indexOf("px-page-heading"),-1,'the overview opens straight on the numbers, with no title block above them');
+ assert(body.indexOf("px-budget-top")<body.indexOf("ov-board"));
  assert(body.includes("budgetHeaderItem('meta_ads'"));
  assert(body.includes("budgetHeaderItem('google_ads'"));
  assert(body.includes("googleAdsVisible()?budgetHeaderItem('google_ads'"));

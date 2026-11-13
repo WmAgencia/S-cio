@@ -6,6 +6,7 @@ import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from
 import {officialPersistenceScenario} from './meta-official-fixture.mjs';
 import {selectOfficialAccount} from '../../meta-official.mjs';
 import {readAdsTool,prepareAdsPlan,executeAdsPlan,uploadAdImage,inspectOfficialCampaign} from '../../meta-ads-tools.mjs';
+import {recordMetaVideoUpload} from '../../ads-media.mjs';
 export async function metaToolsScenario(pool){
  const {actors,env,request:oauthRequest}=await officialPersistenceScenario(pool),a=actors[0];
  let writes=[],uncertain=false,fallbackPages=false,existingPixels=true;
@@ -32,7 +33,8 @@ export async function metaToolsScenario(pool){
   if(path==='/act_123456/ads')return response({data:[{id:'554433',creative:{object_story_spec:{page_id:'445566'}}}]});
   if(path==='/act_123456')return response({id:'act_123456',currency:'BRL',amount_spent:'1234',spend_cap:'2000',business:{id:'777888'}});
   if(path==='/445566')return response({id:'445566',name:'Página existente na conta'});
-  if(path==='/1616096903323428')return response({id:'1616096903323428',status:{video_status:'ready'}});
+  if(path==='/1616096903323428')return response({id:'1616096903323428',status:{video_status:'ready'},
+  picture:'https://scontent.xx.fbcdn.net/v/poster.jpg?_nc_cat=1&oh=abc'});
   if(path==='/998877/adsets')return response({data:[{id:'121212',name:'Conjunto de teste',effective_status:'ACTIVE'}]});
   if(path==='/998877/ads')return response({data:[{id:'343434',name:'Anúncio de teste',effective_status:'ACTIVE'}]});
   if(path==='/998877/insights')return response({data:[{campaign_id:'998877',spend:'12.27',clicks:'488',impressions:'3098'}]});
@@ -104,6 +106,9 @@ export async function metaToolsScenario(pool){
  assert.equal(writes[5].body.optimization_goal,'CONVERSATIONS');
  assert.equal(JSON.parse(writes[5].body.promoted_object).whatsapp_phone_number,'5515999999999');
  assert.equal(JSON.parse(writes[6].body.object_story_spec).link_data.call_to_action.type,'WHATSAPP_MESSAGE');
+ const waCta=JSON.parse(writes[6].body.object_story_spec).link_data.call_to_action.value;
+ assert.deepEqual(waCta,{app_destination:'WHATSAPP'},'WhatsApp CTA must not carry a link');
+ assert.equal(JSON.parse(writes[6].body.object_story_spec).link_data.link,'https://wa.me/5515999999999');
  await assert.rejects(prepareAdsPlan(pool,a,'create_whatsapp',{...wa,whatsappPhone:'5515888888888'},opts),{status:422});
  const adOnly=await prepareAdsPlan(pool,a,'create_ad',{...input,adsetId:'998877'},opts);
  assert.equal(writes.length,8,'Standalone ad preview does not write to Meta');
@@ -208,6 +213,7 @@ export async function metaToolsScenario(pool){
  assert.equal(writes.at(-2).path,'/act_123456/adcreatives');
  const story=JSON.parse(writes.at(-2).body.object_story_spec);
  assert.equal(story.video_data.video_id,videoAd.videoId);
+ assert.match(story.video_data.image_url,/^https:\/\/scontent\./,'video creative needs a thumbnail');
  assert.equal(story.link_data,undefined);
  assert.equal(writes.at(-1).body.status,'PAUSED');
  assert.equal(videoMade.result.delivery,'PAUSED');
@@ -217,5 +223,18 @@ export async function metaToolsScenario(pool){
  await assert.rejects(prepareAdsPlan(pool,a,'create_ad',
   {...videoAd,videoId:'999999999999'},opts),{status:403});
  await assert.rejects(prepareAdsPlan(pool,{...a,active_tenant_id:randomUUID()},'create_ad',videoAd,opts));
+ // A video the owner sent to the orb is authorized by its media-bridge receipt
+ // even without a WhatsApp import row, and a video with no receipt at all is
+ // still refused.
+ await pool.query("DELETE FROM socio_whatsapp_meta_video_imports WHERE tenant_id=$1 AND meta_video_id=$2",
+  [a.active_tenant_id,'1616096903323428']);
+ await assert.rejects(prepareAdsPlan(pool,a,'create_ad',videoAd,opts),{status:403});
+ const receipt=await recordMetaVideoUpload(pool,{tenantId:a.active_tenant_id,mediaId:randomUUID(),
+  userId:a.user_id,accountId:'act_123456',videoId:'1616096903323428'});
+ assert.equal(receipt.videoId,'1616096903323428');
+ const orbPlan=await prepareAdsPlan(pool,a,'create_ad',videoAd,opts);
+ assert.equal(orbPlan.summary.videoId,'1616096903323428');
+ await assert.rejects(recordMetaVideoUpload(pool,{tenantId:a.active_tenant_id,mediaId:randomUUID(),
+  userId:a.user_id,accountId:'sem_conta',videoId:'1616096903323428'}),{status:422},'invalid account');
 
 }
