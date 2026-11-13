@@ -1759,7 +1759,7 @@ body #appShell[data-workspace="master"]{
 }
 body #appShell[data-workspace="master"] .app-main{background:#f2f1f7!important}
 body #appShell[data-workspace="master"] .sidebar{
- background:linear-gradient(178deg,#201e3d 0%,#191830 58%,#16152b 100%)!important;
+ background:#1b1a33 linear-gradient(178deg,#201e3d 0%,#191830 58%,#16152b 100%)!important;
  border-right:1px solid #2c2a4d!important;
  color:#c9c6e4!important;
  box-shadow:inset -1px 0 0 rgba(255,255,255,.04)!important;
@@ -1828,6 +1828,7 @@ body #appShell[data-workspace="master"] .topbar{
  border-bottom:1px solid #e4e1f0!important;
  box-shadow:0 1px 0 #e9e6f6,0 8px 24px rgba(46,38,96,.05)!important;
 }
+body #appShell[data-workspace="master"] #view .px-page-heading p{color:#5b6478!important}
 body #appShell[data-workspace="master"] .breadcrumb,
 body #appShell[data-workspace="master"] .breadcrumb span{color:#6b6389!important}
 body #appShell[data-workspace="master"] .breadcrumb strong{color:#2a2450!important}

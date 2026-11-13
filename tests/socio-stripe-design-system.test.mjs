@@ -19,7 +19,7 @@ const chrome=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/google-
 
 test('one canonical Stripe-inspired light theme replaces obsolete dark overrides',()=>{
  assert.equal(cssImports.at(-1),'/socio-stripe-system.css');
- assert.match(html,/\/socio-stripe-system\.css\?v=20261113k/);
+ assert.match(html,/\/socio-stripe-system\.css\?v=20261113l/);
  assert(server.includes("'/socio-stripe-system.css'"));
  assert.match(html,/<meta name="theme-color" content="#f7f8fa">/);
  for(const old of ['socio-glass-motion.css','socio-glass-enforced.css',
