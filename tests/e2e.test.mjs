@@ -387,7 +387,7 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
   currentPassword:'SenhaAtendente2026!',newPassword:'SenhaNova2026!MuitoForte'
  },activeCookie,activeCsrf);
  assert.equal(passwordChanged.status,200);
- assert.equal(passwordChanged.result.otherSessionsRevoked,true);
+ assert.equal(passwordChanged.result.allSessionsRevoked,true);
  const otherSessionRevoked=await call('/api/me','GET',undefined,anotherSession.cookie.split(';')[0]);
  assert.equal(otherSessionRevoked.status,401,'Password rotation invalidates other sessions');
  assert.equal((await call('/api/me','GET',undefined,activeCookie)).status,200,'Current session survives own password change');

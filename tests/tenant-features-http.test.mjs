@@ -66,7 +66,7 @@ test('HTTP tenant bundles: master creates company with optional modules, switch 
  assert.deepEqual(me.tenant.features,opts);
  assert(!me.user.permissions.includes('catalog.read'));
  assert(!me.user.permissions.includes('marketing.read'));
- assert(!me.user.permissions.includes('billing.manage'));
+ assert(me.user.permissions.includes('billing.manage'),'Billing is not module-scoped');
  assert(me.user.permissions.includes('platform.manage'),'Platform master controls remain available');
  for(const url of ['/api/products','/api/marketing/oauth','/api/agent']){
   const res=await request(url);
