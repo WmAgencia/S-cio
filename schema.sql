@@ -302,6 +302,17 @@ CREATE TABLE IF NOT EXISTS product_campaign_links (
  UNIQUE(tenant_id,product_id,provider,campaign_id)
 );
 CREATE INDEX IF NOT EXISTS product_campaign_links_tenant_product ON product_campaign_links(tenant_id,product_id);
+-- Facts the AI may quote to a customer, rebuilt on every product change.
+-- Never served by a public URL; read only inside authenticated server paths.
+CREATE TABLE IF NOT EXISTS socio_product_knowledge (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ product_id uuid NOT NULL,
+ markdown text NOT NULL CHECK(char_length(markdown)>0),
+ refreshed_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(tenant_id,product_id) REFERENCES products(tenant_id,id) ON DELETE CASCADE,
+ UNIQUE(tenant_id,product_id)
+);
 
 
 -- Conversas: tenant-owned operational metadata, never WhatsApp network actions.

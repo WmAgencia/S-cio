@@ -838,6 +838,8 @@ async function products(selected=null){
     '<p>Preencha as informações do produto. Fotos e variações ficam no mesmo lugar.</p></div>'+
     '<button type="button" class="socio-popup-close" id="closeProductModal" aria-label="Fechar cadastro">×</button></div>'+
     '<form class="form-stack" id="productForm">'+
+     '<div class="catalog-voice"><button type="button" class="btn soft" id="productVoice">'+(current?'◉ Falar alterações':'◉ Falar dados do produto')+'</button>'+
+      '<small id="productVoiceStatus" class="form-note" role="status">Toque em Falar e descreva o produto: título, preço, cores, modelo, estoque. A IA preenche o formulário para você revisar.</small></div>'+
      '<label>Nome ou título do produto<input name="name" required maxlength="120" placeholder="Ex.: Kit profissional" value="'+e(current?.name||'')+'"></label>'+
      '<div class="catalog-pair"><label>Preço (R$)<input name="price" required type="text" inputmode="decimal" placeholder="Ex.: 129,90" maxlength="18" value="'+e(current?(current.price_cents/100).toFixed(2).replace('.',','):'')+'"></label>'+
      '<label>Preço anterior (opcional)<input name="compareAtPrice" type="text" inputmode="decimal" maxlength="18" value="'+e(current?.compare_at_price_cents!=null?(current.compare_at_price_cents/100).toFixed(2).replace('.',','):'')+'"></label></div>'+
@@ -942,6 +944,67 @@ async function products(selected=null){
    await products(productId);
   });
  });
+ const voiceButton=$('#productVoice');
+ if(voiceButton){
+  const voiceStatus=$('#productVoiceStatus');
+  const idleLabel=current?'◉ Falar alterações':'◉ Falar dados do produto';
+  let voiceRecorder=null,voiceStream=null,voiceChunks=[],voiceTimer=null,voiceBusy=false;
+  const setVoice=text=>{if(voiceStatus)voiceStatus.textContent=text;};
+  const releaseStream=()=>{voiceStream?.getTracks().forEach(track=>track.stop());voiceStream=null;};
+  voiceButton.addEventListener('click',async()=>{
+   if(voiceRecorder?.state==='recording'){voiceRecorder.stop();return;}
+   if(voiceBusy)return;
+   if(!window.MediaRecorder||!navigator.mediaDevices?.getUserMedia)return toast('Microfone indisponível neste dispositivo. Você pode digitar os dados.',true);
+   let activeRecorder;
+   try{
+    voiceStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
+    const mime=['audio/webm','audio/ogg','audio/mp4'].find(type=>MediaRecorder.isTypeSupported(type));
+    if(!mime)throw Error('O navegador não oferece um formato de gravação compatível.');
+    activeRecorder=new MediaRecorder(voiceStream,{mimeType:mime});voiceRecorder=activeRecorder;voiceChunks=[];
+    activeRecorder.ondataavailable=ev=>{if(ev.data?.size)voiceChunks.push(ev.data);};
+    activeRecorder.onstop=async()=>{
+     if(voiceTimer)clearTimeout(voiceTimer);voiceTimer=null;
+     const blob=new Blob(voiceChunks,{type:mime});voiceChunks=[];
+     releaseStream();voiceRecorder=null;voiceButton.textContent=idleLabel;
+     if(blob.size>3*1024*1024)return setVoice('A gravação passou de 3 MB. Fale de um jeito mais curto.');
+     voiceBusy=true;setVoice('Transcrevendo o que você falou…');
+     try{
+      const resp=await fetch('/api/products/voice/transcribe',{method:'POST',credentials:'same-origin',
+       headers:{'Content-Type':mime,'X-CSRF-Token':state.csrf},body:blob});
+      const audio=await resp.json().catch(()=>({error:'Erro de conexão.'}));
+      if(!resp.ok)throw Error(audio.error||'Não foi possível transcrever o áudio.');
+      setVoice('Preenchendo o formulário com o que você falou…');
+      const draft=await api('/api/products/draft','POST',{text:audio.text});
+      const product=draft.product||{};
+      form.elements.name.value=product.name||'';
+      form.elements.price.value=Number.isSafeInteger(product.priceCents)?(product.priceCents/100).toFixed(2).replace('.',','):'';
+      form.elements.compareAtPrice.value=Number.isSafeInteger(product.compareAtPriceCents)?(product.compareAtPriceCents/100).toFixed(2).replace('.',','):'';
+      form.elements.sku.value=product.sku||'';
+      form.elements.stock.value=product.stockQuantity??'';
+      form.elements.description.value=product.description||'';
+      if(form.elements.active)form.elements.active.value='true';
+      const variants=Array.isArray(draft.variants)?draft.variants.slice(0,25):[];
+      let note='';
+      if(!current){
+       const host=$('#newVariantRows');
+       if(host)host.innerHTML=variants.map(v=>catalogVariantRow({name:v.name,price_cents:v.priceCents,stock_quantity:v.stockQuantity,sku:v.sku})).join('');
+       note=variants.length?' '+variants.length+' variação(ões) adicionada(s).':'';
+      }else if(variants.length)note=' As variações faladas devem ser ajustadas na seção “Variações e preços”.';
+      setVoice('Formulário preenchido.'+note+' Revise e confirme o cadastro.'+(draft.transcript?' Você disse: “'+draft.transcript+'”':''));
+      toast('Dados do produto preenchidos pela IA.');
+     }catch(error){setVoice('Não foi possível preencher automaticamente: '+String(error.message||error));}
+     finally{voiceBusy=false;}
+    };
+    activeRecorder.start();
+    voiceButton.textContent='■ Parar e preencher';
+    setVoice('Ouvindo… descreva o produto. Toque em Parar quando terminar (até 30 segundos).');
+    voiceTimer=setTimeout(()=>{if(activeRecorder.state==='recording')activeRecorder.stop();},30000);
+   }catch(error){
+    releaseStream();voiceRecorder=null;voiceButton.textContent=idleLabel;
+    toast('Microfone indisponível: '+String(error.message||'Erro'),true);
+   }
+  });
+ }
  if(!current)return;
  $('#catalogPhotoForm').addEventListener('submit',async ev=>{
   ev.preventDefault();const files=[...ev.currentTarget.elements.photos.files];

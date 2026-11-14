@@ -169,7 +169,7 @@ export async function advanceSocioInterview(pool,tenant,text){
  }catch(e){await c.query('ROLLBACK').catch(()=>{});throw e;}
  finally{c.release();}
 }
-export async function transcribeSocioTraining(bytes,mime,{env=process.env,request=fetch}={}){
+export async function transcribeSocioTraining(bytes,mime,{env=process.env,request=fetch,prompt=null,maxChars=850}={}){
  const accepted=new Set(['audio/webm','audio/ogg','audio/mp4','audio/mpeg','audio/wav']);
  if(!accepted.has(mime)||!Buffer.isBuffer(bytes)||bytes.length<80||bytes.length>3*1024*1024)
   throw err(422,'Áudio inválido ou muito grande (máximo 3 MB).');
@@ -179,7 +179,7 @@ export async function transcribeSocioTraining(bytes,mime,{env=process.env,reques
  data.set('response_format','verbose_json');data.set('timestamp_granularities[]','segment');data.set('temperature','0');
  // Domain vocabulary keeps short, accent-heavy answers from drifting into
  // unrelated words ("anúncio" heard as "anuncio", "seis reais" as "seis reis").
- data.set('prompt',String(env.SOCIO_STT_PROMPT||
+ data.set('prompt',String(prompt||env.SOCIO_STT_PROMPT||
   'Conversa em português do Brasil sobre anúncios: campanha, conjunto de anúncios, público, cidade, orçamento diário em reais, WhatsApp, Página do Facebook, vídeo, foto, criar, pausar, ativar.').slice(0,600));
  data.set('file',new Blob([bytes],{type:mime}),'treinamento.'+extensions[mime]);
  let r;
@@ -188,7 +188,7 @@ export async function transcribeSocioTraining(bytes,mime,{env=process.env,reques
  });}catch{throw err(503,'Transcrição indisponível. Você pode continuar digitando.');}
  if(!r.ok)throw err(503,'O serviço de transcrição não respondeu.');
  let json;try{json=await r.json();}catch{throw err(503,'Transcrição inválida.');}
- const text=clean(json?.text,850);
+ const text=clean(json?.text,Number.isSafeInteger(maxChars)&&maxChars>0?maxChars:850);
  const plain=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
   .replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
  // A one-word numeric answer ("6" to the daily-budget question) is a complete

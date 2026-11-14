@@ -61,6 +61,8 @@ import {startGoogleAdsOAuth,finishGoogleAdsOAuth,googleAdsStatus,listGoogleAdsAc
 import {createTrackingSite,listTrackingSites,enableTrackingSite,receiveSignedSiteEvent} from './socio-site-tracking.mjs';
 import {integrationReadiness} from './socio-integrations-readiness.mjs';
 import {validateProduct,validateVariants,validateCampaign,catalogPrompt,matchCatalogProducts} from './catalog.mjs';
+import {draftProductFromSpeech} from './catalog-voice.mjs';
+import {syncProductKnowledge} from './product-knowledge.mjs';
 import {mediaConfigured,normalizeImage,imageKey,putPrivateImage,getPrivateImage,deletePrivateImage,checkMediaStorage} from './media-storage.mjs';
 import {reserveAdVideo,listAdVideos,storeAdVideo,readAdVideoBytes,recordMetaVideoUpload,purgeDeliveredAdVideos,adVideoExportUrl,resolveSignedAsset,serveSignedVideo,importWhatsAppAdVideo,createMediaMcpToken,revokeMediaMcpTokens,MAX_AD_VIDEO_BYTES} from './ads-media.mjs';
 import {handleAdsMediaMcp} from './ads-media-mcp.mjs';
@@ -100,6 +102,12 @@ pool.on('error',error=>{
  console.error('[socio-db] idle connection failed',String(error?.code||error?.message||'error').slice(0,80));
 });
 const query=(sql,values=[])=>pool.query(sql,values);
+// The product document is derived data: it is always rebuilt from committed
+// rows, so a failure here never rolls back the product change itself.
+const refreshProductKnowledge=async(tenantId,productId)=>{
+ try{await syncProductKnowledge(pool,{tenantId,productId});}
+ catch(error){console.warn('[product-knowledge]',String(error?.message||error).slice(0,160));}
+};
 async function fullCatalog(tenantId){
  const [items,variants,media,campaigns]=await Promise.all([
   query('SELECT id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active FROM products WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 500',[tenantId]),
@@ -1312,6 +1320,29 @@ async function handle(req,res){
  if(method==='GET'&&pathname==='/api/products'){
   return json(res,200,await fullCatalog(a.active_tenant_id));
  }
+ if(method==='POST'&&pathname==='/api/products/voice/transcribe'){
+  needRole(a,['owner','admin']);sameOrigin(req);
+  if(!await limiter('sim','product-voice:'+a.active_tenant_id,60000,12))
+   throw fail(429,'Limite temporário de gravações atingido.');
+  const mime=String(req.headers['content-type']||'').split(';')[0].toLowerCase();
+  if(!['audio/webm','audio/ogg','audio/mp4','audio/mpeg','audio/wav'].includes(mime))
+   throw fail(422,'Formato de áudio não suportado.');
+  if(Number(req.headers['content-length']||0)>3*1024*1024)throw fail(413,'O áudio deve ter até 3 MB.');
+  let length=0;const chunks=[];
+  for await(const chunk of req){length+=chunk.length;if(length>3*1024*1024)throw fail(413,'O áudio deve ter até 3 MB.');chunks.push(chunk);}
+  // Audio is transcribed and discarded; nothing is stored or published.
+  return json(res,200,await transcribeSocioTraining(Buffer.concat(chunks),mime,{
+   prompt:'Ditado em português do Brasil sobre um produto de loja: título, descrição, preço em reais, cores, tamanhos, modelo, memória, GB, estoque, quantidade.',maxChars:2000}));
+ }
+ if(method==='POST'&&pathname==='/api/products/draft'){
+  needRole(a,['owner','admin']);
+  if(!await limiter('sim','product-draft:'+a.active_tenant_id,60000,20))
+   throw fail(429,'Muitas solicitações de preenchimento. Aguarde um instante.');
+  const {data}=await body(req,6000);
+  const draft=await draftProductFromSpeech(data.text);
+  await audit(a,'product.voice.drafted',{variants:draft.variants.length,provider:draft.provider});
+  return json(res,200,{product:draft.product,variants:draft.variants,provider:draft.provider,transcript:draft.transcript});
+ }
  if(method==='GET'&&pathname==='/api/products/storage'){
   return json(res,200,{configured:mediaConfigured(),limits:{maxPhotos:8,maxSourceBytes:3000000},
    supported:['image/jpeg','image/png','image/webp']});
@@ -1348,6 +1379,7 @@ async function handle(req,res){
    await client.query('COMMIT');
   }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}
   finally{client.release();}
+  await refreshProductKnowledge(a.active_tenant_id,product.id);
   await audit(a,'product.created',{productId:product.id,variants:variants.length,campaigns:campaigns.length});
   return json(res,201,product);
  }
@@ -1368,6 +1400,7 @@ async function handle(req,res){
    }
    await client.query('COMMIT');
   }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
+  await refreshProductKnowledge(a.active_tenant_id,productVariants[1]);
   await audit(a,'product.variants.updated',{productId:productVariants[1],count:variants.length});
   return json(res,200,{ok:true,count:variants.length});
  }
@@ -1390,6 +1423,7 @@ async function handle(req,res){
    await query('INSERT INTO product_media(id,tenant_id,product_id,object_key,content_type,bytes,alt) VALUES($1,$2,$3,$4,$5,$6,$7)',
     [mediaId,a.active_tenant_id,productMedia[1],objectKey,img.contentType,img.bytes.length,alt]);
   }catch(e){try{await deletePrivateImage(objectKey);}catch{}throw e;}
+  await refreshProductKnowledge(a.active_tenant_id,productMedia[1]);
   await audit(a,'product.media.uploaded',{productId:productMedia[1],mediaId,bytes:img.bytes.length});
   return json(res,201,{id:mediaId,url:'/api/products/'+productMedia[1]+'/media/'+mediaId+'/file',alt,bytes:img.bytes.length});
  }
@@ -1412,6 +1446,7 @@ async function handle(req,res){
   await deletePrivateImage(record.rows[0].object_key);
   await query('DELETE FROM product_media WHERE tenant_id=$1 AND product_id=$2 AND id=$3',
    [a.active_tenant_id,mediaDelete[1],mediaDelete[2]]);
+  await refreshProductKnowledge(a.active_tenant_id,mediaDelete[1]);
   await audit(a,'product.media.deleted',{productId:mediaDelete[1],mediaId:mediaDelete[2]});
   return json(res,200,{ok:true});
  }
@@ -1425,6 +1460,7 @@ async function handle(req,res){
   const result=await query(
    'INSERT INTO product_campaign_links(id,tenant_id,product_id,provider,campaign_id,label) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,provider,campaign_id,label,verified',
    [id(),a.active_tenant_id,campaignPath[1],campaign.provider,campaign.campaignId,campaign.label]);
+  await refreshProductKnowledge(a.active_tenant_id,campaignPath[1]);
   await audit(a,'product.campaign.linked',{productId:campaignPath[1],provider:campaign.provider});
   return json(res,201,result.rows[0]);
  }
@@ -1434,6 +1470,7 @@ async function handle(req,res){
   const deleted=await query('DELETE FROM product_campaign_links WHERE tenant_id=$1 AND product_id=$2 AND id=$3 RETURNING id',
    [a.active_tenant_id,campaignDelete[1],campaignDelete[2]]);
   if(!deleted.rowCount)throw fail(404,'Vínculo de campanha não encontrado.');
+  await refreshProductKnowledge(a.active_tenant_id,campaignDelete[1]);
   await audit(a,'product.campaign.unlinked',{productId:campaignDelete[1]});
   return json(res,200,{ok:true});
  }
@@ -1445,6 +1482,7 @@ async function handle(req,res){
    'UPDATE products SET name=$3,description=$4,sku=$5,price_cents=$6,stock_quantity=$7,compare_at_price_cents=$8,active=$9,updated_at=now() WHERE id=$1 AND tenant_id=$2 RETURNING id,name,description,sku,price_cents,stock_quantity,compare_at_price_cents,active',
    [prodMatch[1],a.active_tenant_id,p.name,p.description,p.sku,p.priceCents,p.stockQuantity,p.compareAtPriceCents,p.active]);
   if(!result.rowCount)throw fail(404,'Produto não encontrado.');
+  await refreshProductKnowledge(a.active_tenant_id,prodMatch[1]);
   await audit(a,'product.updated',{productId:prodMatch[1]});
   return json(res,200,result.rows[0]);
  }
