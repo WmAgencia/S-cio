@@ -230,7 +230,7 @@ test('A preview never writes or executes anything',async()=>{
   prepare:async()=>{throw new Error('preview must not prepare');},
   execute:async()=>{throw new Error('preview must not execute');}});
  assert.equal(result.decisions.length,1);
- assert.equal(pool.calls.length,0);
+ assert.equal(pool.calls.filter(c=>/\b(INSERT|UPDATE|DELETE)\b/i.test(c.sql)).length,0);
 });
 
 test('An account must be selected before the manager touches anything',async()=>{
@@ -407,4 +407,202 @@ test('A review is due only after six hours',async()=>{
  assert.match(insert.sql,/INSERT INTO socio_traffic_reviews/);
  assert.equal(insert.args[4],2);
  assert.equal(insert.args[5],1);
+});
+
+const conversation=value=>({action_type:'onsite_conversion.messaging_conversation_started_7d',
+ value:String(value)});
+const purchase=value=>({action_type:'purchase',value:String(value)});
+
+test('An ad above the owner limit is paused before the CTR contest',()=>{
+ const result=decideTrafficActions({
+  campaigns:[campaign('1001')],
+  adsets:[adset('2001','1001')],
+  ads:[ad('3001','2001','1001')],
+  campaignInsights:[{campaign_id:'1001',impressions:'1000',clicks:'50',spend:'12',
+   actions:[conversation(3)]}],
+  adInsights:[{ad_id:'3001',impressions:'1000',clicks:'20',spend:'12',
+   actions:[conversation(3)]}],
+  targetResultCents:300
+ });
+ const pause=result.actions.find(a=>a.reason==='ad_over_target');
+ assert.ok(pause,'one ad above the kill limit must pause even without a sibling');
+ assert.equal(pause.entityId,'3001');
+ assert.equal(pause.priority,0);
+ assert.equal(pause.requiresApproval,false);
+ assert.match(pause.explanation,/R\$\s4,00/);
+ assert.match(pause.explanation,/limite de R\$\s3,90/);
+ assert.match(pause.explanation,/meta R\$\s3,00/);
+ assert.equal(pause.evidence.resultKind,'conversation');
+ assert.equal(pause.evidence.results,3);
+ assert.equal(pause.evidence.costPerResultCents,400);
+ assert.equal(pause.evidence.targetResultCents,300);
+ assert.equal(pause.evidence.killResultCents,390);
+ assert.equal(result.summary.resultKind,'conversation');
+ assert.equal(result.summary.costPerResultCents,400);
+ assert.equal(result.summary.targetResultCents,300);
+ assert.equal(result.summary.killResultCents,390);
+});
+
+test('An ad inside the kill limit is not paused by the result rule',()=>{
+ const result=decideTrafficActions({
+  campaigns:[campaign('1001')],
+  adsets:[adset('2001','1001')],
+  ads:[ad('3001','2001','1001')],
+  campaignInsights:[{campaign_id:'1001',impressions:'1000',clicks:'50',spend:'11',
+   actions:[conversation(3)]}],
+  adInsights:[{ad_id:'3001',impressions:'1000',clicks:'20',spend:'11',
+   actions:[conversation(3)]}],
+  targetResultCents:300
+ });
+ assert.equal(result.actions.filter(a=>a.reason==='ad_over_target').length,0);
+ assert.equal(result.summary.costPerResultCents,367);
+});
+
+test('An ad that spent without results is paused only after twice the target',()=>{
+ const run=spend=>decideTrafficActions({
+  campaigns:[campaign('1001')],
+  adsets:[adset('2001','1001')],
+  ads:[ad('3001','2001','1001'),ad('3002','2001','1001')],
+  campaignInsights:[{campaign_id:'1001',impressions:'1000',clicks:'40',spend:'12',
+   actions:[conversation(6)]}],
+  adInsights:[
+   {ad_id:'3001',impressions:'1000',clicks:'20',spend:'6',actions:[conversation(3)]},
+   {ad_id:'3002',impressions:'1000',clicks:'20',spend}],
+  targetResultCents:300
+ });
+ const below=run('5.99');
+ assert.equal(below.actions.filter(a=>a.reason==='ad_no_results').length,0,
+  'one cent below twice the target must not pause');
+ const reached=run('6');
+ const pause=reached.actions.find(a=>a.reason==='ad_no_results');
+ assert.ok(pause);
+ assert.equal(pause.entityId,'3002');
+ assert.match(pause.explanation,/R\$\s6,00/);
+ assert.match(pause.explanation,/meta de R\$\s3,00 por conversa iniciada/);
+ assert.equal(pause.evidence.spendCents,600);
+ assert.equal(pause.evidence.results,0);
+});
+
+test('The purchase target from ticket and margin never judges WhatsApp conversations',()=>{
+ const result=decideTrafficActions({
+  campaigns:[campaign('1001')],
+  adsets:[adset('2001','1001')],
+  ads:[ad('3001','2001','1001')],
+  campaignInsights:[{campaign_id:'1001',impressions:'1000',clicks:'40',spend:'24',
+   actions:[conversation(3)]}],
+  adInsights:[{ad_id:'3001',impressions:'1000',clicks:'20',spend:'24',
+   actions:[conversation(3)]}],
+  purchaseTargetCents:500
+ });
+ assert.equal(result.actions.filter(a=>a.reason==='ad_over_target').length,0);
+ assert.equal(result.summary.targetResultCents,null);
+ assert.ok(result.notes.some(note=>/custo máximo por resultado/.test(note)));
+});
+
+test('The purchase target derived from ticket and margin pauses a losing purchase ad',()=>{
+ const result=decideTrafficActions({
+  campaigns:[campaign('1001')],
+  adsets:[adset('2001','1001')],
+  ads:[ad('3001','2001','1001')],
+  campaignInsights:[{campaign_id:'1001',impressions:'1000',clicks:'40',spend:'30',
+   actions:[purchase(3)]}],
+  adInsights:[{ad_id:'3001',impressions:'1000',clicks:'20',spend:'30',
+   actions:[purchase(3)]}],
+  purchaseTargetCents:500
+ });
+ const pause=result.actions.find(a=>a.reason==='ad_over_target');
+ assert.ok(pause);
+ assert.equal(pause.evidence.resultKind,'purchase');
+ assert.match(pause.explanation,/custo por venda/);
+ assert.match(pause.explanation,/R\$\s6,50/,'kill is the target plus 30%');
+});
+
+test('An adset delivering inside the target gets more budget',()=>{
+ const result=decideTrafficActions({
+  campaigns:[campaign('1001')],
+  adsets:[adset('2001','1001',{daily_budget:'5000'})],
+  ads:[],
+  campaignInsights:[{campaign_id:'1001',impressions:'1000',clicks:'20',spend:'6',
+   actions:[conversation(3)]}],
+  adsetInsights:[{adset_id:'2001',impressions:'1000',clicks:'30',spend:'6',
+   actions:[conversation(3)]}],
+  targetResultCents:300
+ });
+ const scale=result.actions.find(a=>a.reason==='result_scale');
+ assert.ok(scale,'an adset within the owner target is scaled even without the CTR lead');
+ assert.equal(scale.currentBudgetCents,5000);
+ assert.equal(scale.targetBudgetCents,6000);
+ assert.match(scale.explanation,/dentro da sua meta de R\$\s3,00/);
+ assert.equal(scale.evidence.costPerResultCents,200);
+});
+
+test('A campaign inside the target is duplicated for its result, not its clicks',()=>{
+ const result=decideTrafficActions({
+  campaigns:[campaign('1001',{name:'Bolos caseiros'})],
+  adsets:[],
+  ads:[],
+  campaignInsights:[{campaign_id:'1001',impressions:'1000',clicks:'20',spend:'9',
+   actions:[conversation(3)]}],
+  targetResultCents:300
+ });
+ const duplicate=result.actions.find(a=>a.action==='duplicate_campaign');
+ assert.ok(duplicate);
+ assert.match(duplicate.explanation,/entrega conversa iniciada a R\$\s3,00/);
+ assert.match(duplicate.explanation,/meta de R\$\s3,00/);
+ assert.equal(duplicate.evidence.resultKind,'conversation');
+ assert.equal(duplicate.evidence.results,3);
+});
+
+test('The report states the cost per result against the owner target',()=>{
+ const report=formatTrafficReport({decisions:[],notes:[],
+  summary:{resultKind:'conversation',results:3,costPerResultCents:400,
+   targetResultCents:300,killResultCents:390}});
+ assert.match(report,/Custo por conversa iniciada: R\$\s4,00 em 3 resultado\(s\)/);
+ assert.match(report,/meta R\$\s3,00, limite R\$\s3,90/);
+ const empty=formatTrafficReport({decisions:[],notes:[],
+  summary:{resultKind:'conversation',results:0,costPerResultCents:null,
+   targetResultCents:300,killResultCents:390}});
+ assert.match(empty,/Nenhum resultado registrado no período/);
+});
+
+test('The result question carries the exact cost, limit and target',()=>{
+ const over=trafficQuestion({action:'pause',reason:'ad_over_target',
+  entityName:'Anúncio 3001',campaignName:'Bolos caseiros',
+  evidence:{resultKind:'conversation',costPerResultCents:400,killResultCents:390,
+   targetResultCents:300}});
+ assert.match(over,/conversa iniciada no Anúncio 3001 da campanha "Bolos caseiros"/);
+ assert.match(over,/está em R\$\s4,00, acima do seu limite de R\$\s3,90 \(meta R\$\s3,00\)/);
+ assert.match(over,/Posso pausá-lo\?$/);
+ const none=trafficQuestion({action:'pause',reason:'ad_no_results',
+  entityName:'Anúncio 3002',campaignName:'Bolos caseiros',
+  evidence:{resultKind:'conversation',spendCents:600,targetResultCents:300}});
+ assert.match(none,/Já gastamos R\$\s6,00 no Anúncio 3002 da campanha "Bolos caseiros" sem nenhum resultado/);
+ assert.match(none,/meta de R\$\s3,00 por conversa iniciada/);
+});
+
+test('The owner target saved in the channel reaches the review',async()=>{
+ const pool=stubPool(sql=>{
+  if(/FROM socio_owner_groups/.test(sql))
+   return {rowCount:1,rows:[{ticketCents:null,marginPercent:null,targetResultCents:300}]};
+  return {rowCount:0,rows:[]};
+ });
+ const read=async(pool,actor,kind,query)=>{
+  if(kind==='campaigns')return {items:[campaign('1001')]};
+  if(kind==='adsets')return {items:[adset('2001','1001')]};
+  if(kind==='ads')return {items:[ad('3001','2001','1001')]};
+  if(kind==='insights'&&query?.level==='campaign')
+   return {items:[{campaign_id:'1001',impressions:'1000',clicks:'50',spend:'12',
+    actions:[conversation(3)]}]};
+  if(kind==='insights'&&query?.level==='ad')
+   return {items:[{ad_id:'3001',impressions:'1000',clicks:'20',spend:'12',
+    actions:[conversation(3)]}]};
+  return {items:[]};
+ };
+ const result=await runTrafficManager(pool,actor,{env,apply:false,read,
+  resolve:async()=>({id:'act_1234567890'})});
+ assert.equal(result.decisions[0].reason,'ad_over_target');
+ assert.equal(result.summary.targetResultCents,300);
+ assert.match(result.report,/meta R\$\s3,00/);
+ const lookup=pool.calls.find(c=>/FROM socio_owner_groups/.test(c.sql));
+ assert.deepEqual(lookup.args,[tenantId]);
 });

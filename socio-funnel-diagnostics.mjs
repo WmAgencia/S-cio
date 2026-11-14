@@ -2,6 +2,7 @@
 // "unavailable", never a failure, and the first failing rung is the culprit.
 // Benchmarks are practitioner ranges, not guarantees from Meta.
 import {classifyCpa} from './socio-account-economics.mjs';
+import {resultCounts,RESULT_LABELS} from './socio-result-metrics.mjs';
 
 export const FUNNEL_VERSION='socio-funnel-diagnostics-v1';
 
@@ -12,22 +13,9 @@ export const FUNNEL_THRESHOLDS=Object.freeze({
  linkCtrPercent:1
 });
 
-const PURCHASE_TYPES=['purchase','omni_purchase','offsite_conversion.fb_pixel_purchase'];
-const CONVERSATION_TYPES=['onsite_conversion.messaging_conversation_started_7d',
- 'onsite_conversion.total_messaging_connection'];
-const LEAD_TYPES=['lead','onsite_conversion.lead_grouped','offsite_conversion.fb_pixel_lead'];
-
 const num=value=>{
  const n=Number(value);
  return Number.isFinite(n)&&n>=0?n:0;
-};
-const list=row=>Array.isArray(row.actions)?row.actions:[];
-const actionCount=(row,types)=>{
- for(const type of types){
-  const found=list(row).find(a=>a&&a.action_type===type);
-  if(found){const n=Number(found.value);if(Number.isFinite(n))return n;}
- }
- return 0;
 };
 const videoCount=(row,field)=>{
  const source=Array.isArray(row[field])?row[field]:null;
@@ -53,13 +41,6 @@ const RECOMMENDATIONS={
  result:'Há cliques e nenhum resultado registrado pela Meta. Verifique página, atendimento e a atribuição antes de culpar a campanha.',
  economics:'O custo por venda passou do limite calculado com a sua margem: cada venda nesse custo dá prejuízo. Pausar ou reduzir é mais barato que insistir.'
 };
-
-function resultKind(row){
- if(actionCount(row,PURCHASE_TYPES)>0)return {kind:'purchase',events:actionCount(row,PURCHASE_TYPES)};
- if(actionCount(row,CONVERSATION_TYPES)>0)return {kind:'conversation',events:actionCount(row,CONVERSATION_TYPES)};
- if(actionCount(row,LEAD_TYPES)>0)return {kind:'lead',events:actionCount(row,LEAD_TYPES)};
- return {kind:null,events:0};
-}
 
 function buildCampaignLadder(row,economics,currency){
  const impressions=num(row.impressions);
@@ -103,13 +84,13 @@ function buildCampaignLadder(row,economics,currency){
   status:thin?'limited':ctr>=FUNNEL_THRESHOLDS.linkCtrPercent?'ok':'fail',
   detail:clicks===0&&impressions>0?'Há impressões e nenhum clique.':null}));
 
- const total=resultKind(row);
+ const total=resultCounts(row);
  if(total.kind===null){
   rungs.push(rung({id:'result',label:'Resultado',benchmark:'evento de conversa, lead ou compra',
    detail:'A Meta não retornou evento de resultado. Clique não comprova conversa nem venda.'}));
  }else{
   const costCents=Math.round(spendCents/total.events);
-  rungs.push(rung({id:'result',label:total.kind==='purchase'?'Venda':total.kind==='lead'?'Lead':'Conversa iniciada',
+  rungs.push(rung({id:'result',label:RESULT_LABELS[total.kind],
    value:costCents,unit:'cents',benchmark:'custo por resultado',
    status:thin?'limited':'ok',
    detail:total.events+' resultado(s) registrados pela Meta no período.'}));

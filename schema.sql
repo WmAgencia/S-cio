@@ -974,6 +974,13 @@ CREATE TABLE IF NOT EXISTS socio_owner_groups (
  whatsapp_destination text CHECK (whatsapp_destination IS NULL OR whatsapp_destination ~ '^[0-9]{10,15}$'),
  last_video_message_id text,
  last_video_id text CHECK (last_video_id IS NULL OR last_video_id ~ '^[0-9]{4,30}$'),
+ ticket_cents integer
+  CHECK (ticket_cents IS NULL OR ticket_cents BETWEEN 100 AND 100000000),
+ margin_percent numeric(5,2)
+  CHECK (margin_percent IS NULL OR (margin_percent > 0 AND margin_percent <= 100)),
+ target_result_cents integer
+  CHECK (target_result_cents IS NULL OR target_result_cents BETWEEN 100 AND 10000000),
+ autopilot_enabled boolean NOT NULL DEFAULT true,
  last_seen_at timestamptz,
  created_at timestamptz NOT NULL DEFAULT now(),
  updated_at timestamptz NOT NULL DEFAULT now(),

@@ -134,6 +134,11 @@
   margin.value=group.marginPercent?String(group.marginPercent):'';
   field('Margem de lucro (%)',margin,'Parte do valor da venda que sobra como lucro, já sem custo do produto.');
 
+  const target=el('input');target.type='text';target.inputMode='decimal';target.maxLength=12;
+  target.value=group.targetResultCents?(group.targetResultCents/100).toFixed(2).replace('.',','):'';
+  field('Custo máximo por resultado (R$)',target,
+   'Quanto você aceita pagar por conversa, lead ou venda. Eu pauso o que passar deste valor e reforço o que entregar dentro dele. Em branco, eu comparo apenas os anúncios entre si.');
+
   const autopilot=el('input');autopilot.type='checkbox';autopilot.checked=group.autopilotEnabled!==false;
   const autopilotWrap=el('label');autopilotWrap.append(autopilot,
    document.createTextNode(' Acompanhar as campanhas a cada 6 horas e me perguntar antes de cada mudança'));
@@ -177,6 +182,8 @@
    if(Number.isFinite(ticketCents)&&ticketCents>0)payload.ticketCents=ticketCents;
    const marginValue=Number(String(margin.value).replace(',','.'));
    if(Number.isFinite(marginValue)&&marginValue>0)payload.marginPercent=marginValue;
+   const targetCents=centsFrom(target.value);
+   payload.targetResultCents=Number.isFinite(targetCents)&&targetCents>0?targetCents:null;
    payload.autopilotEnabled=autopilot.checked;
    payload.ageMin=Number(ageMin.value);payload.ageMax=Number(ageMax.value);
    payload.genders=genderBoxes.filter(box=>box.checked).map(box=>Number(box.value));

@@ -10,6 +10,8 @@ import {randomUUID} from 'node:crypto';
 import {readAdsTool,prepareAdsPlan,executeAdsPlan,broadenedTargeting} from './meta-ads-tools.mjs';
 import {resolveSelectedOfficialAccount} from './meta-official.mjs';
 import {brainResponse,brainReady} from './ai-brain.mjs';
+import {computeAccountEconomics} from './socio-account-economics.mjs';
+import {resultCounts,pickResultKind,costPerResultCents,RESULT_LABELS} from './socio-result-metrics.mjs';
 
 export const TRAFFIC_LIMITS=Object.freeze({
  stepPercent:20,
@@ -25,7 +27,10 @@ export const TRAFFIC_LIMITS=Object.freeze({
  maxActiveCampaigns:4,
  maxActions:4,
  cooldownHours:12,
- allowDuplicate:true
+ allowDuplicate:true,
+ resultKillRatio:1.3,
+ resultMinResults:2,
+ resultMinSpendRatio:2
 });
 
 const num=value=>{const n=Number(value);return Number.isFinite(n)&&n>=0?n:null;};
@@ -48,18 +53,65 @@ function insightMap(rows,idKey){
   if(!id)continue;
   const impressions=int(row.impressions),clicks=int(row.clicks),spend=num(row.spend);
   if(impressions===null||clicks===null||spend===null)continue;
-  const prev=map.get(id)||{impressions:0,clicks:0,spend:0};
+  const counts=resultCounts(row);
+  const prev=map.get(id)||{impressions:0,clicks:0,spend:0,purchase:0,conversation:0,lead:0};
   prev.impressions+=impressions;prev.clicks+=clicks;prev.spend+=spend;
+  prev.purchase+=counts.purchase;prev.conversation+=counts.conversation;prev.lead+=counts.lead;
   map.set(id,prev);
  }
  const out=new Map();
  for(const [id,m] of map){
+  const resultKind=pickResultKind(m);
+  const results=resultKind?m[resultKind]:0;
   out.set(id,{...m,
    ctr:m.impressions>0?round2(100*m.clicks/m.impressions):null,
    cpc:m.clicks>0?round2(m.spend/m.clicks):null,
-   cpm:m.impressions>0?round2(1000*m.spend/m.impressions):null});
+   cpm:m.impressions>0?round2(1000*m.spend/m.impressions):null,
+   resultKind,results,
+   costPerResultCents:costPerResultCents(Math.round(m.spend*100),results)});
  }
  return out;
+}
+
+const positiveCents=value=>{const n=int(value);return n!==null&&n>=100?n:null;};
+
+// Totals per result kind, so an account with purchases and conversations is
+// judged by the strongest result it actually produced, not by a mix.
+function resultTotals(map){
+ const totals={purchase:0,conversation:0,lead:0};
+ let spendCents=0;
+ for(const m of map.values()){
+  totals.purchase+=m.purchase;totals.conversation+=m.conversation;totals.lead+=m.lead;
+  spendCents+=Math.round(m.spend*100);
+ }
+ const kind=pickResultKind(totals);
+ const events=kind?totals[kind]:0;
+ return {kind,events,spendCents,
+  costPerResultCents:kind===null?null:costPerResultCents(spendCents,events)};
+}
+
+function resultFailure(m,{limits,targets,accountKind,killFor}){
+ const target=accountKind===null?null:targets[accountKind];
+ if(target===null)return null;
+ const label=RESULT_LABELS[accountKind].toLowerCase();
+ const kill=killFor(accountKind);
+ if(m.resultKind===accountKind&&m.results>=limits.resultMinResults&&
+    m.costPerResultCents!==null&&m.costPerResultCents>kill)
+  return {reason:'ad_over_target',
+   explanation:'Vou pausar este anúncio: o custo por '+label+' está em '+
+    money(m.costPerResultCents)+', acima do seu limite de '+money(kill)+
+    ' (meta '+money(target)+'), com '+m.results+' resultado(s) no período. '+
+    'O orçamento fica nos anúncios que entregam dentro da meta.',
+   evidence:{resultKind:accountKind,results:m.results,
+    costPerResultCents:m.costPerResultCents,targetResultCents:target,killResultCents:kill}};
+ const spentCents=Math.round(m.spend*100);
+ if(m.purchase+m.conversation+m.lead===0&&spentCents>=target*limits.resultMinSpendRatio)
+  return {reason:'ad_no_results',
+   explanation:'Vou pausar este anúncio: ele já gastou '+money(spentCents)+
+    ' sem nenhum resultado registrado pela Meta, com meta de '+money(target)+' por '+label+'.',
+   evidence:{resultKind:accountKind,results:0,costPerResultCents:null,
+    targetResultCents:target,killResultCents:kill,spendCents:spentCents}};
+ return null;
 }
 
 function budgetChangeDecision({entity,entityId,entityName,campaignId,currentBudgetCents,targetBudgetCents,limits}){
@@ -107,6 +159,18 @@ export function decideTrafficActions(input={}){
  const medianCpm=median(sampledCampaigns.map(c=>c.cpm));
  const medianCtr=median(sampledCampaigns.map(c=>c.ctr));
  const medianCpc=median(sampledCampaigns.map(c=>c.cpc).filter(v=>v!==null));
+ // An owner target applies to every result kind. A purchase campaign can also
+ // use the limit derived from ticket and margin when no explicit target exists.
+ const explicitTarget=positiveCents(input.targetResultCents);
+ const purchaseTarget=positiveCents(input.purchaseTargetCents);
+ const targets={purchase:explicitTarget??purchaseTarget,
+  conversation:explicitTarget,lead:explicitTarget};
+ const killFor=kind=>targets[kind]===null?null:Math.round(targets[kind]*limits.resultKillRatio);
+ const campaignResults=resultTotals(campaignMetrics);
+ const adsetResults=resultTotals(adsetMetrics);
+ const adResults=resultTotals(adMetrics);
+ const accountResults=[campaignResults,adsetResults,adResults].find(row=>row.kind!==null)||campaignResults;
+ const accountKind=accountResults.kind;
  const actions=[],notes=[];
  const planned=new Set();
  const add=(action)=>{
@@ -122,6 +186,19 @@ export function decideTrafficActions(input={}){
   if(!adId||!adsetId||!active(ad))continue;
   const m=adMetrics.get(adId);
   if(!m||m.impressions<limits.adMinImpressions)continue;
+  // The owner target is judged before comparing ads with each other: an ad can
+  // win the CTR contest and still be too expensive per result.
+  const campaignName=campaigns.find(row=>idOf(row.id)===idOf(ad.campaign_id))?.name||null;
+  const failure=resultFailure(m,{limits,targets,accountKind,killFor});
+  if(failure){
+   add({action:'pause',entity:'ad',entityId:adId,entityName:String(ad.name||'Anúncio').slice(0,100),
+    campaignId:idOf(ad.campaign_id),
+    campaignName:campaignName?String(campaignName).slice(0,100):null,reason:failure.reason,
+    explanation:failure.explanation,
+    evidence:{...failure.evidence,impressions:m.impressions,spendCents:Math.round(m.spend*100),adsetId},
+    withinAutonomy:true,requiresApproval:false,priority:0});
+   continue;
+  }
   const siblings=ads.filter(other=>String(other?.adset_id||'')===adsetId&&active(other))
    .map(other=>({id:idOf(other.id),metrics:adMetrics.get(idOf(other.id))}))
    .filter(row=>row.id&&row.metrics&&row.metrics.impressions>=limits.adMinImpressions)
@@ -133,7 +210,6 @@ export function decideTrafficActions(input={}){
   if(!(bestCtr>0))continue;
   if(m.ctr>bestCtr*limits.pauseCtrRatio)continue;
   if(m.spend<limits.minSpendCents/100)continue;
-  const campaignName=campaigns.find(row=>idOf(row.id)===idOf(ad.campaign_id))?.name||null;
   add({action:'pause',entity:'ad',entityId:adId,entityName:String(ad.name||'Anúncio').slice(0,100),
    campaignId:idOf(ad.campaign_id),
    campaignName:campaignName?String(campaignName).slice(0,100):null,reason:'ad_low_ctr',
@@ -166,11 +242,28 @@ export function decideTrafficActions(input={}){
     withinAutonomy:true,requiresApproval:false,priority:2});
   const budget=int(adset.daily_budget);
   if(!budget||campaignBudget>0)continue;
-  if(medianCtr===null||m.ctr<medianCtr*limits.scaleCtrRatio)continue;
-  if(m.cpc!==null&&medianCpc!==null&&m.cpc>medianCpc*0.8)continue;
   const target=Math.round(budget*(1+limits.stepPercent/100));
   if(target<=budget)continue;
   if(actions.length>=limits.maxActions)continue;
+  const targetCents=accountKind===null?null:targets[accountKind];
+  if(targetCents!==null&&m.resultKind===accountKind&&m.results>=limits.resultMinResults&&
+     m.costPerResultCents!==null&&m.costPerResultCents<=targetCents){
+   add({action:'scale',entity:'adset',entityId:adsetId,
+    entityName:String(adset.name||'Conjunto').slice(0,100),campaignId:idOf(adset.campaign_id),
+    campaignName:campaign?.name?String(campaign.name).slice(0,100):null,
+    reason:'result_scale',currentBudgetCents:budget,targetBudgetCents:target,
+    explanation:'Este conjunto entrega '+RESULT_LABELS[accountKind].toLowerCase()+' a '+
+     money(m.costPerResultCents)+', dentro da sua meta de '+money(targetCents)+' ('+m.results+
+     ' resultado(s)). Vou subir o orçamento de '+money(budget)+' para '+money(target)+
+     ' por dia (+'+limits.stepPercent+'%), dentro do limite automático.',
+    evidence:{resultKind:accountKind,results:m.results,costPerResultCents:m.costPerResultCents,
+     targetResultCents:targetCents,currentBudgetCents:budget,targetBudgetCents:target,
+     impressions:m.impressions},
+    withinAutonomy:true,requiresApproval:false,priority:2});
+   continue;
+  }
+  if(medianCtr===null||m.ctr<medianCtr*limits.scaleCtrRatio)continue;
+  if(m.cpc!==null&&medianCpc!==null&&m.cpc>medianCpc*0.8)continue;
   add({action:'scale',entity:'adset',entityId:adsetId,
    entityName:String(adset.name||'Conjunto').slice(0,100),campaignId:idOf(adset.campaign_id),
    campaignName:campaign?.name?String(campaign.name).slice(0,100):null,
@@ -186,20 +279,37 @@ export function decideTrafficActions(input={}){
  const activeCampaigns=campaigns.filter(active).length;
  if(limits.allowDuplicate&&activeCampaigns>0&&activeCampaigns<limits.maxActiveCampaigns&&
     medianCtr!==null&&sampledCampaigns.length>0){
-  const best=[...sampledCampaigns]
+  const targetCents=accountKind===null?null:targets[accountKind];
+  const resultBest=targetCents===null?null:[...sampledCampaigns]
+   .filter(row=>row.resultKind===accountKind&&row.results>=limits.resultMinResults&&
+    row.costPerResultCents!==null&&row.costPerResultCents<=targetCents)
+   .sort((a,b)=>a.costPerResultCents-b.costPerResultCents||b.spend-a.spend)[0];
+  const ctrBest=[...sampledCampaigns]
    .filter(row=>row.ctr>=medianCtr*limits.duplicateCtrRatio)
    .sort((a,b)=>b.ctr-a.ctr||b.spend-a.spend)[0];
+  const best=resultBest&&campaigns.some(row=>idOf(row.id)===resultBest.id&&active(row))?resultBest:ctrBest;
   const campaign=best?campaigns.find(row=>idOf(row.id)===best.id&&active(row)):null;
   if(campaign){
+   const byResult=best===resultBest&&resultBest!==null;
    add({action:'duplicate_campaign',entity:'campaign',entityId:campaign.id,
     entityName:String(campaign.name||'Campanha').slice(0,100),campaignId:campaign.id,
     campaignName:String(campaign.name||'').slice(0,100)||null,
     reason:'winner_test',
-    explanation:'A campanha "'+String(campaign.name||'').slice(0,60)+'" tem '+
-     best.ctr.toFixed(2)+'% de cliques, acima da média. Vou duplicá-la PAUSADA para você testar '+
-     'outro criativo ou público sem mexer na que já funciona. A cópia não gasta até ser ativada.',
-    evidence:{ctrPercent:best.ctr,medianCtrPercent:medianCtr,spendCents:Math.round(best.spend*100),
-     activeCampaigns},
+    explanation:byResult
+     ? 'A campanha "'+String(campaign.name||'').slice(0,60)+'" entrega '+
+       RESULT_LABELS[accountKind].toLowerCase()+' a '+money(resultBest.costPerResultCents)+
+       ', dentro da sua meta de '+money(targetCents)+' ('+resultBest.results+' resultado(s)). '+
+       'Vou duplicá-la PAUSADA para você testar outro criativo ou público sem mexer na que já '+
+       'funciona. A cópia não gasta até ser ativada.'
+     : 'A campanha "'+String(campaign.name||'').slice(0,60)+'" tem '+
+       best.ctr.toFixed(2)+'% de cliques, acima da média. Vou duplicá-la PAUSADA para você testar '+
+       'outro criativo ou público sem mexer na que já funciona. A cópia não gasta até ser ativada.',
+    evidence:byResult
+     ? {resultKind:accountKind,results:resultBest.results,
+      costPerResultCents:resultBest.costPerResultCents,targetResultCents:targetCents,
+      spendCents:Math.round(resultBest.spend*100),activeCampaigns}
+     : {ctrPercent:best.ctr,medianCtrPercent:medianCtr,spendCents:Math.round(best.spend*100),
+      activeCampaigns},
     withinAutonomy:true,requiresApproval:false,priority:4});
   }
  }
@@ -212,10 +322,19 @@ export function decideTrafficActions(input={}){
  if(!sampledCampaigns.length)
   notes.push('Ainda não há amostra suficiente (mínimo '+limits.minImpressions+' impressões e '+
    limits.minClicks+' cliques) para mudar nada com segurança.');
+ if(accountKind!==null&&accountResults.events>0&&targets[accountKind]===null)
+  notes.push('Defina o custo máximo por resultado no canal do dono para eu comparar a campanha '+
+   'com o que ela precisa entregar, não só com os outros anúncios.');
  return {actions:proposed,notes,readOnly:true,limits,
   summary:{campaigns:campaigns.length,adsets:adsets.length,ads:ads.length,
    sampledCampaigns:sampledCampaigns.length,medianCpmCents:medianCpm===null?null:Math.round(medianCpm*100),
-   medianCtrPercent:medianCtr}};
+   medianCtrPercent:medianCtr,
+   resultKind:accountKind,
+   results:accountResults.events,
+   resultsSpendCents:accountResults.spendCents,
+   costPerResultCents:accountResults.costPerResultCents,
+   targetResultCents:accountKind===null?(explicitTarget??purchaseTarget):targets[accountKind],
+   killResultCents:accountKind===null?null:killFor(accountKind)}};
 }
 
 const planKind=action=>({pause:'status',scale:'budget',
@@ -243,6 +362,16 @@ export function formatTrafficReport(result,{max=5}={}){
  }else{
   for(const action of decisions.slice(0,Math.max(1,Math.min(10,max))))
    lines.push('• '+action.explanation);
+ }
+ const summary=result?.summary||{};
+ if(summary.targetResultCents){
+  const label=String(RESULT_LABELS[summary.resultKind]||'resultado').toLowerCase();
+  lines.push('',summary.costPerResultCents==null
+   ? 'Nenhum resultado registrado no período para comparar com a sua meta de '+
+     money(summary.targetResultCents)+' por '+label+'.'
+   : 'Custo por '+label+': '+money(summary.costPerResultCents)+' em '+summary.results+
+     ' resultado(s) no período (meta '+money(summary.targetResultCents)+
+     ', limite '+money(summary.killResultCents)+').');
  }
  if(executed.length)lines.push('',executed.length+' ajuste(s) aplicado(s) dentro do limite automático.');
  if(pending.length)lines.push('',pending.length+' mudança(s) precisam da sua autorização. Responda APROVAR para aplicar.');
@@ -305,6 +434,17 @@ export function trafficQuestion(action={}){
  const where=entity&&campaign&&entity!==campaign
   ?entity+' da campanha "'+campaign+'"'
   :entity||(campaign?'campanha "'+campaign+'"':'conta');
+ if(action.action==='pause'&&(action.reason==='ad_over_target'||action.reason==='ad_no_results')){
+  const evidence=action.evidence||{};
+  const label=(RESULT_LABELS[evidence.resultKind]||'resultado').toLowerCase();
+  const place=entity?'no '+where:'na conta';
+  if(action.reason==='ad_over_target')
+   return 'O custo por '+label+' '+place+' está em '+money(evidence.costPerResultCents)+
+    ', acima do seu limite de '+money(evidence.killResultCents)+' (meta '+
+    money(evidence.targetResultCents)+'). Posso pausá-lo?';
+  return 'Já gastamos '+money(evidence.spendCents)+' '+place+' sem nenhum resultado registrado, '+
+   'com meta de '+money(evidence.targetResultCents)+' por '+label+'. Posso pausá-lo?';
+ }
  if(action.action==='pause')
   return 'Estamos com baixa performance no '+where+'. Posso pausá-lo?';
  if(action.action==='scale'||action.action==='approval_request')
@@ -343,6 +483,19 @@ async function recentDuplicate(pool,tenantId,action,cooldownHours){
  return found.rowCount>0;
 }
 
+// Owner settings live in this table, but socio-owner-channel imports this
+// module, so the query is direct here to avoid a cycle. A missing table or
+// column degrades to "no target" and never stops the review.
+async function ownerResultTarget(pool,tenantId){
+ try{
+  const found=await pool.query(
+   'SELECT ticket_cents AS "ticketCents",margin_percent::float AS "marginPercent",'+
+   'target_result_cents AS "targetResultCents" FROM socio_owner_groups '+
+   'WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 1',[tenantId]);
+  return found.rows[0]||null;
+ }catch{return null;}
+}
+
 export async function runTrafficManager(pool,actor,options={}){
  const env=options.env||process.env;
  const read=options.read||readAdsTool;
@@ -362,11 +515,16 @@ export async function runTrafficManager(pool,actor,options={}){
  ]);
  const accountId=idOf(String(account?.id||'').replace(/^act_/,''));
  if(!accountId)throw Object.assign(new Error('Selecione a conta de anúncios Meta antes de otimizar o tráfego.'),{status:409});
+ const owner=await (options.ownerSettings||ownerResultTarget)(pool,actor.active_tenant_id);
+ const economics=computeAccountEconomics({ticketCents:owner?.ticketCents,
+  marginPercent:owner?.marginPercent});
  // Sócio asks before every change. Only an explicit alwaysAsk:false restores
  // silent execution inside the automatic envelope, and nothing calls it that way.
  const decision=decideTrafficActions({campaigns:campaigns.items,adsets:adsets.items,ads:ads.items,
   campaignInsights:campaignInsights.items,adsetInsights:adsetInsights.items,
-  adInsights:adInsights.items,limits,alwaysAsk:options.alwaysAsk!==false});
+  adInsights:adInsights.items,limits,alwaysAsk:options.alwaysAsk!==false,
+  targetResultCents:owner?.targetResultCents??null,
+  purchaseTargetCents:economics.valid?economics.targetCpaCents:null});
  const executed=[],pending=[],skipped=[];
  // A preview is a click and must answer immediately: no brain on this path.
  if(options.apply===false)return {accountId,period,decisions:decision.actions,notes:decision.notes,

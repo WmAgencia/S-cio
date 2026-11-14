@@ -147,6 +147,7 @@ const channelSelect=
  "g.ad_genders AS genders,g.whatsapp_destination AS \"destination\","+
  "g.last_video_id AS \"lastVideoId\",g.last_seen_at AS \"lastSeenAt\",g.created_at AS \"createdAt\","+
  "g.ticket_cents AS \"ticketCents\",g.margin_percent::float AS \"marginPercent\","+
+ "g.target_result_cents AS \"targetResultCents\","+
  "g.autopilot_enabled AS \"autopilotEnabled\","+
  "ch.phone AS \"channelPhone\" "+
  "FROM socio_owner_groups g JOIN channels ch ON ch.id=g.channel_id AND ch.tenant_id=g.tenant_id ";
@@ -218,6 +219,15 @@ export async function updateOwnerChannelSettings(pool,actor,data){
   const value=Number(data.marginPercent);
   if(!Number.isFinite(value)||value<=0||value>100)throw fail(422,'Margem de lucro inválida.');
   push('margin_percent',Math.round(value*100)/100);
+ }
+ if('targetResultCents' in data){
+  if(data.targetResultCents===null)push('target_result_cents',null);
+  else{
+   const value=Number(data.targetResultCents);
+   if(!Number.isInteger(value)||value<100||value>10000000)
+    throw fail(422,'Custo máximo por resultado inválido.');
+   push('target_result_cents',value);
+  }
  }
  if('autopilotEnabled' in data){
   if(typeof data.autopilotEnabled!=='boolean')throw fail(422,SETTINGS_ERROR);

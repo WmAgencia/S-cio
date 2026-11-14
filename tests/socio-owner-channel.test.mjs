@@ -288,16 +288,27 @@ test('Owner-channel settings are owner-only and strictly validated',async()=>{
  await assert.rejects(updateOwnerChannelSettings(pool(),owner,{ticketCents:50}),/venda/);
  await assert.rejects(updateOwnerChannelSettings(pool(),owner,{marginPercent:150}),/Margem/);
  await assert.rejects(updateOwnerChannelSettings(pool(),owner,{marginPercent:0}),/Margem/);
+ await assert.rejects(updateOwnerChannelSettings(pool(),owner,{targetResultCents:50}),/Custo máximo/);
+ await assert.rejects(updateOwnerChannelSettings(pool(),owner,{targetResultCents:10000001}),/Custo máximo/);
+ await assert.rejects(updateOwnerChannelSettings(pool(),owner,{targetResultCents:10.5}),/Custo máximo/);
  await assert.rejects(updateOwnerChannelSettings(pool(),owner,{autopilotEnabled:'sim'}),/Configuração/);
  await assert.rejects(updateOwnerChannelSettings(pool(),owner,{}),/Nada para atualizar/);
  const p=pool();
- await updateOwnerChannelSettings(p,owner,{destination:'55 11 98888-8888',genders:[1,2]});
+ await updateOwnerChannelSettings(p,owner,{destination:'55 11 98888-8888',genders:[1,2],
+  targetResultCents:300});
  const update=p.calls.find(c=>/^UPDATE socio_owner_groups SET/.test(c.sql));
  assert.match(update.sql,/whatsapp_destination=\$\d/);
  assert.match(update.sql,/ad_genders=\$\d/);
+ assert.match(update.sql,/target_result_cents=\$\d/);
  assert.ok(update.args.includes('5511988888888'));
  assert.ok(update.args.includes('{1,2}'));
+ assert.ok(update.args.includes(300));
  assert.equal(update.args[0],tenantId);
+ const cleared=pool();
+ await updateOwnerChannelSettings(cleared,owner,{targetResultCents:null});
+ const clearUpdate=cleared.calls.find(c=>/^UPDATE socio_owner_groups SET/.test(c.sql));
+ assert.match(clearUpdate.sql,/target_result_cents=\$\d/);
+ assert.equal(clearUpdate.args[1],null,'an empty field clears the target');
 });
 
 test('Ad copy falls back to catalog data without inventing prices',async()=>{
