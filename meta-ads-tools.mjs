@@ -123,8 +123,13 @@ export async function readAdsTool(pool,a,kind,input={},options={}){
   const keys={campaign:'campaign_id,campaign_name',
    adset:'campaign_id,campaign_name,adset_id,adset_name',
    ad:'campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name'}[level];
+  // An explicit window is what the self-evaluation needs: Meta accepts either
+  // date_preset or time_range, never both.
+  const day=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)?value:null;
+  const since=day(input.since),until=day(input.until);
+  const window=since&&until&&since<=until?{time_range:{since,until}}:{date_preset:datePreset};
   return listing(await graph(c,'/'+id+'/insights',{fields:keys+
-   ',impressions,reach,clicks,spend,ctr,cpc,cpm,actions',level,date_preset:datePreset,limit:100}));
+   ',impressions,reach,clicks,spend,ctr,cpc,cpm,actions',level,...window,limit:100}));
  }
  if(kind==='cities'){
   if(!text(input.query,100)||input.query.trim().length<2)throw fail(422,'Digite uma cidade.');

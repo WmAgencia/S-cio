@@ -1043,11 +1043,25 @@ CREATE TABLE IF NOT EXISTS socio_traffic_decisions (
  plan_id uuid,
  result jsonb,
  error_code text,
+ question text,
+ notified_at timestamptz,
+ responded_at timestamptz,
+ resolved_via text
+  CHECK (resolved_via IS NULL OR resolved_via IN ('system','whatsapp','whatsapp_amount')),
+ outcome text CHECK (outcome IS NULL OR outcome IN ('improved','worsened','neutral','unknown')),
+ outcome_kind text CHECK (outcome_kind IS NULL OR outcome_kind IN ('purchase','conversation','lead')),
+ cost_before_cents integer CHECK (cost_before_cents IS NULL OR cost_before_cents >= 0),
+ cost_after_cents integer CHECK (cost_after_cents IS NULL OR cost_after_cents >= 0),
+ outcome_evidence jsonb NOT NULL DEFAULT '{}'::jsonb,
+ evaluated_at timestamptz,
  created_at timestamptz NOT NULL DEFAULT now(),
  updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS socio_traffic_decisions_tenant_idx
  ON socio_traffic_decisions(tenant_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS socio_traffic_decisions_eval_idx
+ ON socio_traffic_decisions(tenant_id,account_id,updated_at)
+ WHERE evaluated_at IS NULL;
 CREATE INDEX IF NOT EXISTS socio_traffic_decisions_pending_idx
  ON socio_traffic_decisions(tenant_id,status)
  WHERE status IN ('awaiting_approval','executing');

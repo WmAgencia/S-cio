@@ -4,7 +4,8 @@ import {
  TRAFFIC_LIMITS,decideTrafficActions,budgetChangeDecision,formatTrafficReport,
  runTrafficManager,approveTrafficDecisions,listTrafficDecisions,
  trafficQuestion,resolveTrafficDecision,listPendingDecisions,markDecisionNotified,
- recordTrafficReview,reviewIsDue,decisionNotification
+ recordTrafficReview,reviewIsDue,decisionNotification,evaluationWindows,
+ classifyOutcome,trafficScorecard,evaluateTrafficDecisions
 } from '../socio-traffic-manager.mjs';
 import {broadenedTargeting} from '../meta-ads-tools.mjs';
 
@@ -605,4 +606,124 @@ test('The owner target saved in the channel reaches the review',async()=>{
  assert.match(result.report,/meta R\$\s3,00/);
  const lookup=pool.calls.find(c=>/FROM socio_owner_groups/.test(c.sql));
  assert.deepEqual(lookup.args,[tenantId]);
+});
+
+test('The evaluation windows are the seven days before and after the decision',()=>{
+ const windows=evaluationWindows('2026-11-10T18:30:00.000Z');
+ assert.deepEqual(windows,{before:{since:'2026-11-03',until:'2026-11-09'},
+  after:{since:'2026-11-10',until:'2026-11-16'}});
+ assert.equal(evaluationWindows('not-a-date'),null);
+});
+
+test('The outcome band only calls a real change an improvement',()=>{
+ assert.equal(classifyOutcome(400,340),'improved');
+ assert.equal(classifyOutcome(400,380),'neutral');
+ assert.equal(classifyOutcome(400,460),'worsened');
+ assert.equal(classifyOutcome(null,null),'unknown');
+ assert.equal(classifyOutcome(null,300),'improved','no cost before is the starting point');
+ assert.equal(classifyOutcome(300,null),'worsened','losing the result is a regression');
+});
+
+test('The scorecard phrases the track record the way the owner asked',()=>{
+ const items=[];
+ for(let i=0;i<12;i++)
+  items.push({action:'scale',outcome:i<9?'improved':'neutral',outcomeKind:'conversation'});
+ const score=trafficScorecard(items);
+ assert.equal(score.text,
+  'Das 12 vezes que aumentei orçamento, 9 melhoraram o custo por conversa iniciada.');
+ assert.deepEqual(score.groups,[{action:'scale',total:12,improved:9,kind:'conversation'}]);
+ assert.equal(trafficScorecard([{action:'pause',outcome:'improved',outcomeKind:'lead'}]).text,
+  'Na única vez que pausei anúncio, o custo por lead melhorou.');
+ assert.equal(trafficScorecard([{action:'scale',outcome:'neutral',outcomeKind:null}]).text,
+  'Na única vez que aumentei orçamento, o custo por resultado não melhorou.');
+ assert.equal(trafficScorecard([
+  {action:'scale',outcome:'improved',outcomeKind:'conversation'},
+  {action:'scale',outcome:'worsened',outcomeKind:'purchase'}]).text,
+  'Das 2 vezes que aumentei orçamento, 1 melhorou o custo por resultado.');
+ assert.equal(trafficScorecard([{action:'scale',outcome:'unknown',outcomeKind:'conversation'}]).text,'');
+ assert.equal(trafficScorecard([]).text,'');
+});
+
+test('A seven-day-old budget decision is measured and recorded',async()=>{
+ const id='33333333-3333-4333-8333-333333333333';
+ const pool=stubPool(sql=>{
+  if(/FROM socio_traffic_decisions/.test(sql)&&/evaluated_at IS NULL/.test(sql))
+   return {rowCount:1,rows:[{id,action:'scale',entity:'adset',entityId:'2001',
+    campaignId:'1001',evidence:{resultKind:'conversation'},
+    completedAt:'2026-11-01T12:00:00.000Z'}]};
+  return null;
+ });
+ const read=async(p,a,kind,query)=>{
+  if(kind!=='insights')return {items:[]};
+  return {items:[{campaign_id:'1001',impressions:'1000',clicks:'20',
+   spend:query.since==='2026-10-25'?'10':'6',actions:[conversation(2)]}]};
+ };
+ const result=await evaluateTrafficDecisions(pool,actor,{accountId:'act_1234567890',read,env,
+  now:new Date('2026-11-10T12:00:00.000Z')});
+ assert.equal(result.evaluated.length,1);
+ assert.equal(result.evaluated[0].outcome,'improved');
+ assert.equal(result.evaluated[0].costBeforeCents,500);
+ assert.equal(result.evaluated[0].costAfterCents,300);
+ const update=pool.calls.find(c=>/UPDATE socio_traffic_decisions/.test(c.sql));
+ assert.ok(update);
+ assert.equal(update.args[1],id);
+ assert.equal(update.args[2],'improved');
+ assert.equal(update.args[3],'conversation');
+ assert.equal(update.args[4],500);
+ assert.equal(update.args[5],300);
+});
+
+test('A decision younger than seven days waits for the next review',async()=>{
+ const pool=stubPool(sql=>/FROM socio_traffic_decisions/.test(sql)
+  ?{rowCount:1,rows:[{id:'55555555-5555-4555-8555-555555555555',action:'pause',entity:'ad',
+    entityId:'3001',campaignId:'1001',evidence:{},
+    completedAt:'2026-11-05T12:00:00.000Z'}]}:null);
+ let reads=0;
+ const read=async()=>{reads++;return {items:[]};};
+ const result=await evaluateTrafficDecisions(pool,actor,{accountId:'act_1234567890',read,env,
+  now:new Date('2026-11-10T12:00:00.000Z')});
+ assert.deepEqual(result.evaluated,[]);
+ assert.equal(result.skipped,1);
+ assert.equal(reads,0);
+ assert.equal(pool.calls.filter(c=>/UPDATE/.test(c.sql)).length,0);
+});
+
+test('A duplicated campaign leaves the queue without a cost verdict',async()=>{
+ const pool=stubPool(sql=>/FROM socio_traffic_decisions/.test(sql)
+  ?{rowCount:1,rows:[{id:'44444444-4444-4444-8444-444444444444',
+    action:'duplicate_campaign',entity:'campaign',entityId:'1001',campaignId:'1001',
+    evidence:{},completedAt:'2026-11-01T12:00:00.000Z'}]}:null);
+ const read=async()=>{throw new Error('must not read Meta');};
+ const result=await evaluateTrafficDecisions(pool,actor,{accountId:'act_1234567890',read,env,
+  now:new Date('2026-11-10T12:00:00.000Z')});
+ assert.equal(result.evaluated[0].outcome,'unknown');
+ const update=pool.calls.find(c=>/UPDATE/.test(c.sql));
+ assert.equal(update.args[2],'unknown');
+});
+
+test('The report carries the measured track record to the owner',()=>{
+ const report=formatTrafficReport({decisions:[],notes:[],
+  scorecard:{text:'Das 12 vezes que aumentei orçamento, 9 melhoraram o custo por conversa iniciada.'}});
+ assert.match(report,
+  /Das 12 vezes que aumentei orçamento, 9 melhoraram o custo por conversa iniciada\./);
+});
+
+test('The preview shows the track record without evaluating anything',async()=>{
+ const pool=stubPool(sql=>{
+  if(/FROM socio_traffic_decisions/.test(sql)&&/evaluated_at IS NOT NULL/.test(sql))
+   return {rowCount:1,rows:[{action:'scale',outcome:'improved',outcomeKind:'conversation'}]};
+  return null;
+ });
+ const read=async(p,a,kind)=>{
+  if(kind==='campaigns')return {items:[campaign('1001')]};
+  if(kind==='adsets')return {items:[adset('2001','1001')]};
+  if(kind==='ads')return {items:[ad('3001','2001','1001')]};
+  return {items:[]};
+ };
+ const result=await runTrafficManager(pool,actor,{env,apply:false,read,
+  resolve:async()=>({id:'act_1234567890'})});
+ assert.equal(result.scorecard.text,
+  'Na única vez que aumentei orçamento, o custo por conversa iniciada melhorou.');
+ assert.match(result.report,/Na única vez que aumentei orçamento/);
+ assert.equal(pool.calls.filter(c=>/\b(INSERT|UPDATE|DELETE)\b/i.test(c.sql)).length,0);
 });

@@ -377,8 +377,172 @@ export function formatTrafficReport(result,{max=5}={}){
  if(pending.length)lines.push('',pending.length+' mudança(s) precisam da sua autorização. Responda APROVAR para aplicar.');
  if(skipped.length)lines.push('',skipped.length+' ação(ões) já feita(s) nas últimas '+
   (result?.limits?.cooldownHours||TRAFFIC_LIMITS.cooldownHours)+' horas; não repeti.');
+ // The scorecard closes the loop: it says, in the owner's words, whether the
+ // changes actually improved the cost per result.
+ const scorecard=typeof result?.scorecard?.text==='string'?result.scorecard.text.trim():'';
+ if(scorecard)lines.push('',scorecard);
  lines.push('','Só altero o que as métricas da Meta mostram. Cliques não comprovam vendas no WhatsApp.');
  return lines.join('\n').slice(0,2800);
+}
+
+const RESULT_KINDS=new Set(['purchase','conversation','lead']);
+const MEASURABLE_ACTIONS=new Set(['scale','pause']);
+const SCORECARD_ORDER=Object.freeze(['scale','pause','broaden_audience','duplicate_campaign']);
+const ACTION_PHRASE=Object.freeze({scale:'aumentei orçamento',pause:'pausei anúncio',
+ broaden_audience:'ampliei o público',duplicate_campaign:'dupliquei campanha'});
+
+const dayKey=date=>date.toISOString().slice(0,10);
+const shiftDay=(day,delta)=>{
+ const date=new Date(day+'T00:00:00.000Z');
+ date.setUTCDate(date.getUTCDate()+delta);
+ return dayKey(date);
+};
+
+// The seven days before the decision, and the seven days after it. Both are
+// only complete once the decision is seven days old.
+export function evaluationWindows(at,{days=7}={}){
+ const date=at instanceof Date?at:new Date(at);
+ if(Number.isNaN(date.getTime()))return null;
+ const size=Math.max(1,Math.min(30,Number(days)||7));
+ const day=dayKey(date);
+ return {before:{since:shiftDay(day,-size),until:shiftDay(day,-1)},
+  after:{since:day,until:shiftDay(day,size-1)}};
+}
+
+// A ten percent band keeps normal noise from being sold as an improvement.
+export function classifyOutcome(beforeCents,afterCents,{band=0.1}={}){
+ const before=Number.isFinite(beforeCents)?beforeCents:null;
+ const after=Number.isFinite(afterCents)?afterCents:null;
+ if(before===null&&after===null)return 'unknown';
+ // No measurable cost means no result: before it is the starting point,
+ // after it is the regression to report.
+ if(before===null)return 'improved';
+ if(after===null)return 'worsened';
+ if(after<before*(1-band))return 'improved';
+ if(after>before*(1+band))return 'worsened';
+ return 'neutral';
+}
+
+export function trafficScorecard(items=[]){
+ const rows=Array.isArray(items)?items:[];
+ const groups=[];
+ for(const action of SCORECARD_ORDER){
+  const measured=rows.filter(item=>item&&item.action===action&&
+   ['improved','worsened','neutral'].includes(item.outcome));
+  if(!measured.length)continue;
+  const kinds=new Set(measured.map(item=>item.outcomeKind).filter(kind=>RESULT_KINDS.has(kind)));
+  groups.push({action,total:measured.length,
+   improved:measured.filter(item=>item.outcome==='improved').length,
+   kind:kinds.size===1?[...kinds][0]:null});
+ }
+ const sentences=groups.map(group=>{
+  const noun='custo por '+(group.kind?RESULT_LABELS[group.kind].toLowerCase():'resultado');
+  const phrase=ACTION_PHRASE[group.action];
+  if(group.total===1)
+   return 'Na única vez que '+phrase+', o '+noun+
+    (group.improved?' melhorou.':' não melhorou.');
+  const improved=group.improved===0?'nenhuma melhorou'
+   :group.improved===1?'1 melhorou':group.improved+' melhoraram';
+  return 'Das '+group.total+' vezes que '+phrase+', '+improved+' o '+noun+'.';
+ });
+ return {text:sentences.join(' '),groups};
+}
+
+const insightTotals=rows=>{
+ const totals={impressions:0,clicks:0,spendCents:0,purchase:0,conversation:0,lead:0};
+ for(const row of (Array.isArray(rows)?rows:[]).slice(0,500)){
+  const impressions=int(row?.impressions),clicks=int(row?.clicks),spend=num(row?.spend);
+  if(impressions===null||clicks===null||spend===null)continue;
+  const counts=resultCounts(row);
+  totals.impressions+=impressions;totals.clicks+=clicks;
+  totals.spendCents+=Math.round(spend*100);
+  totals.purchase+=counts.purchase;totals.conversation+=counts.conversation;
+  totals.lead+=counts.lead;
+ }
+ return totals;
+};
+const campaignRows=(result,id)=>(Array.isArray(result?.items)?result.items:[])
+ .filter(row=>idOf(row?.campaign_id)===id||idOf(row?.campaignId)===id);
+
+async function markEvaluated(pool,tenantId,id,{outcome,kind=null,
+ costBeforeCents=null,costAfterCents=null,evidence={}}){
+ await pool.query('UPDATE socio_traffic_decisions SET outcome=$3,outcome_kind=$4,'+
+  'cost_before_cents=$5,cost_after_cents=$6,outcome_evidence=$7,evaluated_at=now() '+
+  'WHERE tenant_id=$1 AND id=$2 AND evaluated_at IS NULL',
+  [tenantId,id,outcome,kind,costBeforeCents,costAfterCents,JSON.stringify(evidence)]);
+}
+
+// Seven days after a decision was applied, measure the cost per result in the
+// window before it and in the window after it. A failure leaves the row
+// unevaluated so the next review retries instead of losing the measurement.
+export async function evaluateTrafficDecisions(pool,actor,{accountId,
+ read=readAdsTool,env=process.env,limit=5,days=7,now=new Date(),band=0.1}={}){
+ const account='act_'+String(accountId||'').replace(/^act_/,'');
+ if(!/^act_[0-9]{4,30}$/.test(account))return {evaluated:[],skipped:0};
+ const safe=Math.max(1,Math.min(20,Number(limit)||5));
+ const due=await pool.query('SELECT id,action,entity,entity_id AS "entityId",'+
+  'campaign_id AS "campaignId",evidence,updated_at AS "completedAt" FROM socio_traffic_decisions '+
+  "WHERE tenant_id=$1 AND account_id=$2 AND status='done' AND evaluated_at IS NULL "+
+  "AND action IN ('pause','scale','duplicate_campaign','broaden_audience') "+
+  'ORDER BY updated_at ASC LIMIT $3',[actor.active_tenant_id,account,safe]);
+ const evaluated=[];
+ let skipped=0;
+ for(const row of due.rows||[]){
+  const at=new Date(row.completedAt);
+  if(Number.isNaN(at.getTime())||at.getTime()>now.getTime()-days*86400000){
+   skipped++;
+   continue;
+  }
+  const windows=evaluationWindows(at,{days});
+  try{
+   if(!MEASURABLE_ACTIONS.has(String(row.action))){
+    await markEvaluated(pool,actor.active_tenant_id,row.id,
+     {outcome:'unknown',evidence:{reason:'not_measurable'}});
+    evaluated.push({id:row.id,action:row.action,outcome:'unknown'});
+    continue;
+   }
+   const campaignId=idOf(row.campaignId)||(row.entity==='campaign'?idOf(row.entityId):null);
+   if(!campaignId){
+    await markEvaluated(pool,actor.active_tenant_id,row.id,
+     {outcome:'unknown',evidence:{reason:'no_campaign'}});
+    evaluated.push({id:row.id,action:row.action,outcome:'unknown'});
+    continue;
+   }
+   const [beforeResult,afterResult]=await Promise.all([
+    read(pool,actor,'insights',{level:'campaign',since:windows.before.since,
+     until:windows.before.until},{env}),
+    read(pool,actor,'insights',{level:'campaign',since:windows.after.since,
+     until:windows.after.until},{env})
+   ]);
+   const before=insightTotals(campaignRows(beforeResult,campaignId));
+   const after=insightTotals(campaignRows(afterResult,campaignId));
+   let kind=String(row.evidence?.resultKind||'');
+   if(!RESULT_KINDS.has(kind))kind=pickResultKind(before)||pickResultKind(after)||'conversation';
+   const eventsOf=total=>kind==='purchase'?total.purchase:kind==='lead'?total.lead:total.conversation;
+   const costBeforeCents=costPerResultCents(before.spendCents,eventsOf(before));
+   const costAfterCents=costPerResultCents(after.spendCents,eventsOf(after));
+   const outcome=classifyOutcome(costBeforeCents,costAfterCents,{band});
+   await markEvaluated(pool,actor.active_tenant_id,row.id,{outcome,kind,
+    costBeforeCents,costAfterCents,
+    evidence:{windows,spendBeforeCents:before.spendCents,spendAfterCents:after.spendCents,
+     resultsBefore:eventsOf(before),resultsAfter:eventsOf(after)}});
+   evaluated.push({id:row.id,action:row.action,outcome,kind,costBeforeCents,costAfterCents});
+  }catch{skipped++;}
+ }
+ return {evaluated,skipped};
+}
+
+// The owner-facing sentence, read from everything already measured. Preview
+// and report both use it, so the same numbers appear in both surfaces.
+export async function decisionScorecard(pool,tenantId,{limit=100}={}){
+ const safe=Math.max(1,Math.min(300,Number(limit)||100));
+ try{
+  const rows=await pool.query('SELECT action,outcome,outcome_kind AS "outcomeKind" '+
+   'FROM socio_traffic_decisions WHERE tenant_id=$1 AND evaluated_at IS NOT NULL '+
+   "AND outcome IN ('improved','worsened','neutral') "+
+   'ORDER BY evaluated_at DESC LIMIT $2',[tenantId,safe]);
+  return trafficScorecard(rows.rows);
+ }catch{return {text:'',groups:[]};}
 }
 
 const diagnosisInstructions=[
@@ -424,7 +588,9 @@ const decisionColumns='id,action,entity,entity_id AS "entityId",entity_name AS "
  'campaign_id AS "campaignId",reason,explanation,evidence,within_autonomy AS "withinAutonomy",'+
  'status,current_budget_cents AS "currentBudgetCents",target_budget_cents AS "targetBudgetCents",'+
  'question,notified_at AS "notifiedAt",responded_at AS "respondedAt",resolved_via AS "resolvedVia",'+
- 'created_at AS "createdAt"';
+ 'outcome,outcome_kind AS "outcomeKind",cost_before_cents AS "costBeforeCents",'+
+ 'cost_after_cents AS "costAfterCents",outcome_evidence AS "outcomeEvidence",'+
+ 'evaluated_at AS "evaluatedAt",created_at AS "createdAt"';
 
 // The exact question the owner sees. It names the ad and the campaign and, for
 // a budget change, both amounts, so the answer needs no extra context.
@@ -526,10 +692,15 @@ export async function runTrafficManager(pool,actor,options={}){
   targetResultCents:owner?.targetResultCents??null,
   purchaseTargetCents:economics.valid?economics.targetCpaCents:null});
  const executed=[],pending=[],skipped=[];
- // A preview is a click and must answer immediately: no brain on this path.
- if(options.apply===false)return {accountId,period,decisions:decision.actions,notes:decision.notes,
-  summary:decision.summary,executed,pending,skipped,limits,diagnosis:null,
-  report:formatTrafficReport({...decision,executed,pending,skipped,limits})};
+ // A preview is a click and must answer immediately: no brain and no sweep on
+ // this path, but the scorecard is a read and can come along.
+ if(options.apply===false){
+  let scorecard={text:'',groups:[]};
+  try{scorecard=await (options.scorecard||decisionScorecard)(pool,actor.active_tenant_id);}catch{}
+  return {accountId,period,decisions:decision.actions,notes:decision.notes,
+   summary:decision.summary,executed,pending,skipped,limits,diagnosis:null,scorecard,
+   report:formatTrafficReport({...decision,executed,pending,skipped,limits,scorecard})};
+ }
  if(!decision.actions.length){
   await recordDecision(pool,actor.active_tenant_id,'act_'+accountId,{
    action:'hold',entity:'campaign',entityId:accountId,reason:'no_action',
@@ -561,13 +732,19 @@ export async function runTrafficManager(pool,actor,options={}){
    skipped.push({...action,error:String(error?.message||'Falha ao aplicar').slice(0,200)});
   }
  }
+ // Close the loop on older decisions before speaking, so the report the owner
+ // receives already carries the measured track record.
+ try{await (options.evaluate||evaluateTrafficDecisions)(pool,actor,
+  {accountId:'act_'+accountId,read,env});}catch{}
+ let scorecard={text:'',groups:[]};
+ try{scorecard=await (options.scorecard||decisionScorecard)(pool,actor.active_tenant_id);}catch{}
  // The brain speaks last, after everything the rules allowed has run, so its
  // reading can never change an action or a budget.
  const diagnosis=await (options.diagnose||trafficDiagnosis)(
   {...decision,executed,pending,skipped,limits},{env});
  return {accountId,period,decisions:decision.actions,notes:decision.notes,summary:decision.summary,
-  executed,pending,skipped,limits,diagnosis,
-  report:formatTrafficReport({...decision,executed,pending,skipped,limits,diagnosis})};
+  executed,pending,skipped,limits,diagnosis,scorecard,
+  report:formatTrafficReport({...decision,executed,pending,skipped,limits,diagnosis,scorecard})};
 }
 
 // Owner said APROVAR: apply the requests that were held back.
