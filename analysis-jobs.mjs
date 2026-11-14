@@ -2,6 +2,7 @@
 // This does not claim to measure sales or scan WA-AKG messages.
 import {randomUUID} from 'node:crypto';
 import {groqKnowledgeDraft} from './groq-client.mjs';
+import {brainResponse,brainReady} from './ai-brain.mjs';
 const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 export function inspectTrainingSource(input){
  const lines=String(input||'').split('\n').filter(x=>/^- Pessoa \d+:/.test(x)).slice(0,120);
@@ -77,9 +78,9 @@ export async function processNextAnalysisJob(pool){
   }
   const rows=await c.query('SELECT findings FROM training_job_items WHERE job_id=$1 AND tenant_id=$2 AND processed=true ORDER BY import_id',[job.id,job.tenant_id]);
   const base=compileTrainingKnowledge(rows.rows.map(x=>x.findings));
-  // Only de-identified aggregate signals go to Groq. Failure preserves the
-  // deterministic source; no Groq result is ever claimed if the key is absent.
-  const enhanced=await groqKnowledgeDraft(base);
+  // Only de-identified aggregate signals leave the server. Failure preserves the
+  // deterministic source; no model is ever credited when it did not answer.
+  const enhanced=await groqKnowledgeDraft({...base,respond:brainResponse,ready:brainReady});
   const markdown=enhanced.markdown;
   const report={...base.report,analysisProvider:enhanced.provider};
 

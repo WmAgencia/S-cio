@@ -1,21 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {randomBytes,createHmac} from 'node:crypto';
-import {Client} from 'pg';
+import {createHmac} from 'node:crypto';
+import {createTestDatabase} from './helpers/test-database.mjs';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
 test('HTTP Instagram: one-use OAuth launch, signed webhook, role/CSRF and opt-in only',
  {skip:!process.env.DATABASE_URL,timeout:65000},async t=>{
- const dbName='socio_instagram_http_test_'+randomBytes(5).toString('hex');
- const url=new URL(process.env.DATABASE_URL);url.pathname='/'+dbName;
- const admin=new Client({connectionString:process.env.DATABASE_URL});
- await admin.connect();
- await admin.query('CREATE DATABASE '+dbName);
- t.after(async()=>{
-  await admin.query('DROP DATABASE IF EXISTS '+dbName+' WITH (FORCE)').catch(()=>{});
-  await admin.end();
- });
+ const {url,drop}=await createTestDatabase('socio_instagram_http_test_');
  const port=32000+Math.floor(Math.random()*18000),setupToken='fixture-setup-token-unique-2026-very-long';
  const secret='fixture-instagram-app-secret-no-production';
  const instance=spawn(process.execPath,['server.mjs'],{
@@ -29,7 +21,11 @@ test('HTTP Instagram: one-use OAuth launch, signed webhook, role/CSRF and opt-in
   stdio:['ignore','pipe','pipe']
  });
  let logs='';instance.stderr.on('data',x=>{logs+=x.toString();logs=logs.slice(-300)});
- t.after(()=>instance.kill('SIGTERM'));
+ t.after(async()=>{
+  instance.kill('SIGTERM');
+  await new Promise(done=>{if(instance.exitCode!==null)done();else{instance.once('exit',done);setTimeout(done,2000).unref();}});
+  await drop();
+ });
  const base='http://127.0.0.1:'+port;
  let ready=false;
  for(let i=0;i<100;i++){

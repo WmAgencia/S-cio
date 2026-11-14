@@ -4,9 +4,15 @@ import {randomBytes,randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {Client} from 'pg';
 import {TABLES,migrate} from '../scripts/socio-supabase-migrate.mjs';
+const dbHost=(()=>{try{return process.env.DATABASE_URL?new URL(process.env.DATABASE_URL).hostname:''}catch{return ''}})();
+// The tool deliberately refuses a Supabase source, so this rehearsal needs a
+// local PostgreSQL instance to copy out of.
+const skip=!process.env.DATABASE_URL?'DATABASE_URL is not set'
+ :/(^|\.)supabase\.co$|(^|\.)pooler\.supabase\.com$/.test(dbHost)
+  ?'Needs a local PostgreSQL source: the migration tool refuses a Supabase source on purpose':false;
 
 test('all-table migration: read-only preflight, exact copies, fingerprints, and refusal of occupied targets',
- {skip:!process.env.DATABASE_URL,timeout:120000},async t=>{
+ {skip,timeout:120000},async t=>{
  const sourceName='socio_migration_source_test_'+randomBytes(5).toString('hex');
  const targetName='socio_migration_target_test_'+randomBytes(5).toString('hex');
  const sourceUrl=new URL(process.env.DATABASE_URL),targetUrl=new URL(process.env.DATABASE_URL);

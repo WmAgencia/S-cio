@@ -2,15 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
-import {Client} from 'pg';
+import {createTestDatabase} from './helpers/test-database.mjs';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
 test('marketing HTTP: Meta-only UI and OAuth; retired Google routes cannot reconnect or ingest',
  {skip:!process.env.DATABASE_URL,timeout:65000},async t=>{
- const name='socio_marketing_http_test_'+randomBytes(5).toString('hex');
- const url=new URL(process.env.DATABASE_URL);url.pathname='/'+name;
- const admin=new Client({connectionString:process.env.DATABASE_URL});
- await admin.connect();await admin.query('CREATE DATABASE '+name);
+ const {url,drop}=await createTestDatabase('socio_marketing_http_test_');
  const port=35000+Math.floor(Math.random()*18000);
  const app=spawn(process.execPath,['server.mjs'],{
   env:{...process.env,DATABASE_URL:url.href,PORT:String(port),NODE_ENV:'test',
@@ -25,8 +22,7 @@ test('marketing HTTP: Meta-only UI and OAuth; retired Google routes cannot recon
   app.kill('SIGTERM');
   await new Promise(done=>{if(app.exitCode!==null)done();else{
    app.once('exit',done);setTimeout(done,2000).unref();}});
-  await admin.query('DROP DATABASE IF EXISTS '+name+' WITH (FORCE)').catch(()=>{});
-  await admin.end();
+  await drop();
  });
  const base='http://127.0.0.1:'+port;
  let live=false,stderr='';

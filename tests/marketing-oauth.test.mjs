@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,randomBytes} from 'node:crypto';
-import {Pool,Client} from 'pg';
-import {readFile} from 'node:fs/promises';
+import {Pool} from 'pg';
+import {createTestDatabase} from './helpers/test-database.mjs';
 import {
  startPipeboardOAuth,finishPipeboardOAuth,listPipeboardOAuth,revokePipeboardOAuth,
  oauthClientMetadata
@@ -94,18 +94,12 @@ test('OAuth provider redirects are allowlisted and secrets are never in URLs',as
 
 test('disposable Postgres Meta-only OAuth: tenant ownership, one-use state, encrypted tokens and revoke',
  {skip:!process.env.DATABASE_URL,timeout:100000},async t=>{
- const name='socio_oauth_test_'+randomBytes(6).toString('hex');
- const target=new URL(process.env.DATABASE_URL);target.pathname='/'+name;
- const admin=new Client({connectionString:process.env.DATABASE_URL});
- await admin.connect();await admin.query('CREATE DATABASE '+name);
- const pool=new Pool({connectionString:target.href});
+ const {url:dbUrl,drop}=await createTestDatabase('socio_oauth_test_',{schema:'public'});
+ const pool=new Pool({connectionString:dbUrl.href});
  t.after(async()=>{
   await pool.end().catch(()=>{});
-  // Close clients gracefully before removing the disposable database.
-  await admin.query('DROP DATABASE IF EXISTS '+name);
-  await admin.end();
+  await drop();
  });
- await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
  const tenantA=randomUUID(),tenantB=randomUUID(),ownerA=randomUUID(),ownerB=randomUUID();
  await pool.query("INSERT INTO tenants(id,name,slug) VALUES($1,'Empresa A','oauth-a'),($2,'Empresa B','oauth-b')",
   [tenantA,tenantB]);
@@ -157,18 +151,12 @@ test('disposable Postgres Meta-only OAuth: tenant ownership, one-use state, encr
 
 test('Instagram managed SSO: tenant profile, encrypted keys, authorized URL, status and logout',
  {skip:!process.env.DATABASE_URL,timeout:80000},async t=>{
- const name='socio_ig_sso_test_'+randomBytes(6).toString('hex');
- const target=new URL(process.env.DATABASE_URL);target.pathname='/'+name;
- const admin=new Client({connectionString:process.env.DATABASE_URL});
- await admin.connect();await admin.query('CREATE DATABASE '+name);
- const pool=new Pool({connectionString:target.href});
+ const {url:dbUrl,drop}=await createTestDatabase('socio_ig_sso_test_',{schema:'public'});
+ const pool=new Pool({connectionString:dbUrl.href});
  t.after(async()=>{
   await pool.end().catch(()=>{});
-  // Close clients gracefully before removing the disposable database.
-  await admin.query('DROP DATABASE IF EXISTS '+name);
-  await admin.end();
+  await drop();
  });
- await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
  const tenant=randomUUID(),user=randomUUID(),bTenant=randomUUID(),bUser=randomUUID();
  await pool.query("INSERT INTO tenants(id,name,slug) VALUES($1,'Empresa A','ig-sso-a'),($2,'Empresa B','ig-sso-b')",[tenant,bTenant]);
  await pool.query("INSERT INTO users(id,tenant_id,name,email,password_hash,role) VALUES "+

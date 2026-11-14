@@ -9,6 +9,7 @@
 import {randomUUID} from 'node:crypto';
 import {readAdsTool,prepareAdsPlan,executeAdsPlan,broadenedTargeting} from './meta-ads-tools.mjs';
 import {resolveSelectedOfficialAccount} from './meta-official.mjs';
+import {brainResponse,brainReady} from './ai-brain.mjs';
 
 export const TRAFFIC_LIMITS=Object.freeze({
  stepPercent:20,
@@ -229,6 +230,10 @@ const planInput=action=>{
 
 export function formatTrafficReport(result,{max=5}={}){
  const lines=['Tráfego Meta Ads (últimos 7 dias):'];
+ // The brain's reading comes first so the owner reads the why before the list.
+ const diagnosis=(typeof result?.diagnosis==='string'?result.diagnosis
+  :String(result?.diagnosis?.text||'')).trim();
+ if(diagnosis)lines.push('',diagnosis.slice(0,600));
  const executed=Array.isArray(result?.executed)?result.executed:[];
  const pending=Array.isArray(result?.pending)?result.pending:[];
  const skipped=Array.isArray(result?.skipped)?result.skipped:[];
@@ -245,6 +250,45 @@ export function formatTrafficReport(result,{max=5}={}){
   (result?.limits?.cooldownHours||TRAFFIC_LIMITS.cooldownHours)+' horas; não repeti.');
  lines.push('','Só altero o que as métricas da Meta mostram. Cliques não comprovam vendas no WhatsApp.');
  return lines.join('\n').slice(0,2800);
+}
+
+const diagnosisInstructions=[
+ 'Você é gestor de tráfego pago sênior e fala com o dono de uma pequena empresa brasileira.',
+ 'Recebe o retrato de uma conta Meta Ads: resumo das regras, ações propostas ou já feitas, evidências numéricas, orçamentos em centavos e o que foi executado.',
+ 'Escreva a leitura da conta em 4 a 6 linhas curtas, em português do Brasil, tom direto e profissional, sem emoji e sem jargão.',
+ 'Diga, nesta ordem: o que está acontecendo; o que priorizar agora; o que observar nos próximos dias.',
+ 'REGRAS INVIOLÁVEIS: os números e valores recebidos são a única fonte de verdade. Não invente métrica, valor, prazo, resultado, percentual nem promessa de desempenho.',
+ 'Não sugira mudar orçamento para um valor diferente do que está no retrato; as regras já calcularam esses valores e a decisão é do dono.',
+ 'Nunca diga que uma venda aconteceu: cliques e conversas iniciadas não comprovam vendas no WhatsApp.',
+ 'Responda apenas com o texto da leitura, sem título, sem markdown, sem saudação.'
+].join('\n');
+// Reads the account after the rules have decided and explained what happened.
+// It is context for the owner, never a decision: a failed or empty answer is
+// null and the report goes out exactly as it would without the brain.
+export async function trafficDiagnosis(decision,{env=process.env,fetchImpl=fetch}={}){
+ if(!brainReady(env))return null;
+ const actions=Array.isArray(decision?.actions)?decision.actions:[];
+ const input=JSON.stringify({
+  periodoDias:7,
+  resumo:decision?.summary||null,
+  notas:(decision?.notes||[]).slice(0,4),
+  acoes:actions.slice(0,6).map(a=>({tipo:a.action,item:a.entityName||null,
+   campanha:a.campaignName||null,precisaAutonomia:a.requiresApproval===true,
+   motivo:a.reason,evidencias:a.evidence||null,
+   orcamentoAtualCentavos:a.currentBudgetCents??null,
+   orcamentoAlvoCentavos:a.targetBudgetCents??null})),
+  aplicadas:(decision?.executed||[]).length,
+  aguardandoAutorizacao:(decision?.pending||[]).length,
+  ignoradas:(decision?.skipped||[]).length,
+  limiteAutonomia:decision?.limits||null
+ });
+ try{
+  const result=await brainResponse({env,fetchImpl,effort:'high',maxOutputTokens:520,
+   instructions:diagnosisInstructions,input});
+  const text=String(result.reply||'').replace(/^```[a-z]*\n?|```$/g,'').trim();
+  if(text.length<40)return null;
+  return {text:text.slice(0,900),provider:result.provider||'groq',model:result.model||null};
+ }catch{return null;}
 }
 
 const decisionColumns='id,action,entity,entity_id AS "entityId",entity_name AS "entityName",'+
@@ -324,8 +368,9 @@ export async function runTrafficManager(pool,actor,options={}){
   campaignInsights:campaignInsights.items,adsetInsights:adsetInsights.items,
   adInsights:adInsights.items,limits,alwaysAsk:options.alwaysAsk!==false});
  const executed=[],pending=[],skipped=[];
+ // A preview is a click and must answer immediately: no brain on this path.
  if(options.apply===false)return {accountId,period,decisions:decision.actions,notes:decision.notes,
-  summary:decision.summary,executed,pending,skipped,limits,
+  summary:decision.summary,executed,pending,skipped,limits,diagnosis:null,
   report:formatTrafficReport({...decision,executed,pending,skipped,limits})};
  if(!decision.actions.length){
   await recordDecision(pool,actor.active_tenant_id,'act_'+accountId,{
@@ -358,9 +403,13 @@ export async function runTrafficManager(pool,actor,options={}){
    skipped.push({...action,error:String(error?.message||'Falha ao aplicar').slice(0,200)});
   }
  }
+ // The brain speaks last, after everything the rules allowed has run, so its
+ // reading can never change an action or a budget.
+ const diagnosis=await (options.diagnose||trafficDiagnosis)(
+  {...decision,executed,pending,skipped,limits},{env});
  return {accountId,period,decisions:decision.actions,notes:decision.notes,summary:decision.summary,
-  executed,pending,skipped,limits,
-  report:formatTrafficReport({...decision,executed,pending,skipped,limits})};
+  executed,pending,skipped,limits,diagnosis,
+  report:formatTrafficReport({...decision,executed,pending,skipped,limits,diagnosis})};
 }
 
 // Owner said APROVAR: apply the requests that were held back.

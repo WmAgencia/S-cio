@@ -1157,9 +1157,10 @@ async function agent(){
   view.insertAdjacentHTML('beforeend',
    '<section class="card card-pad socio-ops-panel">'+
    '<div class="socio-clean-head"><div><h2>Verificação operacional</h2>'+
-   '<p class="form-note">Veja o que está configurado e teste o Groq sem enviar mensagens aos clientes.</p></div></div>'+
+   '<p class="form-note">Veja o que está configurado e teste o Groq e o cérebro de campanha sem enviar mensagens aos clientes.</p></div></div>'+
    '<div class="socio-ops-actions"><button type="button" class="btn soft" id="checkSocioOps">Verificar operação</button>'+
    '<button type="button" class="btn primary" id="testSocioGroq">Testar conexão Groq</button>'+
+   '<button type="button" class="btn soft" id="testSocioBrain">Testar cérebro de campanha</button>'+
    '<button type="button" class="btn soft" id="checkSocioMigration">Verificar preparação Supabase</button></div>'+
    '<div id="socioOpsResult" role="status" aria-live="polite" class="socio-ops-result">'+
    'Nenhuma verificação executada nesta sessão.</div>'+
@@ -1196,6 +1197,18 @@ async function agent(){
     $('#socioOpsResult').textContent='Groq respondeu ao teste: '+r.model+
      ' · '+r.latencyMs+' ms. Nenhuma mensagem foi enviada ao WhatsApp.';
     toast('Conexão Groq validada com resposta real.');
+   }finally{btn.disabled=false;}
+  }));
+  $('#testSocioBrain')?.addEventListener('click',()=>action(async()=>{
+   const btn=$('#testSocioBrain');btn.disabled=true;
+   try{
+    const r=await api('/api/ops/brain/test','POST',{});
+    $('#socioOpsResult').textContent='Cérebro respondeu ao teste: '+
+     (r.provider==='deepseek'?'DeepSeek':r.provider==='groq'?'Groq':r.provider)+' · '+r.model+
+     ' · '+r.latencyMs+' ms.'+(r.fallback
+      ?' O DeepSeek não respondeu e o Groq assumiu — confira a chave e os logs.'
+      :' Nenhuma campanha foi alterada.');
+    toast(r.fallback?'Groq assumiu o cérebro; o DeepSeek não respondeu.':'Cérebro de campanha validado.');
    }finally{btn.disabled=false;}
   }));
  }

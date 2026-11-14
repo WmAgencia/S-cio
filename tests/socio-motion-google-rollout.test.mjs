@@ -51,8 +51,11 @@ test('overview orders information from budget to KPIs and recommendations, Meta 
  const start=workspace.indexOf("root.innerHTML='<div class=\"px-workspace px-overview\">'+",screenStart);
  const p=workspace.slice(start,workspace.indexOf('async function marketing(',screenStart));
  assert(start>screenStart);
- const order=['px-budget-top','ov-kpi-stack','trafficRail',
+ // The budget strip lives in a local helper rendered first, so the rendered
+ // order is asserted through its call site, not through its DDL strings.
+ const order=['budgetTopHtml()','ov-kpi-stack','trafficRail',
   'px-ad-performance','Atividade de conversas'];
+ assert(p.includes('px-budget-top'),'the budget helper renders the budget strip');
  let at=-1;
  for(const marker of order){
   const next=p.indexOf(marker);

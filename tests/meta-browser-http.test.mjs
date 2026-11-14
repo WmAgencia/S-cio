@@ -1,21 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {randomBytes} from 'node:crypto';
 import {Client} from 'pg';
 import {createMetaBrowser} from '../meta-browser.mjs';
+import {createTestDatabase} from './helpers/test-database.mjs';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 test('browser HTTP and PostgreSQL: auth, role, feature, CSRF and durable scope without Meta app',
  {skip:!process.env.DATABASE_URL,timeout:65000},async t=>{
- const name='socio_meta_browser_test_'+randomBytes(5).toString('hex'),url=new URL(process.env.DATABASE_URL);url.pathname='/'+name;
- const admin=new Client({connectionString:process.env.DATABASE_URL});await admin.connect();await admin.query('CREATE DATABASE '+name);
+ const {url,drop}=await createTestDatabase('socio_meta_browser_test_');
  const port=35000+Math.floor(Math.random()*18000),base='http://127.0.0.1:'+port;
  const app=spawn(process.execPath,['server.mjs'],{env:{...process.env,DATABASE_URL:url.href,PORT:String(port),NODE_ENV:'test',
   SETUP_TOKEN:'meta-browser-test-setup-token-2026-0000',CHANNEL_ENCRYPTION_KEY:'meta-browser-test-key-2026-000000000000',
   SOCIO_META_BROWSER_ENABLED:'true',SOCIO_LIVE_SYNC_ENABLED:'false',SOCIO_AUTOREPLY_ENABLED:'false',SOCIO_OUTBOUND_ENABLED:'false',
   META_APP_ID:'',META_APP_SECRET:'',META_ACCESS_TOKEN:'',WA_AKG_BASE_URL:'',WA_AKG_API_KEY:''},stdio:['ignore','pipe','pipe']});
  const db=new Client({connectionString:url.href});
- t.after(async()=>{app.kill();await new Promise(done=>{if(app.exitCode!==null)done();else{app.once('exit',done);setTimeout(done,2000).unref();}});await db.end().catch(()=>{});await admin.query('DROP DATABASE IF EXISTS '+name+' WITH (FORCE)').catch(()=>{});await admin.end();});
+ t.after(async()=>{app.kill();await new Promise(done=>{if(app.exitCode!==null)done();else{app.once('exit',done);setTimeout(done,2000).unref();}});await db.end().catch(()=>{});await drop();});
  let live=false;
  for(let i=0;i<100;i++){try{if((await fetch(base+'/health')).ok){live=true;break;}}catch{}if(app.exitCode!==null)break;await sleep(120);}
  assert(live,'HTTP app did not boot');await db.connect();

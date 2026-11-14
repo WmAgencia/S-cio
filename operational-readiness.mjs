@@ -3,6 +3,7 @@
 // delivery, payment, voice or Groq responses without actual evidence.
 import {getSessionStatus} from './waakg-adapter.mjs';
 import {groqReady,groqModel} from './groq-client.mjs';
+import {brainProvider,brainModel} from './ai-brain.mjs';
 import {outboundEnabled,canAutoReply} from './socio-outbound.mjs';
 
 export async function getOperationalReadiness(pool,tenantId,{
@@ -37,6 +38,7 @@ export async function getOperationalReadiness(pool,tenantId,{
  const aiPrepared=agent.rows[0]?.enabled===true;
  const knowledgeApproved=versions.rowCount>0;
  const groqConfigured=groqReady(env);
+ const brain=brainProvider(env);
  const outgoingConfigured=outboundEnabled(env);
  const autoConfigured=canAutoReply(env);
  const items=[
@@ -46,6 +48,10 @@ export async function getOperationalReadiness(pool,tenantId,{
   {id:'groq',label:'Groq configurado',status:groqConfigured?'configured':'action_required',
    detail:groqConfigured?'Chave presente; faça uma chamada real no teste':'Configure GROQ_API_KEY no Railway',
    model:groqModel(env,'planning'),chatModel:groqModel(env,'chat')},
+  {id:'brain',label:'Cérebro de campanha',status:brain==='deepseek'?'configured':brain==='groq'?'optional':'action_required',
+   detail:brain==='deepseek'?'DeepSeek conectado para copy, estratégia e leitura da conta':
+    brain==='groq'?'Sem DEEPSEEK_API_KEY; o raciocínio de campanha segue no Groq':'Configure GROQ_API_KEY ou DEEPSEEK_API_KEY',
+   provider:brain,model:brainModel(env)},
   {id:'agent',label:'Agente preparado',status:aiPrepared?'configured':'action_required',
    detail:aiPrepared?'Agente habilitado para as conversas autorizadas':'Habilite o agente em Personalidade e testes'},
   {id:'knowledge',label:'Conhecimento aprovado',status:knowledgeApproved?'verified':'action_required',
@@ -62,6 +68,8 @@ export async function getOperationalReadiness(pool,tenantId,{
    checked:checked.length,unreachable,partial:linked.length>10},
   groq:{configured:groqConfigured,model:groqModel(env,'planning'),
    chatModel:groqModel(env,'chat'),tested:false},
+  brain:{configured:Boolean(brain),provider:brain,model:brainModel(env),
+   deepseekConfigured:brain==='deepseek',tested:false},
   agent:{enabled:aiPrepared,knowledgeApproved,approvedVersion:versions.rows[0]?.version||null},
   catalog:{activeProducts:products.rows[0]?.n||0},
   flags:{humanSendConfigured:outgoingConfigured,aiAutomationConfigured:autoConfigured,

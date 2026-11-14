@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,createHmac,randomBytes} from 'node:crypto';
-import {readFile} from 'node:fs/promises';
-import {Client,Pool} from 'pg';
+import {Pool} from 'pg';
+import {createTestDatabase} from './helpers/test-database.mjs';
 import {
  INSTAGRAM_LAB_IMAGE,PIPEBOARD_HOSTED_URL,sealMarketingSecret,openMarketingSecret,
  instagramLabHealth,pipeboardReadAccountIds,connectPipeboard,
@@ -55,20 +55,12 @@ test('tokens are encrypted separately and Pipeboard only allows approved read-on
 
 test('disposable Postgres: per-company Pipeboard, signed Google Ads import, replay and revocation',
  {skip:!process.env.DATABASE_URL,timeout:110000},async t=>{
- const name='socio_marketing_test_'+randomBytes(5).toString('hex');
- const base=new URL(process.env.DATABASE_URL),target=new URL(base);
- target.pathname='/'+name;
- const admin=new Client({connectionString:base.href});
- await admin.connect();
- await admin.query('CREATE DATABASE '+name);
- const pool=new Pool({connectionString:target.href});
+ const {url:dbUrl,drop}=await createTestDatabase('socio_marketing_test_',{schema:'public'});
+ const pool=new Pool({connectionString:dbUrl.href});
  t.after(async()=>{
   await pool.end().catch(()=>{});
-  // Close clients gracefully before removing the disposable database.
-  await admin.query('DROP DATABASE IF EXISTS '+name);
-  await admin.end();
+  await drop();
  });
- await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
  const tenantA=randomUUID(),tenantB=randomUUID(),ownerA=randomUUID(),ownerB=randomUUID();
  await pool.query("INSERT INTO tenants(id,name,slug) VALUES ($1,'Empresa A','test-a'),($2,'Empresa B','test-b')",[tenantA,tenantB]);
  await pool.query(

@@ -1,8 +1,8 @@
-// Plans the Meta ad copy from the owner's briefing. Groq writes the wording;
-// the deterministic studio is both the floor and the guard, so an unavailable
-// model, an unsafe claim or a malformed answer never blocks a paused campaign
-// and never becomes an unverified promise shown to the public.
-import {groqResponse,groqReady} from './groq-client.mjs';
+// Plans the Meta ad copy from the owner's briefing. The campaign brain writes
+// the wording; the deterministic studio is both the floor and the guard, so an
+// unavailable model, an unsafe claim or a malformed answer never blocks a
+// paused campaign and never becomes an unverified promise shown to the public.
+import {brainResponse,brainReady} from './ai-brain.mjs';
 import {buildApprovedAdCreativeDrafts,cleanCopy,copyIsRisky} from './socio-creative-studio.mjs';
 
 const LIMIT={headline:40,description:60,message:300,welcomeMessage:160,quickReply:40};
@@ -76,12 +76,12 @@ function parse(reply){
 
 export async function composeAdCopy({brief={},tenantName='Empresa',env=process.env,fetchImpl=fetch,timeoutMs=20000}={}){
  const base=buildApprovedAdCreativeDrafts(brief,tenantName);
- if(base.reviewRequired||!groqReady(env))return {...base,copyProvider:'template',copyModel:null};
+ if(base.reviewRequired||!brainReady(env))return {...base,copyProvider:'template',copyModel:null};
  const fact=facts(brief,tenantName);
  const personal=brief.destination==='whatsapp';
  let answer;
  try{
-  answer=await groqResponse({env,fetchImpl,purpose:'planning',maxOutputTokens:1400,timeoutMs,
+  answer=await brainResponse({env,fetchImpl,maxOutputTokens:1400,timeoutMs,effort:'low',
    instructions,input:JSON.stringify(fact)});
  }catch{
   return {...base,copyProvider:'template_fallback',copyModel:null};
@@ -96,6 +96,6 @@ export async function composeAdCopy({brief={},tenantName='Empresa',env=process.e
   written++;
  }
  if(!written)return {...base,copyProvider:'template_fallback',copyModel:null};
- return {...base,variants,copyProvider:'groq',copyModel:answer.model||null,
+ return {...base,variants,copyProvider:answer.provider||'groq',copyModel:answer.model||null,
   copyNote:written===3?null:'Parte das variações manteve o texto base do Sócio porque a versão gerada não foi aprovada na checagem de alegações.'};
 }

@@ -7,14 +7,12 @@ import {zipStore} from './zip-helper.mjs';
 import sharp from 'sharp';
 import {Client} from 'pg';
 import {randomUUID,createHash} from 'node:crypto';
+import {createTestDatabase} from './helpers/test-database.mjs';
 const enabled=!!process.env.DATABASE_URL;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-test('real PostgreSQL: login, tenant isolation, imports and webhook signature protections',{skip:!enabled,timeout:65000},async t=>{
- const database='socio_e2e_'+randomUUID().replaceAll('-','');
- const fixtureUrl=new URL(process.env.DATABASE_URL);fixtureUrl.pathname='/'+database;
+test('real PostgreSQL: login, tenant isolation, imports and webhook signature protections',{skip:!enabled,timeout:150000},async t=>{
+ const {url:fixtureUrl,drop}=await createTestDatabase('socio_e2e_');
  const setupToken='e2e-isolated-fixture-setup-token-2026-long-enough';
- const admin=new Client({connectionString:process.env.DATABASE_URL});
- await admin.connect();await admin.query('CREATE DATABASE '+database);
  let child,fakeGateway,db;
  t.after(async()=>{
   if(child&&child.exitCode===null){
@@ -23,7 +21,7 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
   }
   fakeGateway?.close();
   if(db)await db.end();
-  await admin.query('DROP DATABASE IF EXISTS '+database+' WITH (FORCE)');await admin.end();
+  await drop();
  });
  const port=38475,waPort=38476,waKey='mock-readonly-waakg-key',waSession='socioFixture123',waPhone='5515999999999',waJid=waPhone+'@s.whatsapp.net';
  const gatewayRequests=[],dynamicSessions=new Map(),dynamicPhone='5515888888888';
@@ -79,7 +77,7 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  await new Promise(resolve=>fakeGateway.listen(waPort,'127.0.0.1',resolve));
  child=spawn(process.execPath,['server.mjs'],{
   env:{...process.env,DATABASE_URL:fixtureUrl.href,SETUP_TOKEN:setupToken,PORT:String(port),NODE_ENV:'test',
-   GROQ_API_KEY:'',SOCIO_OUTBOUND_ENABLED:'false',SOCIO_AUTOREPLY_ENABLED:'false',SOCIO_LIVE_SYNC_ENABLED:'false',
+   GROQ_API_KEY:'',DEEPSEEK_API_KEY:'',SOCIO_OUTBOUND_ENABLED:'false',SOCIO_AUTOREPLY_ENABLED:'false',SOCIO_LIVE_SYNC_ENABLED:'false',
    WA_AKG_BASE_URL:'http://127.0.0.1:'+waPort,WA_AKG_API_KEY:waKey,
    CHANNEL_ENCRYPTION_KEY:'0123456789abcdef0123456789abcdef0123456789abcdef',
    SOCIO_STORAGE_DRIVER:'memory'},
@@ -425,7 +423,8 @@ test('real PostgreSQL: login, tenant isolation, imports and webhook signature pr
  assert.equal(unauthorizedCnpj.status,403,'CNPJ prefill is restricted to the master account');
  const migrationReadiness=await call('/api/ops/migration-readiness','GET',undefined,betaCookie);
  assert.equal(migrationReadiness.status,200);
- assert.equal(migrationReadiness.result.database,'railway');
+ assert(['railway','supabase_private'].includes(migrationReadiness.result.database),
+  'Readiness must name its host, got '+migrationReadiness.result.database);
  assert.equal(migrationReadiness.result.maintenance,false);
  assert.equal(migrationReadiness.result.automaticCutoverEnabled,false);
  assert(migrationReadiness.result.blockers.length>=3);

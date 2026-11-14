@@ -60,10 +60,11 @@ export async function groqResponse({instructions,input,maxOutputTokens=450,purpo
   throw bad(503,'Não foi possível comunicar com o Groq.');
  }finally{clearTimeout(timeout);}
 }
-export async function groqKnowledgeDraft({markdown,report,env=process.env,fetchImpl=fetch}){
- if(!groqReady(env))return {markdown,provider:'deterministic',model:null};
+export async function groqKnowledgeDraft({markdown,report,env=process.env,fetchImpl=fetch,
+ respond=groqResponse,ready=groqReady}){
+ if(!ready(env))return {markdown,provider:'deterministic',model:null};
  try{
-  const result=await groqResponse({env,fetchImpl,maxOutputTokens:1750,
+  const result=await respond({env,fetchImpl,maxOutputTokens:1750,
    instructions:[
     'Você é analista de atendimento ao cliente de uma empresa brasileira.',
     'Crie APENAS Markdown em português brasileiro, iniciando com um título.',
@@ -77,9 +78,9 @@ export async function groqKnowledgeDraft({markdown,report,env=process.env,fetchI
     '\n\nBASE DETERMINÍSTICA:\n'+String(markdown).slice(0,13500)});
   if(!/^#\s+\S/m.test(result.reply)||result.reply.length<120)
    return {markdown,provider:'deterministic_fallback',model:null};
-  return {markdown:result.reply.slice(0,21000),provider:'groq',model:result.model};
+  return {markdown:result.reply.slice(0,21000),provider:result.provider||'groq',model:result.model};
  }catch{
-  // Fall back transparently, never claim Groq generated a result if it failed.
+  // Fall back transparently, never claim a model generated a result if it failed.
   return {markdown,provider:'deterministic_fallback',model:null};
  }
 }

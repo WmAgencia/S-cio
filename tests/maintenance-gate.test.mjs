@@ -1,9 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomBytes} from 'node:crypto';
 import {spawn} from 'node:child_process';
-import {Client} from 'pg';
 import {maintenanceEnabled,writesBlocked,workersBlocked} from '../migration-guard.mjs';
+import {createTestDatabase} from './helpers/test-database.mjs';
 
 test('maintenance barrier blocks writes, keeps reads and pauses workers',()=>{
  const yes={SOCIO_MAINTENANCE_MODE:'1'},no={SOCIO_MAINTENANCE_MODE:'0'};
@@ -17,21 +16,18 @@ test('maintenance barrier blocks writes, keeps reads and pauses workers',()=>{
 });
 test('maintenance server returns 503 for all mutation routes, including webhooks and unauthenticated buyer acceptance',
  {skip:!process.env.DATABASE_URL,timeout:45000},async t=>{
- const database='socio_maintenance_test_'+randomBytes(5).toString('hex'),sourceUrl=new URL(process.env.DATABASE_URL);
- sourceUrl.pathname='/'+database;
- const admin=new Client({connectionString:process.env.DATABASE_URL});await admin.connect();
- await admin.query('CREATE DATABASE '+database);
- t.after(async()=>{
-  await admin.query('DROP DATABASE IF EXISTS '+database+' WITH (FORCE)').catch(()=>{});
-  await admin.end();
- });
+ const {url:sourceUrl,drop}=await createTestDatabase('socio_maintenance_test_');
  const port=39000+Math.floor(Math.random()*8000);
  const child=spawn(process.execPath,['server.mjs'],{env:{...process.env,
   DATABASE_URL:sourceUrl.href,PORT:String(port),SOCIO_MAINTENANCE_MODE:'1',
   WA_AKG_BASE_URL:'',WA_AKG_API_KEY:'',NODE_ENV:'test'},
   stdio:['ignore','pipe','pipe']});
  let errors='';child.stderr.on('data',chunk=>{errors+=chunk.toString();errors=errors.slice(-800)});
- t.after(()=>child.kill('SIGTERM'));
+ t.after(async()=>{
+  child.kill('SIGTERM');
+  await new Promise(done=>{if(child.exitCode!==null)done();else{child.once('exit',done);setTimeout(done,2000).unref();}});
+  await drop();
+ });
  const base='http://127.0.0.1:'+port;
  let ready=false;
  for(let i=0;i<100;i++){

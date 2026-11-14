@@ -9,6 +9,7 @@ const server=read('server.mjs');
 const app=read('public/app.js');
 const css=read('public/socio-stripe-system.css');
 const overview=read('public/socio-workspace-ui.js');
+const icons=read('public/socio-icons.js');
 const orb=read('public/socio-orb-ui.js');
 const mesh=read('public/socio-orb-mesh.js');
 
@@ -25,7 +26,7 @@ test('the orb page ships as its own script with a production nav entry',()=>{
 test('app routing exposes the orb view and tears it down on exit',()=>{
  assert(app.includes("['overview','orb','inbox','connections','marketing','products','training','team','settings'].includes(part)"));
  assert.match(app,/titles=\{overview:'Visão geral',orb:'Conversar com IA'/);
- assert.match(app,/orb:'<circle cx="12" cy="12" r="8\.5"\/>/);
+ assert.match(icons,/^\s*orb:'<circle cx="12" cy="12" r="8\.4"\/>/m,'the shared icon set ships the orb glyph');
  assert(app.includes("if(next!=='orb')globalThis.SocioOrbUI?.dispose();"));
  assert(app.includes("document.body?.classList?.toggle('socio-orb-view',next==='orb');"));
  assert(app.includes("if(next==='orb'&&globalThis.SocioOrbUI){"));

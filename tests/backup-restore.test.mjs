@@ -6,12 +6,16 @@ import {readFile,mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {execFile} from 'node:child_process';
+import {execFile,spawnSync} from 'node:child_process';
 import {promisify} from 'node:util';
 
 const exec=promisify(execFile);
+// pg_dump ships with the PostgreSQL client tools, not with the npm driver.
+const missingTools=spawnSync('pg_dump',['--version'],{stdio:'ignore'}).error
+ ?'pg_dump not installed: PostgreSQL client tools are required for the backup rehearsal'
+ :(!process.env.DATABASE_URL?'DATABASE_URL is not set':false);
 test('encrypted backup restores a tenant-isolated fixture into a disposable PostgreSQL database',
- {skip:!process.env.DATABASE_URL,timeout:120000},async t=>{
+ {skip:missingTools,timeout:120000},async t=>{
  const config=new URL(process.env.DATABASE_URL);
  const suffix=randomBytes(5).toString('hex');
  const sourceName='socio_backup_fixture_'+suffix;

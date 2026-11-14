@@ -1,15 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Client,Pool} from 'pg';
-import {randomUUID,randomBytes} from 'node:crypto';
-import {readFile} from 'node:fs/promises';
+import {Pool} from 'pg';
+import {randomUUID} from 'node:crypto';
+import {createTestDatabase} from './helpers/test-database.mjs';
 import {startLocalPairing,claimLocalPairing,authorizeLocalConnector,localHeartbeat,pollLocalJob,finishLocalJob,localConnectionStatus,enqueueLocalJob,getLocalJob,disconnectLocalConnector} from '../meta-local.mjs';
 test('real PostgreSQL local relay: one-time enrollment, user/tenant isolation, delivery once, revoke and no cookies',
  {skip:!process.env.DATABASE_URL,timeout:35000},async()=>{
- const admin=new Client({connectionString:process.env.DATABASE_URL});await admin.connect();const name='socio_local_connector_test_'+randomBytes(5).toString('hex');await admin.query('CREATE DATABASE '+name);
- const url=new URL(process.env.DATABASE_URL);url.pathname='/'+name;const pool=new Pool({connectionString:url.href});
+ const {url,drop}=await createTestDatabase('socio_local_connector_test_',{schema:'public'});
+ const pool=new Pool({connectionString:url.href});
  try{
-  await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
   const tenant=randomUUID(),user=randomUUID(),other=randomUUID();
   await pool.query("INSERT INTO tenants(id,name,slug,status) VALUES($1,'Test','local-relay-test','active')",[tenant]);
   for(const id of [user,other])await pool.query("INSERT INTO users(id,tenant_id,email,name,password_hash,role) VALUES($1,$2,$3,'Fixture','unused','owner')",[id,tenant,id+'@example.test']);
@@ -33,9 +32,7 @@ test('real PostgreSQL local relay: one-time enrollment, user/tenant isolation, d
   await disconnectLocalConnector(pool,a);await assert.rejects(()=>authorizeLocalConnector(pool,'Bearer '+linked.token),{status:401});
   const raw=(await pool.query('SELECT token_hash,pair_hash FROM meta_local_connections WHERE id=$1',[linked.connectionId])).rows[0];assert.equal(raw.token_hash,null);assert.equal(raw.pair_hash,null);
  }finally{
-  // Close the fixture pool gracefully before deleting its disposable database.
-  // FORCE can terminate an in-flight pg connection and trigger an uncaught test error.
   await pool.end();
-  try{await admin.query('DROP DATABASE IF EXISTS '+name);}finally{await admin.end();}
+  await drop();
  }
 });

@@ -37,6 +37,7 @@ import {startAutoTraining,autoTrainingStatus,cancelAutoTraining,processNextAutoT
 import {getSocioInterview,startSocioInterview,advanceSocioInterview,resetSocioInterview,transcribeSocioTraining} from './socio-training-interview.mjs';
 import {synthesizeCachedThalitaVoice,prewarmThalitaAcknowledgements,SOCIO_TRAINING_VOICE} from './socio-training-tts.mjs';
 import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
+import {brainResponse,brainReady,brainProvider,brainModel} from './ai-brain.mjs';
 import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {normalizeTaxId,validCpf,taxIdType as taxIdTypeOf,claimTrial,trialEndFrom,readTrial} from './socio-trial.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
@@ -564,7 +565,8 @@ async function handle(req,res){
    throw fail(429,'Aguarde antes de otimizar o tráfego novamente.');
   const result=await runTrafficManager(pool,a);
   await audit(a,'marketing.traffic.autopilot',{executed:result.executed.length,
-   pending:result.pending.length,skipped:result.skipped.length});
+   pending:result.pending.length,skipped:result.skipped.length,
+   diagnosed:Boolean(result.diagnosis),diagnosisProvider:result.diagnosis?.provider||null});
   return json(res,200,result);
  }
  if(pathname==='/api/marketing/traffic/approve'&&method==='POST'){
@@ -1521,6 +1523,25 @@ async function handle(req,res){
   return json(res,200,{ok:true,provider:'Groq',model:test.model,
    responseVerified:true,latencyMs,checkedAt:new Date().toISOString()});
  }
+ if(method==='POST'&&pathname==='/api/ops/brain/test'){
+  needRole(a,['owner','admin']);
+  if(!await limiter('sim','brain-health:'+a.active_tenant_id,600000,3))
+   throw fail(429,'Limite de testes do cérebro atingido. Tente novamente.');
+  if(!brainReady())throw fail(503,'Nenhum provedor do cérebro está configurado no servidor.');
+  const expected=brainProvider();
+  const start=Date.now();
+  const test=await brainResponse({
+   instructions:'Você está verificando uma integração técnica de raciocínio de campanha. Responda em português, em uma frase curta.',
+   input:'Confirme que o cérebro de campanha está respondendo e diga qual tarefa você executa.',
+   maxOutputTokens:280,timeoutMs:30000,effort:'low'
+  });
+  if(!String(test.reply||'').trim())throw fail(503,'O cérebro não retornou uma resposta válida.');
+  const latencyMs=Date.now()-start;
+  await audit(a,'integration.brain.tested',{provider:test.provider,model:test.model,success:true});
+  return json(res,200,{ok:true,provider:test.provider||expected,expected,
+   fallback:(test.provider||expected)!==expected,model:test.model||brainModel(),
+   responseVerified:true,latencyMs,checkedAt:new Date().toISOString()});
+ }
  if(method==='GET'&&pathname==='/api/agent'){
   requirePermission(a,'training.manage');
   const r=await query('SELECT name,tone,instructions,knowledge_md,enabled,updated_at FROM agents WHERE tenant_id=$1',[a.active_tenant_id]);
@@ -2228,7 +2249,7 @@ async function main(){
      const result=await runOwnerTrafficAutopilot(pool,row.tenant_id);
      await recordTrafficReview(pool,row.tenant_id,row.account_id,{
       status:'done',decisions:result.decisions?.length||0,pending:result.pending?.length||0,
-      summary:result.summary||{}});
+      summary:{...result.summary||{},brain:result.diagnosis?.provider||null}});
     }catch(error){
      const code=String(error?.status||error?.code||'TRAFFIC_ERROR').slice(0,40);
      console.warn('[socio-traffic]',code);

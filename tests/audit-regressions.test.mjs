@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
-import {readFile} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
-import {Client,Pool} from 'pg';
+import {Pool} from 'pg';
+import {createTestDatabase} from './helpers/test-database.mjs';
 import {hashPassword,verifyPassword} from '../lib.mjs';
 import {assertApiFeature} from '../tenant-features.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from '../inbox-cursor.mjs';
@@ -39,11 +39,9 @@ test('invalid passwords are bounded and validation errors are actionable',async(
 
 test('audit regressions against isolated PostgreSQL',
  {skip:!process.env.DATABASE_URL,timeout:90000},async t=>{
- const name='socio_audit_'+randomUUID().replaceAll('-','');
- const url=new URL(process.env.DATABASE_URL);url.pathname='/'+name;
- const admin=new Client({connectionString:process.env.DATABASE_URL});await admin.connect();
- await admin.query('CREATE DATABASE '+name);
- const pool=new Pool({connectionString:url.href});let app;
+ const {url,drop}=await createTestDatabase('socio_audit_');
+ // Same search_path the server sets, so unqualified fixture SQL lands in socio_app.
+ const pool=new Pool({connectionString:url.href,options:'-c search_path=socio_app,pg_catalog'});let app;
  t.after(async()=>{
   if(app&&app.exitCode===null&&app.signalCode===null)await new Promise(resolve=>{
    const timer=setTimeout(()=>app.kill('SIGKILL'),2000);
@@ -51,17 +49,8 @@ test('audit regressions against isolated PostgreSQL',
    app.kill('SIGTERM');
   });
   await pool.end();
-  // A forced drop could terminate an idle socket while pg was still completing
-  // its close, producing a race-dependent uncaught error in parallel CI runs.
-  // Close the app and pool first, then let PostgreSQL verify there are no users.
-  try{
-   for(let attempt=0;;attempt++){
-    try{await admin.query('DROP DATABASE '+name);break;}
-    catch(error){if(error.code!=='55006'||attempt>=10)throw error;await new Promise(r=>setTimeout(r,50));}
-   }
-  }finally{await admin.end();}
+  await drop();
  });
- await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
  const tenant=randomUUID(),user=randomUUID(),channel=randomUUID(),conversation=randomUUID(),product=randomUUID();
  await pool.query("INSERT INTO tenants(id,name,slug) VALUES($1,'Audit fixture','audit')",[tenant]);
  await pool.query("INSERT INTO users(id,tenant_id,name,email,password_hash,role) VALUES($1,$2,'Audit','audit@example.test',$3,'owner')",
@@ -205,7 +194,7 @@ test('audit regressions against isolated PostgreSQL',
  await t.test('HTTP sessions enforce company pause and disabled modules',async()=>{
   const port=51000+Math.floor(Math.random()*8000);const base='http://127.0.0.1:'+port;
   app=spawn(process.execPath,['server.mjs'],{env:{...process.env,DATABASE_URL:url.href,PORT:String(port),NODE_ENV:'test',
-   WA_AKG_BASE_URL:'',WA_AKG_API_KEY:'',GROQ_API_KEY:'',SOCIO_LIVE_SYNC_ENABLED:'false',
+   WA_AKG_BASE_URL:'',WA_AKG_API_KEY:'',GROQ_API_KEY:'',DEEPSEEK_API_KEY:'',SOCIO_LIVE_SYNC_ENABLED:'false',
    SOCIO_OUTBOUND_ENABLED:'false',SOCIO_AUTOREPLY_ENABLED:'false',SOCIO_INSTAGRAM_ENABLED:'false'},stdio:['ignore','pipe','pipe']});
   let errors='';app.stderr.on('data',data=>{errors+=data;});app.stdout.resume();
   let ready=false;

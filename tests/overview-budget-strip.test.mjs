@@ -11,13 +11,19 @@ test('dashboard shows the headline first, then compact advertising budget and bu
  const screen=ui.slice(start,end);
  const header=screen.indexOf("root.innerHTML='<div class=\"px-workspace px-overview\">'+");
  assert(header>0);
- const body=screen.slice(header,header+4000);
- assert(body.indexOf("px-budget-top")>=0);
- assert.equal(body.indexOf("px-page-heading"),-1,'the overview opens straight on the numbers, with no title block above them');
- assert(body.indexOf("px-budget-top")<body.indexOf("ov-board"));
- assert(body.includes("budgetHeaderItem('meta_ads'"));
- assert(body.includes("budgetHeaderItem('google_ads'"));
- assert(body.includes("googleAdsVisible()?budgetHeaderItem('google_ads'"));
+ const body=screen.slice(header,header+1200);
+ // The strip is built by a local helper; the template must still render it
+ // before the KPI board.
+ const helperStart=screen.indexOf('const budgetTopHtml=');
+ assert(helperStart>0,'the budget strip is rendered from one helper');
+ const helper=screen.slice(helperStart,header);
+ assert(helper.indexOf("px-budget-top")>=0);
+ assert.equal(helper.indexOf("px-page-heading"),-1,'the overview opens straight on the numbers, with no title block above them');
+ assert(body.indexOf("budgetTopHtml()+")>=0);
+ assert(body.indexOf("budgetTopHtml()+")<body.indexOf("ov-board"));
+ assert(helper.includes("budgetHeaderItem('meta_ads'"));
+ assert(helper.includes("budgetHeaderItem('google_ads'"));
+ assert(helper.includes("googleAdsVisible()?budgetHeaderItem('google_ads'"));
  assert(screen.includes("px-budget-meter"));
 });
 test('no unverified balance or exhaustion date is presented as financial fact',()=>{

@@ -9,7 +9,7 @@ import {sendGatewayMessage,sendGatewayInteractive,mediaPayload} from './socio-ou
 import {resolveSelectedOfficialAccount} from './meta-official.mjs';
 import {prepareAdsPlan,executeAdsPlan,uploadAdVideo} from './meta-ads-tools.mjs';
 import {downloadVerifiedWhatsAppVideo} from './socio-whatsapp-meta-video.mjs';
-import {groqResponse,groqReady} from './groq-client.mjs';
+import {brainResponse,brainReady} from './ai-brain.mjs';
 import {runTrafficManager,approveTrafficDecisions,resolveTrafficDecision,
  listPendingDecisions,markDecisionNotified,decisionNotification} from './socio-traffic-manager.mjs';
 
@@ -724,9 +724,9 @@ export async function draftAdCopy(pool,{tenantId,tenantName,env=process.env,fetc
    :`${tenantName} atende pelo WhatsApp.\n\nToque em "Enviar mensagem" e fale com a gente agora.`,
   provider:'template'
  };
- if(!groqReady(env))return fallback;
+ if(!brainReady(env))return fallback;
  try{
-  const result=await groqResponse({env,fetchImpl,maxOutputTokens:420,purpose:'planning',
+  const result=await brainResponse({env,fetchImpl,maxOutputTokens:420,effort:'low',
    instructions:[
     'Você escreve anúncios para Meta Ads em português brasileiro.',
     'Responda APENAS um objeto JSON com as chaves "headline" e "message".',
@@ -739,7 +739,7 @@ export async function draftAdCopy(pool,{tenantId,tenantName,env=process.env,fetc
   const parsed=JSON.parse((result.reply.match(/\{[\s\S]*\}/)||[''])[0]);
   const headline=cleanString(parsed?.headline,120),message=cleanString(parsed?.message,2200);
   if(!headline||!message||headline.length<3||message.length<10)return fallback;
-  return {headline,message,provider:'groq'};
+  return {headline,message,provider:result.provider||'groq'};
  }catch{return fallback;}
 }
 function cleanString(value,max){
