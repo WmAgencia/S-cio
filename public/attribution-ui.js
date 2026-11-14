@@ -10,7 +10,50 @@
   const section=el('section');section.className='card card-pad';
   section.dataset.tracking='whatsapp';root.append(section);
   section.append(el('h2','Rastreamento WhatsApp — origem dos leads'));
-  section.append(el('p','Gere links rastreáveis por anúncio e acompanhe códigos enviados pelos clientes. Não é atribuição confirmada pela Meta; vendas e pagamentos permanecem métricas separadas.'));
+  section.append(el('p','Quando alguém clica em um anúncio de mensagem do Meta Ads e fala no WhatsApp oficial, a Meta informa qual anúncio trouxe a pessoa. Os links com código abaixo são um método complementar e não substituem essa confirmação. Vendas e pagamentos permanecem métricas separadas.'));
+  const ctwa=el('div');ctwa.dataset.tracking='ctwa';section.append(ctwa);
+  const loadCtwa=async()=>{
+   ctwa.replaceChildren(el('h3','Chegadas do Meta Ads para o WhatsApp'));
+   ctwa.append(el('p','Origem confirmada pela Meta na primeira mensagem após o clique. Chegadas e conversas não são vendas.'));
+   try{
+    const data=await api('/api/marketing/attribution/ctwa?days=30');
+    const totals=data.totals||{};
+    if(!totals.arrivals){
+     ctwa.append(el('p','Nenhuma chegada confirmada pela Meta nos últimos 30 dias. O acompanhamento começa quando alguém clica em um anúncio de mensagem que leva ao WhatsApp oficial da empresa.'));
+     return;
+    }
+    ctwa.append(el('p','Últimos '+data.windowDays+' dias: '+totals.arrivals+' chegada(s) · '+
+     totals.conversations+' conversa(s) · '+totals.businessResponded+' respondida(s) pela empresa · '+
+     totals.customerFollowedUp+' cliente(s) voltaram a responder'));
+    ctwa.append(el('p','Primeira resposta média da empresa: '+
+     (totals.averageFirstBusinessReplySeconds===null?'sem dados':
+      Math.round(totals.averageFirstBusinessReplySeconds/60)+' min')));
+    if(totals.unresolvedArrivals)
+     ctwa.append(el('p',totals.unresolvedArrivals+' chegada(s) de anúncio ainda sem campanha identificada. A identificação é tentada automaticamente.'));
+    const list=el('div');list.className='attribution-results';ctwa.append(list);
+    for(const campaign of data.campaigns||[]){
+     const card=el('article');card.className='panel';list.append(card);
+     card.append(el('strong',campaign.campaignName||(campaign.campaignId?'Campanha '+campaign.campaignId:'Campanha ainda não identificada')));
+     card.append(el('p',campaign.arrivals+' chegada(s) · '+campaign.conversations+' conversa(s) · '+
+      campaign.businessResponded+' respondida(s) · '+campaign.customerFollowedUp+' retorno(s)'));
+     card.append(el('p','Primeira resposta média: '+
+      (campaign.averageFirstBusinessReplySeconds===null?'sem dados':
+       Math.round(campaign.averageFirstBusinessReplySeconds/60)+' min')+
+      ' · Anúncios: '+campaign.ads));
+    }
+    const ads=el('details');ads.append(el('summary','Ver por anúncio'));
+    for(const item of data.items||[]){
+     ads.append(el('p',(item.adName||('Anúncio '+item.sourceId))+
+      (item.campaignName?' · '+item.campaignName:'')+' — '+item.arrivals+' chegada(s) · '+
+      item.businessResponded+' respondida(s) · '+item.customerFollowedUp+' retorno(s)'+
+      (item.resolutionError?' · '+item.resolutionError:'')));
+    }
+    ctwa.append(ads);
+   }catch(error){
+    ctwa.append(el('p','O painel do Meta Ads ainda não está disponível: '+error.message));
+   }
+  };
+  void loadCtwa();
   const status=el('p');status.setAttribute('role','status');section.append(status);
   const report=el('div');section.append(report);
   const reload=async()=>{

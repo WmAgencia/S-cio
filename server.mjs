@@ -13,6 +13,7 @@ import {metaConnectionPreflight} from './meta-integration-preflight.mjs';
 import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from './meta-report-schedules.mjs';
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
 import {readWhatsAppFunnel} from './whatsapp-funnel.mjs';
+import {whatsappWebhookItems,saveCtwaAttribution,readCtwaReport,resolvePendingCtwaAds} from './whatsapp-ctwa.mjs';
 import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectOfficial,selectOfficialAccount,handleMetaRemoval,metaRemovalStatus} from './meta-official.mjs';
 
 import http from 'node:http';
@@ -504,6 +505,10 @@ async function handle(req,res){
   return json(res,200,await trackingReport(pool,a));
  if(pathname==='/api/marketing/attribution/funnel'&&method==='GET')
   return json(res,200,await readWhatsAppFunnel(pool,a));
+ if(pathname==='/api/marketing/attribution/ctwa'&&method==='GET'){
+  const q=new URL(req.url,'http://local').searchParams;
+  return json(res,200,await readCtwaReport(pool,a,{days:Number(q.get('days')||30)}));
+ }
  if(pathname==='/api/marketing/attribution/links'&&method==='POST'){
   if(!await limiter('sim','tracking-link:'+a.user_id,60000,12))throw fail(429,'Aguarde antes de gerar outro link.');
   const {data}=await body(req,3000);
@@ -2122,13 +2127,8 @@ async function receiveWhatsApp(req,res){
  const expected='sha256='+createHmac('sha256',process.env.META_APP_SECRET).update(raw).digest('hex');
  if(!secureEqual(signature,expected))throw fail(403,'Assinatura inválida.');
  if(data.object!=='whatsapp_business_account')return json(res,200,{ok:true});
- const items=[];
- for(const entry of data.entry||[])for(const change of entry.changes||[]){
-  const value=change.value||{},external=value.metadata?.phone_number_id;
-  for(const m of value.messages||[])if(m.type==='text'&&m.text?.body&&external)items.push({external:String(external),messageId:String(m.id||''),from:String(m.from||''),body:String(m.text.body).slice(0,4000),name:String(value.contacts?.[0]?.profile?.name||'').slice(0,100)});
- }
+ const items=whatsappWebhookItems(data);
  for(const item of items.slice(0,50)){
-  if(!item.from||!item.messageId)continue;
   const ch=await query('SELECT id,tenant_id FROM channels WHERE external_phone_id=$1',[item.external]);
   if(!ch.rowCount)continue;
   const {id:channelId,tenant_id:tenantId}=ch.rows[0];
@@ -2136,7 +2136,11 @@ async function receiveWhatsApp(req,res){
   try{
    await c.query('BEGIN');
    const conv=await c.query("INSERT INTO conversations(id,tenant_id,channel_id,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5) ON CONFLICT(tenant_id,channel_id,customer_phone) DO UPDATE SET last_message_at=now(),customer_name=CASE WHEN conversations.customer_name='' THEN EXCLUDED.customer_name ELSE conversations.customer_name END RETURNING id",[id(),tenantId,channelId,item.name,item.from]);
-   await c.query("INSERT INTO messages(id,tenant_id,conversation_id,direction,body,provider_id) VALUES($1,$2,$3,'inbound',$4,$5) ON CONFLICT(tenant_id,provider_id) DO NOTHING",[id(),tenantId,conv.rows[0].id,item.body,item.messageId]);
+   if(item.body!==null)
+    await c.query("INSERT INTO messages(id,tenant_id,conversation_id,direction,body,provider_id) VALUES($1,$2,$3,'inbound',$4,$5) ON CONFLICT(tenant_id,provider_id) DO NOTHING",[id(),tenantId,conv.rows[0].id,item.body,item.messageId]);
+   if(item.referral)
+    await saveCtwaAttribution(c,{tenantId,channelId,conversationId:conv.rows[0].id,
+     inboundMessageId:item.messageId,wabaId:item.wabaId,referral:item.referral,occurredAt:item.occurredAt});
    await c.query('COMMIT');
   }catch(err){await c.query('ROLLBACK');console.error('webhook persistence failed',err?.code||'db error');throw err;}finally{c.release();}
  }
@@ -2311,6 +2315,17 @@ async function main(){
   finally{attributionBusy=false;}
  },17000);
  attributionWorker.unref();
+ // Click-to-WhatsApp: reads the ad named in the referral and stores its campaign.
+ // Read-only on Meta; a tenant without an active grant is skipped, not failed.
+ let ctwaResolveBusy=false;
+ const ctwaResolveWorker=setInterval(async()=>{
+  if(ctwaResolveBusy||workersBlocked())return;
+  ctwaResolveBusy=true;
+  try{await resolvePendingCtwaAds(pool);}
+  catch(error){console.warn('[socio-ctwa]',String(error?.code||'CTWA_ERROR').slice(0,40));}
+  finally{ctwaResolveBusy=false;}
+ },120000);
+ ctwaResolveWorker.unref();
  // Official Meta reporting worker. Generates private, read-only snapshots.
  // It is opt-in and does not send WA-AKG messages or alter campaigns.
  let metaReportBusy=false;
