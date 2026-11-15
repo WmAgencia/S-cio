@@ -20,6 +20,7 @@
  <link rel="stylesheet" href="/socio-stripe-system.css?v=20261113r">
  <link rel="stylesheet" href="/socio-ethereal.css?v=20261124e">
  <link rel="stylesheet" href="/socio-reference.css?v=20261115b">
+ <link rel="stylesheet" href="/socio-motion.css?v=20261117c">
  <script src="/socio-icons.js?v=20261113a" defer></script>
  <script src="/socio-product-features.js?v=20261112a" defer></script>
  <script src="/meta-browser-ui.js" defer></script>
@@ -33,22 +34,22 @@
  <script src="/attribution-ui.js" defer></script>
  <script src="/socio-integrations-ui.js?v=20261112e" defer></script>
  <script src="/socio-ux.js" defer></script>
- <script src="/inbox.js" defer></script>
+ <script src="/inbox.js?v=20261116d" defer></script>
  <script src="/flow-owner-ui.js" defer></script>
  <script src="/flow-images-ui.js" defer></script>
  <script src="/socio-interview-ui.js?v=20261113a" defer></script>
  <script src="/meta-billing-ui.js" defer></script>
  <script src="/socio-orb-mesh.js?v=20261113e" defer></script>
- <script src="/socio-workspace-ui.js?v=20261124a" defer></script>
+ <script src="/socio-workspace-ui.js?v=20261118a" defer></script>
  <script src="/socio-thalita-ui.js?v=20261113a" defer></script>
  <script src="/socio-orb-ui.js?v=20261113p" defer></script>
  <script src="/socio-master-dashboard.js" defer></script>
  <script src="/owner-channel-ui.js?v=20261112e" defer></script>
- <script src="/socio-autopilot-ui.js?v=20261116h" defer></script>
+ <script src="/socio-autopilot-ui.js?v=20261117a" defer></script>
  <script src="/trial-input.js?v=20261113a" defer></script>
- <script src="/app.js?v=20261116a" defer></script>
+ <script src="/app.js?v=20261117b" defer></script>
  <script src="/ads-media-ui.js" defer></script>
- <script src="/socio-entry-motion.js?v=20261112b" defer></script>
+ <script src="/socio-motion.js?v=20261118a" defer></script>
 </head>
 <body>
 <div id="authScreen" class="auth-screen hidden">
@@ -157,7 +158,7 @@
    <span id="crumbRoot">Sócio</span><span class="page-strip-sep">/</span><strong id="topTitle">Visão geral</strong>
    <span class="top-pill"><i></i> Ambiente privado</span>
   </div>
-  <main id="view" tabindex="-1"><div class="loading socio-page-loading" role="status" aria-live="polite"><span class="socio-loading-sigil" aria-hidden="true">✳</span><span class="socio-loading-title">Preparando seu espaço</span><span class="socio-loading-copy">Carregando as informações da sua empresa…</span></div></main>
+  <main id="view" tabindex="-1" aria-busy="true"></main>
   <footer class="site-footer">Sócio by Consecom <span>·</span> Tecnologia a favor das pessoas.</footer>
  </div>
 </div>

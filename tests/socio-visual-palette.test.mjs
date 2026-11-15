@@ -16,7 +16,8 @@ test('Stripe-inspired paper, ink, violet and border are the only canonical palet
 });
 test('old glass style layers are not loaded; new theme is the last stylesheet',()=>{
  const imports=[...html.matchAll(/<link rel="stylesheet" href="(\/[^"]+)/g)].map(m=>m[1]);
- assert(imports.at(-1).startsWith('/socio-reference.css?v='));
+ assert(imports.filter(x=>!x.startsWith('/socio-motion.css')).at(-1).startsWith('/socio-reference.css?v='));
+ assert(imports.at(-1).startsWith('/socio-motion.css?v='));
  for(const old of ['socio-glass-motion.css','socio-glass-enforced.css','socio-premium-polish.css',
   'socio-contrast-audit.css','socio-motion-refined.css','socio-luminous-glass.css']){
   assert(!imports.some(x=>x.includes('/'+old)),old);

@@ -39,7 +39,7 @@ test('Google Ads remains stored but is disabled in every user-facing entry point
 });
 
 test('Google UI flag and unified visual assets load in correct order',()=>{
- for(const asset of ['socio-product-features.js','socio-entry-motion.js','socio-stripe-system.css']){
+ for(const asset of ['socio-product-features.js','socio-motion.js','socio-stripe-system.css']){
   assert(existsSync(new URL('../public/'+asset,import.meta.url)),asset);
   assert(server.includes("'/"+asset+"'"));
   assert(html.includes('/'+asset+'?v='),asset);

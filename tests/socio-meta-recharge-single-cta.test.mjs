@@ -41,14 +41,18 @@ test('while provider data loads, the board shows a skeleton rather than false ze
  assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
 });
 
-test('all initial and route loading states share the new skeleton loader',()=>{
- assert(app.includes('loading socio-page-loading'));
- assert(html.includes('loading socio-page-loading'));
+test('the app opens straight into the chosen screen, with one quiet wait line',()=>{
+ // No "Preparando seu espaço" curtain: an empty view gets a small status line
+ // and disappears as soon as the chosen route paints.
+ assert(app.includes("socio-loading-line"));
+ assert(!app.includes('Preparando seu espaço'));
+ assert(!html.includes('Preparando seu espaço'));
+ assert.match(html,/<main id="view"[^>]*><\/main>/);
  assert(html.includes('/socio-stripe-system.css?v='));
  assert(!html.includes('href="/socio-premium-polish.css'));
  assert.match(html,/\/socio-workspace-ui\.js\?v=20\d{6}[a-z]/);
  assert.match(html,/\/app\.js\?v=[0-9a-z]+/);
- assert(css.includes('.loading.socio-page-loading'));
+ assert.match(html,/\/socio-motion\.js\?v=[0-9a-z]+/);
  assert(css.includes('.socio-loading-title'));
 });
 

@@ -1,0 +1,252 @@
+/* Sócio motion — skeleton shimmer while a screen loads and the settled
+   states the scripted reveals animate into. No layout change, no blur. */
+
+/* While a screen paints, the previous content fades back and the skeleton
+   breathes instead of a blank hole. */
+body #appShell #view[aria-busy="true"]{position:relative}
+body #appShell #view .socio-loading-overlay{
+ background:color-mix(in srgb,var(--page-deep,#05060b) 62%,transparent)!important;
+ animation:socio-overlay-in .18s ease both;
+}
+@keyframes socio-overlay-in{from{opacity:0}to{opacity:1}}
+
+body #appShell #view .socio-page-loading .socio-loading-sigil{
+ display:inline-grid;
+ place-items:center;
+ width:34px;height:34px;
+ border-radius:12px;
+ background:linear-gradient(140deg,#8f7bff,#4326c4);
+ color:#fff;
+ font-size:15px;
+ box-shadow:0 10px 24px -12px #6a49ea;
+ animation:socio-sigil 1.6s cubic-bezier(.4,0,.2,1) infinite;
+}
+@keyframes socio-sigil{
+ 0%,100%{transform:rotate(0deg) scale(1)}
+ 50%{transform:rotate(180deg) scale(1.08)}
+}
+
+/* Skeleton cards are revealed by socio-motion.js with the same gesture as the
+   real cards, so the swap never looks like a second entrance. */
+
+body #appShell #view .socio-loading-overlay::after{
+ content:"";
+ position:absolute;
+ inset:0;
+ pointer-events:none;
+ background:linear-gradient(105deg,transparent 32%,#ffffff0f 46%,transparent 60%);
+ background-size:260% 100%;
+ animation:socio-sheen 1.5s linear infinite;
+}
+@keyframes socio-sheen{from{background-position:130% 0}to{background-position:-130% 0}}
+
+/* Progressive bars: the element paints its final geometry, the script grows
+   it from zero. Keep the origin at the bar's own foot. */
+body #appShell .et-chart rect[data-socio-grown]{will-change:transform}
+
+@media(prefers-reduced-motion:reduce){
+ body #appShell #view .socio-loading-overlay,
+ body #appShell #view .socio-page-loading .socio-loading-sigil,
+ body #appShell #view .socio-loading-overlay::after,
+ body #appShell #view :is(.px-overview-loading,.px-screen-loading,.master-loading) :is(.px-load-card,.et-kpi,.et-card,.et-hero,.et-block){animation:none!important}
+}
+
+/* ── WhatsApp em tela cheia ───────────────────────────────────────────────
+   The inbox owns the whole viewport between the top bar and the window edge:
+   no breadcrumb strip, no page scroll, list and thread scroll on their own. */
+body:has(#appShell:not(.hidden)) #appShell:has(#view > .wa-inbox) .page-strip{display:none!important}
+body #appShell:has(#view > .wa-inbox) #view{
+ display:flex!important;
+ flex-direction:column;
+ min-height:0!important;
+ height:calc(100dvh - var(--socio-topbar,84px) - var(--socio-footer,34px))!important;
+ padding:0!important;
+ max-width:none!important;
+ overflow:hidden!important;
+}
+body #appShell:has(#view > .wa-inbox) .site-footer{display:none!important}
+body #appShell:has(#view > .wa-inbox){overflow:hidden!important}
+body #appShell #view > .wa-inbox{
+ flex:1 1 auto;
+ min-height:0;
+ height:100%;
+ margin:0!important;
+ border-radius:0 0 24px 24px!important;
+}
+
+/* Botões do composer: anexo, microfone e envio. */
+body #appShell .wa-compose-row .wa-small-action.wa-attach,
+body #appShell .wa-compose-row .wa-small-action.wa-voice{
+ width:38px;height:38px;padding:0;
+ display:grid;place-items:center;
+ border-radius:50%;
+ background:#ffffff0d;
+ border:1px solid #ffffff1f;
+ color:#d9d4e6;
+ font-size:19px;line-height:1;
+ transition:background .15s ease,border-color .15s ease,transform .12s ease;
+}
+body #appShell .wa-compose-row .wa-small-action.wa-attach:hover,
+body #appShell .wa-compose-row .wa-small-action.wa-voice:hover{background:#ffffff1c;border-color:#ffffff33}
+body #appShell .wa-compose-row .wa-small-action.wa-voice svg{width:18px;height:18px}
+body #appShell .wa-compose-row .wa-small-action.wa-voice.is-recording{
+ background:#e0335a;border-color:transparent;color:#fff;
+ animation:wa-rec 1.2s ease-in-out infinite;
+}
+@keyframes wa-rec{0%,100%{box-shadow:0 0 0 0 #e0335a66}50%{box-shadow:0 0 0 8px #e0335a00}}
+body #appShell .wa-file-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+
+/* Um único botão de modo, sempre a ação que falta. */
+body #appShell .wa-compose-ownership{align-items:center}
+body #appShell .wa-mode-btn{
+ border-radius:999px!important;
+ border:1px solid #ffffff1f!important;
+ background:#ffffff0d!important;
+ color:#efeaf7!important;
+ padding:7px 14px!important;
+ font-weight:600!important;
+}
+body #appShell .wa-mode-btn.wa-mode-take{
+ border-color:#8f5cff80!important;
+ background:#8f5cff26!important;
+ color:#e7dcff!important;
+}
+body #appShell .wa-mode-btn.wa-mode-assist{
+ border-color:#5ee0a480!important;
+ background:#5ee0a41f!important;
+ color:#d6fbec!important;
+}
+@media(prefers-reduced-motion:reduce){
+ body #appShell .wa-compose-row .wa-small-action.wa-voice.is-recording{animation:none}
+}
+
+/* WhatsApp: sem a faixa de título, a view ocupa tudo entre o topo e a borda. */
+body:has(#view > .wa-inbox) #appShell .topbar{--socio-topbar:84px}
+body #appShell:has(#view > .wa-inbox) #view{height:calc(100dvh - var(--socio-topbar,84px))!important}
+body:has(#view > .wa-inbox) #appShell .topbar{margin-bottom:0}
+/* Avatar redondo de verdade, preenchendo o botão do topo. */
+body #appShell .user-menu>summary{display:grid;place-items:center;padding:0!important;border-radius:50%!important;overflow:hidden}
+body #appShell .user-menu>summary .user-chip{
+ width:38px!important;height:38px!important;min-width:38px;
+ aspect-ratio:1/1;
+ border-radius:50%!important;
+ box-shadow:0 0 0 2px #ffffff1f,0 6px 16px -8px #000;
+}
+
+/* A view é item flex: sem min-height, ela se esticava 100vh e empurrava tudo
+   para fora da tela. O WhatsApp precisa dela exatamente do tamanho sobrante. */
+body:has(#view > .wa-inbox) #appShell .app-main{min-height:0!important;height:100dvh!important;overflow:hidden!important}
+body #appShell #view:has(> .wa-inbox){
+ min-height:0!important;
+ flex:1 1 auto!important;
+ height:auto!important;
+ max-height:calc(100dvh - var(--socio-topbar,76px))!important;
+}
+
+/* Painel de informações do WhatsApp no tema escuro da referência. */
+body #appShell .wa-inbox-details{
+ background:#12141d!important;border-left:1px solid #ffffff12!important;
+ color:#e7e2f1!important;box-shadow:none!important;
+ -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
+}
+body #appShell .wa-inbox-details :is(h2,h3,strong,label){color:#efeaf7!important}
+body #appShell .wa-inbox-details :is(small,p,span:not(.wa-chat-avatar)){color:#a9a3b8}
+body #appShell .wa-inbox-details :is(input,select,textarea){
+ background:#1b1e2a!important;border:1px solid #ffffff1a!important;color:#efeaf7!important;
+ border-radius:10px!important;
+}
+body #appShell .wa-inbox-details .btn.soft{background:#ffffff0d!important;color:#e7dcff!important;border-color:#ffffff1f!important}
+body #appShell .wa-details-top{border-bottom:1px solid #ffffff10!important}
+body #appShell .wa-inbox-details :is(.btn,.wa-details-section button):focus-visible{outline:2px solid #8f7bff;outline-offset:2px}
+
+/* ── Esqueleto de tela (Meta Ads, Conexões) ──────────────────────────────
+   A regra antiga pintava três retângulos claros antes da tela carregar. Agora
+   os cartões usam o vidro escuro do sistema e o conteúdo deles pulsa. */
+body #appShell #view .px-workspace.px-initial-view{background:transparent!important;min-height:0!important}
+body #appShell #view .px-workspace.px-initial-view .px-page-heading{margin-bottom:22px!important}
+body #appShell #view .px-initial-view .px-page-heading h1{color:var(--et-ink,#f7f5fb)!important}
+body #appShell #view .px-initial-view .px-page-heading p{color:var(--et-muted,#b0aabb)!important;font-size:12.5px!important}
+body #appShell #view .px-workspace.px-initial-view .px-initial-grid>div{
+ min-height:176px!important;
+ border:1px solid #ffffff12!important;
+ border-radius:20px!important;
+ background:linear-gradient(160deg,#ffffff0f 0%,#ffffff06 52%,#ffffff03 100%)!important;
+ box-shadow:inset 0 1px 0 #ffffff14!important;
+ display:flex!important;flex-direction:column;justify-content:center;gap:12px;padding:22px!important;
+}
+body #appShell #view .px-initial-grid .px-load-line{
+ width:100%!important;height:10px!important;
+ background:linear-gradient(90deg,#1e2130 0%,#2a2e40 45%,#1e2130 90%)!important;
+ background-size:200% 100%!important;border-radius:999px!important;
+ animation:stripe-skeleton 1.75s linear infinite;
+}
+body #appShell #view .px-initial-grid .px-load-line:nth-child(2){width:66%!important}
+
+/* O fio do carregamento não some na primeira pintura: ele só sai com o conteúdo. */
+body #appShell #view .px-workspace.px-initial-view .px-load-line{transition:none}
+body #appShell #view .px-workspace.px-initial-view .px-page-heading p::after{
+ content:"";display:inline-block;width:10px;height:10px;margin-left:8px;vertical-align:-1px;
+ border:2px solid #8f7bff;border-right-color:transparent;border-radius:50%;
+ animation:socio-spin .7s linear infinite;
+}
+@keyframes socio-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){
+ body #appShell #view .px-workspace.px-initial-view .px-page-heading p::after{animation:none}
+}
+
+/* ═══ App inteiro na janela: nenhuma tela rola a página ═══════════════════
+   Shell fixo em 100dvh; somente o conteúdo de cada tela rola, por dentro. */
+body:has(#appShell:not(.hidden)){
+ height:100dvh!important;overflow:hidden!important;
+}
+body #appShell.app-shell:not(.hidden){
+ height:100dvh!important;min-height:0!important;
+ display:flex!important;flex-direction:column!important;
+ overflow:hidden!important;
+}
+body #appShell .app-main{
+ height:100%!important;min-height:0!important;
+ display:flex!important;flex-direction:column!important;
+ overflow:hidden!important;
+}
+body #appShell .topbar{flex:0 0 auto!important}
+body #appShell[data-workspace] #view,
+body #appShell #view{
+ flex:1 1 auto!important;
+ min-height:0!important;
+ height:auto!important;
+ max-height:none!important;
+ overflow-y:auto!important;
+ scrollbar-width:thin;
+}
+body #appShell .site-footer{flex:0 0 auto!important}
+
+/* WhatsApp: ocupa a janela inteira, sem a faixa de título e sem rolagem
+   externa — lista e conversa rolam apenas por dentro. */
+body:has(#view > .wa-inbox) #appShell .page-strip{display:none!important}
+body:has(#view > .wa-inbox) #appShell .site-footer{display:none!important}
+body #appShell #view:has(> .wa-inbox){
+ overflow:hidden!important;padding:0!important;
+ min-height:0!important;height:100%!important;max-height:100%!important;
+ display:flex!important;flex-direction:column!important;
+}
+body #appShell #view > .wa-inbox{
+ flex:1 1 auto;min-height:0!important;height:100%!important;
+ margin:0!important;border-radius:0!important;
+}
+@supports(height:100dvh){
+ body #appShell.app-shell:not(.hidden){height:100dvh!important}
+}
+
+/* Os menus só existem quando abertos: fechados, não ficam por cima da tela. */
+body #appShell .topbar-notify:not([open]) .topbar-notify-panel,
+body #appShell .user-menu:not([open]) .user-menu-panel{
+ display:none!important;visibility:hidden!important;pointer-events:none!important;
+}
+
+/* A moldura da página é fixa: nenhuma classe de suavização transforma a view
+   em bloco de contenção e a deixa aparecer deslocada ao navegar. */
+body #appShell #view{animation:none!important;transition:none!important;transform:none!important;filter:none!important}
+@media(prefers-reduced-motion:no-preference){
+ body #appShell #view.socio-workspace-enter{animation:none!important}
+}

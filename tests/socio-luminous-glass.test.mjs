@@ -10,7 +10,9 @@ const chrome=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/google-
  '/usr/bin/chromium','/usr/bin/chromium-browser','/opt/google/chrome/chrome'].find(x=>x&&existsSync(x));
 
 test('canonical light stylesheet is last; old luminous glass is retired',()=>{
- assert.equal(imports.at(-1),'/socio-reference.css');
+ // The reference theme is the last DESIGN layer; motion.css only animates it.
+ assert.equal(imports.filter(x=>!x.startsWith('/socio-motion.css')).at(-1),'/socio-reference.css');
+ assert.equal(imports.at(-1),'/socio-motion.css');
  assert(server.includes("'/socio-ethereal.css'"));
  assert(server.includes("'/socio-reference.css'"));
  assert(!imports.includes('/socio-luminous-glass.css'));

@@ -53,7 +53,10 @@ test('the floating launcher is the orb itself and opens the IA page',()=>{
  assert(!dock.includes('px-assistant-fab'));
  assert(dock.includes("globalThis.SocioOrbMesh?.create(get('.thalita-orb-canvas'),{light:true,density:.34,radius:.40,point:.011})"));
  assert(dock.includes("fab.addEventListener('click',()=>navigate?.('orb'))"));
- assert(app.includes('globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf,navigate:changeView})'));
+ // The assistant navigates through a remounting wrapper so its own navigation
+ // is never swallowed by the "same screen" guard.
+ assert(app.includes('globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf,navigate:'));
+ assert(app.includes("navigate:(view,id=null)=>changeView(view,id,{remount:false})"));
  assert.match(css,/\.thalita-orb\{/);
  assert.match(css,/\.thalita-orb-canvas\{/);
  assert.match(css,/body\.socio-orb-view #socioThalitaDock\{display:none!important\}/);

@@ -22,9 +22,9 @@
  const stopLiveRefresh=()=>{if(liveRefreshTimer){clearInterval(liveRefreshTimer);liveRefreshTimer=null;}liveRefreshSerial++;};
  const invalidateRender=()=>{renderSerial++;stopLiveRefresh();};
  const forTenant=me=>{const id=[me?.tenant?.id||'',me?.user?.id||'',me?.user?.role||''].join(':');
-  if(selectedTenant!==id){stopLiveRefresh();window.SocioMetaBilling?.dispose();getCache.clear();posterCache.clear();billingAutoAttempts.clear();snapshots.clear();periodDraft=null;splitState.preset='month';splitState.from=null;splitState.to=null;selectedTenant=id;}
+  if(selectedTenant!==id){stopLiveRefresh();window.SocioMetaBilling?.dispose();getCache.clear();stableCache.clear();posterCache.clear();billingAutoAttempts.clear();snapshots.clear();periodDraft=null;splitState.preset='month';splitState.from=null;splitState.to=null;selectedTenant=id;}
  };
- const clearCache=()=>{stopLiveRefresh();getCache.clear();posterCache.clear();snapshots.clear();selectedTenant=null;};
+ const clearCache=()=>{stopLiveRefresh();getCache.clear();stableCache.clear();posterCache.clear();snapshots.clear();selectedTenant=null;};
  const startLiveRefresh=(root,kind,renderId,refresh,updateWhilePlaying)=>{
   stopLiveRefresh();const serial=liveRefreshSerial;
   liveRefreshTimer=setInterval(async()=>{
@@ -46,11 +46,43 @@
   if(label&&label.isConnected)label.title='Última consulta iniciada às '+new Date().toLocaleTimeString('pt-BR')+
    '. A Meta pode publicar métricas com atraso.';
  };
+ // Cache-first read used while a confirmed screen is on screen: it resolves at
+ // once with the previous value (never a spinner, never "—") and updates the
+ // cache in the background for the next visit.
+ const peek=(path,ttl=60000)=>{
+  const existing=getCache.get(path);
+  if(existing?.result&&Date.now()-existing.at<ttl)return existing.result;
+  return null;
+ };
+ // Last confirmed value per endpoint, kept even after the quick cache expires,
+ // so the board never falls back to "—" while a fresh read is in flight.
+ const stableCache=new Map();
+ const remember=(path,result)=>{
+  if(result?.ok===true)stableCache.set(path,result);
+  else if(!stableCache.has(path))stableCache.set(path,result);
+ };
+ const stable=(path)=>{
+  const hit=stableCache.get(path);
+  if(!hit)return null;
+  return {ok:!!hit.ok,data:hit.data??null,reason:hit.reason||''};
+ };
+ const refreshed=async(api,path,ttl=25000)=>{
+  const old=getCache.get(path);
+  if(old?.pending)return old.pending;
+  const pending=optional(api,path).then(result=>{
+   if(result?.ok!==false||!stableCache.has(path))remember(path,result);
+   if(result?.ok!==false)getCache.set(path,{result,at:Date.now()});
+   return result;
+  });
+  getCache.set(path,{pending,at:Date.now(),result:old?.result});
+  return pending;
+ };
  const cached=async(api,path,ttl=25000)=>{
   const existing=getCache.get(path),now=Date.now();
   if(existing?.result&&now-existing.at<ttl)return existing.result;
   if(existing?.pending)return existing.pending;
   const pending=optional(api,path).then(result=>{
+   remember(path,result);
    getCache.set(path,{result,at:Date.now()});return result;
   },error=>{getCache.delete(path);throw error;});
   getCache.set(path,{pending,at:now});return pending;
@@ -71,6 +103,8 @@
  };
  const setPreview=(root,kind)=>{
   const html=snapshots.get(kind);
+  // A cached snapshot is the last confirmed screen, never a loader: the reveal
+  // starts from final values and the live read only corrects what changed.
   if(html){root.innerHTML=html;return;}
   const title=({overview:'Visão geral',marketing:'Meta Ads',connections:'Conexões'}[kind]||'Sócio');
   const skeleton='<span class="px-load-line" aria-hidden="true"></span>';
@@ -92,13 +126,13 @@
     '</div>';
    return;
   }
+  // Meta Ads and Conexões: the heading paints at once and the cards wait as
+  // quiet placeholder text inside final-size boxes, never gray slabs.
+  const card='<div class="px-load-card" aria-hidden="true">'+skeleton+skeleton+'</div>';
   root.innerHTML='<div class="px-workspace px-initial-view px-screen-loading" aria-busy="true">'+
    '<div class="px-page-heading"><div><h1>'+esc(title)+'</h1>'+
-   '<p>Carregando informações da empresa…</p></div></div>'+
-   '<div class="px-initial-grid" aria-hidden="true">'+
-   '<div class="px-load-card">'+skeleton+skeleton+'</div>'+
-   '<div class="px-load-card">'+skeleton+skeleton+'</div>'+
-   '<div class="px-load-card">'+skeleton+skeleton+'</div></div></div>';
+   '<p class="px-load-status" role="status">Carregando informações da empresa…</p></div></div>'+
+   '<div class="px-initial-grid" aria-hidden="true">'+card+card+card+'</div></div>';
  };
  const mediaUrl=(value)=>{
   if(typeof value!=='string'||value.length>2600)return null;
@@ -318,7 +352,7 @@
    activeAds:adList.filter(x=>(x.effective_status||x.status)==='ACTIVE').length,
    best:daily.filter(x=>Number(x.clicks)>0).sort((a,b)=>Number(b.clicks)-Number(a.clicks))[0]||null};
  }
- async function overview({root,api,me,navigate,periodPreset='7d',periodFrom=null,periodTo=null,progressive=false,
+ async function overview({root,api,me,navigate,periodPreset='7d',periodFrom=null,periodTo=null,progressive=false,revalidate=false,
   splitPreset=splitState.preset,splitFrom=splitState.from,splitTo=splitState.to}){
   const renderId=++renderSerial;
   // One period decides every tile on the board: Hoje, 7 dias, Mês atual or a
@@ -348,9 +382,20 @@
   };
   // Revenue has its own endpoint so a company without the Meta Ads module still
   // sees what it sold. It is an own-database read, fast enough for the first paint.
-  const revenueCall=cached(api,'/api/dashboard/revenue',30000);
-  const periodCall=cached(api,'/api/dashboard/period?'+periodQuery,20000);
-  const campaignPeriodCall=ads?periodCall.then(result=>{
+  // Coming back to a screen the owner already saw: paint the confirmed values
+  // immediately and let the fresh read correct them underneath.
+  // revalidate=true (live update): always read fresh, never serve cache.
+  const confirmed=!revalidate&&root.querySelector('.px-overview')&&!root.querySelector('.px-overview-loading');
+  const read=(path,ttl)=>{
+   const ready=peek(path,60000)||stable(path);
+   if(ready)return ready;            // last confirmed value, never a spinner
+   if(!confirmed)return cached(api,path,ttl);
+   return refreshed(api,path,ttl);   // a real promise the board can .then()
+  };
+  const revenueCall=read('/api/dashboard/revenue',30000);
+  const periodCall=read('/api/dashboard/period?'+periodQuery,20000);
+  const periodPromise=periodCall&&typeof periodCall.then==='function'?periodCall:Promise.resolve(periodCall);
+  const campaignPeriodCall=ads?periodPromise.then(result=>{
    const span=result?.ok===true?result.data?.period:null;
    if(!isDay(span?.from)||!isDay(span?.to))return {ok:false};
    return cached(api,'/api/marketing/tools/insights?since='+encodeURIComponent(span.from)+
@@ -363,8 +408,11 @@
   const splitActive=splitOk==='custom'&&!splitCustomOk?'month':splitOk;
   const splitQuery='preset='+splitActive+(splitActive==='custom'?
    '&from='+encodeURIComponent(splitFrom)+'&to='+encodeURIComponent(splitTo):'');
-  const splitPeriodCall=cached(api,'/api/dashboard/period?'+splitQuery,20000);
-  const splitSpendCall=splitPeriodCall.then(splitPeriod=>{
+  const splitPeriodCall=read('/api/dashboard/period?'+splitQuery,20000);
+  // Any window read can come back from cache as a plain value: wrap it so the
+  // chain below always has a promise to follow.
+  const spanCall=splitPeriodCall&&typeof splitPeriodCall.then==='function'?splitPeriodCall:Promise.resolve(splitPeriodCall);
+  const splitSpendCall=spanCall.then(splitPeriod=>{
    const span=splitPeriod?.ok===true?splitPeriod.data?.period:null;
    const from=span?.from||(splitActive==='custom'?splitFrom:null);
    const to=span?.to||(splitActive==='custom'?splitTo:null);
@@ -378,7 +426,8 @@
   });
   // The last customer messages the assistant answered come from the inbox module.
   const inboxCall=can(me,'inbox.read')?
-   cached(api,'/api/inbox/v2',20000).catch(()=>({data:null,ok:false})):Promise.resolve({data:null,ok:false});
+   Promise.resolve(confirmed?peek('/api/inbox/v2',60000):null).then(ready=>ready||
+    cached(api,'/api/inbox/v2',20000)).catch(()=>({data:null,ok:false})):Promise.resolve({data:null,ok:false});
   const calls=[
    ads?loadMeta(api,'today').catch(()=>null):Promise.resolve(null),
    ads?cached(api,'/api/marketing/traffic?limit=12',30000):Promise.resolve({ok:false}),
@@ -558,9 +607,7 @@
      '<span class="et-campaign-thumb" data-campaign-preview>'+
       posterView(featuredThumb,'Criativo da campanha '+String(bestCampaign.campaign_name||bestCampaign.name||''))+'</span>'+
      '<span class="et-campaign-copy"><strong>'+
-      esc(bestCampaign.campaign_name||bestCampaign.name||bestCampaignId)+'</strong>'+
-      '<small>'+(featuredIsRanked?number(bestCampaign.clicks)+' cliques · '+esc(periodName):'Ativa · sem métricas no período')+'</small>'+
-      '<b>'+(featuredIsRanked?money(bestCampaign.spend,meta?.currency):'—')+'<i>gastos no período</i></b></span></div>':
+      esc(bestCampaign.campaign_name||bestCampaign.name||bestCampaignId)+'</strong></span></div>':
     '<p class="et-muted">Nenhuma campanha encontrada na conta Meta.</p>')+'</section>';
   const flowMonths=Array.isArray(rev?.months)?rev.months:[];
   const flowPeak=Math.max(1,...flowMonths.map(m=>Number(m.revenueCents)||0));
@@ -694,11 +741,8 @@
     flowCard+
     splitCard+
     conversationsCard+
-   '</div>'+
-   '<p class="px-live-indicator"><span class="px-live-dot"></span>'+(progressive?'Indicadores da empresa disponíveis · consultando anúncios em segundo plano':'Atualização automática a cada 60 segundos · indicadores retornados pelos provedores')+'</p>'+
-   '<p class="px-provenance">Indicadores consolidados por empresa. Métricas publicitárias dependem das permissões das contas autorizadas; conversões atribuídas por anúncios não são comprovantes de pagamento. Nenhum número indisponível é substituído por uma estimativa.</p>'+
-  '</div>';
-  snapshots.set('overview',root.innerHTML);
+   '</div></div>';
+  if(!root.querySelector('.px-overview-loading'))snapshots.set('overview',root.innerHTML);
   if(featuredAd){
    const placeholder=root.querySelector('[data-campaign-preview]');
    cached(api,'/api/marketing/tools/ad-media?adId='+encodeURIComponent(featuredAd.id),25000).then(result=>{
@@ -712,6 +756,30 @@
     if(result.data?.quality==='thumbnail_only')placeholder?.classList.add('px-media-lowres');
    }).catch(()=>{});
   }
+
+  // Give the first paint a readable count-up instead of a sudden jump.
+  const animateBoardValues=()=>{
+   const nodes=root.querySelectorAll('.et-hero-value strong,.et-kpi-value,.et-legend-value,.et-donut-center');
+   nodes.forEach(node=>{
+    if(node.dataset.countAnimated)return;
+    const text=node.textContent||'';
+    const match=text.match(/^(.*?)([\d.,]+)([^\d]*)$/);
+    if(!match)return;
+    const raw=Number(match[2].replace(/\./g,'').replace(',','.'));
+    if(!Number.isFinite(raw)||raw===0)return;
+    node.dataset.countAnimated='true';
+    const prefix=match[1],suffix=match[3],decimals=(match[2].split(',')[1]||'').length;
+    const start=performance.now(),duration=720;
+    const tick=now=>{
+     const p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3);
+     const value=(raw*eased).toLocaleString('pt-BR',{minimumFractionDigits:decimals,maximumFractionDigits:decimals});
+     node.textContent=prefix+value+suffix;
+     if(p<1)requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+   });
+  };
+  animateBoardValues();
 
   // One period control owns every number on the board. A preset repaints at
   // once with the own-database reads and lets Meta arrive in the second paint;
@@ -810,21 +878,23 @@
    });
   });
 
-  if(progressive&&ads){
+  if(progressive&&ads&&!confirmed){
    // Never hold up the dashboard for an ad provider. If the visitor switches
-   // pages meanwhile, renderSerial stops the stale secondary paint.
+   // pages meanwhile, renderSerial stops the stale secondary paint. A screen
+   // already showing confirmed values is not repainted again: that was the
+   // double flash (values, "—", values) the owner saw when returning.
    void later.then(()=>{
     if(renderId!==renderSerial||!root.isConnected||!root.querySelector('.px-overview'))return;
     return overview({root,api,me,navigate,...keepPeriod,progressive:false});
    }).catch(()=>{});
   }else startLiveRefresh(root,'overview',renderId,
-   ()=>overview({root,api,me,navigate,...keepPeriod}),
+   ()=>overview({root,api,me,navigate,...keepPeriod,revalidate:true}),
    // Every number on the board answers the chosen window, so a live refresh
    // repaints the board instead of patching individual elements: a late
    // provider never writes a figure into a tile it does not own.
    async()=>{
     getCache.clear();
-    await overview({root,api,me,navigate,...keepPeriod,progressive:false});
+    await overview({root,api,me,navigate,...keepPeriod,progressive:false,revalidate:true});
    });
   // The spend card owns its own window, so its control never touches the
   // headline period. The choice lives in module state and survives a repaint.
@@ -862,7 +932,10 @@
   // A refresh circle sits next to the period pills, like the reference's "+".
   root.querySelector('[data-px-refresh]')?.addEventListener('click',()=>{
    getCache.clear();
-   void overview({root,api,me,navigate,...keepPeriod,progressive:true});
+   // A manual refresh replays the reveal: the owner asked to watch it.
+   void overview({root,api,me,navigate,...keepPeriod,progressive:true}).then(()=>{
+    requestAnimationFrame(()=>globalThis.SocioMotion?.replay?.(root));
+   });
   });
   root.querySelectorAll('[data-open-conversation]').forEach(button=>button.addEventListener('click',()=>
    navigate('inbox',button.dataset.openConversation)));
@@ -878,9 +951,27 @@
   if(renderId!==renderSerial)return;
   const connected=data?.status.data?.connected===true,selected=!!data?.status.data?.selectedAccount;
   const campaigns=data?.list||[],ads=data?.adList||[],hasData=data?.insights.ok===true,currency=data?.currency;
+  const insightsMap=new Map((data?.daily||[]).map(x=>[String(x.campaign_id),x]));
   const decoratedCampaigns=campaigns.map(c=>{
    const matches=ads.filter(ad=>String(ad.campaign_id||'')===String(c.id));
    return {...c,topAd:matches.find(ad=>(ad.effective_status||ad.status)==='ACTIVE')||matches[0]||null};
+  });
+  // Keep the working set visible first. Within each status, put the campaigns
+  // with the strongest available result ahead of the rest (purchases, then
+  // clicks, then spend), while preserving Meta's order for ties.
+  const campaignRank=c=>{
+   const status=String(c.effective_status||c.status||'').toUpperCase();
+   const metric=insightsMap?.get?.(String(c.id))||{};
+   return {
+    active:status==='ACTIVE'?1:0,
+    purchases:Number(metric.purchases??metric.conversions??0)||0,
+    clicks:Number(metric.clicks)||0,
+    spend:Number(metric.spend)||0
+   };
+  };
+  decoratedCampaigns.sort((a,b)=>{
+   const ar=campaignRank(a),br=campaignRank(b);
+   return br.active-ar.active||br.purchases-ar.purchases||br.clicks-ar.clicks||br.spend-ar.spend;
   });
   const bestThumbnail=mediaUrl(data?.bestAd?.thumbnailUrl);
   const selectedCampaign=campaignId?decoratedCampaigns.find(c=>String(c.id)===String(campaignId)):null;
@@ -901,7 +992,6 @@
   const visibleAds=selectedAdset?(adsResult?.ok?adsResult.items:accountSetAds):selectedCampaign?[]:ads;
   const manage=can(me,'marketing.manage');
 
-  const insightsMap=new Map((data?.daily||[]).map(x=>[String(x.campaign_id),x]));
   const btn='<button type="button" class="btn soft" data-px-connect>Gerenciar conexões</button>';
   root.innerHTML='<div class="px-workspace px-marketing">'+
    '<div class="px-page-heading"><div><span class="px-eyebrow">MÍDIA PAGA · META ADS</span><h1>Campanhas e desempenho</h1>'+

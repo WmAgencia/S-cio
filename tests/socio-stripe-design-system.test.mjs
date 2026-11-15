@@ -10,7 +10,7 @@ const server=read('server.mjs');
 const css=read('public/socio-stripe-system.css');
 const app=read('public/app.js');
 const overview=read('public/socio-workspace-ui.js');
-const motion=read('public/socio-entry-motion.js');
+const motion=read('public/socio-motion.js');
 const base=read('public/inbox.css');
 const cssImports=[...html.matchAll(/<link rel="stylesheet" href="(\/[^"]+\.css(?:\?[^"]*)?)"/g)]
  .map(match=>match[1].split('?')[0]);
@@ -18,7 +18,9 @@ const chrome=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/google-
  '/usr/bin/chromium','/usr/bin/chromium-browser','/opt/google/chrome/chrome'].find(x=>x&&existsSync(x));
 
 test('one canonical board theme replaces obsolete dark overrides',()=>{
- assert.equal(cssImports.at(-1),'/socio-reference.css');
+ // design layers end with the reference theme; motion.css animates only.
+ assert.equal(cssImports.filter(x=>!x.startsWith('/socio-motion.css')).at(-1),'/socio-reference.css');
+ assert.equal(cssImports.at(-1),'/socio-motion.css');
  assert.match(html,/\/socio-stripe-system\.css\?v=[\w]+/);
  assert.match(html,/\/socio-ethereal\.css\?v=[\w]+/);
  assert(server.includes("'/socio-stripe-system.css'"));
@@ -31,9 +33,12 @@ test('one canonical board theme replaces obsolete dark overrides',()=>{
   assert(!cssImports.some(x=>x.endsWith('/'+old)),old+' should not be loaded');
  }
  assert(!html.includes('<script src="/socio-glass-motion.js'));
- assert.match(html,/\/socio-entry-motion\.js\?v=20261112b/);
+ assert.match(html,/\/socio-motion\.js\?v=20\d{6}[a-z]/);
+ assert(!html.includes('/socio-entry-motion.js'),'one motion layer only');
  assert.match(motion,/prefers-reduced-motion: reduce/);
- assert.match(motion,/duration=cheapMotion\?\.matches\?165:215/);
+ assert.match(motion,/prefers-reduced-motion/);
+ assert.match(motion,/IntersectionObserver|MutationObserver/);
+ assert.match(motion,/requestAnimationFrame/);
  assert.doesNotThrow(()=>new vm.Script(motion));
  assert.doesNotThrow(()=>new vm.Script(app));
  assert.doesNotThrow(()=>new vm.Script(overview));

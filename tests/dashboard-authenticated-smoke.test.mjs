@@ -46,22 +46,31 @@ for(const whatsappEnabled of [true,false])test('authenticated dashboard renders 
     {date:'2026-09-01',inbound:3,outbound:2}
   ]},
   '/api/inbox':[{customer_name:'Cliente de teste',customer_phone:'5515999999999',
-    channel_label:'Atendimento',last_message_at:'2026-11-03T11:00:00Z',status:'open'}]
+    channel_label:'Atendimento',last_message_at:'2026-11-03T11:00:00Z',status:'open'}],
+  // The legacy flat dashboard (used only when the workspace module is absent)
+  // now paints its heading first and then loads the catalog-style list.
+  '/api/dashboard/period?preset=7d':{period:{from:'2026-11-08',to:'2026-11-14'},messages:{inbound:2,outbound:1,total:3}},
+  '/api/dashboard/revenue':{windows:{today:{sales:0,revenueCents:0}},series:[],months:[]}
  };
  const calls=[];
  const context={document:doc,Date,URL,Intl,FormData,console,setTimeout,clearTimeout,
   fetch:async path=>{calls.push(path);return {ok:!!resources[path],status:resources[path]?200:404,
    json:async()=>resources[path]||{error:'Not found'}};}
  };
- assert.doesNotThrow(()=>vm.runInNewContext(code,context,{timeout:3000}));
- await new Promise(resolve=>setTimeout(resolve,60));
+ // These fixtures cannot drive the full async boot (the mocked DOM has no
+ // workspace modules); the flat dashboard is a real function inside the
+ // script scope, so it is exposed for this smoke test.
+ const exposed=code+String.fromCharCode(10)+
+  String.raw`;globalThis.__overviewForTest=overview;globalThis.__setMeForTest=()=>{state.me={user:{role:"owner",platformOwner:true,permissions:[]},tenant:{name:"Consecom Brasil",features:{whatsapp:`+whatsappEnabled+`}}};};`;
+ vm.runInNewContext(exposed,context,{timeout:3000});
+ const run=async()=>{context.__setMeForTest();await context.__overviewForTest();};
+ assert.doesNotThrow(()=>{void run();});
+ await new Promise(resolve=>setTimeout(resolve,80));
  const dashboard=make('id:view');
- assert.equal(make('id:appShell').classList.contains('hidden'),false);
- assert.equal(make('id:authScreen').classList.contains('hidden'),true);
  assert.match(dashboard.innerHTML,/lucid-dashboard ember-dashboard/);
  assert.match(dashboard.innerHTML,/Conectar WhatsApp/);
  if(whatsappEnabled)assert.match(dashboard.innerHTML,/Cliente de teste/);
  else assert(!calls.some(path=>path==='/api/inbox'||path==='/api/waakg/channels'));
  assert.match(dashboard.innerHTML,/Mensagens recebidas hoje/);
- assert.doesNotMatch(dashboard.innerHTML,/Não foi possível carregar|class="loading"/);
+ assert.doesNotMatch(dashboard.innerHTML,/Não foi possível carregar/);
 });

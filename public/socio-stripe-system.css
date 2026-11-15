@@ -1497,11 +1497,7 @@ body #appShell #view .px-overview-loading,
 body #appShell #view .px-screen-loading{
  color:#344054!important;
 }
-body #appShell #view .px-overview-loading :is(.px-budget-account.px-load-card,.px-kpi.px-load-card),
-body #appShell #view .px-screen-loading .px-initial-grid .px-load-card{
- background:#fff!important;border:1px solid #e5e7ed!important;
- box-shadow:none!important;border-radius:12px!important;
-}
+/* Skeletons take their surface from socio-motion.css (dark glass). */
 body #appShell #view :is(.px-load-line,.px-budget-meta-pending .px-load-line){
  background:linear-gradient(90deg,#ebedf3 0%,#f5f6fa 45%,#ebedf3 90%)!important;
  background-size:200% 100%!important;

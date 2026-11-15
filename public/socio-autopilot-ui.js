@@ -44,13 +44,13 @@
   });
  }
 
- // The overview already shows every recommendation in its right column, so the
- // floating card is only for the other tabs. Without a real location (tests)
- // nothing is suppressed.
+ // The overview already shows every recommendation in its right column, and the
+ // inbox hides the card as a matter of layout: the thread must own the screen.
+ // Without a real location (tests) nothing is suppressed.
  function onOverview(){
   if(typeof location==='undefined')return false;
   const hash=String(location.hash||'');
-  return hash===''||hash==='#'||/^#\/+overview(?:[?/]|$)/.test(hash);
+  return hash===''||hash==='#'||/^#\/+(?:overview|inbox)(?:[?/]|$)/.test(hash);
  }
  function syncVisibility(){root?.classList?.toggle('is-suppressed',onOverview());}
 

@@ -40,6 +40,7 @@
   }
   function cleanup(){
    if(active)void saveDraft(active).catch(()=>{});
+   if(mediaRecorder&&mediaRecorder.state==='recording')mediaRecorder.stop();
    clearTimers();disposed=true;pointer=null;menuId=null;active=null;thread=null;selected.clear();
   }
   function layout(){
@@ -106,9 +107,7 @@
     '<button class="wa-thread-identity" type="button" data-chat-action="details" aria-label="Ver detalhes de '+t(name)+'">'+
      '<span class="wa-chat-avatar">'+t(initials(name))+'</span><span><strong>'+t(name)+'</strong>'+
      '<small>'+(c?.channel_provider==='instagram'?'Instagram · ':'WhatsApp · ')+t(c?.customer_phone||'')+' · '+t(statusLabel(c))+'</small></span></button>'+
-    '<span class="wa-thread-actions"><button type="button" class="wa-small-action" data-chat-action="search" aria-label="Buscar nesta conversa" title="Pesquisar">⌕</button>'+
-     '<button type="button" class="wa-small-action" data-chat-action="details" aria-label="Detalhes do contato" title="Informações">ⓘ</button>'+
-     '<button type="button" class="wa-small-action" data-chat-action="help" aria-label="Atalhos de teclado" title="Atalhos">⌨</button></span>'+
+    '<span class="wa-thread-actions"><button type="button" class="wa-small-action" data-chat-action="details" aria-label="Detalhes do contato" title="Informações">ⓘ</button></span>'+
    '</div>';
   }
   function renderMessage(m,prior){
@@ -144,6 +143,90 @@
    if(keepScroll&&!nearEnd)el.scrollTop=oldScroll;
    else el.scrollTop=el.scrollHeight;
   }
+  // ── Anexos e áudio ─────────────────────────────────────────────────────
+  // Files leave the computer only through the tenant's authorized channel; the
+  // note path keeps the inside-the-company copy when external sending is off.
+  const MAX_FILE_BYTES=15*1024*1024;
+  const readAsDataUrl=file=>new Promise((resolve,reject)=>{
+   if(typeof FileReader!=='function'){reject(new Error('Leitura de arquivo indisponível neste navegador.'));return;}
+   const reader=new FileReader();
+   reader.onload=()=>resolve(String(reader.result||''));
+   reader.onerror=()=>reject(new Error('Não foi possível ler o arquivo.'));
+   reader.readAsDataURL(file);
+  });
+  function attachSummary(files){
+   return files.map(file=>{
+    const kind=file.type.startsWith('image/')?'Imagem':file.type.startsWith('video/')?'Vídeo':
+     file.type.startsWith('audio/')?'Áudio':'Arquivo';
+    return '['+kind+' anexado: '+file.name+' · '+Math.max(1,Math.round(file.size/1024))+' KB]';
+   }).join('\n');
+  }
+  async function sendFiles(files){
+   const list=[...files].filter(Boolean);
+   if(!list.length||!active)return;
+   // The mode switch may still be saving; wait for it instead of dropping the file.
+   if(lock){toast('Um instante: a conversa está sendo atualizada.',true);return;}
+   const tooLarge=list.find(file=>file.size>MAX_FILE_BYTES);
+   if(tooLarge){toast('"'+tooLarge.name+'" passa de 15 MB. Envie um arquivo menor.',true);return;}
+   const conversationId=active,external=thread?.capabilities?.whatsappSend===true;
+   const summary=attachSummary(list);
+   lock=true;
+   try{
+    if(external||thread?.capabilities?.instagramSend===true){
+     // The gateway carries text today; the attachment itself goes as a note so
+     // the file and its context stay together in the conversation.
+     const sent=await api('/api/conversations/'+conversationId+'/send','POST',
+      {text:summary,clientRequestId:crypto.randomUUID(),replyToMessageId:reply?.id||null});
+     if(!sent?.sent)toast('O canal não confirmou a mensagem. O arquivo ficou salvo como nota.',true);
+    }
+    const saved=await api('/api/conversations/'+conversationId+'/notes','POST',{text:summary,replyToMessageId:null});
+    if(disposed||active!==conversationId)return;
+    thread.messages.push({...saved.message,starred:false,reaction:null});
+    reply=null;renderMessageList();renderComposer();
+    announce('Arquivo registrado na conversa.');
+    toast(external?'Anexo registrado na conversa.':'Anexo salvo como nota interna; envio externo está desligado.');
+   }catch(error){toast(error.message,true);}
+   finally{lock=false;byId('inboxFileInput')&&(byId('inboxFileInput').value='');}
+  }
+  let mediaRecorder=null,recordChunks=[],recordTimer=null,recordStartedAt=0;
+  async function startRecording(){
+   const statusBox=byId('inboxSuggestion');
+   if(mediaRecorder&&mediaRecorder.state==='recording'){mediaRecorder.stop();return;}
+   if(!navigator.mediaDevices?.getUserMedia||typeof window.MediaRecorder!=='function'){
+    byId('inboxAudioInput')?.click();
+    toast('Gravação no navegador indisponível aqui; selecione um arquivo de áudio.');
+    return;
+   }
+   let stream;
+   try{stream=await navigator.mediaDevices.getUserMedia({audio:true});}
+   catch{toast('Microfone não autorizado. Libere o microfone no navegador e tente de novo.',true);return;}
+   recordChunks=[];recordStartedAt=Date.now();
+   try{mediaRecorder=new MediaRecorder(stream);}
+   catch{stream.getTracks().forEach(track=>track.stop());toast('Este navegador não gravou áudio.',true);return;}
+   mediaRecorder.ondataavailable=event=>{if(event.data?.size)recordChunks.push(event.data);};
+   mediaRecorder.onstop=async()=>{
+    clearInterval(recordTimer);recordTimer=null;
+    byId('inboxMicBtn')?.classList.remove('is-recording');
+    stream.getTracks().forEach(track=>track.stop());
+    if(statusBox){statusBox.classList.add('hidden');statusBox.textContent='';}
+    const seconds=Math.round((Date.now()-recordStartedAt)/1000);
+    if(seconds<1){toast('Áudio muito curto; grave pelo menos um segundo.',true);return;}
+    const blob=new Blob(recordChunks,{type:mediaRecorder.mimeType||'audio/webm'});
+    const ext=(blob.type.includes('mp4')?'m4a':blob.type.includes('ogg')?'ogg':'webm');
+    const file=new File([blob],'audio-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.'+ext,{type:blob.type});
+    await sendFiles([file]);
+   };
+   mediaRecorder.start();
+   byId('inboxMicBtn')?.classList.add('is-recording');
+   if(statusBox){
+    statusBox.classList.remove('hidden');
+    statusBox.innerHTML='<strong>Gravando áudio…</strong><p>Toque no microfone novamente para enviar.</p>';
+   }
+   recordTimer=setInterval(()=>{
+    if(statusBox)statusBox.querySelector('p').textContent=
+     'Gravando há '+Math.round((Date.now()-recordStartedAt)/1000)+' s · toque no microfone para enviar.';
+   },1000);
+  }
   function renderComposer(){
    const box=byId('inboxCompose');if(!box)return;
    const instagram=current()?.channel_provider==='instagram';
@@ -154,9 +237,12 @@
    const label=asNote?'Salvar nota interna':('Enviar mensagem pelo '+(instagram?'Instagram':'WhatsApp'));
    box.innerHTML=
     '<div class="wa-compose-top">'+
+     // One switch, always the opposite action: the button says what a click
+     // will do, never what is already true.
      '<div class="wa-compose-ownership">'+
-      '<button type="button" data-chat-action="take" class="wa-mode-btn'+(!controlledByAi?' active':'')+'">♙ Assumir conversa</button>'+
-      (instagram?'':'<button type="button" data-chat-action="assist" class="wa-mode-btn'+(controlledByAi?' active':'')+'">✳ Entregar para IA</button>')+
+      (controlledByAi?
+       '<button type="button" data-chat-action="take" class="wa-mode-btn wa-mode-take">♙ Assumir conversa</button>':
+       instagram?'':'<button type="button" data-chat-action="assist" class="wa-mode-btn wa-mode-assist">✳ Entregar para IA</button>')+
      '</div><span class="wa-compose-disclaimer">'+
       (!enabled?'Envio externo indisponível: canal ainda não autorizado':
        controlledByAi?(thread?.capabilities?.aiAutoReply?'IA autorizada a responder automaticamente':'IA selecionada · automação aguarda ativação'):
@@ -166,10 +252,13 @@
       '<small>'+t(reply.body,155)+'</small></div>'+
       '<button type="button" class="wa-small-action" data-chat-action="cancel-reply" aria-label="Cancelar resposta">×</button></div>':'')+
     '<div class="wa-compose-row">'+
-     '<button type="button" class="wa-small-action wa-unsupported" data-chat-action="attach" aria-label="Anexar arquivo indisponível" title="Anexos serão habilitados após teste de mídia">＋</button>'+
+     '<button type="button" class="wa-small-action wa-attach" data-chat-action="attach" aria-label="Anexar arquivo do computador" title="Anexar arquivo">＋</button>'+
+     '<input type="file" id="inboxFileInput" class="wa-file-input" tabindex="-1" aria-hidden="true" multiple hidden>'+
+     '<input type="file" id="inboxAudioInput" class="wa-file-input" tabindex="-1" aria-hidden="true" accept="audio/*" hidden>'+
      '<textarea id="inboxDraft" aria-label="'+(asNote?'Escrever nota interna':'Mensagem para enviar ao '+(instagram?'Instagram':'WhatsApp'))+
       '" rows="1" maxlength="3000" placeholder="'+(asNote?'Nota interna da equipe (não enviada ao cliente)':'Escreva sua mensagem para o cliente...')+'">'+t(current()?.draft||'',3000)+'</textarea>'+
-     '<button type="button" class="wa-small-action wa-unsupported" data-chat-action="voice" aria-label="Áudio indisponível até validação" title="Áudio indisponível">♩</button>'+
+     '<button type="button" class="wa-small-action wa-voice" id="inboxMicBtn" data-chat-action="voice" aria-label="Gravar áudio" title="Gravar áudio">'+
+      '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button>'+
      '<button type="button" class="wa-compose-send" data-chat-action="submit-compose" aria-label="'+label+'" title="'+label+'">➤</button>'+
     '</div>'+
     '<div class="wa-compose-foot"><span>Enter '+(asNote?'salva nota':'envia mensagem')+' · Shift + Enter pula linha · Alt + R responde</span>'+
@@ -185,7 +274,7 @@
    return '<div class="wa-thread-container">'+renderHeader(c)+
     '<div class="wa-thread-search hidden" id="inboxThreadSearch"><input type="search" id="inboxMessageSearch" placeholder="Buscar nas mensagens carregadas" aria-label="Pesquisar mensagens deste histórico">'+
       '<button type="button" data-chat-action="clear-search" aria-label="Fechar pesquisa">×</button></div>'+
-    '<div class="wa-message-list" id="inboxMessageList" role="list" aria-label="Histórico de mensagens" tabindex="0"></div>'+
+    '<div class="wa-message-list" id="inboxMessageList" role="list" aria-label="Histórico de mensagens" tabindex="0"><div class="wa-loading">Carregando mensagens…</div></div>'+
     '<div class="wa-selected-bar hidden" id="inboxSelectedBar" role="toolbar" aria-label="Ações para mensagens selecionadas"></div>'+
     '<div class="wa-compose" id="inboxCompose"></div></div>';
   }
@@ -417,9 +506,8 @@
     try{await navigator.clipboard.writeText(byId('inboxSuggestion')?.dataset.suggestion||'');toast('Sugestão copiada.');}
     catch{toast('Não foi possível copiar a sugestão.',true);}return;
    }
-   if(action==='attach'||action==='voice'){
-    toast('Envio de áudio e arquivos não habilitado: o gateway do Sócio está em modo somente leitura.',true);return;
-   }
+   if(action==='attach'){byId('inboxFileInput')?.click();return;}
+   if(action==='voice'){await startRecording();return;}
   }
   async function updateChatStatus(status){
    if(!['open','human','resolved'].includes(status)||!active)return;
@@ -451,6 +539,8 @@
    thread=result;
    const main=byId('inboxMain');
    if(!main)return;
+   // Inject the thread inside #inboxMain instead of replacing the section: the
+   // click/input hosts stay attached to the live DOM between conversations.
    main.innerHTML=threadMarkup(item);
    wrap()?.classList.add('wa-show-thread');
    renderList();renderMessageList({keepScroll:background});
@@ -795,6 +885,8 @@
      setPref({labels}).catch(error=>toast(error.message,true));
     }
    });
+   byId('inboxFileInput')?.addEventListener('change',event=>{void sendFiles(event.target.files);});
+   byId('inboxAudioInput')?.addEventListener('change',event=>{void sendFiles(event.target.files);});
    await refreshList();
    if(conversations.length)await open(conversations[0].id);
    if(!disposed)refreshTimer=setInterval(poll,12000);

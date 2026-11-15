@@ -117,7 +117,23 @@ function empty(icon,title,description,action=''){
 function badge(text,color='gray'){return '<span class="badge '+color+'">'+e(text)+'</span>';}
 function panel(title,description,body){return '<div class="card"><div class="panel-head"><div><h2>'+e(title)+'</h2>'+ (description?'<p>'+e(description)+'</p>':'')+'</div></div>'+body+'</div>';}
 function formValues(form){return Object.fromEntries(new FormData(form).entries());}
-function setLoading(){view.innerHTML='<div class="loading socio-page-loading" role="status" aria-live="polite"><span class="socio-loading-sigil" aria-hidden="true">✳</span><span class="socio-loading-title">Preparando seu espaço</span><span class="socio-loading-copy">Carregando as informações da sua empresa…</span></div>';}
+// No "preparando ambiente" curtain: the view keeps the previous screen until
+// the chosen one paints. Only a truly empty view gets a quiet wait line, so the
+// first visit to a section never looks frozen.
+function setLoading(){
+ view.setAttribute('aria-busy','true');
+ const empty=!view.firstElementChild;
+ let line=view.querySelector('[data-socio-loading-line]');
+ if(empty&&!line&&typeof document?.createElement==='function'){
+  line=document.createElement('p');line.dataset.socioLoadingLine='';
+  line.className='socio-loading-line';line.setAttribute('role','status');line.setAttribute('aria-live','polite');
+  line.textContent='Carregando…';view.appendChild(line);
+ }
+}
+function finishLoading(){
+ view.querySelectorAll?.('[data-socio-loading-line]').forEach(node=>node.remove());
+ view.removeAttribute?.('aria-busy');
+}
 function setupAuth(initialized){
  $('#authScreen').classList.remove('hidden');$('#appShell').classList.add('hidden');
  $('#loginForm').classList.toggle('hidden',!initialized);
@@ -128,6 +144,8 @@ function setupAuth(initialized){
 }
 async function boot(){
  try{
+  // Nothing to show yet: a quiet line instead of a curtain over an empty view.
+  if(!view.firstElementChild)setLoading();
   const bootstrap=await api('/api/bootstrap');
   try{
    const me=await api('/api/me');
@@ -171,7 +189,7 @@ async function boot(){
     if(typeof history==='object')history.replaceState(null,'',location.pathname);
    }
    if(isMasterView())globalThis.SocioThalitaUI?.unmount();
-   else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf,navigate:changeView});
+   else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf,navigate:(view,id=null)=>changeView(view,id,{remount:false})});
    if(isMasterView())globalThis.SocioAutopilotUI?.dispose();
    else globalThis.SocioAutopilotUI?.start({api,me:state.me});
    await changeView(state.view);
@@ -207,10 +225,36 @@ async function boot(){
    }
    if(marketingStatus==='failed')toast('Não foi possível concluir autorização. Confira a conta e tente novamente.',true);
    if(marketingStatus==='cancelled')toast('Autorização cancelada; nenhuma conta foi alterada.');
-  }catch(error){state.me=null;state.csrf='';globalThis.SocioAutopilotUI?.dispose();setupAuth(bootstrap.initialized);}
+  }catch(error){state.me=null;state.csrf='';globalThis.SocioAutopilotUI?.dispose();finishLoading();setupAuth(bootstrap.initialized);}
  }catch(error){setupAuth(true);$('#authError').textContent='Não foi possível conectar ao servidor. '+errMsg(error);}
 }
-async function changeView(next,conversationId=null){
+// The notification and account menus are exclusive: opening one closes the
+// other, and a click outside closes both. One menu at a time, like any OS.
+(()=>{
+ const shell=typeof document?.getElementById==='function'?document.getElementById('appShell'):null;
+ if(!shell)return;
+ const dismiss=()=>shell.querySelectorAll('details[open]').forEach(node=>node.removeAttribute('open'));
+ shell.addEventListener('toggle',event=>{
+  const opened=event.target;
+  if(!(opened instanceof HTMLDetailsElement)||!opened.open)return;
+  shell.querySelectorAll('details[open]').forEach(node=>{if(node!==opened)node.removeAttribute('open');});
+ },true);
+ document.addEventListener('click',event=>{
+  if(event.target.closest?.('details'))return;
+  dismiss();
+ },true);
+ document.addEventListener('keydown',event=>{if(event.key==='Escape')dismiss();});
+})();
+async function changeView(next,conversationId=null,{remount=false}={}){
+ // The same screen repainted by its own refresh (or a second click) must not
+ // run the full load again: the visible screen is already the right one.
+ if(!remount&&!conversationId&&state.view===next&&view.querySelector(':scope > .px-workspace, :scope > .wa-inbox, :scope > .view-heading')){
+  const current=view.firstElementChild;
+  const matches=next==='overview'?view.querySelector('.px-overview'):
+   next==='inbox'?view.querySelector('.wa-inbox'):
+   current&&current.classList.contains('px-'+next)?current:null;
+  if(matches)return;
+ }
  globalThis.SocioMetaBilling?.dispose();
  globalThis.SocioInterviewUI?.dispose();
  if(next!=='inbox'&&activeInbox){activeInbox.cleanup();activeInbox=null;}
@@ -247,7 +291,10 @@ async function changeView(next,conversationId=null){
   if(next==='orb'&&globalThis.SocioOrbUI){
    await globalThis.SocioOrbUI.render({root:view,api,me:state.me,csrfToken:state.csrf,navigate:changeView});
   }
-  if(next==='overview')await overview();
+  if(next==='overview'){
+  // Cached reads paint from memory at once; only a cold first visit waits.
+  if(state.dashboard)overview().catch(()=>{});else await overview();
+ }
    if(next==='connections'){
     await globalThis.SocioWorkspaceUI.connections({root:view,api,me:state.me,navigate:changeView});
     await globalThis.SocioOwnerChannelUI?.render({root:view,api,me:state.me});
@@ -265,7 +312,8 @@ async function changeView(next,conversationId=null){
   if(next==='masterOverview'||next==='masterPlans')
    await globalThis.SocioMasterDashboard.render({root:view,api,me:state.me,navigate:changeView,
     mode:next==='masterPlans'?'plans':'overview'});
- }catch(error){view.innerHTML=empty('alert', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
+  finishLoading();
+ }catch(error){finishLoading();view.innerHTML=empty('alert', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
 }
 
 function chartNumber(value){const n=Number(value);return Number.isFinite(n)&&n>0?Math.round(n):0;}
@@ -340,6 +388,7 @@ function emberIcon(kind){
 }
 async function overview(){
  if(globalThis.SocioWorkspaceUI)return globalThis.SocioWorkspaceUI.overview({root:view,api,me:state.me,navigate:changeView,progressive:true});
+ // Workspace module absent (older deploy): the flat dashboard below renders.
  const [d,trend,recent,links]=await Promise.all([
   api('/api/dashboard'),api('/api/dashboard/activity?range=1m'),
   featureAvailable('whatsapp')?api('/api/inbox'):Promise.resolve([]),
@@ -738,6 +787,8 @@ const readVariantRows=(root,basePrice)=>[...root.querySelectorAll('[data-variant
   stockQuantity:stockFromInput(row.querySelector('[data-variant-stock]')?.value),active:true};
 });
 async function products(selected=null){
+ // The heading paints at once; the catalog rows arrive underneath it.
+ if(!document.querySelector?.('.view-heading, .px-workspace, .wa-inbox'))view.innerHTML=heading('CATÁLOGO','Produtos e serviços.','Catálogo, preços e disponibilidade da empresa.');
  const [list,storage]=await Promise.all([api('/api/products'),api('/api/products/storage')]);
  const canReadCampaigns=(state.me?.user?.permissions||[]).includes('marketing.read')&&featureAvailable('meta_ads');
  const showDetails=selected==='new'||Boolean(selected);
@@ -1075,6 +1126,9 @@ function mountAiGuideTabs(){
 }
 
 async function training(){
+ // Only a workspace without a heading gets one: a returning owner keeps the
+ // screen they were reading and the live read refreshes it underneath.
+ if(!document.querySelector?.('.view-heading, .px-workspace, .wa-inbox'))view.innerHTML=heading('INTELIGÊNCIA ARTIFICIAL','Inteligência Artificial.','Seu Sócio aprende com as conversas da empresa e fica pronto para responder.');
  clearTimeout(trainingTimer);
  const [auto,versions,waLinks,ag]=await Promise.all([
   api('/api/training/auto'),api('/api/training/versions'),
@@ -1170,6 +1224,7 @@ async function training(){
  },1800);
 }
 async function agent(){
+ if(!view.querySelector('.socio-training-center, .two-pane'))view.innerHTML=heading('INTELIGÊNCIA ARTIFICIAL','Meu Sócio.','Personalidade, instruções e um laboratório para testar antes de publicar.');
  const ag=await api('/api/agent');
  const missing=!state.me.groqConfigured;
  const labHistory=[]; // local to this training screen, never saved as customer memory
@@ -1401,6 +1456,7 @@ async function settings(){
  });
 }
 async function team(){
+ if(!document.querySelector?.('.view-heading, .px-workspace, .wa-inbox'))view.innerHTML=heading('EQUIPE','Equipe.','Acessos, permissões e convites da empresa.');
  const permissions=new Set(state.me?.user?.permissions||[]);
  const ownAccountOnly=!featureAvailable('team')||state.me?.tenant?.status==='paused';
  const mayView=!ownAccountOnly&&permissions.has('team.read'),mayInvite=!ownAccountOnly&&permissions.has('team.invite'),
@@ -1469,8 +1525,9 @@ function selectedFeatures(form,prefix='feature-'){
  return Object.fromEntries(featureKeys.map(key=>[key,form.elements[prefix+key]?.checked===true]));
 }
 async function admin(){
+ if(!document.querySelector?.('.view-heading, .px-workspace, .wa-inbox'))view.innerHTML=heading('ADMINISTRAÇÃO','Empresas.','Contas, planos e situação de cada empresa da plataforma.');
  const [tenants,monitor]=await Promise.all([
-  api('/api/admin/tenants'),api('/api/admin/monitor').catch(()=>null)
+  api('/api/admin/tenants').catch(()=>[]),api('/api/admin/monitor').catch(()=>null)
  ]);
  const monitorById=new Map((monitor?.tenants||[]).map(t=>[t.id,t]));
  const trialLabel=t=>{
@@ -1760,7 +1817,7 @@ async function switchWorkspace(mode){
   view.classList.add('socio-workspace-enter');
   setTimeout(()=>view.classList.remove('socio-workspace-enter'),760);
   if(isMasterView())globalThis.SocioThalitaUI?.unmount();
-  else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf,navigate:changeView});
+  else globalThis.SocioThalitaUI?.mount({client:api,auth:state.me,csrfToken:state.csrf,navigate:(view,id=null)=>changeView(view,id,{remount:false})});
   if(isMasterView())globalThis.SocioAutopilotUI?.dispose();
   else globalThis.SocioAutopilotUI?.start({api,me:state.me});
   await changeView(nextMode==='master'?'masterOverview':'overview');

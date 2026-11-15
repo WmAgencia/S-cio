@@ -69,7 +69,8 @@ test('featured campaign uses the headline date range and spend conversion reads 
  assert(h.requests.includes('/api/marketing/tools/insights?since=2026-11-08&until=2026-11-14'));
  assert.match(h.root.innerHTML,/Melhor no período/);
  assert.doesNotMatch(h.root.innerHTML,/Somente hoje/);
- assert.match(h.root.innerHTML,/30 cliques · Últimos 7 dias/);
+ assert.doesNotMatch(h.root.innerHTML,/30 cliques · Últimos 7 dias/);
+ assert.doesNotMatch(h.root.innerHTML,/gastos no período/);
  assert.match(h.root.innerHTML,/Taxa de conversão<\/span><span class="et-legend-value">10,00%/);
  assert.match(h.root.innerHTML,/4 vendas/);
 });
