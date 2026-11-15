@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test --test-concurrency=4 tests/*.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.923.0",
