@@ -10,12 +10,13 @@ const chrome=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/google-
  '/usr/bin/chromium','/usr/bin/chromium-browser','/opt/google/chrome/chrome'].find(x=>x&&existsSync(x));
 
 test('canonical light stylesheet is last; old luminous glass is retired',()=>{
- assert.equal(imports.at(-1),'/socio-reference.css');
+ assert.equal(imports.at(-1),'/socio-stripe-shell.css');
+ assert(!imports.includes('/socio-reference.css'));
  assert(server.includes("'/socio-ethereal.css'"));
  assert(server.includes("'/socio-reference.css'"));
  assert(!imports.includes('/socio-luminous-glass.css'));
  assert(!imports.includes('/socio-glass-motion.css'));
- assert.match(html,/<meta name="theme-color" content="#08080a">/);
+ assert.match(html,/<meta name="theme-color" content="#f7f8fa">/);
  const source=css.replace(/\/\*[\s\S]*?\*\//g,'');
  let n=0;
  for(const ch of source){n+=(ch==='{')-(ch==='}');assert(n>=0);}
@@ -30,7 +31,7 @@ test('cards are unblurred, toolbar is white and assistant opens as a right panel
  assert.match(css,/width:min\(408px,calc\(100vw - 36px\)\)!important/);
  assert.match(css,/@media\(max-width:780px\)/);
 });
-test('Chromium computes the approved dark materials with readable cards and an unblurred toolbar', {timeout:40000},async t=>{
+test('Chromium computes light materials with readable cards and an unblurred toolbar', {timeout:40000},async t=>{
  if(!chrome){t.skip('Chromium unavailable');return;}
  let browser;
  try{browser=await chromium.launch({executablePath:chrome,headless:true,args:['--no-sandbox']});}
@@ -56,9 +57,9 @@ test('Chromium computes the approved dark materials with readable cards and an u
     assistantPosition:style('#socioThalitaDock .px-assistant-window').position
    };
   });
-  assert.equal(data.top,'rgba(0, 0, 0, 0)');
-  assert.equal(data.kpi,'rgb(32, 33, 45)');
-  assert.equal(data.panel,'rgb(32, 33, 45)');
+  assert.equal(data.top,'rgba(255, 255, 255, 0.97)');
+  assert.equal(data.kpi,'rgb(255, 255, 255)');
+  assert.equal(data.panel,'rgb(255, 255, 255)');
   assert.equal(data.topBackdrop,'none');
   assert.equal(data.cardBackdrop,'none');
   assert.equal(data.assistantPosition,'fixed');
