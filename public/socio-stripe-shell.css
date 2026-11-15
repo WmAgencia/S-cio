@@ -1,0 +1,100 @@
+/*
+ * Sócio · definitive Stripe-inspired light shell.
+ * The legacy Ethereal/Reference visual experiments are intentionally not loaded.
+ * Functional modules retain their existing CSS and event handlers.
+ */
+html:has(#appShell:not(.hidden)),
+body:has(#appShell:not(.hidden)){background:#f7f8fa!important;color:#202735!important;color-scheme:light!important}
+body #appShell.app-shell{width:100%!important;max-width:none!important;min-height:100dvh!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:#f7f8fa!important;box-shadow:none!important;overflow:visible!important;color-scheme:light!important}
+body #appShell .app-main{display:flex;flex-direction:column;width:100%;min-height:100dvh;min-width:0;background:#f7f8fa!important;color:#202735!important}
+body #appShell .topbar{position:sticky;top:0;z-index:50;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:18px;width:100%;min-height:74px;height:auto;padding:11px clamp(16px,2.8vw,36px);border:0;border-bottom:1px solid #e5e7eb;background:rgba(255,255,255,.97)!important;box-shadow:0 2px 12px rgba(24,34,62,.025);color:#202735!important}
+body #appShell .topbar-brand{display:flex;align-items:center;gap:9px;white-space:nowrap;min-width:0}
+body #appShell .topbar-brand .et-logo{display:block!important;flex:none;width:34px;height:34px;border:0;border-radius:8px;background:transparent;object-fit:contain;box-shadow:none}
+body #appShell .topbar-brand strong{display:flex;flex-direction:column;gap:1px;line-height:1.15;font-size:17px;font-weight:760;letter-spacing:-.04em;color:#202735!important}
+body #appShell .topbar-brand strong small{font-size:9px;font-weight:600;letter-spacing:.055em;color:#667085!important}
+body #appShell .nav-rail{display:flex;align-items:center;min-width:0;gap:18px}
+body #appShell .nav-rail>.sidebar-label,
+body #appShell .nav-rail .sidebar-label.inner,
+body #appShell .nav-rail .master-nav-title{display:none!important}
+body #appShell .nav-rail .nav{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:4px;min-width:0;padding:0;margin:0;background:transparent;border:0}
+body #appShell .nav-rail .nav.hidden{display:none!important}
+body #appShell .nav-rail .nav-item{position:relative;display:flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:8px 11px;border:1px solid transparent;border-radius:9px;background:transparent!important;color:#526077!important;font-size:12px;font-weight:590;white-space:nowrap;box-shadow:none!important;transform:none!important;transition:background .16s ease,color .16s ease,border-color .16s ease}
+body #appShell .nav-rail .nav-item.hidden{display:none!important}
+body #appShell .nav-rail .nav-item:hover{background:#f2f4f9!important;color:#202735!important}
+body #appShell .nav-rail .nav-item.selected{background:#f0efff!important;color:#514ed5!important;border-color:#e4e1ff!important;font-weight:690}
+body #appShell .nav-rail .nav-symbol{display:inline-flex;align-items:center;justify-content:center;min-width:14px;color:inherit}
+body #appShell .nav-rail .nav-symbol svg{width:15px;height:15px;stroke:currentColor}
+body #appShell .workspace-switcher{display:inline-flex;align-items:center;gap:2px;flex:none;padding:3px;background:#f4f5f9;border:1px solid #e5e7eb;border-radius:11px}
+body #appShell .workspace-switcher.hidden{display:none!important}
+body #appShell .workspace-switcher-thumb{display:none}
+body #appShell .workspace-switcher button{position:relative;min-height:31px;padding:5px 10px;border:0;border-radius:8px;background:transparent;color:#667085;font-weight:620;font-size:11px}
+body #appShell .workspace-switcher button[aria-selected="true"]{background:white;color:#514ed5;box-shadow:0 1px 5px rgba(25,35,55,.08)}
+body #appShell .ws-mark{display:none}
+body #appShell .topbar-tools{display:flex;align-items:center;gap:9px;justify-content:flex-end;min-width:0}
+body #appShell .workspace-box{display:flex;align-items:center;gap:7px;max-width:180px;min-width:0;margin:0!important;padding:6px 9px!important;background:#fff!important;border:1px solid #e5e7eb!important;border-radius:10px!important;box-shadow:none!important}
+body #appShell .workspace-circle{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:8px;background:#eeefff;color:#514ed5}
+body #appShell .workspace-label{display:flex;flex-direction:column;min-width:0}
+body #appShell .workspace-label small{font-size:9px;color:#667085}
+body #appShell .workspace-label strong{font-size:11px;color:#202735;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body #appShell .workspace-chevron{color:#667085}
+body #appShell .topbar-icon{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:35px;padding:7px 10px;border:1px solid #e5e7eb;border-radius:9px;background:#fff;color:#526077;font-size:11px}
+body #appShell .topbar-icon svg{width:16px;height:16px}
+body #appShell .topbar-icon .shortcut{font-size:10px;color:#8390a2}
+body #appShell .topbar-icon:hover{color:#514ed5;background:#fafaff}
+body #appShell .page-strip{display:flex;align-items:center;gap:9px;padding:15px clamp(16px,3vw,42px) 0;background:transparent;color:#667085;font-size:12px}
+body #appShell .page-strip strong{color:#202735}
+body #appShell .page-strip .top-pill{display:none}
+body #appShell #view{flex:1;width:100%;max-width:1500px;margin:0 auto;padding:22px clamp(16px,3vw,42px) 48px;background:transparent!important;color:#202735!important}
+body #appShell .site-footer{display:none!important}
+body #appShell #view :is(.et-card,.et-kpi,.et-block,.px-panel,.card,.master-kpi,.wa-inbox){border-color:#e5e7eb;background-color:#fff;color:#202735;box-shadow:0 2px 11px rgba(23,33,54,.035)}
+body #appShell #view :is(.et-title,.et-kpi-value,.et-card strong,.et-block h2,.px-panel h2){color:#202735}
+body #appShell #view :is(.et-kpi-label,.et-block p,.et-card small,.px-panel p){color:#667085}
+body #appShell #view .px-overview.et-board{min-width:0;max-width:100%;background:transparent!important}
+body #appShell #view .et-board-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}
+body #appShell #view .et-board-grid>*{min-width:0}
+body #appShell #view .et-board-grid>.et-hero{grid-column:span 7}
+body #appShell #view .et-board-grid>.et-income{grid-column:span 5}
+body #appShell #view .et-board-grid>.et-kpi{grid-column:span 3}
+body #appShell #view .et-board-grid>.et-card,
+body #appShell #view .et-board-grid>.et-block{grid-column:span 6}
+body #appShell #view .et-board-grid>.et-expense-split{grid-column:span 7}
+body #appShell #view .et-board-grid>.et-subs{grid-column:span 5}
+body #appShell #view .socio-loading-overlay{background:rgba(247,248,250,.72);backdrop-filter:none!important}
+body #appShell #view .loading{color:#667085}
+body #appShell #view .px-overview-loading :is(.et-kpi,.et-card,.et-block){min-height:100px}
+body #appShell :is(button,input,select,textarea,a):focus-visible{outline:2px solid #605dec;outline-offset:2px}
+@media(max-width:1400px){
+ body #appShell .topbar{grid-template-columns:auto 1fr;gap:10px}
+ body #appShell .topbar-tools{grid-column:2;grid-row:1}
+ body #appShell .nav-rail{grid-column:1/-1;grid-row:2;justify-content:flex-start;overflow-x:auto;scrollbar-width:thin;padding-bottom:2px}
+ body #appShell .nav-rail .nav{flex-wrap:nowrap;justify-content:flex-start}
+ body #appShell .nav-rail .nav-item{min-height:33px}
+}
+@media(max-width:760px){
+ body #appShell .topbar{position:sticky;top:0;gap:8px;min-height:0;padding:10px 14px}
+ body #appShell .topbar-brand strong{font-size:14px}
+ body #appShell .topbar-tools{gap:5px}
+ body #appShell .workspace-box{display:none!important}
+ body #appShell .topbar-icon{min-width:32px;padding:6px}
+ body #appShell .topbar-icon>span{display:none}
+ body #appShell .nav-rail{gap:8px}
+ body #appShell .nav-rail .nav-item{padding:7px 9px;font-size:11px}
+ body #appShell .nav-rail .nav-symbol{display:none}
+ body #appShell .page-strip{padding:12px 16px 0}
+ body #appShell #view{padding:16px 14px 36px}
+ body #appShell #view .et-board-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ body #appShell #view .et-board-grid>*,
+ body #appShell #view .et-board-grid>.et-hero,
+ body #appShell #view .et-board-grid>.et-income,
+ body #appShell #view .et-board-grid>.et-card,
+ body #appShell #view .et-board-grid>.et-block,
+ body #appShell #view .et-board-grid>.et-expense-split,
+ body #appShell #view .et-board-grid>.et-subs{grid-column:span 2}
+ body #appShell #view .et-board-grid>.et-kpi{grid-column:span 1}
+}
+@media(max-width:440px){
+ body #appShell #view .et-board-grid>.et-kpi{grid-column:span 2}
+}
+@media(prefers-reduced-motion:reduce){
+ body #appShell .nav-rail .nav-item{transition:none!important}
+}
