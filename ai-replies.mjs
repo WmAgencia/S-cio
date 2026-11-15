@@ -64,7 +64,12 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
   " AND newer.conversation_id=m.conversation_id AND newer.direction='inbound' AND (newer.created_at,newer.id)>(m.created_at,m.id)) "+
   "AND NOT EXISTS(SELECT 1 FROM messages sent WHERE sent.tenant_id=m.tenant_id "+
   " AND sent.conversation_id=m.conversation_id AND sent.direction='outbound' AND sent.created_at>m.created_at) "+
-  "AND NOT EXISTS(SELECT 1 FROM ai_reply_attempts ar WHERE ar.tenant_id=m.tenant_id AND ar.inbound_message_id=m.id) "+
+  // Only retry a proven generation failure once. An unknown send or a crashed
+  // worker must never trigger an automatic duplicate WhatsApp send.
+  "AND NOT EXISTS(SELECT 1 FROM ai_reply_attempts ar WHERE ar.tenant_id=m.tenant_id "+
+  "AND ar.inbound_message_id=m.id AND NOT (ar.status='failed' "+
+  "AND ar.reason='RETRYABLE_GENERATION_1' "+
+  "AND ar.finished_at<now()-interval '5 minutes')) "+
   "ORDER BY m.created_at ASC LIMIT 1");
  if(!found.rowCount)return {processed:false};
  const m=found.rows[0],attemptId=randomUUID();
@@ -79,12 +84,20 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
  }
  const created=await pool.query(
   "INSERT INTO ai_reply_attempts(id,tenant_id,conversation_id,inbound_message_id,status) "+
-  "VALUES($1,$2,$3,$4,'generating') ON CONFLICT(tenant_id,inbound_message_id) DO NOTHING RETURNING id",
+  "VALUES($1,$2,$3,$4,'generating') ON CONFLICT(tenant_id,inbound_message_id) "+
+  "DO UPDATE SET status='generating',reason='RETRYING_GENERATION_2',finished_at=NULL "+
+  "WHERE ai_reply_attempts.status='failed' AND ai_reply_attempts.reason='RETRYABLE_GENERATION_1' "+
+  "AND ai_reply_attempts.finished_at<now()-interval '5 minutes' RETURNING id,reason",
   [attemptId,m.tenant_id,m.conversation_id,m.inbound_id]);
  if(!created.rowCount)return {processed:false,reason:'CLAIMED'};
+ const claimedId=created.rows[0].id;
+ const retrying=created.rows[0].reason==='RETRYING_GENERATION_2';
+ const retryFailureReason=retrying?'GENERATION_FAILED_FINAL':'RETRYABLE_GENERATION_1';
  const finish=async(status,reason=null)=>pool.query(
-  "UPDATE ai_reply_attempts SET status=$2,reason=$3,finished_at=now() WHERE id=$1",
-  [attemptId,status,reason]);
+  "UPDATE ai_reply_attempts SET status=$2,reason=$3,finished_at=now() "+
+  "WHERE id=$1 AND status='generating'",
+  [claimedId,status,reason]);
+ let sendAttempted=false;
  try{
   const [history,products]=await Promise.all([
    // Internal notes belong to staff only and must never be passed to a customer-facing model.
@@ -129,15 +142,21 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
    maxOutputTokens:500,purpose:'chat',env});
   const message=polishCustomerReply(result.reply,{hasConversation:continuity.hasAssistantReply,incoming:m.body,
    previousAssistant:history.rows.filter(x=>x.direction==='outbound').at(-1)?.body||''});
-  if(!message){await finish('failed','EMPTY_RESPONSE');return {processed:true,failed:true};}
+  if(!message){
+   await finish('failed',retryFailureReason);
+   return {processed:true,failed:true,retryScheduled:!retrying};
+  }
   // Exactly one outbound attempt. deliverToConversation rechecks tenant,
   // connected number and the current AI ownership before network send.
+  sendAttempted=true;
   const sent=await deliver(pool,{tenantId:m.tenant_id,conversationId:m.conversation_id,
-   mode:'ai',text:message,clientRequestId:attemptId,replyToId:m.inbound_id,env});
+   mode:'ai',text:message,clientRequestId:claimedId,replyToId:m.inbound_id,env});
   await finish(sent.sent?'sent':'failed',sent.sent?null:'UNCONFIRMED');
   return {processed:true,sent:sent.sent};
  }catch(error){
-  await finish('failed','GENERATION_OR_SEND_FAILED').catch(()=>{});
-  return {processed:true,failed:true};
+  // Retry only before delivery starts. Once handed to WA-AKG, its status can
+  // be uncertain: leave a record for manual reconciliation, never resend.
+  await finish('failed',sendAttempted?'SEND_UNCONFIRMED':retryFailureReason).catch(()=>{});
+  return {processed:true,failed:true,retryScheduled:!sendAttempted&&!retrying};
  }
 }

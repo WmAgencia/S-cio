@@ -102,7 +102,10 @@ if(!['public','socio_app'].includes(dbSchema)||(isSupabaseDb&&dbSchema!=='socio_
  console.error('SOCIO_DB_SCHEMA must be socio_app for a Supabase database');
  process.exit(1);
 }
-const pool=new Pool({connectionString:DATABASE_URL,max:10,connectionTimeoutMillis:8000,idleTimeoutMillis:30000,
+// Per-process pool cap leaves headroom for jobs and other app replicas.
+const dbPoolRequested=Number(process.env.SOCIO_DB_POOL_MAX||4);
+const dbPoolMax=Number.isInteger(dbPoolRequested)?Math.min(8,Math.max(2,dbPoolRequested)):4;
+const pool=new Pool({connectionString:DATABASE_URL,max:dbPoolMax,connectionTimeoutMillis:12000,idleTimeoutMillis:20000,
  options:dbSchema==='socio_app'?'-c search_path=socio_app,pg_catalog':undefined});
 // Supabase's pooler closes idle connections; without this listener the error
 // event would be unhandled and Node would end the whole process.
@@ -2283,16 +2286,7 @@ async function main(){
   const readiness=await schemaHealth();
   if(!readiness.ok)throw new Error('Private Supabase schema is not ready: '+readiness.error);
  }else await query(schema);
- // Google Ads was removed from this SaaS. Revoke any previously stored local
- // authorizations and legacy script secrets, without deleting historic metrics.
- // Idempotent: after the first successful deployment subsequent runs are no-ops.
- await query("UPDATE marketing_oauth_attempts SET consumed_at=now() "+
-  "WHERE provider='google' AND consumed_at IS NULL");
- await query("UPDATE marketing_oauth_grants SET status='disconnected',token_ciphertext=NULL,expires_at=NULL,"+
-  "last_read_status='not_tested',last_checked_at=NULL,last_account_count=0,updated_at=now() "+
-  "WHERE provider='google' AND (status<>'disconnected' OR token_ciphertext IS NOT NULL)");
- await query("UPDATE marketing_connections SET status='disabled',secret_ciphertext=NULL,updated_at=now() "+
-  "WHERE provider='google_ads_scripts' AND (status<>'disabled' OR secret_ciphertext IS NOT NULL)");
+ // Google Ads is hidden in the UI. Never revoke credentials during startup.
  // Storage probe checks the real private S3 endpoint without touching customer files.
  if(mediaConfigured())void checkMediaStorage()
   .then(x=>console.info('[socio product media]',JSON.stringify(x)))

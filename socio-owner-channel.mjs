@@ -57,7 +57,9 @@ async function actorFor(pool,tenantId){
 
 async function groupFor(pool,groupId){
  const found=await pool.query(
-  "SELECT g.*,ch.phone AS channel_phone,l.session_id "+
+  "SELECT g.*,ch.phone AS channel_phone,l.session_id,"+
+  "(SELECT u.phone FROM users u WHERE u.tenant_id=g.tenant_id AND u.active=true "+
+  "AND u.role='owner' AND u.phone IS NOT NULL ORDER BY u.created_at,u.id LIMIT 1) AS authorized_owner_phone "+
   "FROM socio_owner_groups g "+
   "JOIN channels ch ON ch.id=g.channel_id AND ch.tenant_id=g.tenant_id "+
   "JOIN waakg_links l ON l.channel_id=g.channel_id AND l.tenant_id=g.tenant_id "+
@@ -314,7 +316,8 @@ export async function runOwnerTrafficAutopilot(pool,tenantId,{env=process.env,
 
 async function participantsFor(pool,tenantId,excludePhone){
  const found=await pool.query(
-  'SELECT phone FROM users WHERE tenant_id=$1 AND active=true AND phone IS NOT NULL ORDER BY created_at',
+  "SELECT phone FROM users WHERE tenant_id=$1 AND active=true AND role='owner' "+
+  "AND phone IS NOT NULL ORDER BY created_at",
   [tenantId]);
  const seen=new Set();
  for(const row of found.rows){
@@ -405,7 +408,9 @@ const looksLikeCaption=value=>{
 
 export async function pollOwnerGroups(pool,{env=process.env,read=loadGroupMessages,limit=20}={}){
  const groups=await pool.query(
-  "SELECT g.id,g.tenant_id,g.group_jid,l.session_id "+
+  "SELECT g.id,g.tenant_id,g.group_jid,l.session_id,"+
+  "(SELECT u.phone FROM users u WHERE u.tenant_id=g.tenant_id AND u.active=true "+
+  "AND u.role='owner' AND u.phone IS NOT NULL ORDER BY u.created_at,u.id LIMIT 1) AS authorized_owner_phone "+
   "FROM socio_owner_groups g "+
   "JOIN channels ch ON ch.id=g.channel_id AND ch.tenant_id=g.tenant_id "+
   "JOIN waakg_links l ON l.channel_id=g.channel_id AND l.tenant_id=g.tenant_id "+
@@ -416,8 +421,14 @@ export async function pollOwnerGroups(pool,{env=process.env,read=loadGroupMessag
   let messages;
   try{messages=await read(group.session_id,group.group_jid,{env,limit:100});}
   catch{continue;}
+  // A group may contain other participants. Never ingest their instructions.
+  // Unknown WhatsApp LID senders are intentionally rejected until explicitly verified.
+  const ownerPhone=digits(group.authorized_owner_phone);
+  if(!/^\d{10,15}$/.test(ownerPhone))continue;
   for(const message of messages){
    if(message?.fromMe===true)continue;
+   const sender=clean(message?.participant||message?.senderJid||'',80);
+   if(sender!==ownerPhone+'@s.whatsapp.net')continue;
    const providerMessageId=clean(message?.keyId,180);
    if(providerMessageId.length<4)continue;
    const kind=messageKind(message);
@@ -476,9 +487,17 @@ export async function processOwnerCommands(pool,{env=process.env,send=sendGatewa
  if(!claimed.rowCount)return {processed:false};
  const command=claimed.rows[0];
  const group=await groupFor(pool,command.group_id);
- if(!group||group.status!=='active'){
+ if(!group||group.status!=='active'||group.tenant_id!==command.tenant_id){
   await failCommand(pool,command,null,'GROUP_UNAVAILABLE');
   return {processed:false};
+ }
+ // Revalidate at EXECUTION time, not just ingestion, to reject historical,
+ // queued or forged commands from anyone other than the registered owner.
+ const ownerPhone=digits(group.authorized_owner_phone);
+ if(!/^\d{10,15}$/.test(ownerPhone)||
+    clean(command.sender_jid,80)!==ownerPhone+'@s.whatsapp.net'){
+  await failCommand(pool,command,null,'OWNER_SENDER_UNAUTHORIZED');
+  return {processed:true,rejected:true,reason:'OWNER_SENDER_UNAUTHORIZED'};
  }
  try{
   const handled=await handleCommand(pool,group,command,{env,send,prepare,execute,upload,download,resolve,copy,traffic,approveTraffic,resolveDecision});
