@@ -585,3 +585,103 @@ body #appShell[data-workspace] #view{
 body #appShell[data-workspace] #view .px-workspace{
  max-width:none!important;width:100%!important;
 }
+
+/* Keep the floating launcher inside the viewport, including browser zoom. */
+body:has(#appShell:not(.hidden)) #socioThalitaDock{
+ position:fixed!important;inset:auto max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) auto!important;
+ width:48px!important;height:48px!important;margin:0!important;transform:none!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .thalita-orb{
+ display:block;width:48px!important;height:48px!important;max-width:100%;max-height:100%;
+ margin:0!important;padding:0!important;
+}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .thalita-orb-canvas{
+ display:block;width:100%!important;height:100%!important;max-width:100%;max-height:100%;
+}
+
+/* The desktop board uses the available height rather than fixed card heights.
+   Its existing 30-column arrangement and card order remain unchanged. */
+@media(min-width:1000px) and (min-height:600px){
+ body:has(.px-overview.et-board) #appShell .app-main{height:100dvh!important;min-height:0!important}
+ body:has(.px-overview.et-board) #appShell .topbar{flex-shrink:0;padding:12px 24px!important;min-height:68px!important}
+ body:has(.px-overview.et-board) #appShell #view{min-height:0!important;padding:0 20px 10px!important}
+ body #appShell #view .px-overview.et-board{
+  height:100%!important;min-height:0!important;display:grid!important;
+  grid-template-rows:auto minmax(0,1fr) auto auto!important;gap:0!important;
+ }
+ body #appShell #view .et-board .et-title{font-size:28px!important;line-height:1.2!important;margin:0 0 12px!important}
+ body #appShell #view .et-board .et-board-grid{min-height:0!important;grid-template-rows:minmax(0,1fr) minmax(0,1fr) minmax(0,2fr)!important;gap:10px!important}
+ body #appShell #view .et-board .et-board-grid>section{min-height:0!important;min-width:0!important}
+ body #appShell #view .et-board .et-board-grid>.et-hero{padding:16px!important;min-height:0!important;gap:0!important;justify-content:flex-start!important}
+ body #appShell #view .et-board .et-hero-label{font-size:15px!important}
+ body #appShell #view .et-board .et-hero-value{margin:10px 0!important;gap:8px!important}
+ body #appShell #view .et-board .et-hero-value strong{font-size:36px!important;line-height:1.15!important}
+ body #appShell #view .et-board .et-hero-note{font-size:11px!important;line-height:1.45!important;margin:4px 0!important}
+ body #appShell #view .et-board .et-hero-foot{padding-top:8px!important}
+ body #appShell #view .et-board .et-hero .et-pill{min-height:30px!important;height:30px!important;font-size:11px!important}
+ body #appShell #view .et-board .et-kpi{padding:12px!important;gap:5px!important}
+ body #appShell #view .et-board .et-kpi-label{font-size:13px!important}
+ body #appShell #view .et-board .et-kpi-value{font-size:28px!important;line-height:1.2!important}
+ body #appShell #view .et-board .et-kpi-sub{font-size:11px!important;line-height:1.4!important}
+ body #appShell #view .et-board .et-kpi-campaign{padding:10px!important}
+ body #appShell #view .et-board .et-kpi-campaign .et-kpi-link{min-height:22px!important;height:22px!important;font-size:11px!important}
+ body #appShell #view .et-board .et-kpi-campaign .et-campaign-body{margin-top:4px!important;gap:10px!important}
+ body #appShell #view .et-board .et-campaign-thumb{width:42px!important;min-width:42px!important;height:42px!important}
+ body #appShell #view .et-board .et-campaign-copy strong{font-size:11px!important;line-height:13px!important;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+ body #appShell #view .et-board .et-campaign-copy :is(small,b){font-size:10px!important;line-height:11px!important}
+ body #appShell #view .et-board .et-card{padding:12px!important;display:flex!important;flex-direction:column;min-height:0!important}
+ body #appShell #view .et-board :is(.et-card-title,.et-block-head h2){font-size:14px!important;line-height:1.3!important}
+ body #appShell #view .et-board .et-card-sub{font-size:11px!important;line-height:1.4!important;margin-top:3px!important}
+ body #appShell #view .et-board .et-flow .et-chart{min-height:0!important;flex:1!important;margin:8px 0 0!important}
+ body #appShell #view .et-board .et-flow svg{height:100%!important;max-height:100%!important;width:100%!important}
+ body #appShell #view .et-board .et-expense-split .et-card-head{flex-shrink:0;gap:5px!important}
+ body #appShell #view .et-board .et-expense-split .et-seg{padding:2px!important}
+ body #appShell #view .et-board .et-expense-split .et-seg button{min-height:26px!important;height:26px!important;font-size:10px!important}
+ body #appShell #view .et-board .et-expense-split .et-split{min-height:0!important;flex:1!important;grid-template-columns:minmax(80px,1.1fr) minmax(0,1fr)!important;gap:8px!important}
+ body #appShell #view .et-board .et-donut{height:100%!important;max-height:180px!important;min-height:0!important;max-width:100%!important;display:flex;align-items:center}
+ body #appShell #view .et-board .et-donut svg{height:100%!important;max-height:100%!important;width:100%!important}
+ body #appShell #view .et-board .et-expense-split .et-legend{gap:10px!important}
+ body #appShell #view .et-board .et-legend-label{font-size:10px!important;line-height:1.3!important}
+ body #appShell #view .et-board .et-legend-value{font-size:12px!important;line-height:1.3!important}
+ body #appShell #view .et-board .et-board-grid::before{top:-46px!important}
+ body #appShell #view .px-overview.et-board .et-block.et-recs{margin-top:-46px!important;padding:12px 12px 0!important;min-height:0!important}
+ body #appShell #view .et-board .et-recs .et-stack{padding-top:28px!important;margin-top:8px!important}
+ body #appShell #view .et-board .et-recs .et-rec{padding:12px!important;gap:8px!important}
+ body #appShell #view .et-board .et-recs .et-rec:first-child{min-height:0!important}
+ body #appShell #view .et-board .et-recs .et-rec:nth-child(2){top:14px!important;height:calc(100% - 28px)!important}
+ body #appShell #view .et-board .et-recs .et-rec:nth-child(3){top:0!important;height:calc(100% - 28px)!important}
+ body #appShell #view .et-board .et-recs .et-rec-title{font-size:13px!important;line-height:1.4!important;-webkit-line-clamp:3!important}
+ body #appShell #view .et-board .et-recs .et-rec .et-btn{min-height:30px!important;padding:6px 10px!important;font-size:11px!important}
+ body #appShell #view .et-board .et-recs .ov-rail-empty{font-size:12px!important;line-height:1.5!important}
+ body #appShell #view .px-overview.et-board .et-block.et-subs{min-height:0!important;padding:0 12px 8px!important;display:flex!important;flex-direction:column}
+ body #appShell #view .et-board .et-subs .et-block-head{flex-shrink:0;min-height:24px;gap:5px!important}
+ body #appShell #view .et-board .et-subs .et-block-link{min-height:24px!important}
+ body #appShell #view .et-board .et-subs-icons{margin:6px 0!important}
+ body #appShell #view .et-board .et-subs-icon{height:26px!important;width:26px!important;min-width:26px!important;font-size:11px!important}
+ body #appShell #view .et-board .et-subs-list{min-height:0!important;flex:1;display:grid!important;grid-auto-rows:minmax(0,1fr);padding:3px!important;gap:2px!important}
+ body #appShell #view .et-board .et-sub-row{padding:2px 5px!important;min-height:0!important;gap:6px!important}
+ body #appShell #view .et-board .et-sub-copy strong{font-size:11px!important;line-height:13px!important}
+ body #appShell #view .et-board .et-sub-copy small{font-size:10px!important;line-height:12px!important}
+ body #appShell #view .et-board .et-open{min-height:26px!important;height:26px!important;font-size:11px!important}
+ body #appShell #view .et-board .et-sub-avatar{width:24px!important;height:24px!important;min-width:24px!important}
+ body #appShell #view .et-board .px-live-indicator{margin:8px 0 3px!important;font-size:10px!important;line-height:1.4!important;min-height:14px}
+ body #appShell #view .et-board .px-provenance{font-size:10px!important;line-height:1.4!important;padding:0 64px 0 0!important;max-width:none!important;min-height:30px;display:flex;align-items:center;justify-content:center}
+ body #appShell #view .et-board .et-hero:has([data-period-fields]:not([hidden])){justify-content:flex-start!important;gap:0!important;padding:12px!important}
+ body #appShell #view .et-board .et-hero:has([data-period-fields]:not([hidden])) .et-hero-value{margin:4px 0!important}
+ body #appShell #view .et-board .et-hero:has([data-period-fields]:not([hidden])) .et-hero-value strong{font-size:30px!important}
+ body #appShell #view .et-board .et-hero:has([data-period-fields]:not([hidden])) .et-hero-note{font-size:10px!important;margin:0!important}
+ body #appShell #view .et-board .et-hero:has([data-period-fields]:not([hidden])) .et-hero-foot{padding-top:4px!important}
+ body #appShell #view .et-board .period-fields:not([hidden]){display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:5px!important;margin-top:6px!important;align-items:end;flex-shrink:0}
+ body #appShell #view .et-board .period-fields label{font-size:10px!important;line-height:12px!important;min-width:0}
+ body #appShell #view .et-board .period-fields input{height:28px!important;min-height:28px!important;padding:3px 5px!important;width:100%;min-width:0;font-size:11px!important}
+ body #appShell #view .et-board .period-fields .btn{height:28px!important;min-height:28px!important;padding:3px 8px!important;font-size:11px!important}
+ body #appShell #view .et-board .period-hint:empty{display:none}
+}
+@media(min-width:1000px) and (min-height:600px) and (max-height:660px){
+ body #appShell #view .et-board .et-card{padding:10px!important}
+ body #appShell #view .et-board .et-expense-split .et-legend{gap:6px!important}
+ body #appShell #view .et-board .et-expense-split .et-legend li{gap:2px 4px!important}
+ body #appShell #view .et-board .et-legend-label{font-size:9px!important;line-height:11px!important}
+ body #appShell #view .et-board .et-legend-value{font-size:11px!important;line-height:13px!important}
+ body #appShell #view .et-board .et-subs-icons{display:none!important}
+}
