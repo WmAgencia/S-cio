@@ -136,9 +136,15 @@ function setupAuth(initialized){
 }
 async function boot(){
  try{
-  const bootstrap=await api('/api/bootstrap');
+  // Session and bootstrap state are independent read-only GETs; fetch together
+  // to remove one full round trip from every authenticated first paint.
+  const [bootstrap,session]=await Promise.all([
+   api('/api/bootstrap'),
+   api('/api/me').then(me=>({me}),error=>({error}))
+  ]);
   try{
-   const me=await api('/api/me');
+   if(session.error)throw session.error;
+   const me=session.me;
    state.me=me;state.csrf=me.csrf;
    state.workspace=workspaceFromLocation();
    state.view=initialWorkspaceView();
