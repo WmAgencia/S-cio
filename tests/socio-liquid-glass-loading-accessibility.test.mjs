@@ -67,7 +67,7 @@ test('Apple-inspired glass stays on functional controls, not data cards or giant
 test('Dashboard first paints operational metrics and fetches Meta independently',()=>{
  assert.match(workspace,/async function overview\(\{root,api,me,navigate,periodPreset='7d',periodFrom=null,periodTo=null,progressive=false,/);
  assert.match(app,/progressive:true/);
- assert.match(workspace,/const later=progressive&&ads\?Promise\.all\(calls\):null/);
+ assert.match(workspace,/const later=progressive\?Promise\.all\(ads\?/);
  assert.match(workspace,/\[Promise\.resolve\(null\),\.\.\.calls\.slice\(1\)\.map\(skip\)\]/);
  assert.match(workspace,/if\(renderId!==renderSerial\|\|!root\.isConnected/);
  assert.match(workspace,/progressive:false/);
