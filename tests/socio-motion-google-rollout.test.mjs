@@ -16,9 +16,16 @@ const motion=read('public/socio-entry-motion.js');
 
 test('Google Ads remains stored but is disabled in every user-facing entry point',()=>{
  assert.match(flags,/googleAdsVisible:false/);
- assert.match(workspace,/ads&&googleAdsVisible\(\)\?googleOverview\(\):Promise\.resolve/);
+ // The board's first paint never asks Google for data, and any later read is
+ // behind a configured+connected account; the flag still gates every
+ // connection card and Marketing entry point.
+ const overviewScreen=workspace.slice(workspace.indexOf('async function overview('),
+  workspace.indexOf('async function marketing('));
+ const callsBlock=overviewScreen.slice(overviewScreen.indexOf('const calls=['),
+  overviewScreen.indexOf('];',overviewScreen.indexOf('const calls=[')));
+ assert.doesNotMatch(callsBlock,/google/i);
+ assert.match(overviewScreen,/status\?\.data\?\.configured!==true\|\|/);
  assert.match(workspace,/can\(me,'marketing\.read'\)&&googleAdsVisible\(\)\?cached\(api,'\/api\/google-ads\/status'/);
- assert.match(workspace,/googleAdsVisible\(\)\?budgetHeaderItem\('google_ads'/);
  assert.match(workspace,/googleAdsVisible\(\)\?'<section class="px-conn-card"/);
  assert.match(workspace,/if\(googleAdsVisible\(\)&&googleConnected\)/);
  assert.match(thalita,/SocioProductFeatures\?\.googleAdsVisible===true\?'<button/);
@@ -46,16 +53,15 @@ test('Google UI flag and unified visual assets load in correct order',()=>{
  assert.match(html,/\/app\.js\?v=[0-9a-z]+/);
 });
 
-test('overview orders information from budget to KPIs and recommendations, Meta and reports',()=>{
+test('overview orders the board from the headline money to what needs a decision',()=>{
  const screenStart=workspace.indexOf('async function overview(');
- const start=workspace.indexOf("root.innerHTML='<div class=\"px-workspace px-overview\">'+",screenStart);
+ const start=workspace.indexOf("root.innerHTML='<div class=\"px-workspace px-overview et-board\">'+",screenStart);
  const p=workspace.slice(start,workspace.indexOf('async function marketing(',screenStart));
  assert(start>screenStart);
- // The budget strip lives in a local helper rendered first, so the rendered
- // order is asserted through its call site, not through its DDL strings.
- const order=['budgetTopHtml()','ov-kpi-stack','trafficRail',
-  'px-ad-performance','Atividade de conversas'];
- assert(p.includes('px-budget-top'),'the budget helper renders the budget strip');
+ // Reading order is the board's argument: título, faturamento com o filtro,
+ // o que entrou, o que foi gasto e o que precisa de decisão.
+ const order=["'<h1 class=\"et-title\">Visão geral</h1>'",'<div class="et-board-grid">','hero+','incomeCard+',
+  'campaignCard+','recsBlock+','flowCard+','splitCard+','conversationsCard+'];
  let at=-1;
  for(const marker of order){
   const next=p.indexOf(marker);
@@ -64,16 +70,20 @@ test('overview orders information from budget to KPIs and recommendations, Meta 
  }
  assert(!p.includes('CENTRAL DE INTELIGÊNCIA'),'the title block is gone; the numbers come first');
  assert.equal(p.indexOf('px-page-heading'),-1,'the overview has no page heading');
+ assert(!p.includes('budgetTopHtml'),'the budget strip is no longer part of the board');
+ assert(!p.includes('px-budget-top'),'no Meta budget bar is rendered on the overview');
  assert(p.includes('data-px-traffic-review'),'overview renders the autonomous traffic rail');
  assert(!p.includes('Funil de atendimento'),'removed commerce funnel is gone from the overview');
  const preview=workspace.slice(workspace.indexOf("if(kind==='overview')"),workspace.indexOf("if(kind==='overview')")+2600);
  assert.equal(preview.indexOf('CENTRAL DE INTELIGÊNCIA'),-1,'the loading skeleton does not flash a heading that the loaded page does not have');
- assert(preview.indexOf('px-budget-top')<preview.indexOf('ov-board'));
- assert(preview.indexOf('ov-kpi-stack')<preview.indexOf('ov-rail'));
- assert.match(p,/Publicidade<\/h2>/);
- assert.match(p,/Custo por clique/);
- assert.match(p,/Cliques/);
- assert.doesNotMatch(p.slice(0,p.indexOf('px-ad-performance')),/Requer OAuth/);
+ assert(preview.indexOf('et-board-grid')>0,'the skeleton paints the same grid as the board');
+ for(const title of ['Faturamento total','Fluxo de faturamento','Métricas de anúncios',
+  'Leads no WhatsApp','Campanha em destaque','Recomendações','Conversas no WhatsApp'])
+  assert(workspace.includes(title),title);
+ assert.match(workspace,/Custo por clique/);
+ assert.match(workspace,/Cliques/);
+ assert.doesNotMatch(workspace,/Requer OAuth, conta selecionada e API autorizada/,
+  'the board never shows a Google Ads requirement when the feature is disabled');
 });
 
 test('entrances use route-aware one-shot compositor animations, not refresh jitter',()=>{
@@ -132,9 +142,9 @@ test('disabled feature truly disappears from rendered overview and connections',
  };
  await context.globalThis.SocioWorkspaceUI.overview({root,api,me,navigate:()=>{}});
  assert(root.innerHTML.includes('Recomendações'));
- assert(root.innerHTML.includes('Conversas em aberto'));
- assert(root.innerHTML.includes('Publicidade'));
- assert(root.innerHTML.includes('Meta Ads'));
+ assert(root.innerHTML.includes('Leads no WhatsApp'));
+ assert(root.innerHTML.includes('Faturamento total'));
+ assert(root.innerHTML.includes('Campanha em destaque'));
  assert(!root.innerHTML.includes('Google Ads'));
  assert(!queried.some(p=>p.includes('/api/google-ads')));
  await context.globalThis.SocioWorkspaceUI.connections({root,api,me,navigate:()=>{}});

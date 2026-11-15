@@ -40,8 +40,9 @@ test('payment link opens official Meta billing, never claims a Pix was generated
  const ui=readFileSync(new URL('../public/socio-workspace-ui.js',import.meta.url),'utf8');
  assert.match(source,/metaBillingDetailsURL\(id,\{businessId:data\.business\?\.id\}\)/);
  assert.match(source,/paymentLinkType:'meta_billing_details',pixCodeAvailable:false/);
- assert.match(ui,/url\.hostname==='adsmanager\.facebook\.com'/);
- assert.match(ui,/Abrir recarga na Meta/);
+ // The dashboard no longer carries a recharge CTA, so it cannot mislabel one;
+ // the official link is still the only payment surface the API returns.
+ assert.doesNotMatch(ui,/Abrir recarga na Meta|paymentsUrl/);
  assert.doesNotMatch(ui,/Pix gerado|QR Pix gerado/);
 });
 

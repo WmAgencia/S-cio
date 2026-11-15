@@ -1,6 +1,7 @@
 // Tenant-safe WhatsApp attribution controls; no ad publication or WhatsApp sending.
 (()=>{
  const el=(tag,value)=>{const node=document.createElement(tag);if(value!==undefined)node.textContent=String(value);return node;};
+ const brl=cents=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cents||0)/100);
  const field=(form,title,name,placeholder,max=90)=>{
   const wrapper=el('label',title),input=el('input');
   input.type='text';input.name=name;input.maxLength=max;input.placeholder=placeholder;wrapper.append(input);form.append(wrapper);
@@ -28,6 +29,15 @@
     ctwa.append(el('p','Primeira resposta média da empresa: '+
      (totals.averageFirstBusinessReplySeconds===null?'sem dados':
       Math.round(totals.averageFirstBusinessReplySeconds/60)+' min')));
+    const feedback=data.conversionFeedback;
+    if(feedback?.enabled){
+     ctwa.append(el('p','Eventos de conversa enviados à Meta: '+(feedback.sent||0)+
+      ' · aguardando: '+(feedback.pending||0)+' · falhas: '+(feedback.failed||0)+
+      (feedback.expired?' · fora da janela: '+feedback.expired:'')));
+     if(feedback.lastError)ctwa.append(el('p','Pendência na Meta: '+feedback.lastError));
+    }else if(feedback){
+     ctwa.append(el('p','O envio de conversas confirmadas para a Meta está desligado. As chegadas continuam sendo registradas.'));
+    }
     if(totals.unresolvedArrivals)
      ctwa.append(el('p',totals.unresolvedArrivals+' chegada(s) de anúncio ainda sem campanha identificada. A identificação é tentada automaticamente.'));
     const list=el('div');list.className='attribution-results';ctwa.append(list);
@@ -54,6 +64,37 @@
    }
   };
   void loadCtwa();
+  const sales=el('div');sales.dataset.tracking='sales';section.append(sales);
+  const loadSales=async()=>{
+   sales.replaceChildren(el('h3','Vendas confirmadas'));
+   sales.append(el('p','Somente uma venda confirmada pelo dono entra aqui. Chegadas e conversas não são vendas.'));
+   try{
+    const data=await api('/api/marketing/sales/performance?days=30');
+    if(!data.totalSales){
+     sales.append(el('p',data.everConfirmedSales?
+      'Nenhuma venda confirmada nos últimos '+data.windowDays+' dias.':
+      'Nenhuma venda confirmada ainda. Quando o cliente enviar o comprovante, o Sócio pergunta e a venda confirmada aparece aqui.'));
+     return;
+    }
+    sales.append(el('p','Últimos '+data.windowDays+' dias: '+data.totalSales+' venda(s), '+
+     brl(data.revenueCents)+' de receita.'));
+    const list=el('div');list.className='attribution-results';sales.append(list);
+    for(const campaign of data.campaigns||[]){
+     const card=el('article');card.className='panel';list.append(card);
+     card.append(el('strong',campaign.campaignName||('Campanha '+campaign.campaignId)));
+     card.append(el('p',campaign.sales+' venda(s) · '+brl(campaign.revenueCents)+' de receita'));
+    }
+    const best=[...(data.ads||[])].sort((a,b)=>b.sales-a.sales||b.revenueCents-a.revenueCents)[0];
+    if(best)sales.append(el('p','Anúncio com mais vendas: '+
+     (best.adName||('Anúncio '+best.adId))+' — '+best.sales+' venda(s), '+
+     brl(best.revenueCents)+'.'));
+    if(data.unattributedSales>0)sales.append(el('p','Sem atribuição de anúncio: '+
+     data.unattributedSales+' venda(s), '+brl(data.unattributedRevenueCents)+'.'));
+   }catch(error){
+    sales.append(el('p','O painel de vendas ainda não está disponível: '+error.message));
+   }
+  };
+  void loadSales();
   const status=el('p');status.setAttribute('role','status');section.append(status);
   const report=el('div');section.append(report);
   const reload=async()=>{
@@ -78,7 +119,7 @@
      card.append(el('p','Primeira resposta média: '+
       (detail.averageFirstBusinessReplySeconds===null?'sem dados':
        Math.round(detail.averageFirstBusinessReplySeconds/60)+' min (aproximado)')));
-     card.append(el('p','Vendas reais e receita confirmada: indisponíveis sem um provedor de pagamentos de produção validado.'));
+     card.append(el('p','Vendas confirmadas aparecem no painel de vendas confirmadas acima. O código do link sozinho não prova uma venda.'));
     }else{
      card.append(el('p','Conversas com código: '+item.conversations));
     }

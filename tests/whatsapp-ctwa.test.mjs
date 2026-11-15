@@ -47,15 +47,21 @@ test('webhook extraction keeps the referral carried by the first non-text messag
    {from:'5515999999999',timestamp:String(seconds),type:'text',text:{body:'sem id'}}
   ]}}]}]};
  const items=whatsappWebhookItems(payload,{now});
- assert.equal(items.length,2);
+ assert.equal(items.length,3);
  assert.equal(items[0].body,null);
+ assert.equal(items[0].mediaType,'image');
  assert.equal(items[0].referral.sourceId,'1200000000001');
  assert.equal(items[0].wabaId,'WABA-1');
  assert.equal(items[0].external,'55501');
  assert.equal(items[0].messageId,'wamid.1');
  assert.equal(items[0].occurredAt.getTime(),seconds*1000);
- assert.equal(items[1].body,'Olá');
+ // A receipt is usually a bare image, so media travels without text as well.
+ assert.equal(items[1].body,null);
+ assert.equal(items[1].mediaType,'image');
  assert.equal(items[1].referral,null);
+ assert.equal(items[2].body,'Olá');
+ assert.equal(items[2].mediaType,null);
+ assert.equal(items[2].referral,null);
  const stale=whatsappWebhookItems({object:'whatsapp_business_account',entry:[{id:'WABA-1',
   changes:[{value:{metadata:{phone_number_id:'55501'},messages:[{id:'wamid.old',
    from:'5515999999999',timestamp:String(seconds-40*86400),type:'text',text:{body:'antigo'}}]}}]}]},{now});
@@ -108,7 +114,7 @@ test('real PostgreSQL: ctwa capture, read-only ad resolution and honest arrival 
   await db.query(insertAttribution,[id(),t4,c4,cv4,'wamid.ctwa.five','1200000000104']);
   await db.query("INSERT INTO meta_official_grants(tenant_id,user_id,meta_user_id,token_encrypted,scopes,expires_at) "+
    "VALUES($1,$2,'103',$3,'{ads_read}',now()+interval '2 days')",
-   [t3,u3,sealMarketingSecret('EAA-test-token-'+'a'.repeat(40),env)]);
+   [t3,u3,sealMarketingSecret(JSON.stringify({tenant:t3,user:u3,token:'EAA-test-token-'+'a'.repeat(40)}),env)]);
   const calls=[];
   const request=async(link,options)=>{
    const adId=new URL(link).pathname.split('/').pop();

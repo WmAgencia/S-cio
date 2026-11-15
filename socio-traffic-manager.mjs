@@ -12,6 +12,7 @@ import {resolveSelectedOfficialAccount} from './meta-official.mjs';
 import {brainResponse,brainReady} from './ai-brain.mjs';
 import {computeAccountEconomics} from './socio-account-economics.mjs';
 import {resultCounts,pickResultKind,costPerResultCents,RESULT_LABELS} from './socio-result-metrics.mjs';
+import {salesPerformance,formatSalesSection} from './socio-sales-report.mjs';
 
 export const TRAFFIC_LIMITS=Object.freeze({
  stepPercent:20,
@@ -30,7 +31,8 @@ export const TRAFFIC_LIMITS=Object.freeze({
  allowDuplicate:true,
  resultKillRatio:1.3,
  resultMinResults:2,
- resultMinSpendRatio:2
+ resultMinSpendRatio:2,
+ noSalePauseSpendRatio:3
 });
 
 const num=value=>{const n=Number(value);return Number.isFinite(n)&&n>=0?n:null;};
@@ -71,6 +73,20 @@ function insightMap(rows,idKey){
    costPerResultCents:costPerResultCents(Math.round(m.spend*100),results)});
  }
  return out;
+}
+
+// A sale the owner confirmed is the strongest evidence a campaign exists for. It
+// adds to the purchases Meta reported, so a campaign is priced by the sales it
+// actually produced, not only by what the pixel could see.
+function mergeConfirmedSales(map,counts){
+ for(const [id,value] of Object.entries(counts||{})){
+  const sales=int(value),m=map.get(id);
+  if(!m||sales===null||sales<=0)continue;
+  m.purchase+=sales;
+  m.resultKind=pickResultKind(m);
+  m.results=m.resultKind?m[m.resultKind]:0;
+  m.costPerResultCents=costPerResultCents(Math.round(m.spend*100),m.results);
+ }
 }
 
 const positiveCents=value=>{const n=int(value);return n!==null&&n>=100?n:null;};
@@ -153,6 +169,8 @@ export function decideTrafficActions(input={}){
  const campaignMetrics=insightMap(input.campaignInsights,'campaign_id');
  const adsetMetrics=insightMap(input.adsetInsights,'adset_id');
  const adMetrics=insightMap(input.adInsights,'ad_id');
+ mergeConfirmedSales(campaignMetrics,input.confirmedSales?.campaigns);
+ mergeConfirmedSales(adMetrics,input.confirmedSales?.ads);
  const sampledCampaigns=[...campaignMetrics.entries()]
   .filter(([,m])=>m.impressions>=limits.minImpressions&&m.clicks>=limits.minClicks)
   .map(([id,m])=>({id,...m}));
@@ -180,6 +198,29 @@ export function decideTrafficActions(input={}){
   actions.push(action);
   return true;
  };
+
+ // A campaign that spent well past the cost of a sale without one confirmed is
+ // the owner's money going nowhere. It is only proposed once the account has
+ // proven it can record a sale, and it is always a question, never automatic.
+ if(input.confirmedSales?.ever===true&&targets.purchase!==null){
+  const threshold=Math.round(targets.purchase*limits.noSalePauseSpendRatio);
+  for(const campaign of campaigns.slice(0,100)){
+   const campaignId=idOf(campaign?.id);
+   if(!campaignId||!active(campaign))continue;
+   const m=campaignMetrics.get(campaignId);
+   if(!m||m.purchase>0||Math.round(m.spend*100)<threshold)continue;
+   const name=String(campaign.name||campaignId).slice(0,100);
+   const spentCents=Math.round(m.spend*100);
+   add({action:'pause',entity:'campaign',entityId:campaignId,entityName:name,
+    campaignId,campaignName:null,reason:'campaign_no_confirmed_sales',
+    explanation:'Vou pausar esta campanha: ela gastou '+money(spentCents)+
+     ' nos últimos 7 dias sem nenhuma venda confirmada, com meta de '+
+     money(targets.purchase)+' por venda.',
+    evidence:{spendCents:spentCents,targetResultCents:targets.purchase,windowDays:7,
+     spendRatio:limits.noSalePauseSpendRatio,confirmedSales:0},
+    withinAutonomy:false,requiresApproval:true,priority:0});
+  }
+ }
 
  for(const ad of ads.slice(0,300)){
   const adId=idOf(ad?.id),adsetId=idOf(ad?.adset_id);
@@ -340,7 +381,8 @@ export function decideTrafficActions(input={}){
 const planKind=action=>({pause:'status',scale:'budget',
  duplicate_campaign:'duplicate_campaign',broaden_audience:'broaden_adset'}[action.action]);
 const planInput=action=>{
- if(action.action==='pause')return {entity:'ad',id:action.entityId,status:'PAUSED'};
+ if(action.action==='pause')return {entity:action.entity==='campaign'?'campaign':'ad',
+  id:action.entityId,status:'PAUSED'};
  if(action.action==='scale')return {entity:action.entity,dailyBudgetCents:action.targetBudgetCents,
   id:action.entityId};
  if(action.action==='duplicate_campaign')return {campaignId:action.entityId};
@@ -363,6 +405,9 @@ export function formatTrafficReport(result,{max=5}={}){
   for(const action of decisions.slice(0,Math.max(1,Math.min(10,max))))
    lines.push('• '+action.explanation);
  }
+ // What actually sold and what it returned, next to what was spent.
+ const sales=typeof result?.salesSection==='string'?result.salesSection.trim():'';
+ if(sales)lines.push('',sales);
  const summary=result?.summary||{};
  if(summary.targetResultCents){
   const label=String(RESULT_LABELS[summary.resultKind]||'resultado').toLowerCase();
@@ -382,7 +427,7 @@ export function formatTrafficReport(result,{max=5}={}){
  const scorecard=typeof result?.scorecard?.text==='string'?result.scorecard.text.trim():'';
  if(scorecard)lines.push('',scorecard);
  lines.push('','Só altero o que as métricas da Meta mostram. Cliques não comprovam vendas no WhatsApp.');
- return lines.join('\n').slice(0,2800);
+ return lines.join('\n').slice(0,3600);
 }
 
 const RESULT_KINDS=new Set(['purchase','conversation','lead']);
@@ -611,6 +656,14 @@ export function trafficQuestion(action={}){
   return 'Já gastamos '+money(evidence.spendCents)+' '+place+' sem nenhum resultado registrado, '+
    'com meta de '+money(evidence.targetResultCents)+' por '+label+'. Posso pausá-lo?';
  }
+ if(action.action==='pause'&&action.reason==='campaign_no_confirmed_sales'){
+  const evidence=action.evidence||{};
+  return 'A campanha "'+(campaign||entity||'sem nome')+'" gastou '+
+   money(evidence.spendCents)+' nos últimos '+(evidence.windowDays||7)+
+   ' dias, mais de '+(evidence.spendRatio||3)+' vezes a sua meta de '+
+   money(evidence.targetResultCents)+' por venda, e não teve nenhuma venda confirmada. '+
+   'Posso pausar a campanha?';
+ }
  if(action.action==='pause')
   return 'Estamos com baixa performance no '+where+'. Posso pausá-lo?';
  if(action.action==='scale'||action.action==='approval_request')
@@ -684,13 +737,27 @@ export async function runTrafficManager(pool,actor,options={}){
  const owner=await (options.ownerSettings||ownerResultTarget)(pool,actor.active_tenant_id);
  const economics=computeAccountEconomics({ticketCents:owner?.ticketCents,
   marginPercent:owner?.marginPercent});
+ // Confirmed sales are the only proof a click turned into revenue. They reach
+ // the decision engine as purchases, and when the query fails the decision and
+ // the report are exactly what they were before this section existed.
+ let performance=null,salesSection='';
+ try{
+  performance=await (options.salesPerformance||salesPerformance)(
+   pool,actor.active_tenant_id,{days:7});
+  salesSection=formatSalesSection(performance,{campaignInsights:campaignInsights.items,
+   adInsights:adInsights.items});
+ }catch{}
+ const confirmedSales=performance?{ever:performance.everConfirmedSales===true,
+  campaigns:Object.fromEntries(performance.campaigns.map(c=>[c.campaignId,c.sales])),
+  ads:Object.fromEntries(performance.ads.map(a=>[a.adId,a.sales]))}:null;
  // Sócio asks before every change. Only an explicit alwaysAsk:false restores
  // silent execution inside the automatic envelope, and nothing calls it that way.
  const decision=decideTrafficActions({campaigns:campaigns.items,adsets:adsets.items,ads:ads.items,
   campaignInsights:campaignInsights.items,adsetInsights:adsetInsights.items,
   adInsights:adInsights.items,limits,alwaysAsk:options.alwaysAsk!==false,
   targetResultCents:owner?.targetResultCents??null,
-  purchaseTargetCents:economics.valid?economics.targetCpaCents:null});
+  purchaseTargetCents:economics.valid?economics.targetCpaCents:null,
+  confirmedSales});
  const executed=[],pending=[],skipped=[];
  // A preview is a click and must answer immediately: no brain and no sweep on
  // this path, but the scorecard is a read and can come along.
@@ -698,8 +765,8 @@ export async function runTrafficManager(pool,actor,options={}){
   let scorecard={text:'',groups:[]};
   try{scorecard=await (options.scorecard||decisionScorecard)(pool,actor.active_tenant_id);}catch{}
   return {accountId,period,decisions:decision.actions,notes:decision.notes,
-   summary:decision.summary,executed,pending,skipped,limits,diagnosis:null,scorecard,
-   report:formatTrafficReport({...decision,executed,pending,skipped,limits,scorecard})};
+   summary:decision.summary,executed,pending,skipped,limits,diagnosis:null,scorecard,salesSection,
+   report:formatTrafficReport({...decision,executed,pending,skipped,limits,scorecard,salesSection})};
  }
  if(!decision.actions.length){
   await recordDecision(pool,actor.active_tenant_id,'act_'+accountId,{
@@ -743,8 +810,9 @@ export async function runTrafficManager(pool,actor,options={}){
  const diagnosis=await (options.diagnose||trafficDiagnosis)(
   {...decision,executed,pending,skipped,limits},{env});
  return {accountId,period,decisions:decision.actions,notes:decision.notes,summary:decision.summary,
-  executed,pending,skipped,limits,diagnosis,scorecard,
-  report:formatTrafficReport({...decision,executed,pending,skipped,limits,diagnosis,scorecard})};
+  executed,pending,skipped,limits,diagnosis,scorecard,salesSection,
+  report:formatTrafficReport({...decision,executed,pending,skipped,limits,diagnosis,scorecard,
+   salesSection})};
 }
 
 // Owner said APROVAR: apply the requests that were held back.

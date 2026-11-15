@@ -6,58 +6,42 @@ import vm from 'node:vm';
 const load=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const ui=load('public/socio-workspace-ui.js');
 const css=load('public/socio-stripe-system.css');
+const boardCss=load('public/socio-ethereal.css');
+const dialog=load('public/meta-billing-ui.js');
 const app=load('public/app.js');
 const html=load('public/index.html');
 
-test('Meta budget shows exactly one recharge CTA and no duplicate billing actions',()=>{
- assert(ui.includes('px-budget-recharge-cta'));
- assert(ui.includes('Abrir recarga na Meta <span'));
- assert(ui.includes('px-budget-meta-ribbon'));
- assert(ui.includes('px-budget-meta-summary'));
- assert(ui.includes('px-budget-meta-action'));
- assert(ui.includes('href="'+ "'+esc(paymentUrl)+'" + '" target="_blank" rel="noopener noreferrer"'));
- assert(ui.includes("url.protocol==='https:'&&url.hostname==='adsmanager.facebook.com'"));
- assert(!ui.includes('Adicionar saldo por Pix'));
- assert(!ui.includes('Conectar faturamento e ler saldo'));
- assert(!ui.includes('data-px-billing="pix"'));
- assert(!ui.includes('data-px-billing="balance"'));
- assert(!ui.includes("querySelectorAll('[data-px-billing]')"));
- assert(ui.includes("if(provider==='meta_ads'){"));
- assert(ui.includes('Limite disponível'));
- assert(ui.includes('spendCapRemainingMinor'));
- assert(ui.includes('Gasto hoje'));
- assert(ui.includes('Não representa saldo pré-pago.'));
- assert(ui.includes('Link oficial de recarga indisponível nesta conta'));
- assert(ui.includes('type="button" disabled'));
- assert(css.includes('.px-budget-meta-ribbon .px-budget-meta-summary'));
- assert(css.includes('min-height:0!important'));
- assert(css.includes('min-height:33px!important'));
- assert(css.includes('background:#605dec!important'));
- assert(css.includes('color:#fff!important'));
- assert(ui.includes("provider!=='meta_ads'"));
+const overview=()=>{
+ const start=ui.indexOf('async function overview(');
+ return ui.slice(start,ui.indexOf('async function marketing(',start));
+};
+
+test('the dashboard renders no Meta budget, recharge CTA or billing action',()=>{
+ const screen=overview();
+ for(const gone of ['px-budget-recharge-cta','px-budget-meta-ribbon','px-budget-meta-summary',
+  'px-budget-meta-action','px-budget-top','Abrir recarga na Meta','Adicionar saldo por Pix',
+  'data-px-billing','spendCapRemainingMinor','Limite disponível','Gasto hoje','Saldo disponível'])
+  assert.equal(screen.indexOf(gone),-1,gone+' must not appear on the dashboard');
+ assert(!screen.includes('href="'+ "'+esc(paymentUrl)+'" + '"'));
+ assert.doesNotMatch(screen,/hostname==='adsmanager\.facebook\.com'/);
 });
 
-test('Meta balance descriptions no longer direct the user to removed buttons',()=>{
- assert(ui.includes('Consulte o saldo e faça recargas no faturamento oficial da Meta.'));
- assert(ui.includes('O saldo ainda não foi confirmado.'));
- assert(!ui.includes('use Atualizar saldo'));
- assert(!ui.includes('Use Conectar faturamento'));
+test('billing and balance guidance lives in the billing dialog, not the board',()=>{
+ assert(!overview().includes('Consulte o saldo e faça recargas no faturamento oficial da Meta.'));
+ assert(!overview().includes('O saldo ainda não foi confirmado.'));
+ assert.match(dialog,/Salvar sessão de faturamento/);
+ assert.doesNotMatch(ui,/use Atualizar saldo|Use Conectar faturamento/);
 });
 
-test('while provider data loads, show skeleton rather than false zero or partial card',()=>{
- assert(ui.includes("if(progressive&&ads){"));
- assert(ui.includes('px-budget-provider-pending'));
- assert(ui.includes('aria-busy="true"'));
- assert(ui.includes("px-overview-loading"));
- assert(ui.includes("px-load-card"));
- assert(ui.includes("Consultando dados confirmados"));
- assert(css.includes('.px-budget-meta-pending'));
- assert(css.includes('.px-load-line'));
- assert(css.includes('.px-kpi.px-load-card'));
- assert(css.includes('@media(prefers-reduced-motion:reduce)'));
+test('while provider data loads, the board shows a skeleton rather than false zeros',()=>{
+ assert.match(ui,/px-overview-loading/);
+ assert.match(ui,/px-load-card/);
+ assert.match(ui,/Consultando dados confirmados/);
+ assert.match(css,/\.px-load-line/);
+ assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
 });
 
-test('all initial and route loading states share the new light skeleton loader',()=>{
+test('all initial and route loading states share the new skeleton loader',()=>{
  assert(app.includes('loading socio-page-loading'));
  assert(html.includes('loading socio-page-loading'));
  assert(html.includes('/socio-stripe-system.css?v='));
@@ -68,12 +52,10 @@ test('all initial and route loading states share the new light skeleton loader',
  assert(css.includes('.socio-loading-title'));
 });
 
-test('recharge button has high contrast, keyboard focus and no layout mutation',()=>{
- assert(css.includes('.px-budget-recharge-cta'));
- assert(css.includes('color:#fff!important'));
- assert(css.includes('background:#605dec!important'));
- assert(css.includes('a.px-budget-recharge-cta')||css.includes('.px-budget-recharge-cta'));
- assert(css.includes(':focus-visible'));
+test('board actions keep keyboard focus styles and every script parses',()=>{
+ assert(boardCss.includes(':focus-visible'));
+ assert.match(boardCss,/\.et-pill:focus-visible/);
+ assert.match(boardCss,/\.et-open:focus-visible/);
  assert.doesNotThrow(()=>new vm.Script(ui,{filename:'socio-workspace-ui.js'}));
  assert.doesNotThrow(()=>new vm.Script(app,{filename:'app.js'}));
 });

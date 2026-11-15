@@ -1,0 +1,557 @@
+/* Ethereal reference composition. Last visual layer; all controls retain their
+   existing handlers, accessible names and real company data. */
+html:has(body #appShell:not(.hidden)),
+body:has(#appShell:not(.hidden)){
+ background:radial-gradient(ellipse at 88% 0%,#dedde4,transparent 62%),linear-gradient(130deg,#b9a5b8,#a8a4b9 65%,#c1c5d1)!important;
+ background-attachment:fixed!important;
+}
+body #appShell{
+ --et-canvas:#03050c;--et-card:#22212d;--et-ink:#f7f5fb;
+ --et-muted:#b0aabb;--et-ink-2:#cbc6d6;
+ --et-mint-1:#90eee4;--et-mint-2:#b4f48b;--et-mint-3:#d4ec88;
+ --et-line:#ffffff12;--et-line-soft:#ffffff0a;
+}
+body #appShell.app-shell:not(.hidden){
+ width:calc(100% - 100px)!important;max-width:1440px!important;
+ margin:54px auto!important;min-height:calc(100vh - 108px)!important;
+ background:radial-gradient(ellipse at 91% 0%,#0a1937 0%,transparent 55%),#03040b!important;
+ border:9px solid #d9d3e0b3!important;border-radius:48px!important;
+ box-shadow:0 24px 40px -24px #282b5366,inset 0 1px #ffffff28!important;
+ backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+ overflow:hidden!important;
+}
+body #appShell.app-shell:not(.hidden)::before{display:none!important}
+body #appShell .app-main{min-height:calc(100vh - 126px)!important}
+body #appShell .topbar{
+ height:84px!important;min-height:84px!important;padding:0 24px!important;
+ background:transparent!important;position:relative!important;
+ border:0!important;gap:16px!important;
+}
+body #appShell .et-logo{
+ background:none!important;box-shadow:none!important;color:#fff!important;
+ border:2px solid #fff;border-right-color:transparent;border-radius:8px!important;
+ width:29px!important;height:25px!important;min-width:29px!important;
+ font-family:inherit!important;font-size:23px!important;font-weight:500!important;
+}
+body #appShell .topbar-brand{gap:9px!important}
+body #appShell .topbar-brand strong{font-size:14px!important;font-weight:500!important}
+body #appShell .topbar-brand strong small{display:none!important}
+body #appShell .nav-rail .nav{
+ padding:5px!important;gap:3px!important;background:#ffffff0a!important;
+ border:0!important;box-shadow:none!important;max-width:680px;
+}
+body #appShell .nav-rail .nav-item{
+ height:31px!important;min-height:31px!important;padding:0 12px!important;
+ gap:5px!important;font-size:11px!important;font-weight:400!important;
+}
+body #appShell .nav-rail .nav-item .nav-symbol{
+ width:15px!important;min-width:15px!important;height:15px!important;
+ padding:0!important;background:none!important;border:0!important;
+ border-radius:0!important;box-shadow:none!important;color:inherit!important;
+}
+body #appShell .nav-rail .nav-item .nav-symbol svg{width:14px!important;height:14px!important}
+body #appShell .nav-rail .nav-item.selected{
+ background:#fff!important;color:#15131d!important;box-shadow:none!important;
+}
+body #appShell .topbar-tools{gap:8px!important}
+body #appShell .topbar-icon{
+ width:36px!important;height:36px!important;min-width:36px!important;
+ background:#ffffff0a!important;border:1px solid #ffffff08!important;
+ box-shadow:inset 0 0 14px #ffffff05!important;border-radius:50%!important;
+}
+body #appShell #view{padding:0 24px 24px!important}
+body #appShell #view .px-overview.et-board{position:relative;padding:0!important;gap:0!important}
+body #appShell #view .et-title{
+ margin:1px 0 24px!important;font-weight:400!important;
+ font-size:32px!important;letter-spacing:-1px!important;line-height:1.2!important;
+}
+body #appShell #view .et-board-grid{
+ position:relative;isolation:isolate;grid-template-columns:repeat(30,minmax(0,1fr))!important;
+ gap:14px!important;grid-auto-rows:auto!important;
+}
+body #appShell #view .et-board-grid>*{min-width:0!important}
+body #appShell #view .et-board-grid::before{
+ content:"";position:absolute;z-index:-1;right:-1px;top:-62px;bottom:0;
+ width:calc(33.333% - 8px);background:linear-gradient(155deg,#ffffff0f,#ffffff08);
+ border:1px solid #ffffff08;border-radius:28px;pointer-events:none;
+}
+body #appShell #view .et-board-grid>.et-hero{grid-column:1/span 13!important;grid-row:1/span 2!important}
+body #appShell #view .et-board-grid>.et-income{grid-column:14/span 7!important;grid-row:1!important}
+body #appShell #view .et-board-grid>.et-kpi-campaign{grid-column:14/span 7!important;grid-row:2!important}
+body #appShell #view .et-board-grid>.et-recs{grid-column:21/span 10!important;grid-row:1/span 2!important}
+body #appShell #view .et-board-grid>.et-flow{grid-column:1/span 10!important;grid-row:3!important}
+body #appShell #view .et-board-grid>.et-expense-split{grid-column:11/span 10!important;grid-row:3!important}
+body #appShell #view .et-board-grid>.et-subs{grid-column:21/span 10!important;grid-row:3!important}
+body #appShell #view .px-overview.et-board :is(.et-card,.et-kpi){
+ background:linear-gradient(125deg,#252430e8,#24232de0)!important;
+ border:1px solid #ffffff05!important;border-radius:25px!important;
+ box-shadow:inset 0 1px #ffffff05!important;backdrop-filter:none!important;
+}
+body #appShell #view .et-board-grid>.et-hero{
+ min-height:260px!important;padding:20px!important;border-radius:26px!important;
+ background:linear-gradient(112deg,#81e5df 0%,#a2f0ad 51%,#d3ed86 100%)!important;
+ border:0!important;box-shadow:none!important;isolation:isolate;
+}
+body #appShell #view .et-hero::before{
+ content:"";position:absolute;inset:0!important;width:auto!important;height:auto!important;
+ border-radius:0!important;opacity:1!important;z-index:-1;
+ background:linear-gradient(127deg,transparent 66%,#779d3430 66.2%)!important;
+}
+body #appShell #view .et-hero::after{
+ content:"";display:block!important;position:absolute;right:-40px;bottom:-45px;
+ width:165px;height:120px;border-radius:50%;background:#6c90372b;
+ transform:rotate(35deg);z-index:-1;pointer-events:none;
+}
+body #appShell #view .et-hero-mark{display:none!important}
+body #appShell #view .et-hero-label{font-size:17px!important;font-weight:400!important;color:#102b28!important;text-transform:none!important;letter-spacing:0!important}
+body #appShell #view .et-hero-value{gap:10px!important;flex-wrap:wrap!important;margin-top:16px!important}
+body #appShell #view .et-hero-value strong{font-size:clamp(30px,3vw,43px)!important;font-weight:600!important;letter-spacing:-1.8px!important}
+body #appShell #view .et-hero-value strong sup{font-size:14px!important;letter-spacing:0!important}
+body #appShell #view .et-hero-sales{font-size:12px!important;color:#12392c!important}
+body #appShell #view .et-hero-note{font-size:10px!important;line-height:1.5!important;color:#183e2f!important;max-width:95%}
+body #appShell #view .et-hero-foot{margin-top:auto!important;gap:6px!important;padding-top:22px!important;align-items:flex-end!important}
+body #appShell #view .et-pills{gap:5px!important;flex-wrap:wrap!important}
+body #appShell #view .et-hero .et-pill{height:32px!important;padding:0 10px!important;font-size:10px!important;font-weight:500!important;box-shadow:none!important;border:0!important}
+body #appShell #view .et-hero .et-pill.on{background:#050c0b!important;color:#fff!important}
+body #appShell #view .et-hero-refresh{width:32px!important;height:32px!important;min-width:32px!important;background:#ffffffbd!important;box-shadow:none!important}
+body #appShell #view .et-board-grid>.et-income{background:linear-gradient(125deg,#262733,#32484d)!important}
+body #appShell #view .et-board-grid>.et-kpi-campaign{background:linear-gradient(125deg,#282531,#39323e)!important}
+body #appShell #view .et-kpi{padding:15px!important;min-height:123px!important}
+body #appShell #view .et-kpi-label{font-size:15px!important;font-weight:400!important}
+body #appShell #view .et-kpi-value{font-size:30px!important;font-weight:400!important;letter-spacing:-1px!important}
+body #appShell #view .et-kpi-sub{font-size:10px!important;margin:4px 0 0!important}
+body #appShell #view .et-kpi-note{display:none!important}
+body #appShell #view .et-campaign-thumb{width:44px!important;height:44px!important;min-width:44px!important;border-radius:10px!important}
+body #appShell #view .et-campaign-copy strong{font-size:12px!important}
+body #appShell #view .et-campaign-copy :is(small,b){font-size:10px!important}
+body #appShell #view .et-card{padding:17px!important;min-height:270px!important}
+body #appShell #view .et-card-title,body #appShell #view .et-block-head h2{font-size:16px!important;font-weight:400!important;letter-spacing:-.3px!important}
+body #appShell #view .et-card-sub{font-size:10px!important;margin-top:5px!important}
+body #appShell #view .et-flow .et-chart{display:flex!important;flex:1!important;margin:16px -6px 0!important;align-items:stretch}
+body #appShell #view .et-flow svg{width:100%!important;height:190px!important;filter:none!important;overflow:visible}
+body #appShell #view .et-flow rect[fill^="url(#etFlowPast)"]{filter:none!important}
+body #appShell #view .et-expense-split .et-card-head{gap:8px!important}
+body #appShell #view .et-expense-split .et-seg{width:100%!important;justify-content:space-between!important;background:#ffffff08!important;border:0!important}
+body #appShell #view .et-expense-split .et-seg button{font-size:9px!important;padding:0 6px!important}
+body #appShell #view .et-expense-split .et-split{grid-template-columns:minmax(100px,1.1fr) minmax(0,1fr)!important;gap:8px!important}
+body #appShell #view .et-expense-split .et-legend{grid-template-columns:1fr!important;gap:11px!important}
+body #appShell #view .et-legend li{flex-wrap:wrap;gap:4px!important}
+body #appShell #view .et-legend-label{font-size:9px!important;white-space:normal!important}
+body #appShell #view .et-legend-value{font-size:11px!important}
+body #appShell #view .px-overview.et-board .et-block.et-recs{
+ margin-top:-62px!important;padding:20px 15px 0!important;min-height:0!important;
+ background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;
+ backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+}
+body #appShell #view .et-recs .et-stack{padding-top:56px!important;margin-top:14px!important}
+body #appShell #view .et-recs .et-rec{border:0!important;border-radius:20px!important;box-shadow:inset 0 1px #ffffff50!important;padding:16px!important}
+body #appShell #view .et-recs .et-rec:nth-child(1){min-height:170px!important;background:linear-gradient(115deg,#b183dc,#7763ce 60%,#655dd0)!important}
+body #appShell #view .et-recs .et-rec:nth-child(2){top:28px!important;left:14px!important;right:14px!important;background:linear-gradient(115deg,#9bf6c6,#b7edac)!important;color:#152922!important;pointer-events:none}
+body #appShell #view .et-recs .et-rec:nth-child(3){top:0!important;left:28px!important;right:28px!important;background:linear-gradient(115deg,#f2967b,#ebc37b)!important;color:#482d24!important;pointer-events:none}
+body #appShell #view .et-recs .et-rec .et-rec-kind{background:none!important;padding:0!important;font-size:12px!important;font-weight:500!important;color:inherit!important}
+body #appShell #view .et-board .et-rec .ov-rec-question{font-size:14px!important;font-weight:400!important;line-height:1.45!important}
+body #appShell #view .et-rec-actions{gap:5px!important;flex-wrap:wrap!important;margin-top:auto!important}
+body #appShell #view .et-rec-actions .et-btn{font-size:10px!important;height:30px!important;padding:0 10px!important;min-height:30px!important}
+body #appShell #view .px-overview.et-board .et-block.et-subs{
+ background:transparent!important;border:0!important;box-shadow:none!important;
+ padding:4px 15px 16px!important;border-radius:0!important;backdrop-filter:none!important;
+}
+body #appShell #view .et-block-head{gap:5px!important}
+body #appShell #view .et-block-link{font-size:10px!important}
+body #appShell #view .et-subs-icons{margin:14px 0!important}
+body #appShell #view .et-subs-icon{width:35px!important;height:35px!important;min-width:35px!important;border:2px solid #202536!important;margin-left:-5px!important;box-shadow:none!important}
+body #appShell #view .et-subs-list{padding:8px!important;gap:6px!important;border-radius:18px;background:#ffffff08}
+body #appShell #view .et-sub-row{padding:7px!important;background:#ffffff09!important;border:0!important;border-radius:11px!important;gap:8px!important;min-height:42px!important}
+body #appShell #view .et-sub-copy strong{font-size:11px!important;font-weight:400!important}
+body #appShell #view .et-sub-copy small{font-size:9px!important;color:#c2becc!important}
+body #appShell #view .et-sub-avatar{width:29px!important;height:29px!important;min-width:29px!important;border-radius:7px!important;background:#ffffff0c!important}
+body #appShell #view .et-open{font-size:10px!important;height:27px!important;padding:0 9px!important;background:#ffffff12!important;border-color:#ffffff14!important}
+body #appShell #view .px-live-indicator{display:flex!important;justify-content:flex-start!important;width:auto!important;background:none!important;border:0!important;box-shadow:none!important;padding:0!important;margin:18px 0 0!important;font-size:9px!important;color:#b5adbf!important}
+body #appShell #view .px-provenance{font-size:9px!important;line-height:1.6!important;color:#a7a0b0!important;max-width:66%!important;margin-top:6px!important}
+body:has(.px-overview.et-board) #appShell .site-footer{display:none!important}
+@media(max-width:1190px) and (min-width:901px){
+ body #appShell.app-shell:not(.hidden){width:calc(100% - 64px)!important;margin:32px auto!important;border-width:7px!important;border-radius:38px!important}
+ body #appShell .topbar{padding:0 18px!important;gap:8px!important}
+ body #appShell .nav-rail .nav-item{padding:0 7px!important;font-size:10px!important}
+ body #appShell .nav-rail .nav-item .nav-symbol{display:none!important}
+ body #appShell #view{padding:0 18px 22px!important}
+ body #appShell #view .et-board-grid{gap:10px!important}
+ body #appShell #view .et-hero-value strong{font-size:31px!important}
+ body #appShell #view .et-hero .et-pill{padding:0 8px!important;font-size:9px!important}
+ body #appShell #view .et-card{padding:13px!important}
+ body #appShell #view .et-card-title,body #appShell #view .et-block-head h2{font-size:13px!important}
+ body #appShell #view .et-kpi-label{font-size:12px!important}
+ body #appShell #view .et-expense-split .et-split{grid-template-columns:1fr!important}
+ body #appShell #view .et-donut{max-width:150px!important;margin:0 auto!important}
+ body #appShell #view .et-expense-split .et-legend{grid-template-columns:1fr 1fr!important}
+}
+@media(max-width:900px){
+ body #appShell.app-shell:not(.hidden){width:calc(100% - 24px)!important;max-width:none!important;margin:12px auto!important;border:4px solid #d9d3e0b3!important;border-radius:28px!important}
+ body #appShell .topbar{height:auto!important;min-height:72px!important;padding:14px!important;grid-template-columns:1fr auto!important}
+ body #appShell .nav-rail{grid-row:2;grid-column:1/-1;justify-content:flex-start!important;min-width:0!important}
+ body #appShell .nav-rail .nav{width:100%!important;max-width:100%!important;justify-content:flex-start!important}
+ body #appShell .topbar-tools{grid-row:1;grid-column:2}
+ body #appShell #view{padding:6px 14px 20px!important}
+ body #appShell #view .et-title{font-size:26px!important;margin:6px 0 18px!important}
+ body #appShell #view .et-board-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important}
+ body #appShell #view .et-board-grid>:is(.et-hero,.et-income,.et-kpi-campaign,.et-recs,.et-flow,.et-expense-split,.et-subs){grid-column:1/-1!important;grid-row:auto!important}
+ body #appShell #view .et-board-grid::before{display:none!important}
+ body #appShell #view .et-board-grid>.et-income{grid-column:1!important}
+ body #appShell #view .et-board-grid>.et-kpi-campaign{grid-column:2!important}
+ body #appShell #view .et-board-grid>.et-hero{min-height:250px!important}
+ body #appShell #view .px-overview.et-board .et-block.et-recs{margin-top:0!important;padding:18px!important;background:#192234!important;border-radius:24px!important}
+ body #appShell #view .px-overview.et-board .et-block.et-subs{padding:18px!important;background:#192234!important;border-radius:24px!important}
+ body #appShell #view .et-expense-split .et-split{grid-template-columns:minmax(100px,1fr) minmax(0,1fr)!important}
+ body #appShell #view .px-provenance{max-width:100%!important}
+}
+@media(prefers-reduced-motion:reduce){body #appShell #view .et-rec{animation:none!important;transition:none!important}}
+
+/* Shared legibility and alignment: the rail never hides half of a destination. */
+body #appShell .topbar{
+ height:auto!important;min-height:84px!important;padding:18px 24px!important;
+ align-items:center!important;
+}
+body #appShell .nav-rail{justify-content:center!important;overflow:visible!important;flex-wrap:wrap!important;gap:8px!important}
+body #appShell .workspace-switcher:not(.hidden){display:inline-flex!important;width:auto!important;min-width:max-content!important;flex:0 0 auto!important;overflow:visible!important;margin:0!important}
+body #appShell .workspace-switcher button{flex:0 0 auto!important;min-height:32px!important;height:auto!important;line-height:1.4!important;font-size:12px!important}
+body #appShell .nav-rail .nav{
+ max-width:100%!important;width:auto!important;flex-wrap:wrap!important;
+ justify-content:center!important;overflow:visible!important;row-gap:5px!important;
+}
+body #appShell .nav-rail .nav-item{
+ flex:0 0 auto!important;justify-content:center!important;
+ font-size:12px!important;min-height:36px!important;height:auto!important;
+ line-height:1.35!important;padding:8px 11px!important;
+}
+body #appShell .nav-rail .nav-item:not(.selected){color:#dedbe8!important}
+body #appShell .nav-rail .nav-item:hover:not(.selected){background:#ffffff18!important;color:#fff!important}
+body #appShell .nav-rail .nav-item:focus-visible{outline:2px solid #c8b8ff!important;outline-offset:2px!important}
+body #appShell .nav-rail .nav-item .nav-symbol{flex:0 0 15px!important}
+body #appShell .topbar-brand,body #appShell .topbar-tools{align-self:center!important}
+body #appShell .workspace-box{display:none!important}
+body #appShell .page-strip{justify-content:space-between!important;align-items:center!important;gap:12px!important;padding:12px 24px!important}
+body #appShell .page-strip :is(.breadcrumb,.breadcrumb strong,.breadcrumb span,#crumbRoot,#topTitle){color:#e1ddea!important}
+body #appShell .page-strip .top-pill{background:#282c40!important;color:#e1e5f1!important;border-color:#ffffff24!important}
+
+/* Page headings live on the dark canvas. White form/table surfaces keep their
+   original paired foreground/background colors from the component layer. */
+body #appShell #view :is(.view-heading h1,.px-page-heading h1,.master-hero h1,.socio-clean-head h1,.socio-clean-head h2){color:#f5f2fb!important}
+body #appShell #view :is(.view-heading p,.px-page-heading p,.master-hero p,.socio-clean-head p){color:#c5bfd3!important;font-size:14px!important;line-height:1.6!important}
+body #appShell #view :is(.view-heading,.px-page-heading,.master-hero,.socio-clean-head) :is(.eyebrow,.px-eyebrow,.master-eyebrow){color:#c9b8ff!important}
+body #appShell #view :is(.view-heading,.px-page-heading,.socio-clean-head){align-items:center;gap:16px;min-width:0}
+body #appShell #view :is(.view-heading,.px-page-heading,.socio-clean-head)>*{min-width:0}
+body #appShell #view .ai-guide-title h1{color:#f5f2fb!important}
+body #appShell #view .ai-guide-title p{color:#c5bfd3!important;font-size:14px!important;line-height:1.6!important}
+body #appShell #view .ai-guide-title .eyebrow{color:#c9b8ff!important}
+body #appShell #view .ai-guide-head{align-items:center!important;gap:20px!important;flex-wrap:wrap!important}
+body #appShell #view .ps-heading h1{color:#f5f2fb!important}
+body #appShell #view .ps-heading p{color:#c5bfd3!important;font-size:14px!important;line-height:1.6!important}
+body #appShell #view .ps-heading .ps-kicker{color:#c9b8ff!important}
+body #appShell #view :is(.card,.panel,.px-panel,.master-panel) :is(h1,h2,h3){color:#202735!important}
+body #appShell #view .wa-inbox-empty-list p{color:#62576d!important;font-size:12px!important;line-height:1.6!important}
+body #appShell[data-workspace="master"] #view :is(.view-heading h1,.px-page-heading h1,.master-hero h1,.socio-clean-head h1,.socio-clean-head h2){color:#202735!important}
+body #appShell[data-workspace="master"] #view :is(.view-heading p,.px-page-heading p,.master-hero p,.socio-clean-head p){color:#526079!important}
+body #appShell[data-workspace="master"] #view :is(.view-heading,.px-page-heading,.master-hero,.socio-clean-head) :is(.eyebrow,.px-eyebrow,.master-eyebrow){color:#5145a8!important}
+body #appShell #view :is(button,.btn,a,input,textarea,select):focus-visible{outline:2px solid #9879ee!important;outline-offset:3px!important}
+body #appShell #view :is(.table-wrap,.socio-team-controls){max-width:100%}
+body #appShell #view :is(.table-wrap){overflow-x:auto}
+
+/* Recommendation badges are text, not tiny decorative marks. */
+body #appShell #view .et-board .et-rec .et-rec-top{display:flex!important;align-items:center!important;justify-content:space-between!important;flex-wrap:wrap!important;gap:8px!important}
+body #appShell #view .et-board .et-rec .ov-rec-status{
+ display:inline-flex!important;align-items:center!important;justify-content:center!important;
+ flex:0 0 auto;padding:5px 9px!important;min-height:26px!important;
+ font-size:11px!important;line-height:1.4!important;font-weight:650!important;
+ text-align:center!important;border-radius:999px!important;white-space:normal!important;
+ background:#d7f5b1!important;color:#19320b!important;
+}
+body #appShell #view .et-board .et-rec .et-rec-kind{font-size:12px!important;line-height:1.5!important;letter-spacing:.02em!important}
+body #appShell #view .et-board .et-rec .et-rec-title{font-size:15px!important;line-height:1.5!important}
+body #appShell #view .et-board .et-rec .et-rec-actions{justify-content:center!important}
+body #appShell #view .et-board .et-rec .et-btn{font-size:12px!important;min-height:36px!important;height:auto!important;padding:8px 12px!important;line-height:1.4!important}
+body #appShell #view .et-board .et-rec .et-btn.primary{background:#fff!important;color:#35216d!important;border-color:#fff!important}
+body #appShell #view .et-board .et-rec .et-btn.ghost{background:#35235e!important;color:#fff!important;border:1px solid #ffffff55!important}
+body #appShell #view .et-board .et-rec .ov-rec-note{font-size:12px!important;line-height:1.5!important;color:#fff!important}
+body #appShell #view .et-board .et-rec .ov-rec-note.is-error{background:#4e192b!important;color:#fff0f3!important;border-radius:8px;padding:8px}
+body #appShell #view .px-overview.et-board .et-recs .et-rec:first-child{background:linear-gradient(115deg,#7855aa,#6250a6 60%,#53499b)!important}
+body #appShell #view .px-overview.et-board .et-recs .et-rec .et-btn.primary{background:#fff!important;color:#35216d!important;border-color:#fff!important}
+body #appShell #view .px-overview.et-board .et-recs .et-rec:nth-child(n+2) :is(.ov-rec-status,.et-rec-actions,.ov-rec-amount){display:none!important}
+
+/* Missing provider media has an explicit neutral fallback, never a blank tile. */
+body #appShell #view .et-campaign-thumb{display:grid!important;place-items:center!important;min-width:56px!important;width:56px!important;height:56px!important;background:#ffffff12!important;border:1px solid #ffffff25!important}
+body #appShell #view .et-campaign-thumb .px-feature-no-media{display:grid!important;place-items:center!important;align-content:center!important;gap:3px!important;min-height:0!important;height:100%!important;width:100%!important;padding:4px!important;font-size:0!important;background:transparent!important;color:#dfd9eb!important;text-align:center!important}
+body #appShell #view .et-campaign-thumb .px-feature-no-media::before{content:"◇";font-size:20px;line-height:1}
+body #appShell #view .et-campaign-thumb .px-feature-no-media::after{content:"Sem prévia";font-size:9px;line-height:1.2}
+body #appShell #view .et-campaign-copy{min-width:0!important}
+body #appShell #view .et-campaign-copy strong{font-size:13px!important;line-height:1.4!important;overflow-wrap:anywhere}
+body #appShell #view .et-campaign-copy :is(small,b){font-size:11px!important;line-height:1.5!important;white-space:normal!important}
+body #appShell #view .et-kpi-link,body #appShell #view .et-block-link{font-size:12px!important;line-height:1.5!important;min-height:32px;display:inline-flex;align-items:center;justify-content:center}
+body #appShell #view .et-card-sub{color:#c7c0d3!important;font-size:12px!important;line-height:1.5!important}
+body #appShell #view .et-sub-copy strong{font-size:13px!important;line-height:1.4!important}
+body #appShell #view .et-sub-copy small{font-size:11px!important;line-height:1.5!important;color:#d0cada!important}
+body #appShell #view .et-open{font-size:12px!important;min-height:34px!important;display:inline-flex;align-items:center;justify-content:center}
+body #appShell #view .et-expense-split .et-seg button{font-size:11px!important;min-height:32px!important;height:auto!important;line-height:1.4!important}
+body #appShell #view .et-expense-split .et-seg button.on{background:#f5f1ff!important;color:#30234c!important}
+body #appShell #view .et-legend-label{color:#d0cada!important;font-size:11px!important;line-height:1.4!important}
+body #appShell #view .et-hero .et-pill{font-size:11px!important;min-height:36px!important;height:auto!important;line-height:1.4!important}
+body #appShell #view .et-hero-note{font-size:12px!important;line-height:1.5!important}
+body #appShell #view .px-live-indicator{
+ width:100%!important;justify-content:center!important;align-items:center!important;
+ gap:8px!important;margin:24px auto 8px!important;font-size:12px!important;
+ line-height:1.6!important;color:#d6d0e2!important;text-align:center!important;
+}
+body #appShell #view .px-live-indicator .px-live-dot{flex:0 0 7px;width:7px!important;height:7px!important;border:0!important;box-shadow:none!important}
+body #appShell #view .px-provenance{
+ max-width:900px!important;margin:0 auto!important;padding:0 12px!important;
+ color:#bfb7ce!important;font-size:12px!important;line-height:1.7!important;text-align:center!important;
+}
+body #appShell #view .px-workspace .px-provenance{color:#bfb7ce!important}
+body #appShell #view :is(.card,.panel,.px-panel) .px-provenance{color:#526079!important}
+body #appShell[data-workspace="master"] #view .px-provenance{color:#526079!important}
+body #appShell .site-footer{color:#c8c1d5!important;text-align:center!important;font-size:12px!important}
+@media(max-width:900px){
+ body #appShell .topbar{padding:14px!important}
+ body #appShell .nav-rail .nav{width:100%!important;justify-content:center!important}
+ body #appShell .nav-rail .nav-item{flex:1 1 auto!important;min-height:38px!important;font-size:12px!important}
+ body #appShell .page-strip{padding:10px 14px!important;flex-wrap:wrap!important}
+ body #appShell #view :is(.view-heading,.px-page-heading,.socio-clean-head){flex-wrap:wrap;align-items:flex-start}
+ body #appShell #view .et-board-grid>.et-income,body #appShell #view .et-board-grid>.et-kpi-campaign{grid-column:1/-1!important}
+ body #appShell #view .et-expense-split .et-seg{flex-wrap:wrap!important;gap:4px!important}
+ body #appShell #view .et-expense-split .et-seg button{flex:1 1 40%!important}
+ body #appShell #view .px-provenance{padding:0!important}
+}
+
+/* Sócio wordmark and the reference's two-by-two metric legend. */
+body #appShell .topbar-brand .et-logo{
+ display:block!important;width:40px!important;height:40px!important;
+ min-width:40px!important;flex:0 0 40px!important;object-fit:contain;
+ border:0!important;border-radius:0!important;background:none!important;box-shadow:none!important;
+}
+body #appShell .topbar-brand{gap:10px!important}
+body #appShell .topbar-brand strong{font-size:18px!important;font-weight:600!important;letter-spacing:-.6px!important}
+body #appShell #view .et-expense-split .et-legend{
+ display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;
+ gap:18px 14px!important;align-items:start!important;
+}
+body #appShell #view .et-expense-split .et-legend li{
+ display:grid!important;grid-template-columns:3px minmax(0,1fr)!important;
+ grid-template-rows:auto auto!important;align-items:start!important;
+ gap:4px 7px!important;min-width:0!important;
+}
+body #appShell #view .et-expense-split .et-legend .et-swatch{
+ grid-row:1/span 2;width:3px!important;min-width:3px!important;height:100%!important;
+ min-height:26px;border-radius:3px!important;
+}
+body #appShell #view .et-expense-split .et-legend-label{
+ grid-column:2;white-space:normal!important;overflow:visible!important;
+ font-size:11px!important;line-height:1.4!important;
+}
+body #appShell #view .et-expense-split .et-legend-value{
+ grid-column:2;font-size:13px!important;line-height:1.4!important;white-space:normal!important;overflow-wrap:anywhere;
+}
+
+/* Full workspace identity — all operational screens share the approved board's
+   navy canvas, charcoal surfaces, lavender details and mint primary actions.
+   The overview is intentionally excluded from these component overrides. */
+/* Important layer rules outrank legacy unlayered display declarations. Hidden
+   controls must never become visible just because a button receives a theme. */
+@layer socio-visibility{
+ body:has(#appShell:not(.hidden)) :is([hidden],.hidden){display:none!important}
+}
+body #appShell[data-workspace] #view:not(:has(.et-board)){
+ --page-ink:#f5f1fc;--page-copy:#d6cfdf;--page-muted:#bdb3cc;
+ --page-panel:#20212d;--page-raised:#2a2b3b;--page-deep:#141925;
+ --page-line:#424151;--page-accent:#ccb8ff;
+ --ink:var(--page-ink);--muted:var(--page-muted);--surface:var(--page-panel);
+ --line:var(--page-line);--px-ink:var(--page-ink);--px-muted:var(--page-muted);
+ --stripe-card:var(--page-panel);--stripe-line:var(--page-line);
+ --sx-panel:var(--page-panel);--sx-fg:var(--page-ink);--sx-fg-muted:var(--page-muted);
+ --socio-surface:var(--page-panel);--socio-ink:var(--page-ink);--socio-muted:var(--page-muted);
+ color:var(--page-copy)!important;background:transparent!important;
+ padding-top:20px!important;padding-bottom:32px!important;color-scheme:dark;
+}
+body #appShell[data-workspace="master"] .app-main{background:transparent!important}
+body #appShell[data-workspace="master"] .topbar{background:transparent!important;border-color:#ffffff12!important}
+body #appShell[data-workspace="master"] .nav-rail .nav{background:#ffffff09!important;border-color:#ffffff12!important}
+body #appShell[data-workspace="master"] #masterNav .nav-item.selected{background:#f4edff!important;color:#2b2241!important;border-color:transparent!important}
+body #appShell[data-workspace="master"] .workspace-switcher{background:#191d2b!important;border-color:#534960!important}
+body #appShell[data-workspace="master"] .workspace-switcher button[aria-selected="true"]{background:#e2d5fa!important;color:#2b2241!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-workspace,.ps-interview-shell,.socio-training-clean,.socio-catalog-clean,.socio-my-account,.socio-team-grid,.commerce-page){color:var(--page-copy)!important;min-width:0}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(h1,h2,h3,h4,.section-title,.panel-head h2,.px-section-heading h2,.master-panel-head h2,.px-panel-head h2,.ai-guide-title h1,.ps-heading h1){
+ color:var(--page-ink)!important;letter-spacing:-.035em!important;font-weight:550!important;
+}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.view-heading,.px-page-heading,.ai-guide-head,.master-hero,.socio-clean-head){margin-bottom:24px!important;border-color:var(--page-line)!important;gap:20px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.view-heading h1,.px-page-heading h1,.ai-guide-title h1,.master-hero h1){font-size:clamp(26px,2.6vw,36px)!important;line-height:1.2!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .ai-guide-head~* .ps-heading h1{font-size:24px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(p,small,label,legend,dt,dd,blockquote,.form-note,.table-detail,.muted,.px-muted,.px-provenance,.ps-composer-hint,.ps-voice-status,.wa-chat-preview,.wa-chat-meta,.wa-message-meta,.master-disclaimer,.master-updated){
+ color:var(--page-muted)!important;line-height:1.6!important;
+}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(strong,b,.px-kpi-number,.master-kpi strong,.ember-kpi-value,.lucid-kpi-number,.px-ads-metric>b,.px-budget-meta-metric>strong){color:var(--page-ink)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.eyebrow,.px-eyebrow,.ps-kicker,.master-eyebrow,.wa-inbox-eyebrow){color:var(--page-accent)!important;letter-spacing:.1em!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-kpi-label,.master-kpi-label,.master-kpi-meta,.px-kpi-meta,.px-feature-label,.px-feature-stats span,.master-health-list span,.master-plan-row-top small,.wa-compose-disclaimer,.wa-thread-identity small){color:var(--page-muted)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.master-kpi-copy>span,.master-company-summary,#inboxCount){color:#c8bed5!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-date-marker{background:#2e2d42!important;color:#e7daF4!important;border-color:#625375!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-date-marker span{background:transparent!important;color:inherit!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.card,.panel,.callout,.lucid-card,.ember-card,.ember-kpi,.px-kpi,.px-panel,.px-ads-metric,.px-conn-card,.master-panel,.master-kpi,.socio-clean-section,.socio-training-center,.socio-list-panel,.catalog-product,.quote-request-item,.commerce-lead-card,.ps-interview-welcome,.ps-chat-card,.ps-review,.ps-review-card,.ps-mode,.ps-optional-training,.socio-train-account,.socio-train-result,.socio-knowledge-edit,.socio-ops-panel,.socio-ops-grid>div,.quote-request-panel){
+ background:linear-gradient(135deg,#252532,#1d202c)!important;
+ border:1px solid var(--page-line)!important;border-radius:24px!important;
+ color:var(--page-copy)!important;box-shadow:inset 0 1px #ffffff05,0 16px 32px -28px #000b!important;
+ backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.card,.panel,.px-panel,.master-panel,.ps-review){padding:24px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.catalog-product,.ps-mode,.ps-review-card,.px-conn-card):hover{border-color:#8f7db4!important;background:linear-gradient(135deg,#302b42,#222634)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.catalog-variant-row,.px-campaign-picker,.feature-choice,.socio-audit-line,.socio-team-controls,.px-traffic-item,.master-no-data,.master-loading,.master-company-edit-note,.ps-markdown-advanced){background:var(--page-deep)!important;color:var(--page-copy)!important;border-color:var(--page-line)!important;border-radius:14px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .feature-choice:has(input:checked){background:#332d49!important;border-color:#b6a0e9!important}
+
+/* Forms, actions, filters and tables: paired foregrounds and backgrounds. */
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),textarea,select,option){
+ background:var(--page-deep)!important;color:var(--page-ink)!important;
+ border:1px solid #555063!important;border-radius:12px!important;
+ caret-color:#b9f1cd!important;color-scheme:dark!important;box-shadow:none!important;
+ -webkit-text-fill-color:initial!important;
+}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(input,textarea)::placeholder{color:#b4aabd!important;opacity:1!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(input,select,textarea):focus{border-color:#c7b5f6!important;box-shadow:0 0 0 3px #c7b5f61a!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(button,.btn,input,select,textarea,a,[tabindex]):focus-visible{outline:2px solid #d1befa!important;outline-offset:3px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(input[type="checkbox"],input[type="radio"]){accent-color:#b6edd3!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.btn,button.primary,button.soft,.wa-small-action,.wa-round-icon,.px-quick-action,.px-range-btn,.master-text-action,.ps-choices button){
+ display:inline-flex;align-items:center;justify-content:center;
+ min-height:38px;border-radius:999px!important;line-height:1.4!important;
+ background:#2d2c3c!important;color:#f2ecfb!important;border:1px solid #585168!important;
+ box-shadow:none!important;font-weight:550!important;
+}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.btn.primary,button.primary,.wa-compose-send,.wa-inbox-connect,#newProduct,.px-campaign-confirm,.ps-primary){
+ background:linear-gradient(110deg,#92e7db,#cceda2)!important;color:#152c25!important;border:1px solid #bcebb7!important;
+}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.btn.primary,button.primary,.wa-compose-send,.wa-inbox-connect,#newProduct,.px-campaign-confirm,.ps-primary) :is(span,small,strong,b,svg){color:inherit!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.btn,button.soft,.wa-small-action,.wa-round-icon,.ps-mode,.ps-choices button):hover:not(:disabled){background:#413653!important;color:#fff!important;border-color:#a991c8!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.btn.primary,button.primary,.wa-compose-send,.wa-inbox-connect):hover:not(:disabled){background:#d1f4c2!important;color:#152c25!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.lucid-filter,.ai-guide-tabs,.settings-tabs,.ember-filter,.px-range-tabs,.wa-filters){background:#151b2b!important;border-color:var(--page-line)!important;color:var(--page-copy)!important;border-radius:18px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.lucid-filter,.ai-guide-tabs,.settings-tabs,.ember-filter,.px-range-tabs,.wa-filters) button{
+ background:transparent!important;color:#d5cee2!important;border:1px solid transparent!important;border-radius:999px!important;min-height:38px;line-height:1.4!important;
+}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.lucid-filter,.ai-guide-tabs,.settings-tabs,.ember-filter,.px-range-tabs,.wa-filters) button:is(.active,.is-active,[aria-selected="true"]){background:#d5c4f7!important;color:#2d2048!important;border-color:#d5c4f7!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.lucid-filter,.ai-guide-tabs,.settings-tabs,.ember-filter,.px-range-tabs,.wa-filters) button:not(.active):not(.is-active):not([aria-selected="true"]){background:transparent!important;color:#d5cee2!important;border-color:transparent!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.ps-optional-training>summary,.ps-markdown-advanced>summary,.socio-training-clean>summary){color:#d4c0fa!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(table,.data-table,.px-table){background:transparent!important;color:var(--page-copy)!important;border-color:var(--page-line)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(th,thead){background:#191e2b!important;color:#d6cce5!important;border-color:var(--page-line)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) td{background:transparent!important;color:#e6dfee!important;border-color:var(--page-line)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.table-wrap,tbody,tbody tr){background:#202432!important;color:#e6dfee!important;border-color:var(--page-line)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-table-scroll,.px-table,.px-campaign-table,.px-adset-table,.master-table){background:#202432!important;color:#e6dfee!important;border-color:var(--page-line)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-table,.px-campaign-table,.px-adset-table,.master-table) tr:hover td{background:#303044!important;color:#f4edfa!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) tbody tr:hover{background:#ffffff06!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.empty,.empty-state,.catalog-empty,.catalog-cover,.catalog-cover-empty){background:#191e2b!important;border-color:var(--page-line)!important;color:var(--page-copy)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.badge,.px-status,.catalog-status,.master-status,.ember-status,.ps-pill,.px-traffic-status){background:#323344!important;color:#e0d7f0!important;border-color:#585269!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.badge.green,.px-status.on,.catalog-status.yes,.master-status-active,.ps-pill.approved,.ps-concluded,.px-traffic-status.done){background:#193d33!important;color:#a8f0c6!important;border-color:#366653!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.badge.yellow,.master-status-trial,.px-traffic-status.awaiting_approval){background:#45351f!important;color:#ffe0a6!important;border-color:#725737!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.badge.red,.catalog-status.no,.ps-error,.px-traffic-status.failed){background:#481f30!important;color:#ffd2df!important;border-color:#754256!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.badge,.px-status,.catalog-status,.master-status,.ps-pill) :is(span,small,strong,b){color:inherit!important}
+
+/* WhatsApp: same navy shell, distinct message and private-note treatments. */
+body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-inbox{background:#151b29!important;border:1px solid var(--page-line)!important;border-radius:26px!important;overflow:hidden}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.wa-inbox-side,.wa-inbox-items,.wa-thread-header,.wa-compose,.wa-inbox-details,.wa-details-top,.wa-details-section,.wa-thread-search,.wa-context-menu,.wa-dialog-surface,.wa-inbox-dialog){background:#202432!important;color:var(--page-copy)!important;border-color:var(--page-line)!important;box-shadow:none!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.wa-inbox-main,.wa-message-list){background:#131a29!important;color:var(--page-copy)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.wa-inbox-side-head,.wa-list-row-wrap,.wa-thread-header,.wa-inbox-side-bottom){border-color:var(--page-line)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.wa-inbox-search,.wa-inbox-side-bottom,.wa-compose-top,.wa-compose-foot,.wa-mode-btn,.wa-message-more,.wa-context-menu button){background:#191f2f!important;color:var(--page-muted)!important;border-color:var(--page-line)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-list-row{background:transparent!important;color:var(--page-copy)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.wa-list-row:hover,.wa-thread-identity:hover){background:#2b2a40!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-list-row.active{background:#352f49!important;box-shadow:inset 3px 0 #c8b5f3!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.wa-chat-name-line strong,.wa-thread-identity strong,.wa-inbox-empty-list strong){color:var(--page-ink)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.wa-chat-preview,.wa-chat-meta,.wa-thread-identity small,.wa-inbox-side-bottom,.wa-history-load span,.wa-inbox-empty-list p,.wa-compose-disclaimer,.wa-inline-link){color:var(--page-muted)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-inbox-welcome{background:transparent!important;color:var(--page-copy)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.wa-chat-avatar,.wa-inbox-welcome-mark){background:#353047!important;color:#d9c8fa!important;border-color:#584a71!important;box-shadow:none!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-message-bubble{background:#282b3b!important;color:#f2edf8!important;border-color:#4a455b!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-message-row.outgoing .wa-message-bubble{background:#34304e!important;color:#f5eefe!important;border-color:#61507a!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-message-row.internal .wa-message-bubble{background:#443723!important;color:#ffebc2!important;border-color:#806438!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.wa-message-copy,.wa-message-copy p){color:inherit!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.wa-message-quote,.wa-reply-banner,.wa-mode-btn.active){background:#3a304d!important;color:#e8ddf7!important;border-color:#a18ac6!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-message-meta{color:#c1b9d2!important}
+
+/* Learning, image generation and manual review remain full working screens. */
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.ps-feed,.ps-composer,.ps-bubble,.ps-choices button,.ps-markdown-advanced){background:#171e2d!important;color:var(--page-copy)!important;border-color:var(--page-line)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .ps-line.mine .ps-bubble{background:#382e4e!important;color:#f1e9fc!important;border-color:#66517f!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .messages-preview{background:#141c2b!important;color:#e5dced!important;border:1px solid #494257!important;border-radius:18px!important;padding:20px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .messages-preview .bubble{background:#2b2b40!important;color:#efe5fa!important;border-color:#605077!important;border-radius:18px 18px 18px 5px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .messages-preview .bubble.user{background:#3a3050!important;border-radius:18px 18px 5px 18px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.ps-mode-icon,.ps-face,.ps-small-avatar,.socio-train-emblem,.socio-train-account .icon,.socio-wa-empty-icon,.master-kpi-icon){background:#3c3154!important;color:#d6c1fc!important;border-color:#625078!important;box-shadow:none!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.ps-progress,.socio-train-progress,.master-plan-track,.master-month-track){background:#343246!important;border-color:var(--page-line)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.ps-progress>div,.socio-train-progress>div,.master-month-bar){background:linear-gradient(110deg,#b49bdf,#dcc3f1)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.master-donut-center,.master-month-track){background:#1c2230!important;color:var(--page-copy)!important;box-shadow:none!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.master-health-list>div,.master-panel-head,.ps-chat-header,.ai-guide-head){border-color:var(--page-line)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.master-health-list span,.master-plan-row-top>span,.master-month-col>span,.master-month-value){color:var(--page-muted)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.master-health-list strong,.master-plan-row-top strong){color:var(--page-ink)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-feature-no-media,.px-feature-media,.px-campaign-provider-meta,.px-budget-meta-ribbon,.px-budget-account){background:#191f2e!important;color:var(--page-copy)!important;border-color:var(--page-line)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-featured-item,.px-featured-video,.px-ad-creative,.px-featured-ad,.px-ad-card){background:#191f2e!important;color:var(--page-copy)!important;border-color:var(--page-line)!important;border-radius:18px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-advanced,.px-feature-details,.px-ad-creative-info,.px-ad-creative-media,.px-meta-preview-frame,.px-facebook-video-frame){background:#191f2e!important;color:var(--page-copy)!important;border-color:var(--page-line)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-feature-media:has(.px-feature-no-media){display:flex!important;flex-direction:column;justify-content:center;align-items:center;gap:14px;padding:18px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-feature-media:has(.px-feature-no-media) .px-feature-no-media{position:static!important;inset:auto!important;min-height:0!important;width:auto!important;height:auto!important;padding:0!important;color:#c9bbda!important;font-size:12px!important;line-height:1.5!important;text-align:center}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-feature-media:has(.px-feature-no-media) .px-media-play{position:static!important;inset:auto!important;transform:none!important;margin:0!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-campaign-open,.px-campaign-back,.px-media-external,.px-campaign-crumbs strong){color:#dcc9ff!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-campaign-back{background:#342d49!important;color:#e9dafb!important;border-color:#6c587f!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-budget-value{color:#f4ecff!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-campaign-dialog{background:#202432!important;color:#e9e1f3!important;border:1px solid #6c587e!important;border-radius:26px!important;box-shadow:0 30px 80px #0009!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-campaign-dialog :is(h2,h3,strong){color:#f6edfe!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-campaign-dialog :is(p,small,label){color:#cbbfda!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-dialog-help,.px-footnote,.px-preview-text){background:#191e2f!important;color:#cfc1e0!important;border-color:#594b6b!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-campaign-dialog .btn.primary{color:#152c25!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-marketing-filters{background:#151b2b!important;border-color:var(--page-line)!important;border-radius:999px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-marketing-filters button{background:transparent!important;color:#d5cee2!important;border-color:transparent!important;border-radius:999px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-marketing-filters button:is(.selected,[aria-pressed="true"]){background:#d5c4f7!important;color:#2d2048!important;border-color:#d5c4f7!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-kpi-icon,.px-conn-icon,.px-feature-icon){background:#382e4c!important;color:#d5c2fb!important;border-color:#625279!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-traffic-item p,.px-traffic-item small,.px-traffic-feedback){color:var(--page-copy)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(a,.ps-mode>span,.px-conn-row a){color:#d3bfff!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.ps-mode strong,.ps-review-card strong,.ps-review strong,.ps-chat-header strong,.ps-choices strong,.catalog-product strong){color:var(--page-ink)!important}
+
+/* Dialogs and the assistant live outside #view and need the same materials. */
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.catalog-voice,.loading.socio-page-loading,.socio-loading-card){background:#1a2030!important;color:var(--page-copy)!important;border-color:var(--page-line)!important;border-radius:20px!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.socio-loading-title,.catalog-voice strong){color:var(--page-ink)!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .socio-loading-copy{color:var(--page-muted)!important}
+body.socio-orb-view #appShell #view .orb-page{background:radial-gradient(ellipse at 50% 40%,#29213f 0%,#111a2c 55%,#080e1b 100%)!important;color:#f3edfc!important}
+body.socio-orb-view #appShell #view .orb-page :is(.orb-transcript,.orb-plan-panel,.orb-composer,.orb-back,.orb-mic-btn,.orb-btn,.orb-drop-hint,.orb-media-pill){background:#24273aeF!important;color:#eee5fb!important;border-color:#655374!important;box-shadow:none!important}
+body.socio-orb-view #appShell #view .orb-page :is(.orb-line,.orb-step-body strong,.orb-plan-head strong){color:#f3edfc!important}
+body.socio-orb-view #appShell #view .orb-page :is(.orb-line.user,.orb-step-body small,.orb-status,.orb-hint){color:#c8bbd8!important}
+body.socio-orb-view #appShell #view .orb-page .orb-plan-eyebrow{color:#cdb6f7!important}
+body.socio-orb-view #appShell #view .orb-page .orb-composer input{background:transparent!important;color:#f4eafc!important;border:0!important;box-shadow:none!important}
+body.socio-orb-view #appShell #view .orb-page .orb-composer input::placeholder{color:#c2b4d4!important}
+body.socio-orb-view #appShell #view .orb-page :is(.orb-send,.orb-attach){background:#3d3154!important;color:#e7d7fc!important;border-color:#74608e!important}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog,.command-box){
+ background:#202432!important;color:#e9e1f3!important;border:1px solid #5b506a!important;
+ border-radius:26px!important;box-shadow:0 28px 100px #0009!important;
+}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface.socio-product-popup,.socio-popup-surface.socio-company-popup,.socio-popup-backdrop .socio-popup-surface,.ps-card-dialog,.socio-billing-dialog,.command-box){background:#202432!important;color:#e9e1f3!important;border:1px solid #5b506a!important;border-radius:26px!important;box-shadow:0 28px 100px #0009!important}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog) .catalog-voice{background:#171e2c!important;border-color:#655276!important;color:#d9cde8!important}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog) .catalog-voice :is(p,small){color:#c6bad6!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-notice{background:#28283b!important;color:#e3d7f2!important;border-color:#62516f!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-notice :is(p,strong,small){color:inherit!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-thread-identity{color:#eee5f7!important}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog,.command-box) :is(h1,h2,h3,strong,.section-title){color:#f5f1fc!important}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog,.command-box) :is(p,small,label,legend,span,li){color:#c6bad6!important}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog) :is(.socio-clean-section,.catalog-variant-row,.report-note-grid>div,.px-campaign-picker,.feature-choice){background:#161d2c!important;color:#e5dcee!important;border-color:#50465f!important}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog,.command-box) :is(input,select,textarea,option){background:#131b2a!important;color:#f5effb!important;border:1px solid #645775!important;color-scheme:dark!important;box-shadow:none!important}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog) :is(.btn,button.soft){background:#353047!important;color:#f3eafa!important;border-color:#685a7a!important;border-radius:999px!important}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog) .btn.primary{background:#c0eeb9!important;color:#1b3021!important;border-color:#c0eeb9!important}
+body:has(#appShell:not(.hidden)) .socio-popup-header{background:#202432!important;border-color:#51465f!important;color:#f5f1fc!important}
+body:has(#appShell:not(.hidden)) :is(.socio-qr-current,.socio-qr-live,.socio-connected-item,.socio-qr-pending){background:#192131!important;color:#e6dced!important;border-color:#5a4c6a!important}
+body:has(#appShell:not(.hidden)) :is(.socio-qr-current,.socio-qr-live,.socio-connected-item,.socio-qr-pending) :is(strong,small,p,span){color:#d9cce8!important}
+body:has(#appShell:not(.hidden)) .socio-qr-steps{color:#c6bad6!important}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-close,.px-dialog-close,.wa-dialog-close){background:#3a304b!important;color:#f1e8fc!important;border-color:#716080!important}
+body:has(#appShell:not(.hidden)) #commandOverlay .command-item{color:#e3d8f0!important}
+body:has(#appShell:not(.hidden)) #commandOverlay .command-item:hover{background:#3a304e!important}
+body:has(#appShell:not(.hidden)) #commandOverlay .command-item>span:not(.command-item-icon){color:#e3d8f0!important}
+body:has(#appShell:not(.hidden)) #commandOverlay :is(.command-tip,.command-empty){color:#c6b8d6!important}
+body:has(#appShell:not(.hidden)) #commandOverlay #commandSearch{background:#202432!important;color:#f4eafa!important;border:0!important}
+body:has(#appShell:not(.hidden)) #commandOverlay #commandSearch::placeholder{color:#c5b6d5!important;opacity:1!important}
+body #appShell .page-strip .page-strip-sep{color:#bbb0cc!important}
+body:has(#appShell:not(.hidden)) #socioThalitaDock :is(.px-assistant-window:not(.hidden),.px-assistant-window>header,.px-assistant-suggestions,#thalitaForm){background:#202432!important;color:#e6def0!important;border-color:#554a65!important}
+body:has(#appShell:not(.hidden)) #socioThalitaDock :is(.px-assistant-feed,.px-assistant-disclaimer,#thalitaInput){background:#151d2b!important;color:#e6def0!important;border-color:#554a65!important}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-line{background:#2b2c3f!important;color:#f2ebfa!important;border-color:#554a65!important}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-line.user{background:#3b3150!important;border-color:#6a5683!important}
+body:has(#appShell:not(.hidden)) #socioThalitaDock :is(p,small,.px-assistant-hint,.px-assistant-window>header small){color:#c5b8d6!important}
+body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header strong{color:#f7f0fd!important}
+@media(max-width:760px){
+ body #appShell[data-workspace] #view:not(:has(.et-board)){padding-top:16px!important}
+ body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.card,.panel,.px-panel,.master-panel,.ps-review){padding:18px!important;border-radius:20px!important}
+ body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.ai-guide-tabs,.settings-tabs){display:flex!important;flex-wrap:wrap!important;max-width:100%!important}
+ body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.ai-guide-tabs,.settings-tabs) button{flex:1 1 auto;white-space:normal!important}
+ body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.view-heading,.px-page-heading,.ai-guide-head,.master-hero){align-items:flex-start!important;flex-wrap:wrap!important}
+}

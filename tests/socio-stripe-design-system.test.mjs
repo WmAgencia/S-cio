@@ -17,11 +17,14 @@ const cssImports=[...html.matchAll(/<link rel="stylesheet" href="(\/[^"]+\.css(?
 const chrome=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/google-chrome-stable',
  '/usr/bin/chromium','/usr/bin/chromium-browser','/opt/google/chrome/chrome'].find(x=>x&&existsSync(x));
 
-test('one canonical Stripe-inspired light theme replaces obsolete dark overrides',()=>{
- assert.equal(cssImports.at(-1),'/socio-stripe-system.css');
+test('one canonical board theme replaces obsolete dark overrides',()=>{
+ assert.equal(cssImports.at(-1),'/socio-reference.css');
  assert.match(html,/\/socio-stripe-system\.css\?v=[\w]+/);
+ assert.match(html,/\/socio-ethereal\.css\?v=[\w]+/);
  assert(server.includes("'/socio-stripe-system.css'"));
- assert.match(html,/<meta name="theme-color" content="#f7f8fa">/);
+ assert(server.includes("'/socio-ethereal.css'"));
+ assert(server.includes("'/socio-reference.css'"));
+ assert.match(html,/<meta name="theme-color" content="#08080a">/);
  for(const old of ['socio-glass-motion.css','socio-glass-enforced.css',
   'socio-premium-polish.css','socio-contrast-audit.css',
   'socio-motion-refined.css','socio-luminous-glass.css']){
@@ -59,9 +62,11 @@ test('visual hierarchy remains Stripe-inspired and complete across modules',()=>
  assert.equal(level,0,'unterminated CSS block');
  assert.doesNotMatch(withoutComments,/@import|url\s*\(\s*https?:/i);
  assert.match(base,/\.wa-inbox/);
- assert.match(overview,/Gasto hoje/);
- assert.match(overview,/Limite disponível/);
- assert.match(overview,/Abrir recarga na Meta/);
+ assert.match(overview,/Faturamento total/);
+ assert.match(overview,/Leads no WhatsApp/);
+ assert.match(overview,/Campanha em destaque/);
+ assert.doesNotMatch(overview,/Limite disponível|Abrir recarga na Meta|Saldo disponível/,
+  'the board shows no unverified Meta balance or recharge CTA');
  assert.match(app,/const masterViews=new Set/);
 });
 

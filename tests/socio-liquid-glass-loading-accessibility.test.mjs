@@ -65,15 +65,25 @@ test('Apple-inspired glass stays on functional controls, not data cards or giant
 });
 
 test('Dashboard first paints operational metrics and fetches Meta independently',()=>{
- assert.match(workspace,/async function overview\(\{root,api,me,navigate,activityRange='1m',progressive=false\}\)/);
+ assert.match(workspace,/async function overview\(\{root,api,me,navigate,periodPreset='7d',periodFrom=null,periodTo=null,progressive=false,/);
  assert.match(app,/progressive:true/);
- assert.match(workspace,/Promise\.all\(calls\.slice\(4\)\)/);
+ assert.match(workspace,/const later=progressive&&ads\?Promise\.all\(calls\):null/);
+ assert.match(workspace,/\[Promise\.resolve\(null\),\.\.\.calls\.slice\(1\)\.map\(skip\)\]/);
  assert.match(workspace,/if\(renderId!==renderSerial\|\|!root\.isConnected/);
  assert.match(workspace,/progressive:false/);
  assert.match(workspace,/getCache\.clear/);
  assert.match(workspace,/if\(liveRefreshBusy\|\|serial!==liveRefreshSerial/);
  assert.match(workspace,/\},60000\)/);
- assert.match(workspace,/ads&&googleAdsVisible\(\)\?googleOverview\(\):Promise\.resolve\(\{ok:false\}\)/);
+ // The overview's first paint never asks Google for data; wherever it does,
+ // the call is behind a configured+connected account, and the feature flag
+ // still gates every connection card and Marketing entry point.
+ const overviewScreen=workspace.slice(workspace.indexOf('async function overview('),
+  workspace.indexOf('async function marketing('));
+ const callsBlock=overviewScreen.slice(overviewScreen.indexOf('const calls=['),
+  overviewScreen.indexOf('];',overviewScreen.indexOf('const calls=[')));
+ assert.doesNotMatch(callsBlock,/google/i);
+ assert.match(overviewScreen,/status\?\.data\?\.configured!==true\|\|/);
+ assert.match(workspace,/if\(googleAdsVisible\(\)&&googleConnected\)/);
  assert.doesNotMatch(workspace,/optional\(api,'\/api\/google-ads\/campaigns\?period=today'\)/);
 });
 

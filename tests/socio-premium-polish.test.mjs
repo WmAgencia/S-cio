@@ -30,7 +30,7 @@ test('overview, inbox and Thalita share a readable light design vocabulary',()=>
  assert.match(thalita,/data-thalita-send/);
  assert.match(thalita,/data-thalita-voice/);
  assert.match(inbox,/wa-compose-send/);
- assert.match(workspace,/px-budget-top/);
+ assert.match(workspace,/et-board-grid/);
 });
 test('no future style layer reintroduces dark-ink on dark surface',()=>{
  const clean=css.replace(/\/\*[\s\S]*?\*\//g,'');

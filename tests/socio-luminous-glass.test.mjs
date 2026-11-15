@@ -10,11 +10,12 @@ const chrome=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/google-
  '/usr/bin/chromium','/usr/bin/chromium-browser','/opt/google/chrome/chrome'].find(x=>x&&existsSync(x));
 
 test('canonical light stylesheet is last; old luminous glass is retired',()=>{
- assert.equal(imports.at(-1),'/socio-stripe-system.css');
- assert(server.includes("'/socio-stripe-system.css'"));
+ assert.equal(imports.at(-1),'/socio-reference.css');
+ assert(server.includes("'/socio-ethereal.css'"));
+ assert(server.includes("'/socio-reference.css'"));
  assert(!imports.includes('/socio-luminous-glass.css'));
  assert(!imports.includes('/socio-glass-motion.css'));
- assert.match(html,/<meta name="theme-color" content="#f7f8fa">/);
+ assert.match(html,/<meta name="theme-color" content="#08080a">/);
  const source=css.replace(/\/\*[\s\S]*?\*\//g,'');
  let n=0;
  for(const ch of source){n+=(ch==='{')-(ch==='}');assert(n>=0);}

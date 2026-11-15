@@ -46,6 +46,8 @@ export function normalizeCtwaReferral(input){
 
 // One entry per real customer message. Text keeps its body; any message type can
 // carry a referral, and that is exactly the first message after an ad click.
+// Images and documents also pass without text so a payment receipt reaches the
+// sales detector; their caption and filename travel along as evidence.
 export function whatsappWebhookItems(data,{now=Date.now()}={}){
  const items=[];
  if(!data||data.object!=='whatsapp_business_account')return items;
@@ -56,15 +58,23 @@ export function whatsappWebhookItems(data,{now=Date.now()}={}){
    const name=String(value.contacts?.[0]?.profile?.name||'').slice(0,100);
    for(const message of value.messages||[]){
     if(!external||!message?.id||!message?.from)continue;
-    const body=message.type==='text'&&message.text?.body?
+    const type=String(message.type||'');
+    const body=type==='text'&&message.text?.body?
      String(message.text.body).slice(0,4000):null;
+    const mediaType=type==='image'||type==='document'?type:null;
+    const caption=mediaType?String(message[type]?.caption||'').slice(0,1000)||null:null;
+    const fileName=type==='document'?
+     String(message.document?.filename||'').slice(0,200)||null:null;
     const referral=normalizeCtwaReferral(message.referral);
-    if(body===null&&!referral)continue;
+    if(body===null&&!referral&&!mediaType)continue;
     items.push({
      external:String(external).slice(0,64),
      messageId:String(message.id).slice(0,200),
      from:String(message.from).slice(0,32),
      body,
+     mediaType,
+     caption,
+     fileName,
      name,
      referral,
      wabaId,
@@ -105,12 +115,22 @@ const PENDING_SQL=[
 
 const NOT_FOUND_CODES=new Set([100,803,80004]);
 
-async function tenantMetaToken(pool,tenantId,env){
+// Grants are sealed as {tenant,user,token}. Returning the decrypted JSON as the
+// bearer token would make every Graph call fail, so the payload is parsed here.
+export async function tenantMetaGrant(pool,tenantId,env){
  const result=await pool.query(
-  "SELECT token_encrypted FROM meta_official_grants WHERE tenant_id=$1 AND expires_at>now() ORDER BY updated_at DESC LIMIT 1",
+  "SELECT token_encrypted,scopes FROM meta_official_grants WHERE tenant_id=$1 AND expires_at>now() ORDER BY updated_at DESC LIMIT 1",
   [tenantId]);
  if(!result.rowCount)return null;
- return openMarketingSecret(result.rows[0].token_encrypted,env);
+ let payload;
+ try{payload=JSON.parse(openMarketingSecret(result.rows[0].token_encrypted,env));}
+ catch{return null;}
+ if(!payload||payload.tenant!==tenantId||typeof payload.token!=='string'||!payload.token)return null;
+ return {token:payload.token,scopes:Array.isArray(result.rows[0].scopes)?result.rows[0].scopes:[]};
+}
+
+async function tenantMetaToken(pool,tenantId,env){
+ return (await tenantMetaGrant(pool,tenantId,env))?.token||null;
 }
 
 async function lookupAd({config,token,adId,request}){
@@ -205,6 +225,26 @@ const REPORT_SQL=[
  "FROM replied r ORDER BY r.occurred_at DESC LIMIT 5000"
 ].join('\n');
 
+const FEEDBACK_SQL=[
+ "SELECT",
+ " count(*) FILTER (WHERE capi_sent_at IS NOT NULL)::int AS sent,",
+ " count(*) FILTER (WHERE capi_sent_at IS NULL AND capi_attempts<5",
+ "  AND occurred_at>now()-interval '7 days')::int AS pending,",
+ " count(*) FILTER (WHERE capi_sent_at IS NULL AND capi_attempts>=5)::int AS failed,",
+ " count(*) FILTER (WHERE capi_sent_at IS NULL AND capi_attempts<5",
+ "  AND occurred_at<=now()-interval '7 days')::int AS expired,",
+ " (SELECT d.error FROM meta_waba_datasets d",
+ "  WHERE d.tenant_id=$1 AND d.dataset_id IS NULL AND d.error IS NOT NULL",
+ "  ORDER BY d.last_attempt_at DESC NULLS LAST LIMIT 1) AS dataset_error,",
+ " (SELECT a.capi_error FROM wa_ctwa_attributions a",
+ "  WHERE a.tenant_id=$1 AND a.capi_sent_at IS NULL AND a.capi_error IS NOT NULL",
+ "  AND a.occurred_at>now()-interval '7 days'",
+ "  ORDER BY a.capi_last_attempt_at DESC NULLS LAST LIMIT 1) AS event_error",
+ "FROM wa_ctwa_attributions",
+ "WHERE tenant_id=$1 AND source_type='ad' AND ctwa_clid IS NOT NULL AND waba_id<>''",
+ "AND occurred_at>=now()-($2::int*interval '1 day')"
+].join(' ');
+
 function authorize(actor){
  requirePermission(actor,'marketing.read');
  assertApiFeature(actor.features,'/api/marketing/tools');
@@ -214,10 +254,13 @@ function authorize(actor){
 const average=(seconds,count)=>count?Math.round(seconds/count):null;
 const iso=value=>value?new Date(value).toISOString():null;
 
-export async function readCtwaReport(pool,actor,{days=30}={}){
+export async function readCtwaReport(pool,actor,{days=30,env=process.env}={}){
  authorize(actor);
  const windowDays=Math.max(1,Math.min(Number(days)||30,90));
- const result=await pool.query(REPORT_SQL,[actor.active_tenant_id,windowDays]);
+ const [result,feedbackResult]=await Promise.all([
+  pool.query(REPORT_SQL,[actor.active_tenant_id,windowDays]),
+  pool.query(FEEDBACK_SQL,[actor.active_tenant_id,windowDays])
+ ]);
  const rows=result.rows.map(row=>({
   conversationId:row.conversation_id,
   occurredAt:new Date(row.occurred_at),
@@ -324,6 +367,17 @@ export async function readCtwaReport(pool,actor,{days=30}={}){
    unresolvedArrivals:items.filter(x=>!x.campaignId&&x.sourceType==='ad')
     .reduce((sum,x)=>sum+x.arrivals,0)
   },
+  conversionFeedback:(()=>{
+   const feedback=feedbackResult.rows[0]||{};
+   return {
+    enabled:env.SOCIO_META_CTWA_CAPI_ENABLED==='true',
+    sent:Number(feedback.sent||0),
+    pending:Number(feedback.pending||0),
+    failed:Number(feedback.failed||0),
+    expired:Number(feedback.expired||0),
+    lastError:feedback.dataset_error||feedback.event_error||null
+   };
+  })(),
   items,
   campaigns:campaignItems,
   notes:[
@@ -345,6 +399,13 @@ export function formatCtwaReport(report,{max=5}={}){
    ' · Primeira resposta média: '+(totals.averageFirstBusinessReplySeconds===null?'sem dados':
    Math.round(totals.averageFirstBusinessReplySeconds/60)+' min')
  ];
+ const feedback=report.conversionFeedback;
+ if(feedback?.enabled){
+  lines.push('Eventos de conversa enviados à Meta: '+feedback.sent+
+   ' · aguardando: '+feedback.pending+' · falhas: '+feedback.failed+
+   (feedback.expired?' · fora da janela: '+feedback.expired:''));
+  if(feedback.lastError)lines.push('Pendência na Meta: '+feedback.lastError);
+ }
  for(const item of (report.items||[]).slice(0,max)){
   lines.push((item.adName||('Anúncio '+item.sourceId))+
    (item.campaignName?' · '+item.campaignName:'')+' — '+item.arrivals+' chegada(s), '+

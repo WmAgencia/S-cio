@@ -28,7 +28,7 @@ test('canonical contrast layer loads after every structural stylesheet',()=>{
  assert.equal(balance,0);
  assert.doesNotMatch(code,/javascript:|@import|url\s*\(\s*https?:/i);
 });
-test('period filters and sales charts have explicit light backgrounds and active state',()=>{
+test('one period control drives the board and keeps an explicit active state',()=>{
  for(const key of ['.px-chart-actions button.px-range-btn.active',
   '.px-chart-actions button.px-range-btn[aria-pressed="true"]',
   '.px-graph-counts','.px-chart-wrap','.px-axis','.px-legend',
@@ -36,9 +36,15 @@ test('period filters and sales charts have explicit light backgrounds and active
   '.px-legend .px-dot.purple','.px-legend .px-dot.green']){
   assert(css.includes(key),key);
  }
- assert.match(dashboard,/Atividade de conversas/);
- assert.match(dashboard,/data-px-chart-range=/);
+ assert.match(dashboard,/Faturamento total/);
+ assert.match(dashboard,/Leads no WhatsApp/);
+ assert.match(dashboard,/data-period-preset=/);
  assert.match(dashboard,/aria-pressed=/);
+ assert.match(dashboard,/data-period-custom/);
+ assert.match(dashboard,/data-period-apply/);
+ // The spend card answers to its own filter, never the headline one.
+ assert.match(dashboard,/data-split-preset=/);
+ assert.match(dashboard,/data-split-apply/);
 });
 test('every major SaaS area has an explicit light theme and readable inputs',()=>{
  for(const key of ['.lucid-filter','.ai-guide-tabs','.settings-tabs',

@@ -82,7 +82,11 @@ test('dashboard checks OAuth state before trying the unavailable Google campaign
  assert.match(block,/connected!==true/);
  assert.match(block,/selectedCustomerId/);
  assert(block.indexOf('google_not_connected')<block.indexOf('/api/google-ads/campaigns?period=today'));
- assert.match(ui,/ads\?googleOverview\(\)/);
+ // The dashboard no longer calls Google at all while the feature is disabled;
+ // wherever Google is still offered, the visibility gate stays in front of it.
+ const overviewBlock=ui.slice(ui.indexOf('async function overview('),ui.indexOf('async function marketing(',ui.indexOf('async function overview(')));
+ assert.doesNotMatch(overviewBlock,/googleOverview\(\)/,'no Google read ships in the dashboard');
+ assert.match(ui,/googleAdsVisible\(\)\?cached\(api,'\/api\/google-ads\/status'/);
 });
 test('billing browser never performs final Meta payment click, and the billing UI labels it assisted',()=>{
  const worker=readFileSync(new URL('../meta-browser/remote-worker.js',import.meta.url),'utf8');

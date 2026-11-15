@@ -118,7 +118,7 @@ test('dashboard ad spend and assistant tools degrade gracefully without invented
  assert.match(css,/@media\(max-width:650px\)/);
  assert.match(dash,/api\/marketing\/tools\/insights\?period=/);
  assert.match(dash,/api\/google-ads\/campaigns\?period=today/);
- assert.match(dash,/Não disponível/);
+ assert.match(dash,/Meta não respondeu agora/);
  assert.match(dash,/Campanhas ativas/);
  assert.doesNotMatch(dash,/Vendas pagas/);
  assert.match(dash,/CPA atribuído/);

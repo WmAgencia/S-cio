@@ -14,6 +14,8 @@ import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
 import {readWhatsAppFunnel} from './whatsapp-funnel.mjs';
 import {whatsappWebhookItems,saveCtwaAttribution,readCtwaReport,resolvePendingCtwaAds} from './whatsapp-ctwa.mjs';
+import {sendPendingCtwaEvents} from './whatsapp-ctwa-events.mjs';
+import {sendPendingSaleEvents} from './socio-sales-events.mjs';
 import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectOfficial,selectOfficialAccount,handleMetaRemoval,metaRemovalStatus} from './meta-official.mjs';
 
 import http from 'node:http';
@@ -29,7 +31,7 @@ import {maintenanceEnabled,writesBlocked,workersBlocked} from './migration-guard
 import {TABLES as MIGRATION_TABLES} from './scripts/socio-supabase-migrate.mjs';
 import {applyPendingMigrations,schemaVersionStatus} from './schema-migrations.mjs';
 import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,buildTrainingMarkdown,slugify,emailOk,normalizeLoginPhone,loginIdentifier,clientIp,createLimiter} from './lib.mjs';
-import {permissionsFor,requirePermission,allowedNewMemberRole,validateMemberPatch} from './team-permissions.mjs';
+import {permissionsFor,requirePermission,allowed,allowedNewMemberRole,validateMemberPatch} from './team-permissions.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
 import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
 import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
@@ -49,7 +51,12 @@ import {analyzeSocioContinuity} from './socio-prospector-continuity.mjs';
 import {knowledgeV3Enabled,loadTenantApprovedKnowledge,retrieveApprovedKnowledge} from './socio-knowledge-retrieval.mjs';
 import {readConversationMemory,clearConversationMemory,purgeExpiredConversationMemories} from './socio-conversation-memory.mjs';
 import {reconcileConfirmedOutbox,outboundEnabled} from './socio-outbound.mjs';
-import {readOwnerChannel,updateOwnerChannelSettings,retryOwnerGroup,provisionOwnerGroups,pollOwnerGroups,processOwnerCommands,runOwnerTrafficAutopilot} from './socio-owner-channel.mjs';
+import {readOwnerChannel,updateOwnerChannelSettings,retryOwnerGroup,provisionOwnerGroups,pollOwnerGroups,processOwnerCommands,runOwnerTrafficAutopilot,notifySaleQuestion} from './socio-owner-channel.mjs';
+import {detectSaleCandidate,recordSaleCandidate,listSales,createManualSale,
+ confirmSale,rejectSale} from './socio-sales.mjs';
+import {salesPerformance} from './socio-sales-report.mjs';
+import {salesSummary} from './socio-sales-summary.mjs';
+import {periodSummary,resolvePeriod} from './socio-period-summary.mjs';
 import {runTrafficManager,approveTrafficDecisions,listTrafficDecisions,reviewIsDue,
  recordTrafficReview,resolveTrafficDecision,listPendingDecisions} from './socio-traffic-manager.mjs';
 import {encodeHistoryCursor,decodeHistoryCursor} from './inbox-cursor.mjs';
@@ -309,10 +316,10 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/socio-semantic-turn.mjs','/socio-workspace-ui.js','/socio-thalita-ui.js','/socio-orb-ui.js','/socio-orb-mesh.js','/socio-executive.css','/socio-glass-motion.css','/socio-glass-motion.js','/socio-glass-enforced.css','/socio-premium-polish.css','/socio-contrast-audit.css','/socio-product-features.js','/socio-icons.js','/socio-entry-motion.js','/socio-motion-refined.css','/socio-luminous-glass.css','/socio-stripe-system.css','/socio-master.css','/socio-master-dashboard.js','/meta-billing-ui.js','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/owner-channel-ui.js','/socio-autopilot-ui.js','/socio-autopilot.css','/socio-overview.css','/socio-new-recommendation.mp3','/trial-input.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/socio-semantic-turn.mjs','/socio-workspace-ui.js','/socio-thalita-ui.js','/socio-orb-ui.js','/socio-orb-mesh.js','/socio-executive.css','/socio-glass-motion.css','/socio-glass-motion.js','/socio-glass-enforced.css','/socio-premium-polish.css','/socio-contrast-audit.css','/socio-product-features.js','/socio-icons.js','/socio-entry-motion.js','/socio-motion-refined.css','/socio-luminous-glass.css','/socio-stripe-system.css','/socio-ethereal.css','/socio-reference.css','/socio-logo.svg','/socio-master.css','/socio-master-dashboard.js','/meta-billing-ui.js','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/owner-channel-ui.js','/socio-autopilot-ui.js','/socio-autopilot.css','/socio-overview.css','/socio-new-recommendation.mp3','/trial-input.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
   const content=await readFile(new URL('./public'+file,import.meta.url));
-  res.writeHead(200,{'Content-Type':(file.endsWith('.js')||file.endsWith('.mjs'))?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':file.endsWith('.mp3')?'audio/mpeg':'text/html; charset=utf-8','Cache-Control':'no-cache'});
+  res.writeHead(200,{'Content-Type':(file.endsWith('.js')||file.endsWith('.mjs'))?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':file.endsWith('.svg')?'image/svg+xml':file.endsWith('.mp3')?'audio/mpeg':'text/html; charset=utf-8','Cache-Control':'no-cache'});
   return res.end(content);
  }
  if(pathname==='/webhooks/whatsapp'&&method==='GET'){
@@ -509,6 +516,51 @@ async function handle(req,res){
   const q=new URL(req.url,'http://local').searchParams;
   return json(res,200,await readCtwaReport(pool,a,{days:Number(q.get('days')||30)}));
  }
+ if(pathname==='/api/marketing/sales'&&method==='GET'){
+  requirePermission(a,'marketing.read');
+  const q=new URL(req.url,'http://local').searchParams;
+  return json(res,200,{items:await listSales(pool,a.active_tenant_id,{
+   days:Number(q.get('days')||30),status:q.get('status')||null,
+   limit:Number(q.get('limit')||50)})});
+ }
+ if(pathname==='/api/marketing/sales/performance'&&method==='GET'){
+  requirePermission(a,'marketing.read');
+  const q=new URL(req.url,'http://local').searchParams;
+  return json(res,200,await salesPerformance(pool,a.active_tenant_id,{
+   days:Number(q.get('days')||30)}));
+ }
+ if(pathname==='/api/marketing/sales'&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  if(!await limiter('sim','sales-manual:'+a.user_id,60000,12))
+   throw fail(429,'Aguarde antes de registrar outra venda.');
+  const {data}=await body(req,1200);
+  const result=await createManualSale(pool,{tenantId:a.active_tenant_id,
+   amountCents:Number(data.amountCents),conversationId:data.conversationId||null,
+   createdBy:a.user_id});
+  if(!result.ok)throw fail(400,'Informe o valor da venda em centavos.');
+  await audit(a,'marketing.sales.manual',{id:result.sale.id,amountCents:result.sale.amountCents});
+  return json(res,201,{sale:result.sale});
+ }
+ const confirmSaleRoute=pathname.match(/^\/api\/marketing\/sales\/([0-9a-f-]{36})\/confirm$/i);
+ if(confirmSaleRoute&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  const {data}=await body(req,600);
+  const result=await confirmSale(pool,{tenantId:a.active_tenant_id,id:confirmSaleRoute[1],
+   amountCents:Number(data.amountCents)||null,by:a.user_id});
+  if(!result.ok)throw fail(result.reason==='not_found'?404:
+   result.reason==='amount_required'?400:409,
+   result.reason==='amount_required'?'Informe o valor da venda em centavos.':'Essa venda já foi resolvida.');
+  await audit(a,'marketing.sales.confirmed',{id:result.sale.id,amountCents:result.sale.amountCents});
+  return json(res,200,{sale:result.sale});
+ }
+ const rejectSaleRoute=pathname.match(/^\/api\/marketing\/sales\/([0-9a-f-]{36})\/reject$/i);
+ if(rejectSaleRoute&&method==='POST'){
+  requirePermission(a,'marketing.manage');
+  const result=await rejectSale(pool,{tenantId:a.active_tenant_id,id:rejectSaleRoute[1],by:a.user_id});
+  if(!result.ok)throw fail(409,'Essa venda já foi resolvida.');
+  await audit(a,'marketing.sales.rejected',{id:result.sale.id});
+  return json(res,200,{sale:result.sale});
+ }
  if(pathname==='/api/marketing/attribution/links'&&method==='POST'){
   if(!await limiter('sim','tracking-link:'+a.user_id,60000,12))throw fail(429,'Aguarde antes de gerar outro link.');
   const {data}=await body(req,3000);
@@ -655,7 +707,7 @@ async function handle(req,res){
  const adsRead=pathname.match(/^\/api\/marketing\/tools\/(campaigns|adsets|ads|images|pages|insights|finance|cities)$/);
  if(adsRead&&method==='GET'){
   const qs=new URL(req.url,'http://local').searchParams;
-  const result=await readAdsTool(pool,a,adsRead[1],{query:qs.get('q'),period:qs.get('period'),after:qs.get('after'),campaignId:qs.get('campaignId'),adsetId:qs.get('adsetId')});
+  const result=await readAdsTool(pool,a,adsRead[1],{query:qs.get('q'),period:qs.get('period'),after:qs.get('after'),campaignId:qs.get('campaignId'),adsetId:qs.get('adsetId'),since:qs.get('since'),until:qs.get('until')});
   if(adsRead[1]==='finance'){
    const observed=await metaBillingStatus(pool,a,result.account.id);
    result.balanceObservation=observed.observation;
@@ -1015,7 +1067,34 @@ async function handle(req,res){
  // Real activity grouped by period for the dashboard visualizations.
  // All counts are tenant-scoped; the chart never uses illustrative or invented data.
  if(method==='GET'&&pathname==='/api/dashboard/activity'){
-  const requested=new URL(req.url,'http://local').searchParams.get('range')||'6m';
+  const params=new URL(req.url,'http://local').searchParams;
+  // The overview board picks one period for every tile, and the activity chart
+  // has to answer inside that exact window. Long windows bucket by week so the
+  // line stays readable instead of packing 300 points into 748 pixels.
+  if(params.get('preset')){
+   const window=resolvePeriod({preset:params.get('preset'),from:params.get('from'),to:params.get('to')});
+   const unit=window.days>45?'week':'day';
+   const interval=unit==='week'?"interval '7 days'":"interval '1 day'";
+   const sql=`WITH days AS (
+    SELECT ($2::date + step)::date AS day
+    FROM generate_series(0,($3::date-$2::date)) AS series(step)
+   ), buckets AS (
+    SELECT date_trunc('${unit}',day)::date AS bucket FROM days GROUP BY 1
+   ) SELECT to_char(b.bucket,'YYYY-MM-DD') AS date,
+    COALESCE(count(m.id) FILTER (WHERE m.direction='inbound'),0)::int AS inbound,
+    COALESCE(count(m.id) FILTER (WHERE m.direction='outbound'),0)::int AS outbound
+    FROM buckets b LEFT JOIN messages m ON m.tenant_id=$1 AND $4::boolean=true
+     AND m.created_at>=GREATEST(b.bucket::timestamp AT TIME ZONE 'America/Sao_Paulo',
+      ($2::date)::timestamp AT TIME ZONE 'America/Sao_Paulo')
+     AND m.created_at<LEAST((b.bucket+${interval})::timestamp AT TIME ZONE 'America/Sao_Paulo',
+      ($3::date+1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
+    GROUP BY b.bucket ORDER BY b.bucket ASC`;
+   const results=await query(sql,[a.active_tenant_id,window.from,window.to,
+    parseTenantFeatures(a.features).whatsapp]);
+   return json(res,200,{range:window.preset,granularity:unit,bucket:unit,
+    points:results.rows,period:{from:window.from,to:window.to,days:window.days}});
+  }
+  const requested=params.get('range')||'6m';
   const ranges={'12m':{count:12,unit:'month'},'6m':{count:6,unit:'month'},'3m':{count:3,unit:'month'},'1m':{count:30,unit:'day'},'7d':{count:7,unit:'day'},'90d':{count:90,unit:'day'}};
   const range=Object.hasOwn(ranges,requested)?ranges[requested]:null;
   if(!range)throw fail(400,'Período inválido.');
@@ -1031,7 +1110,20 @@ async function handle(req,res){
     AND m.created_at<((b.bucket + interval '${interval}') AT TIME ZONE 'America/Sao_Paulo')
    GROUP BY b.bucket ORDER BY b.bucket ASC`;
   const results=await query(sql,[a.active_tenant_id,parseTenantFeatures(a.features).whatsapp]);
-  return json(res,200,{range:requested,granularity:range.unit,points:results.rows});
+  return json(res,200,{range:requested,granularity:range.unit,
+   bucket:range.unit==='month'?'month':'day',points:results.rows});
+ }
+ // One window for the whole board: the owner picks it once and every tile reads
+ // inside it. Sales stay behind marketing.read, like /api/dashboard/revenue.
+ if(method==='GET'&&pathname==='/api/dashboard/period'){
+  const qs=new URL(req.url,'http://local').searchParams;
+  const flags=parseTenantFeatures(a.features);
+  const summary=await periodSummary(pool,a.active_tenant_id,{
+   preset:qs.get('preset')||'7d',from:qs.get('from'),to:qs.get('to'),
+   includeSales:allowed(a,'marketing.read')});
+  if(!flags.whatsapp){summary.messages={inbound:0,outbound:0,total:0,previousInbound:0,previousOutbound:0};
+   summary.conversations={started:0,active:0,open:0,waiting:0,previousStarted:0};}
+  return json(res,200,summary);
  }
  // Floating Thalita: read tools for the active company; all writes need one-use approval.
  if(method==='POST'&&pathname==='/api/thalita/ask'){
@@ -1079,6 +1171,12 @@ async function handle(req,res){
  }
  if(method==='GET'&&pathname==='/api/dashboard/executive'){
   return json(res,200,await getExecutiveMetrics(pool,a));
+ }
+ // Revenue lives outside /api/marketing so a tenant without the Meta Ads module
+ // still sees what it sold; marketing.read still gates who may look.
+ if(method==='GET'&&pathname==='/api/dashboard/revenue'){
+  requirePermission(a,'marketing.read');
+  return json(res,200,await salesSummary(pool,a.active_tenant_id));
  }
  if(method==='GET'&&pathname==='/api/dashboard'){
   const [ch,prod,imp,conv,msg,today]=await Promise.all([
@@ -2128,11 +2226,13 @@ async function receiveWhatsApp(req,res){
  if(!secureEqual(signature,expected))throw fail(403,'Assinatura inválida.');
  if(data.object!=='whatsapp_business_account')return json(res,200,{ok:true});
  const items=whatsappWebhookItems(data);
+ const newSales=[];
  for(const item of items.slice(0,50)){
   const ch=await query('SELECT id,tenant_id FROM channels WHERE external_phone_id=$1',[item.external]);
   if(!ch.rowCount)continue;
   const {id:channelId,tenant_id:tenantId}=ch.rows[0];
   const c=await pool.connect();
+  let sale=null;
   try{
    await c.query('BEGIN');
    const conv=await c.query("INSERT INTO conversations(id,tenant_id,channel_id,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5) ON CONFLICT(tenant_id,channel_id,customer_phone) DO UPDATE SET last_message_at=now(),customer_name=CASE WHEN conversations.customer_name='' THEN EXCLUDED.customer_name ELSE conversations.customer_name END RETURNING id",[id(),tenantId,channelId,item.name,item.from]);
@@ -2141,8 +2241,24 @@ async function receiveWhatsApp(req,res){
    if(item.referral)
     await saveCtwaAttribution(c,{tenantId,channelId,conversationId:conv.rows[0].id,
      inboundMessageId:item.messageId,wabaId:item.wabaId,referral:item.referral,occurredAt:item.occurredAt});
+   const evidence=detectSaleCandidate({body:item.body,caption:item.caption,
+    fileName:item.fileName,mediaType:item.mediaType});
+   if(evidence){
+    const recorded=await recordSaleCandidate(c,{tenantId,conversationId:conv.rows[0].id,
+     inboundMessageId:item.messageId,occurredAt:item.occurredAt,evidence});
+    if(recorded.created)sale=recorded.sale;
+   }
    await c.query('COMMIT');
   }catch(err){await c.query('ROLLBACK');console.error('webhook persistence failed',err?.code||'db error');throw err;}finally{c.release();}
+  if(sale)newSales.push({tenantId,sale,customerName:item.name,customerPhone:item.from});
+ }
+ for(const entry of newSales){
+  try{
+   await notifySaleQuestion(pool,entry.tenantId,
+    {...entry.sale,customerName:entry.customerName,customerPhone:entry.customerPhone});
+  }catch(err){
+   console.warn('[socio-sales]',String(err?.code||err?.status||'NOTIFY_ERROR').slice(0,40));
+  }
  }
  return json(res,200,{ok:true});
 }
@@ -2326,6 +2442,29 @@ async function main(){
   finally{ctwaResolveBusy=false;}
  },120000);
  ctwaResolveWorker.unref();
+// Conversion feedback: sends confirmed click-to-WhatsApp arrivals back to Meta as
+// LeadSubmitted so delivery can optimize for conversations. Default-off, and only
+// reports what the referral already proves; it never implies a sale.
+let ctwaEventBusy=false;
+const ctwaEventWorker=setInterval(async()=>{
+ if(ctwaEventBusy||workersBlocked())return;
+ ctwaEventBusy=true;
+ try{await sendPendingCtwaEvents(pool);}
+ catch(error){console.warn('[socio-ctwa-events]',String(error?.code||'CTWA_EVENT_ERROR').slice(0,40));}
+ finally{ctwaEventBusy=false;}
+},120000);
+ctwaEventWorker.unref();
+// Confirmed sales: sends each one back to Meta as Purchase, attributed through the
+// click id the lead arrived with. Only owner-confirmed revenue leaves the system.
+let saleEventBusy=false;
+const saleEventWorker=setInterval(async()=>{
+ if(saleEventBusy||workersBlocked())return;
+ saleEventBusy=true;
+ try{await sendPendingSaleEvents(pool);}
+ catch(error){console.warn('[socio-sales-events]',String(error?.code||'SALE_EVENT_ERROR').slice(0,40));}
+ finally{saleEventBusy=false;}
+},120000);
+saleEventWorker.unref();
  // Official Meta reporting worker. Generates private, read-only snapshots.
  // It is opt-in and does not send WA-AKG messages or alter campaigns.
  let metaReportBusy=false;

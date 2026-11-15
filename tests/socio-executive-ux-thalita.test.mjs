@@ -134,14 +134,17 @@ test('a spoken campaign confirmation and a question about the failure stay insid
  assert.deepEqual(seen,['ok, pode criar','Beleza, pode subir','o que aconteceu?','tentar de novo'],
   'voice confirmations and failure questions must reach the campaign skill');
 });
-test('The executive chart supports accessible 7/30/90 day display and assistant shortcuts',()=>{
+test('The executive board supports accessible period display and assistant shortcuts',()=>{
  const root=file=>readFileSync(new URL('../'+file,import.meta.url),'utf8');
- const ui=root('public/socio-workspace-ui.js'),assistant=root('public/socio-thalita-ui.js'),css=root('public/socio-executive.css');
- for(const name of ['7d','1m','90d'])assert.match(ui,new RegExp("data-px-chart-range"));
- assert.match(ui,/activityRange='1m'/);
+ const ui=root('public/socio-workspace-ui.js'),assistant=root('public/socio-thalita-ui.js'),css=root('public/socio-ethereal.css');
+ assert.match(ui,/data-period-preset="'\+value\+'"/);
+ for(const name of ['Hoje','7 dias','Esse mês'])assert(ui.includes(name),name);
  assert.match(ui,/aria-pressed/);
- assert.match(ui,/px-chart-hit/);
- assert.match(css,/\.px-range-btn\.active/);
+ assert.match(ui,/data-period-apply/);
+ assert.match(ui,/data-split-apply/);
+ assert.match(css,/\.et-stage\{/);
+ assert.match(css,/\.et-hero\{/);
+ assert.match(css,/\.et-split\{/);
  assert.match(assistant,/data-thalita-suggest/);
  for(const name of ['Resumo de hoje','Produtos','WhatsApp','Meta Ads','Google Ads'])assert(assistant.includes(name));
  for(const f of ['public/socio-workspace-ui.js','public/socio-thalita-ui.js'])assert.doesNotThrow(()=>new vm.Script(root(f),{filename:f}));

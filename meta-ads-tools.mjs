@@ -118,7 +118,7 @@ export async function readAdsTool(pool,a,kind,input={},options={}){
  }
  if(kind==='pages')return listing(await availablePages(c));
  if(kind==='insights'){
-  const datePreset=['today','yesterday','last_7d','last_30d'].includes(input.period)?input.period:'last_7d';
+  const datePreset=['today','yesterday','last_7d','last_30d','this_month'].includes(input.period)?input.period:'last_7d';
   const level=['campaign','adset','ad'].includes(input.level)?input.level:'campaign';
   const keys={campaign:'campaign_id,campaign_name',
    adset:'campaign_id,campaign_name,adset_id,adset_name',
