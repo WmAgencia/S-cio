@@ -74,6 +74,10 @@ test('PostgreSQL: live diagnostics never count sessions, messages or owners from
 },async t=>{
  const fixture=await createTestDatabase('socio_wa_live_');
  const pool=new Pool({connectionString:fixture.url.href,max:2});
+ // During forced disposal of the isolated PostgreSQL test database, an idle
+ // pool client can emit a late 'error' independently of a query. Queries still
+ // reject normally; consume the idle event so it cannot crash an unrelated CI run.
+ pool.on('error',()=>{});
  t.after(async()=>{await pool.end().catch(()=>{});await fixture.drop();});
  const tenant1=randomUUID(),tenant2=randomUUID(),channel1=randomUUID(),channel2=randomUUID();
  const conversation1=randomUUID(),conversation2=randomUUID();
