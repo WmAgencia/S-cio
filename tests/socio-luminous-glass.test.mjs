@@ -32,37 +32,46 @@ test('cards are unblurred, toolbar is white and assistant opens as a right panel
  assert.match(css,/width:min\(408px,calc\(100vw - 36px\)\)!important/);
  assert.match(css,/@media\(max-width:780px\)/);
 });
-test('Chromium computes light materials with readable cards and an unblurred toolbar', {timeout:40000},async t=>{
+test('Chromium computes the Ethereal dark surface with readable cards', {timeout:40000},async t=>{
  if(!chrome){t.skip('Chromium unavailable');return;}
  let browser;
  try{browser=await chromium.launch({executablePath:chrome,headless:true,args:['--no-sandbox']});}
  catch(err){t.skip('Browser unavailable: '+String(err).slice(0,90));return;}
  try{
   const page=await browser.newPage({viewport:{width:1440,height:900}});
-  await page.setContent('<html><head><style>'+imports.map(p=>read('public'+p)).join('\n')+'</style></head><body>'+
-   '<div id="appShell" class="app-shell" data-workspace="production"><aside class="sidebar">'+
-    '<nav class="nav"><button class="nav-item selected">Painel</button></nav></aside>'+
+  await page.setContent('<html><head><style>'+imports.map(p=>read('public'+p)).join(String.fromCharCode(10))+'</style></head><body>'+
+   '<div id="appShell" class="app-shell" data-workspace="production">'+
     '<div class="app-main"><header class="topbar">Sócio</header>'+
-    '<main id="view"><section class="px-workspace"><article class="px-kpi"><span class="px-kpi-number">22</span></article>'+
-    '<section class="px-panel">Resultados</section></section></main></div></div>'+
+    '<main id="view"><div class="px-workspace px-overview et-board"><div class="et-board-grid">'+
+     '<section class="et-hero"><div class="et-hero-value"><strong>R$ 1.000,00</strong></div></section>'+
+     '<section class="et-kpi"><b class="et-kpi-value">22</b><span class="et-kpi-label">Leads</span></section>'+
+     '<section class="et-card"><h2 class="et-card-title">Resultados</h2></section>'+
+    '</div></div></main></div></div>'+
     '<div id="socioThalitaDock"><section class="px-assistant-window">Thalita</section></div></body></html>');
   const data=await page.evaluate(()=>{
    const style=q=>getComputedStyle(document.querySelector(q));
+   const rgb=v=>v.match(/\d+/g)?.map(Number)||[0,0,0];
+   const lum=c=>{const [r,g,b]=rgb(c).map(x=>{x/=255;return x<=.03928?x/12.92:Math.pow((x+.055)/1.055,2.4)});return .2126*r+.7152*g+.0722*b;};
+   const ratio=(a,b)=>{const l1=lum(a),l2=lum(b);return (Math.max(l1,l2)+.05)/(Math.min(l1,l2)+.05);};
+   const card=style('#appShell #view .et-card').backgroundColor;
    return {
-    sidebar:style('#appShell .sidebar').backgroundColor,
-    top:style('#appShell .topbar').backgroundColor,
-    kpi:style('#appShell #view .px-kpi').backgroundColor,
-    panel:style('#appShell #view .px-panel').backgroundColor,
-    topBackdrop:style('#appShell .topbar').backdropFilter,
-    cardBackdrop:style('#appShell #view .px-kpi').backdropFilter,
+    shell:style('#appShell').backgroundColor,
+    body:getComputedStyle(document.body).colorScheme,
+    card, heroText:style('#appShell #view .et-hero-value strong').color,
+    cardText:style('#appShell #view .et-card-title').color,
+    label:style('#appShell #view .et-kpi-label').color,
+    cardContrast:ratio(style('#appShell #view .et-card-title').color,card),
+    labelContrast:ratio(style('#appShell #view .et-kpi-label').color,card),
     assistantPosition:style('#socioThalitaDock .px-assistant-window').position
    };
   });
-  assert.equal(data.top,'rgba(255, 255, 255, 0.97)');
-  assert.equal(data.kpi,'rgb(255, 255, 255)');
-  assert.equal(data.panel,'rgb(255, 255, 255)');
-  assert.equal(data.topBackdrop,'none');
-  assert.equal(data.cardBackdrop,'none');
+  // The Ethereal canvas is dark, and no card may paint the retired light surface.
+  const shellLum=(data.shell.match(/\d+/g)||[255,255,255]).map(Number).slice(0,3)
+   .reduce((m,c)=>m+c,0)/3;
+  assert(shellLum<40,'shell stays dark, never the retired light canvas: '+data.shell);
+  assert.notEqual(data.card,'rgb(255, 255, 255)','cards never fall back to the light white surface');
+  assert(data.cardContrast>=4.5,'card title contrast '+data.cardContrast.toFixed(2));
+  assert(data.labelContrast>=4.5,'muted label contrast '+data.labelContrast.toFixed(2));
   assert.equal(data.assistantPosition,'fixed');
   for(const width of [1900,1440,390]){
    await page.setViewportSize({width,height:900});
@@ -75,6 +84,6 @@ test('Chromium computes light materials with readable cards and an unblurred too
    assert.equal(bounds.width,bounds.viewport,'The application fills the browser width');
    assert(bounds.height>=900,'The application fills the browser height');
   }
-  console.log('Ethereal surface material verified: '+JSON.stringify(data));
+  console.log('Ethereal dark surface verified: '+JSON.stringify(data));
  }finally{await browser.close();}
 });
