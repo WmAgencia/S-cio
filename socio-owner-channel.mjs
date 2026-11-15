@@ -12,6 +12,8 @@ import {downloadVerifiedWhatsAppVideo} from './socio-whatsapp-meta-video.mjs';
 import {brainResponse,brainReady} from './ai-brain.mjs';
 import {runTrafficManager,approveTrafficDecisions,resolveTrafficDecision,
  listPendingDecisions,markDecisionNotified,decisionNotification} from './socio-traffic-manager.mjs';
+import {latestPendingSale,pendingSaleSummary,markSaleNotified,confirmSale,rejectSale,
+ parseSaleAnswer,parseSaleButton,saleQuestionText,saleAnswerText} from './socio-sales.mjs';
 
 export const OWNER_GROUP_SUBJECT='Meu Sócio';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
@@ -116,9 +118,33 @@ export async function notifyDecisionQuestion(pool,tenantId,decision,{env=process
  return replyIn(group,fallback,{env,send});
 }
 
+// A receipt opens a pending sale and the owner is asked in the group. The sale
+// only becomes revenue after confirmation.
+export async function notifySaleQuestion(pool,tenantId,sale,{env=process.env,
+ sendInteractive=sendGatewayInteractive,send=sendGatewayMessage}={}){
+ const group=await activeGroupFor(pool,tenantId);
+ if(!group)return {sent:false,reason:'no_group'};
+ const body=saleQuestionText(sale,{customerName:sale.customerName,customerPhone:sale.customerPhone});
+ if(sale.amountCents){
+  try{
+   const delivered=await sendInteractive({sessionId:group.session_id,jid:group.group_jid,
+    title:'Venda recebida',body,footer:'',buttons:[
+     {text:'Confirmar',id:'socio:sale:confirm:'+sale.id},
+     {text:'Não foi venda',id:'socio:sale:reject:'+sale.id}],env});
+   if(delivered?.sent){
+    await markSaleNotified(pool,tenantId,sale.id);
+    return {sent:true,interactive:true};
+   }
+  }catch{}
+ }
+ const result=await replyIn(group,body,{env,send});
+ if(result?.sent)await markSaleNotified(pool,tenantId,sale.id);
+ return result;
+}
+
 async function latestNotifiedDecision(pool,tenantId){
  const found=await pool.query(
-  "SELECT id,action FROM socio_traffic_decisions WHERE tenant_id=$1 AND status='awaiting_approval' "+
+  "SELECT id,action,notified_at FROM socio_traffic_decisions WHERE tenant_id=$1 AND status='awaiting_approval' "+
   'AND notified_at IS NOT NULL ORDER BY notified_at DESC LIMIT 1',[tenantId]);
  return found.rows[0]||null;
 }
@@ -482,6 +508,18 @@ async function handleCommand(pool,group,command,deps){
   return 'video';
  }
  const text=clean(command.body,4000);
+ const saleButton=parseSaleButton(text);
+ if(saleButton)return saleReply(pool,group,command,saleButton,deps);
+ const sale=await latestPendingSale(pool,group.tenant_id);
+ if(sale){
+  const answer=parseSaleAnswer(text);
+  if(answer){
+   const decision=await latestNotifiedDecision(pool,group.tenant_id);
+   const saleNewer=!decision||
+    new Date(sale.notifiedAt).getTime()>=new Date(decision.notified_at).getTime();
+   if(saleNewer)return saleReply(pool,group,command,{...answer,id:sale.id},deps);
+  }
+ }
  const trafficReplyAnswer=parseTrafficReply(text);
  if(trafficReplyAnswer)return trafficReply(pool,group,command,trafficReplyAnswer,deps);
  if(CONFIRM.test(text))return confirmPending(pool,group,command,deps);
@@ -506,8 +544,8 @@ function helpText(group){
   '• ATIVAR — liga a última campanha criada.',
   '• TRÁFEGO — analisa as campanhas agora e me diz o que recomenda.',
   '• APROVAR — aplica as recomendações que estão esperando você.',
-  '• SIM / NÃO — responde a última recomendação (os botões fazem o mesmo).',
-  '• Um número (ex.: 10) — troca o valor diário da recomendação para esse valor em reais.',
+  '• SIM / NÃO — responde a última pergunta: recomendação de tráfego ou venda.',
+  '• Um número (ex.: 50) — informa o valor de uma venda ou troca o valor diário da recomendação.',
   '• CANCELAR — descarta a campanha antes de criar.',
   '• STATUS — mostra o que está pendente.',
   '• AJUDA — esta lista.',
@@ -532,7 +570,10 @@ async function statusReply(pool,group,command,deps){
   "SELECT count(*)::int AS n FROM socio_traffic_decisions WHERE tenant_id=$1 AND status='awaiting_approval'",
   [group.tenant_id]);
  if(approvals.rows[0]?.n)lines.push('• '+approvals.rows[0].n+' recomendação(ões) esperando SIM, NÃO ou outro valor');
- if(!pending.rowCount)lines.push('• Nada pendente agora.');
+ const sales=await pendingSaleSummary(pool,group.tenant_id);
+ if(sales.total)lines.push('• '+sales.total+' venda(s) esperando sua confirmação'+
+  (sales.amountCents?' ('+formatMoney(sales.amountCents)+')':'')+'.');
+ if(!pending.rowCount&&!approvals.rows[0]?.n&&!sales.total)lines.push('• Nada pendente agora.');
  await done(pool,command);
  await replyIn(group,lines.join('\n'),deps);
  return 'status';
@@ -622,6 +663,34 @@ async function trafficReply(pool,group,command,answer,deps){
   await replyIn(group,resolved.ok?appliedText(resolved):
    'Não consegui aplicar: '+(resolved.message||'tente novamente.'),deps);
  return choice==='approve'?'traffic_applied':'traffic_dismissed';
+}
+
+// Owner answered a sale question. A confirmation without a value just asks for
+// the value; the sale stays pending so the next amount finishes it.
+async function saleReply(pool,group,command,answer,deps){
+ if(answer.kind!=='confirm'){
+  const rejected=await rejectSale(pool,{tenantId:group.tenant_id,id:answer.id,by:'whatsapp'});
+  await done(pool,command,{context:{saleId:answer.id,resolution:'reject'}});
+  await replyIn(group,rejected.ok?saleAnswerText(null,{kind:'reject'})
+   :'Essa venda já foi resolvida.',deps);
+  return rejected.ok?'sale_rejected':'sale_stale';
+ }
+ const confirmed=await confirmSale(pool,{tenantId:group.tenant_id,id:answer.id,
+  amountCents:answer.cents||null,by:'whatsapp'});
+ if(confirmed.ok){
+  await done(pool,command,{context:{saleId:answer.id,resolution:'confirm',
+   amountCents:confirmed.sale.amountCents}});
+  await replyIn(group,saleAnswerText(confirmed.sale,{kind:'confirm'}),deps);
+  return 'sale_confirmed';
+ }
+ if(confirmed.reason==='amount_required'){
+  await done(pool,command,{context:{saleId:answer.id,resolution:'amount_required'}});
+  await replyIn(group,'Qual foi o valor da venda? Responda só o número em reais (ex.: 50).',deps);
+  return 'sale_amount';
+ }
+ await done(pool,command,{context:{saleId:answer.id,resolution:'stale'}});
+ await replyIn(group,'Essa venda já foi resolvida.',deps);
+ return 'sale_stale';
 }
 
 function appliedText(resolved){

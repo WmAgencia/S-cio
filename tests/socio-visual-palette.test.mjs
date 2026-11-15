@@ -16,13 +16,15 @@ test('Stripe-inspired paper, ink, violet and border are the only canonical palet
 });
 test('old glass style layers are not loaded; new theme is the last stylesheet',()=>{
  const imports=[...html.matchAll(/<link rel="stylesheet" href="(\/[^"]+)/g)].map(m=>m[1]);
- assert(imports.at(-1).startsWith('/socio-stripe-system.css?v='));
+ assert(imports.at(-1).startsWith('/socio-reference.css?v='));
  for(const old of ['socio-glass-motion.css','socio-glass-enforced.css','socio-premium-polish.css',
   'socio-contrast-audit.css','socio-motion-refined.css','socio-luminous-glass.css']){
   assert(!imports.some(x=>x.includes('/'+old)),old);
  }
  assert(server.includes("'/socio-stripe-system.css'"));
- assert.match(html,/meta name="theme-color" content="#f7f8fa"/);
+ assert(server.includes("'/socio-ethereal.css'"));
+ assert(server.includes("'/socio-reference.css'"));
+ assert.match(html,/meta name="theme-color" content="#08080a"/);
 });
 test('single stylesheet has balanced blocks and accessible motion modes',()=>{
  const content=css.replace(/\/\*[\s\S]*?\*\//g,'');

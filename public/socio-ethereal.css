@@ -1,0 +1,2368 @@
+/* Ethereal shell — dark canvas, top navigation rail, mint hero card.
+   Loaded after socio-stripe-system.css and therefore responsible for beating
+   its light layer with equal-or-higher specificity. */
+
+body #appShell{
+ --et-canvas:#08080a;
+ --et-frame:#0b0b0e;
+ --et-card:#151519;
+ --et-card-2:#1b1b20;
+ --et-elev:#22222a;
+ --et-line:#25252d;
+ --et-line-soft:#1d1d24;
+ --et-ink:#f5f6f7;
+ --et-ink-2:#b4b7be;
+ --et-muted:#8b8e97;
+ --et-mint-1:#e6fcee;
+ --et-mint-2:#a9f0c4;
+ --et-mint-3:#5fdb9a;
+ --et-mint-ink:#07160d;
+ --et-violet:#7c5cfc;
+ --et-violet-2:#a78bff;
+ --et-teal:#2fd6a5;
+ --et-amber:#f7b955;
+ --et-rose:#f4609b;
+ --et-blue:#4f8dff;
+ --et-radius:22px;
+ --et-radius-sm:14px;
+ background:var(--et-canvas)!important;
+ color:var(--et-ink)!important;
+ color-scheme:dark;
+ font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+}
+
+html:has(body #appShell:not(.hidden)),
+body:has(#appShell:not(.hidden)){
+ background:#08080a!important;
+ color:#f5f6f7!important;
+ color-scheme:dark!important;
+}
+
+body #appShell.app-shell{
+ display:block!important;
+ width:100%!important;
+ min-height:100vh!important;
+ margin:0!important;
+ border:0!important;
+ border-radius:0!important;
+ box-shadow:none!important;
+ overflow:visible!important;
+}
+body #appShell .app-main{
+ display:flex!important;
+ flex-direction:column;
+ min-width:0;
+ min-height:100vh;
+ background:transparent!important;
+ color:var(--et-ink)!important;
+}
+
+/* ── Top bar ─────────────────────────────────────────────── */
+body #appShell .topbar{
+ display:grid!important;
+ grid-template-columns:auto minmax(0,1fr) auto;
+ align-items:center;
+ gap:20px;
+ height:76px!important;
+ min-height:76px!important;
+ padding:0 26px!important;
+ margin:0!important;
+ border:0!important;
+ border-bottom:1px solid var(--et-line-soft)!important;
+ border-radius:0!important;
+ background:#0a0a0d!important;
+ box-shadow:none!important;
+ backdrop-filter:none!important;
+ position:sticky;
+ top:0;
+ z-index:70;
+}
+
+body #appShell .topbar-brand{
+ display:flex;
+ align-items:center;
+ gap:10px;
+ min-width:0;
+}
+body #appShell .et-logo{
+ width:34px;
+ height:34px;
+ min-width:34px;
+ border-radius:11px;
+ background:linear-gradient(155deg,#ffffff,#d9dbe2);
+ color:#0a0a0c;
+ display:grid;
+ place-items:center;
+ font-family:Georgia,"Times New Roman",serif;
+ font-size:20px;
+ font-weight:800;
+ letter-spacing:-1px;
+ line-height:1;
+ box-shadow:0 6px 18px #00000059;
+}
+body #appShell .topbar-brand strong{
+ color:var(--et-ink)!important;
+ font-size:14px;
+ font-weight:650;
+ letter-spacing:-.2px;
+ white-space:nowrap;
+}
+body #appShell .topbar-brand strong small{
+ display:block;
+ color:var(--et-muted)!important;
+ font-size:9.5px;
+ font-weight:500;
+ letter-spacing:.09em;
+ text-transform:uppercase;
+}
+
+/* ── Centre navigation rail ──────────────────────────────── */
+body #appShell .nav-rail{
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ gap:6px;
+ min-width:0;
+}
+body #appShell .nav-rail .nav{
+ display:flex!important;
+ flex-direction:row!important;
+ align-items:center;
+ gap:2px;
+ width:auto!important;
+ max-width:100%;
+ padding:5px!important;
+ border:1px solid var(--et-line)!important;
+ border-radius:999px!important;
+ background:#131318!important;
+ box-shadow:inset 0 1px #ffffff08;
+ overflow-x:auto!important;
+ overflow-y:hidden!important;
+ scrollbar-width:none;
+ -webkit-overflow-scrolling:touch;
+}
+body #appShell .nav-rail .nav::-webkit-scrollbar{display:none}
+body #appShell .nav-rail .sidebar-label{display:none!important}
+body #appShell .nav-rail .nav-item{
+ display:inline-flex!important;
+ align-items:center;
+ gap:7px;
+ flex:0 0 auto;
+ width:auto!important;
+ height:34px!important;
+ min-height:34px!important;
+ padding:0 13px!important;
+ border:0!important;
+ border-radius:999px!important;
+ background:transparent!important;
+ color:var(--et-ink-2)!important;
+ font-size:12.5px!important;
+ font-weight:550!important;
+ line-height:1;
+ white-space:nowrap;
+ box-shadow:none!important;
+ transition:background .16s ease,color .16s ease;
+}
+body #appShell .nav-rail .nav-item:hover{
+ background:#1f1f26!important;
+ color:var(--et-ink)!important;
+}
+body #appShell .nav-rail .nav-item.selected{
+ background:#f5f6f7!important;
+ color:#0a0a0c!important;
+ box-shadow:0 2px 10px #0000004d!important;
+}
+body #appShell .nav-rail .nav-item .nav-symbol{
+ display:inline-flex;
+ align-items:center;
+ justify-content:center;
+ width:15px;
+ height:15px;
+ opacity:.9;
+}
+body #appShell .nav-rail .nav-item .nav-symbol svg{
+ width:15px;
+ height:15px;
+ display:block;
+}
+body #appShell .nav-rail .nav-item.selected .nav-symbol{opacity:1}
+/* Permissions hide items with .hidden; the display rules above are more
+   specific than app.css .hidden.hidden, so restore it here. */
+body #appShell .nav-rail .nav.hidden,
+body #appShell .nav-rail .nav-item.hidden,
+body #appShell .user-menu-panel .nav-item.hidden,
+body #appShell .topbar-tools .hidden{display:none!important}
+
+/* Workspace switcher keeps its exact markup; it only shows for master users. */
+body #appShell .workspace-switcher{
+ position:relative;
+ display:inline-flex!important;
+ align-items:center;
+ gap:2px;
+ margin:0 0 0 6px;
+ padding:4px;
+ border:1px solid var(--et-line)!important;
+ border-radius:999px!important;
+ background:#131318!important;
+ overflow:hidden;
+}
+body #appShell .workspace-switcher.hidden{display:none!important}
+body #appShell .workspace-switcher .workspace-switcher-thumb{display:none!important}
+body #appShell .workspace-switcher button{
+ display:inline-flex!important;
+ align-items:center;
+ gap:5px;
+ height:28px!important;
+ min-height:28px!important;
+ padding:0 11px!important;
+ border:0!important;
+ border-radius:999px!important;
+ background:transparent!important;
+ color:var(--et-muted)!important;
+ font-size:11px!important;
+ font-weight:600!important;
+ white-space:nowrap;
+}
+body #appShell .workspace-switcher button[aria-selected="true"]{
+ background:#f5f6f7!important;
+ color:#0a0a0c!important;
+}
+body #appShell .workspace-switcher .ws-mark{
+ display:inline-grid;
+ place-items:center;
+ width:15px;
+ height:15px;
+ border-radius:50%;
+ background:#2a2a33;
+ color:var(--et-ink-2);
+ font-size:8.5px;
+ font-weight:700;
+}
+body #appShell .workspace-switcher button[aria-selected="true"] .ws-mark{
+ background:#0a0a0c;
+ color:#f5f6f7;
+}
+
+/* ── Right-hand tools ────────────────────────────────────── */
+body #appShell .topbar-tools{
+ display:flex;
+ align-items:center;
+ justify-content:flex-end;
+ gap:9px;
+ min-width:0;
+}
+body #appShell .workspace-box{
+ display:flex;
+ align-items:center;
+ gap:9px;
+ height:38px;
+ padding:0 13px 0 5px;
+ border:1px solid var(--et-line)!important;
+ border-radius:999px!important;
+ background:#131318!important;
+ margin:0!important;
+ min-width:0;
+}
+body #appShell .workspace-box .workspace-circle{
+ display:grid!important;
+ place-items:center;
+ width:28px!important;
+ height:28px!important;
+ min-width:28px;
+ border-radius:50%!important;
+ background:linear-gradient(150deg,var(--et-violet),#4a2fd0)!important;
+ color:#fff!important;
+ font-size:11.5px!important;
+ font-weight:700!important;
+}
+body #appShell .workspace-box .workspace-label{display:block;min-width:0;line-height:1.15}
+body #appShell .workspace-box .workspace-label small{
+ display:block;
+ color:var(--et-muted)!important;
+ font-size:8.5px!important;
+ font-weight:600!important;
+ letter-spacing:.07em!important;
+ text-transform:uppercase!important;
+ white-space:nowrap;
+}
+body #appShell .workspace-box .workspace-label strong{
+ display:block;
+ color:var(--et-ink)!important;
+ font-size:11.5px!important;
+ font-weight:600!important;
+ max-width:150px;
+ overflow:hidden;
+ text-overflow:ellipsis;
+ white-space:nowrap;
+}
+body #appShell .workspace-box .workspace-chevron{display:none!important}
+
+body #appShell .topbar-icon{
+ display:inline-grid!important;
+ place-items:center;
+ width:38px!important;
+ height:38px!important;
+ min-width:38px!important;
+ min-height:38px!important;
+ padding:0!important;
+ border:1px solid transparent!important;
+ border-radius:50%!important;
+ background:transparent!important;
+ color:var(--et-ink-2)!important;
+ cursor:pointer;
+ position:relative;
+ transition:background .16s ease,color .16s ease;
+}
+body #appShell .topbar-icon:hover{background:#1b1b21!important;color:var(--et-ink)!important}
+body #appShell .topbar-icon svg{width:18px;height:18px;display:block}
+body #appShell .topbar-icon.is-circled{
+ background:#131318!important;
+ border-color:var(--et-line)!important;
+}
+body #appShell .topbar-icon .et-dot{
+ position:absolute;
+ top:8px;
+ right:9px;
+ width:6px;
+ height:6px;
+ border-radius:50%;
+ background:var(--et-mint-3);
+ box-shadow:0 0 0 2px #0a0a0d;
+}
+body #appShell .topbar-icon .et-dot.hidden{display:none!important}
+
+body #appShell #quickSearchBtn{
+ width:38px!important;
+ height:38px!important;
+ min-width:38px!important;
+ padding:0!important;
+ border:1px solid transparent!important;
+ border-radius:50%!important;
+ background:transparent!important;
+ justify-content:center!important;
+ gap:0!important;
+ color:var(--et-ink-2)!important;
+ box-shadow:none!important;
+}
+body #appShell #quickSearchBtn:hover{background:#1b1b21!important;color:var(--et-ink)!important}
+body #appShell #quickSearchBtn svg{width:18px;height:18px}
+body #appShell #quickSearchBtn span{display:none!important}
+
+/* ── Avatar + account menu ───────────────────────────────── */
+body #appShell .user-menu{
+ position:relative;
+ margin:0;
+}
+body #appShell .user-menu>summary{
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ width:38px;
+ height:38px;
+ border-radius:50%;
+ cursor:pointer;
+ list-style:none;
+ padding:0!important;
+ border:1px solid var(--et-line);
+ background:#131318;
+}
+body #appShell .user-menu>summary::-webkit-details-marker{display:none}
+body #appShell .user-menu>summary::marker{content:''}
+body #appShell .user-menu>summary:hover{background:#1b1b21}
+body #appShell .user-chip{
+ display:grid!important;
+ place-items:center;
+ width:30px!important;
+ height:30px!important;
+ min-width:30px;
+ border-radius:50%!important;
+ background:conic-gradient(from 210deg,#7c5cfc,#f4609b,#f7b955,#2fd6a5,#7c5cfc)!important;
+ color:#0a0a0c!important;
+ font-size:10.5px!important;
+ font-weight:800!important;
+ letter-spacing:.02em;
+}
+body #appShell .user-menu-panel{
+ position:absolute;
+ top:calc(100% + 10px);
+ right:0;
+ width:250px;
+ padding:8px;
+ border:1px solid var(--et-line)!important;
+ border-radius:16px!important;
+ background:#151519!important;
+ box-shadow:0 24px 60px #000000b3,inset 0 1px #ffffff0f!important;
+ z-index:90;
+}
+body #appShell .user-menu-id{
+ display:flex;
+ flex-direction:column;
+ gap:2px;
+ padding:10px 12px 12px;
+ border-bottom:1px solid var(--et-line-soft);
+ margin-bottom:6px;
+}
+body #appShell .user-menu-id strong{
+ color:var(--et-ink)!important;
+ font-size:13px!important;
+ font-weight:600!important;
+}
+body #appShell .user-menu-id small{
+ color:var(--et-muted)!important;
+ font-size:11px!important;
+}
+body #appShell .sidebar-bottom{
+ display:block!important;
+ width:100%!important;
+ margin:0!important;
+ padding:0!important;
+ border:0!important;
+ background:transparent!important;
+}
+body #appShell .user-menu-panel .nav-item{
+ display:flex!important;
+ align-items:center;
+ gap:9px;
+ width:100%!important;
+ height:38px!important;
+ min-height:38px!important;
+ padding:0 12px!important;
+ border:0!important;
+ border-radius:10px!important;
+ background:transparent!important;
+ color:var(--et-ink-2)!important;
+ font-size:12.5px!important;
+ font-weight:500!important;
+ text-align:left;
+ box-shadow:none!important;
+}
+body #appShell .user-menu-panel .nav-item:hover{
+ background:#1f1f26!important;
+ color:var(--et-ink)!important;
+}
+body #appShell .user-menu-panel .nav-item .nav-symbol{
+ display:inline-flex;
+ align-items:center;
+ justify-content:center;
+ width:15px;
+ height:15px;
+ opacity:.8;
+}
+body #appShell .user-menu-panel .nav-item .nav-symbol svg{width:15px;height:15px}
+body #appShell .user-menu-panel .nav-item.logout{color:#f4609b!important}
+body #appShell .user-menu-panel .nav-item.logout:hover{background:#f4609b1a!important}
+
+/* ── Notifications ───────────────────────────────────────── */
+body #appShell .topbar-notify{
+ position:relative;
+ margin:0;
+}
+body #appShell .topbar-notify>summary{
+ list-style:none;
+}
+body #appShell .topbar-notify>summary::-webkit-details-marker{display:none}
+body #appShell .topbar-notify>summary::marker{content:''}
+body #appShell .topbar-notify-panel{
+ position:absolute;
+ top:calc(100% + 10px);
+ right:0;
+ width:322px;
+ max-width:min(322px,calc(100vw - 32px));
+ padding:8px;
+ border:1px solid var(--et-line)!important;
+ border-radius:16px!important;
+ background:#151519!important;
+ box-shadow:0 24px 60px #000000b3,inset 0 1px #ffffff0f!important;
+ z-index:90;
+}
+body #appShell .topbar-notify-head{
+ display:flex;
+ align-items:baseline;
+ justify-content:space-between;
+ gap:10px;
+ padding:10px 12px 11px;
+ border-bottom:1px solid var(--et-line-soft);
+ margin-bottom:6px;
+}
+body #appShell .topbar-notify-head strong{color:var(--et-ink)!important;font-size:12.5px!important;font-weight:600!important}
+body #appShell .topbar-notify-head small{color:var(--et-muted)!important;font-size:10.5px!important}
+body #appShell .topbar-notify-list{
+ display:flex;
+ flex-direction:column;
+ gap:2px;
+ max-height:326px;
+ overflow:auto;
+}
+body #appShell .topbar-notify-row{
+ display:flex;
+ flex-direction:column;
+ gap:3px;
+ padding:9px 12px;
+ border-radius:10px;
+ text-align:left;
+}
+body #appShell .topbar-notify-row:hover{background:#1f1f26}
+body #appShell .topbar-notify-row strong{color:var(--et-ink)!important;font-size:12px!important;font-weight:600!important}
+body #appShell .topbar-notify-row small{color:var(--et-muted)!important;font-size:11px!important;line-height:1.45}
+body #appShell .topbar-notify-empty{padding:14px 12px;color:var(--et-muted)!important;font-size:11.5px!important}
+
+/* ── Page strip under the bar ────────────────────────────── */
+body #appShell .page-strip{
+ display:flex!important;
+ align-items:center;
+ gap:9px;
+ height:46px!important;
+ min-height:46px!important;
+ padding:0 30px!important;
+ border:0!important;
+ border-bottom:1px solid var(--et-line-soft)!important;
+ background:#0a0a0d!important;
+ color:var(--et-muted)!important;
+ font-size:12px!important;
+}
+body #appShell .page-strip #crumbRoot{color:var(--et-muted)!important}
+body #appShell .page-strip .page-strip-sep{color:#3a3a44!important}
+body #appShell .page-strip #topTitle{
+ color:var(--et-ink)!important;
+ font-size:12.5px!important;
+ font-weight:600!important;
+}
+body #appShell .page-strip .top-pill{
+ display:inline-flex;
+ align-items:center;
+ gap:6px;
+ margin-left:auto;
+ padding:5px 11px!important;
+ border:1px solid var(--et-line)!important;
+ border-radius:999px!important;
+ background:#131318!important;
+ color:var(--et-muted)!important;
+ font-size:10.5px!important;
+ font-weight:600!important;
+ letter-spacing:.02em;
+ white-space:nowrap;
+}
+body #appShell .page-strip .top-pill i{
+ display:inline-block;
+ width:6px;
+ height:6px;
+ border-radius:50%;
+ background:var(--et-mint-3);
+}
+
+/* ── Content surface ─────────────────────────────────────── */
+body #appShell #view{
+ max-width:1560px!important;
+ width:100%;
+ margin:0 auto!important;
+ padding:22px 30px 54px!important;
+ background:transparent!important;
+ color:var(--et-ink)!important;
+}
+body #appShell .site-footer{
+ background:transparent!important;
+ border-top:1px solid var(--et-line-soft)!important;
+ color:var(--et-muted)!important;
+ padding:18px 30px 26px!important;
+ font-size:11px!important;
+}
+
+/* ── Shared dashboard atoms ──────────────────────────────── */
+body #appShell .et-card{
+ border:1px solid var(--et-line)!important;
+ border-radius:var(--et-radius)!important;
+ background:var(--et-card)!important;
+ box-shadow:none!important;
+ padding:20px!important;
+ color:var(--et-ink)!important;
+ min-width:0;
+}
+body #appShell .et-card-head{
+ display:flex;
+ align-items:flex-start;
+ justify-content:space-between;
+ gap:14px;
+ margin-bottom:16px;
+}
+body #appShell .et-card-title{
+ margin:0;
+ color:var(--et-ink)!important;
+ font-size:14px!important;
+ font-weight:600!important;
+ letter-spacing:-.15px;
+}
+body #appShell .et-card-sub{
+ margin:3px 0 0;
+ color:var(--et-muted)!important;
+ font-size:11.5px!important;
+}
+body #appShell .et-muted{color:var(--et-muted)!important}
+body #appShell .et-strong{color:var(--et-ink)!important}
+body #appShell .et-up{color:var(--et-mint-3)!important}
+body #appShell .et-down{color:var(--et-rose)!important}
+body #appShell .et-sr{
+ position:absolute!important;
+ width:1px;height:1px;
+ margin:-1px;padding:0;
+ overflow:hidden;
+ clip:rect(0 0 0 0);
+ white-space:nowrap;
+ border:0;
+}
+
+/* Hero card — the mint wedge from the reference. */
+body #appShell .et-hero{
+ position:relative;
+ display:flex;
+ flex-direction:column;
+ justify-content:space-between;
+ gap:18px;
+ min-height:196px;
+ padding:22px 24px!important;
+ border:0!important;
+ border-radius:26px!important;
+ background:linear-gradient(138deg,#eafdf1 0%,#bdf3d2 42%,#7fe3ae 78%,#4fd394 100%)!important;
+ color:var(--et-mint-ink)!important;
+ box-shadow:0 18px 46px #2fd6a526!important;
+ overflow:hidden;
+}
+body #appShell .et-hero::after{
+ content:'';
+ position:absolute;
+ right:-70px;
+ bottom:-90px;
+ width:250px;
+ height:250px;
+ border-radius:50%;
+ background:radial-gradient(circle at 40% 40%,#ffffff8c,transparent 68%);
+ pointer-events:none;
+}
+body #appShell .et-hero-top{
+ display:flex;
+ align-items:flex-start;
+ justify-content:space-between;
+ gap:16px;
+ position:relative;
+ z-index:1;
+}
+body #appShell .et-hero-label{
+ display:block;
+ color:#0d2a19cc!important;
+ font-size:11.5px!important;
+ font-weight:700!important;
+ letter-spacing:.1em;
+ text-transform:uppercase;
+}
+body #appShell .et-hero-value{
+ display:flex;
+ align-items:baseline;
+ gap:12px;
+ margin-top:10px;
+ flex-wrap:wrap;
+}
+body #appShell .et-hero-value strong{
+ color:#06170e!important;
+ font-size:clamp(30px,3.2vw,42px)!important;
+ font-weight:750!important;
+ letter-spacing:-1.6px;
+ line-height:1;
+font-variant-numeric:tabular-nums;
+}
+body #appShell .et-hero-sales{
+ display:inline-flex;
+ align-items:center;
+ gap:5px;
+ padding:4px 9px;
+ border-radius:999px;
+ background:#06170e14;
+ color:#06170e!important;
+ font-size:11.5px!important;
+ font-weight:650!important;
+ white-space:nowrap;
+}
+body #appShell .et-hero-foot{
+ display:flex;
+ align-items:center;
+ justify-content:space-between;
+ gap:14px;
+ flex-wrap:wrap;
+ position:relative;
+ z-index:1;
+}
+body #appShell .et-hero-note{
+ color:#0d2a19b3!important;
+ font-size:11.5px!important;
+ font-weight:500!important;
+}
+
+/* Compact segmented period filter. */
+body #appShell .et-seg{
+ display:inline-flex;
+ align-items:center;
+ gap:2px;
+ padding:4px;
+ border-radius:999px;
+ background:#06170e12;
+}
+body #appShell .et-seg button{
+ appearance:none;
+ display:inline-flex;
+ align-items:center;
+ height:28px;
+ padding:0 12px;
+ border:0;
+ border-radius:999px;
+ background:transparent;
+ color:#0d2a19c7;
+ font-family:inherit;
+ font-size:11.5px;
+ font-weight:600;
+ white-space:nowrap;
+ cursor:pointer;
+ transition:background .16s ease,color .16s ease;
+}
+body #appShell .et-seg button:hover{background:#06170e14;color:#06170e}
+body #appShell .et-seg button.on{
+ background:#06170e;
+ color:#eafdf1;
+}
+body #appShell .et-seg.et-seg-dark{background:#ffffff0a}
+body #appShell .et-seg.et-seg-dark button{color:var(--et-ink-2)}
+body #appShell .et-seg.et-seg-dark button:hover{background:#ffffff12;color:var(--et-ink)}
+body #appShell .et-seg.et-seg-dark button.on{background:#f5f6f7;color:#0a0a0c}
+
+/* Generic two-column dashboard grid. */
+body #appShell .et-grid{
+ display:grid;
+ grid-template-columns:repeat(12,minmax(0,1fr));
+ gap:14px;
+}
+body #appShell .et-span-3{grid-column:span 3}
+body #appShell .et-span-4{grid-column:span 4}
+body #appShell .et-span-5{grid-column:span 5}
+body #appShell .et-span-6{grid-column:span 6}
+body #appShell .et-span-7{grid-column:span 7}
+body #appShell .et-span-8{grid-column:span 8}
+body #appShell .et-span-12{grid-column:span 12}
+
+/* Small stat tiles (Income / Expense replacements). */
+body #appShell .et-stat{
+ display:flex;
+ flex-direction:column;
+ justify-content:space-between;
+ gap:14px;
+ min-height:150px;
+}
+body #appShell .et-stat-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+body #appShell .et-stat-label{
+ color:var(--et-muted)!important;
+ font-size:11.5px!important;
+ font-weight:600!important;
+ letter-spacing:.01em;
+}
+body #appShell .et-stat-icon{
+ display:grid;
+ place-items:center;
+ width:32px;
+ height:32px;
+ min-width:32px;
+ border-radius:10px;
+ background:#ffffff0a;
+ color:var(--et-ink-2);
+}
+body #appShell .et-stat-icon svg{width:16px;height:16px}
+body #appShell .et-stat-value{
+ color:var(--et-ink)!important;
+ font-size:clamp(22px,2.4vw,28px)!important;
+ font-weight:700!important;
+ letter-spacing:-1px;
+ line-height:1;
+ font-variant-numeric:tabular-nums;
+}
+body #appShell .et-stat-delta{
+ display:inline-flex;
+ align-items:center;
+ gap:5px;
+ color:var(--et-muted)!important;
+ font-size:11px!important;
+ font-weight:550!important;
+}
+body #appShell .et-stat-delta b{font-weight:700}
+
+/* Featured campaign thumbnail. */
+body #appShell .et-featured{
+ display:flex;
+ align-items:center;
+ gap:12px;
+ min-width:0;
+}
+body #appShell .et-featured-thumb{
+ position:relative;
+ width:52px;
+ height:52px;
+ min-width:52px;
+ border-radius:14px;
+ overflow:hidden;
+ background:linear-gradient(140deg,#2a2a34,#191920);
+ display:grid;
+ place-items:center;
+ color:var(--et-muted);
+ font-size:10px;
+ font-weight:700;
+ letter-spacing:.06em;
+}
+body #appShell .et-featured-thumb img{
+ width:100%;
+ height:100%;
+ object-fit:cover;
+ display:block;
+}
+body #appShell .et-featured-copy{min-width:0;line-height:1.3}
+body #appShell .et-featured-copy strong{
+ display:block;
+ color:var(--et-ink)!important;
+ font-size:13px!important;
+ font-weight:600!important;
+ overflow:hidden;
+ text-overflow:ellipsis;
+ white-space:nowrap;
+}
+body #appShell .et-featured-copy small{
+ display:block;
+ color:var(--et-muted)!important;
+ font-size:11px!important;
+ overflow:hidden;
+ text-overflow:ellipsis;
+ white-space:nowrap;
+}
+
+/* Bar chart plumbing. */
+body #appShell .et-chart{position:relative;width:100%}
+body #appShell .et-chart svg{display:block;width:100%;height:auto;overflow:visible}
+body #appShell .et-chart-axis{fill:var(--et-muted);font-size:10px;font-weight:500}
+body #appShell .et-chart-value{fill:var(--et-ink);font-size:10.5px;font-weight:600}
+body #appShell .et-chart-empty{
+ display:grid;
+ place-items:center;
+ min-height:150px;
+ color:var(--et-muted);
+ font-size:12px;
+ text-align:center;
+}
+
+/* Legend / donut. */
+body #appShell .et-legend{
+ display:flex;
+ flex-direction:column;
+ gap:11px;
+ margin:0;
+ padding:0;
+ list-style:none;
+}
+body #appShell .et-legend li{
+ display:flex;
+ align-items:center;
+ gap:9px;
+ min-width:0;
+}
+body #appShell .et-legend .et-swatch{
+ width:9px;
+ height:9px;
+ min-width:9px;
+ border-radius:50%;
+}
+body #appShell .et-legend-label{
+ flex:1;
+ min-width:0;
+ color:var(--et-ink-2)!important;
+ font-size:11.5px!important;
+ overflow:hidden;
+ text-overflow:ellipsis;
+ white-space:nowrap;
+}
+body #appShell .et-legend-value{
+ color:var(--et-ink)!important;
+ font-size:12px!important;
+ font-weight:650!important;
+font-variant-numeric:tabular-nums;
+white-space:nowrap;
+}
+body #appShell .et-donut-center{
+ fill:var(--et-ink);
+ font-size:15px;
+ font-weight:700;
+}
+body #appShell .et-donut-center-sub{
+ fill:var(--et-muted);
+ font-size:9.5px;
+ font-weight:600;
+ letter-spacing:.09em;
+}
+
+/* Recommendation card internals — the ov-rec atom is shared with the light
+   dashboard, so the board repaints its text and inputs rather than forking the
+   markup and losing the answer handlers already bound to it. */
+body #appShell #view .et-board .ov-rec-action{
+ color:var(--et-ink-2)!important;
+ background:#ffffff0f;
+ border-radius:999px;
+ padding:3px 9px;
+ font-size:10px!important;
+ font-weight:700!important;
+ letter-spacing:.06em;
+}
+body #appShell #view .et-board .ov-rec-status{
+ color:var(--et-muted)!important;
+ background:#ffffff0a;
+ border-radius:999px;
+ padding:3px 9px;
+ font-size:10px!important;
+}
+body #appShell #view .et-board .ov-rec.is-pending .ov-rec-status{
+ background:linear-gradient(135deg,var(--et-mint-1),var(--et-mint-3))!important;
+ color:var(--et-mint-ink)!important;
+}
+body #appShell #view .et-board .ov-rec-question{
+ color:var(--et-ink)!important;
+ font-size:13.5px!important;
+ line-height:1.45;
+}
+body #appShell #view .et-board .ov-rec-detail{color:var(--et-muted)!important}
+body #appShell #view .et-board .ov-rec-note{color:var(--et-muted)!important}
+body #appShell #view .et-board .ov-rec-note.is-error{color:var(--et-rose)!important}
+body #appShell #view .et-board .ov-rec-amount input{
+ border:1px solid var(--et-line)!important;
+ border-radius:10px!important;
+ background:var(--et-card-2)!important;
+ color:var(--et-ink)!important;
+}
+body #appShell #view .et-board .ov-rail-empty{color:var(--et-muted)!important}
+body #appShell #view .et-board .ov-rail-foot{border-color:var(--et-line-soft)!important}
+body #appShell #view .et-board .ov-rec.is-done .ov-rec-action,
+body #appShell #view .et-board .ov-rec.is-muted .ov-rec-action{color:var(--et-muted)!important}
+body #appShell #view .et-board .ov-rec.is-done .ov-rec-status{
+ background:#ffffff0a!important;
+ color:var(--et-ink-2)!important;
+}
+body #appShell #view .et-board :is(.ov-rec-actions,.ov-rail-foot) .btn{
+ border-radius:999px!important;
+ border:1px solid var(--et-line)!important;
+ background:#ffffff0a!important;
+ color:var(--et-ink)!important;
+ font-weight:600!important;
+}
+body #appShell #view .et-board :is(.ov-rec-actions,.ov-rail-foot) .btn:hover{background:#ffffff14!important}
+body #appShell #view .et-board :is(.ov-rec-actions,.ov-rail-foot) .btn.primary{
+ border-color:transparent!important;
+ background:linear-gradient(135deg,var(--et-mint-1),var(--et-mint-3))!important;
+ color:var(--et-mint-ink)!important;
+}
+
+/* Recommendation stack. */
+body #appShell .et-stack{
+ position:relative;
+ display:flex;
+ flex-direction:column;
+ gap:12px;
+}
+body #appShell .et-rec{
+ position:relative;
+ display:flex;
+ flex-direction:column;
+ gap:13px;
+ padding:18px 18px 16px;
+ border:1px solid var(--et-line);
+ border-radius:20px;
+ background:linear-gradient(155deg,#1b1b22,#141419);
+ color:var(--et-ink);
+ transform-origin:50% 0;
+ transition:opacity .28s ease,transform .28s ease,max-height .28s ease,margin .28s ease,padding .28s ease;
+ max-height:420px;
+ overflow:hidden;
+}
+body #appShell .et-rec:nth-child(2){transform:translateY(-4px) scale(.985);opacity:.9}
+body #appShell .et-rec:nth-child(3){transform:translateY(-8px) scale(.97);opacity:.72}
+body #appShell .et-rec:nth-child(n+4){display:none!important}
+body #appShell .et-rec.is-out{
+ opacity:0!important;
+ transform:translateX(46px) scale(.96)!important;
+ max-height:0!important;
+ padding-top:0!important;
+ padding-bottom:0!important;
+ margin-top:-12px;
+ border-width:0;
+}
+body #appShell .et-rec.is-in{
+ animation:et-rec-in .34s cubic-bezier(.22,.9,.32,1) both;
+}
+@keyframes et-rec-in{
+ from{opacity:0;transform:translateY(12px) scale(.98)}
+ to{opacity:1;transform:none}
+}
+body #appShell .et-rec-top{
+ display:flex;
+ align-items:center;
+ gap:9px;
+ min-width:0;
+}
+body #appShell .et-rec-kind{
+ display:inline-flex;
+ align-items:center;
+ gap:5px;
+ padding:3px 9px;
+ border-radius:999px;
+ background:#ffffff0f;
+ color:var(--et-ink-2);
+ font-size:10px;
+ font-weight:700;
+ letter-spacing:.06em;
+ text-transform:uppercase;
+ white-space:nowrap;
+}
+body #appShell .et-rec-when{
+ margin-left:auto;
+ color:var(--et-muted);
+ font-size:10.5px;
+ white-space:nowrap;
+}
+body #appShell .et-rec-title{
+ margin:0;
+ color:var(--et-ink)!important;
+ font-size:14.5px!important;
+ font-weight:600!important;
+ line-height:1.35;
+ letter-spacing:-.15px;
+}
+body #appShell .et-rec-copy{
+ margin:0;
+ color:var(--et-ink-2)!important;
+ font-size:12px!important;
+ line-height:1.5;
+}
+body #appShell .et-rec-facts{
+ display:flex;
+ flex-wrap:wrap;
+ gap:8px;
+ margin:0;
+ padding:0;
+ list-style:none;
+}
+body #appShell .et-rec-facts li{
+ display:inline-flex;
+ align-items:baseline;
+ gap:5px;
+ padding:5px 9px;
+ border-radius:9px;
+ background:#ffffff08;
+ color:var(--et-muted);
+ font-size:10.5px;
+}
+body #appShell .et-rec-facts b{color:var(--et-ink);font-size:11.5px;font-weight:650}
+body #appShell .et-rec-actions{
+ display:flex;
+ align-items:center;
+ gap:8px;
+ flex-wrap:wrap;
+}
+body #appShell .et-btn{
+ appearance:none;
+ display:inline-flex;
+ align-items:center;
+ justify-content:center;
+ gap:6px;
+ height:34px;
+ padding:0 15px;
+ border:1px solid var(--et-line);
+ border-radius:999px;
+ background:#ffffff0a;
+ color:var(--et-ink);
+ font-family:inherit;
+ font-size:12px;
+ font-weight:600;
+ white-space:nowrap;
+ cursor:pointer;
+ transition:background .16s ease,border-color .16s ease,transform .12s ease;
+}
+body #appShell .et-btn:hover{background:#ffffff14}
+body #appShell .et-btn:active{transform:scale(.98)}
+body #appShell .et-btn.primary{
+ border-color:transparent;
+ background:linear-gradient(135deg,var(--et-mint-1),var(--et-mint-3));
+ color:var(--et-mint-ink);
+}
+body #appShell .et-btn.primary:hover{filter:brightness(1.05)}
+body #appShell .et-btn.ghost{background:transparent}
+body #appShell .et-btn.danger{color:#f4609b;border-color:#f4609b3d}
+body #appShell .et-btn.danger:hover{background:#f4609b14}
+body #appShell .et-btn[disabled]{opacity:.5;cursor:default}
+body #appShell .et-stack-empty{
+ display:grid;
+ place-items:center;
+ gap:6px;
+ min-height:180px;
+ padding:22px;
+ border:1px dashed var(--et-line);
+ border-radius:20px;
+ color:var(--et-muted);
+ font-size:12px;
+ text-align:center;
+}
+body #appShell .et-stack-empty strong{
+ color:var(--et-ink-2);
+ font-size:13px;
+ font-weight:600;
+}
+
+/* Conversation list ("Subscriptions" replacement). */
+body #appShell .et-convos{
+ display:flex;
+ flex-direction:column;
+ gap:2px;
+ margin:0;
+ padding:0;
+ list-style:none;
+}
+body #appShell .et-convo{
+ display:flex;
+ align-items:center;
+ gap:11px;
+ padding:10px 8px;
+ border-radius:13px;
+ min-width:0;
+ transition:background .15s ease;
+}
+body #appShell .et-convo:hover{background:#ffffff08}
+body #appShell .et-convo-avatar{
+ display:grid;
+ place-items:center;
+ width:36px;
+ height:36px;
+ min-width:36px;
+ border-radius:50%;
+ background:#2a2a34;
+ color:var(--et-ink-2);
+ font-size:11.5px;
+ font-weight:700;
+}
+body #appShell .et-convo-copy{
+ flex:1;
+ min-width:0;
+ line-height:1.35;
+}
+body #appShell .et-convo-copy strong{
+ display:block;
+ color:var(--et-ink)!important;
+ font-size:12.5px!important;
+ font-weight:600!important;
+ overflow:hidden;
+ text-overflow:ellipsis;
+ white-space:nowrap;
+}
+body #appShell .et-convo-copy small{
+ display:block;
+ color:var(--et-muted)!important;
+ font-size:11px!important;
+ overflow:hidden;
+ text-overflow:ellipsis;
+ white-space:nowrap;
+}
+body #appShell .et-open{
+ appearance:none;
+ display:inline-flex;
+ align-items:center;
+ gap:5px;
+ height:30px;
+ padding:0 13px;
+ border:1px solid var(--et-line);
+ border-radius:999px;
+ background:#ffffff0a;
+ color:var(--et-ink);
+ font-family:inherit;
+ font-size:11.5px;
+ font-weight:600;
+ white-space:nowrap;
+ cursor:pointer;
+ transition:background .16s ease,border-color .16s ease;
+}
+body #appShell .et-open:hover{
+ background:linear-gradient(135deg,var(--et-mint-1),var(--et-mint-3));
+ border-color:transparent;
+ color:var(--et-mint-ink);
+}
+
+/* Progress meter, reused by budget and campaign panels. */
+body #appShell .et-meter{
+ position:relative;
+ height:5px;
+ border-radius:999px;
+ background:#ffffff0f;
+ overflow:hidden;
+}
+body #appShell .et-meter>span{
+ display:block;
+ height:100%;
+ border-radius:999px;
+ background:linear-gradient(90deg,var(--et-violet),var(--et-violet-2));
+}
+
+/* Dense campaign rows. */
+body #appShell .et-rows{
+ display:flex;
+ flex-direction:column;
+ gap:1px;
+ margin:0;
+ padding:0;
+ list-style:none;
+}
+body #appShell .et-row{
+ display:flex;
+ align-items:center;
+ gap:10px;
+ padding:9px 8px;
+ border-radius:11px;
+ min-width:0;
+}
+body #appShell .et-row:hover{background:#ffffff08}
+body #appShell .et-row-main{flex:1;min-width:0;line-height:1.3}
+body #appShell .et-row-main strong{
+ display:block;
+ color:var(--et-ink)!important;
+ font-size:12px!important;
+ font-weight:600!important;
+ overflow:hidden;
+text-overflow:ellipsis;
+white-space:nowrap;
+}
+body #appShell .et-row-main small{display:block;color:var(--et-muted)!important;font-size:10.5px!important}
+body #appShell .et-row-value{
+ color:var(--et-ink)!important;
+ font-size:12px!important;
+ font-weight:650!important;
+font-variant-numeric:tabular-nums;
+white-space:nowrap;
+}
+body #appShell .et-tag{
+ display:inline-flex;
+ align-items:center;
+ gap:4px;
+ padding:2px 8px;
+ border-radius:999px;
+ background:#ffffff0f;
+ color:var(--et-ink-2);
+ font-size:9.5px;
+ font-weight:700;
+ letter-spacing:.05em;
+ text-transform:uppercase;
+ white-space:nowrap;
+}
+body #appShell .et-tag.active{background:#2fd6a51f;color:#5fe3b8}
+body #appShell .et-tag.paused{background:#f7b9551f;color:#f7b955}
+
+/* Budget strip — it is the board's first line, so it speaks the board's
+   materials instead of the light card it was designed on. */
+body #appShell #view .px-overview.et-board .px-budget-top-heading>strong{color:var(--et-ink)!important}
+body #appShell #view .px-overview.et-board .px-budget-top-heading>small{color:var(--et-muted)!important}
+body #appShell #view .px-overview.et-board .px-budget-top-grid>.px-budget-account:only-child{
+ grid-column:1/-1;
+}
+body #appShell #view .px-overview.et-board .px-budget-account{
+ background:var(--et-card)!important;
+ border:1px solid var(--et-line)!important;
+ border-radius:var(--et-radius-sm)!important;
+ box-shadow:none!important;
+ color:var(--et-ink)!important;
+}
+body #appShell #view .px-overview.et-board .px-budget-brand>strong{color:var(--et-ink)!important}
+body #appShell #view .px-overview.et-board .px-budget-brand>small{color:var(--et-muted)!important}
+body #appShell #view .px-overview.et-board .px-budget-stat>span,
+body #appShell #view .px-overview.et-board .px-budget-meta-metric>span{color:var(--et-muted)!important}
+body #appShell #view .px-overview.et-board .px-budget-stat>strong{color:var(--et-ink)!important}
+body #appShell #view .px-overview.et-board .px-budget-meta-metric>strong{color:var(--et-ink)!important}
+body #appShell #view .px-overview.et-board .px-budget-meter{
+ background:repeating-linear-gradient(90deg,#26262f 0,#26262f 9px,#1c1c22 9px,#1c1c22 14px)!important;
+}
+body #appShell #view .px-overview.et-board .px-budget-billing-link{
+ border:1px solid #ffffff1f!important;
+ background:#ffffff0a!important;
+ color:var(--et-ink-2)!important;
+}
+body #appShell #view .px-overview.et-board .px-budget-billing-link:hover{
+ background:#ffffff14!important;
+ color:var(--et-ink)!important;
+}
+body #appShell #view .px-overview.et-board .px-budget-meta-ribbon{
+ background:var(--et-card)!important;
+ border-color:var(--et-line)!important;
+}
+body #appShell #view .px-overview.et-board .px-load-status{color:var(--et-muted)!important}
+
+/* Loading skeleton paints in the board's own materials, so the first frame is
+   the same dark canvas rather than a white card flashing over it. */
+body #appShell #view .px-overview-loading :is(.px-load-card,.et-card,.et-hero){
+ background:var(--et-card)!important;
+ border:1px solid var(--et-line)!important;
+ box-shadow:none!important;
+ border-radius:var(--et-radius)!important;
+}
+body #appShell #view .px-overview-loading .px-load-line{
+ background:linear-gradient(90deg,#1d1d24 0%,#26262f 45%,#1d1d24 90%)!important;
+ background-size:200% 100%!important;
+}
+
+/* Period fields inside the dark board — the date inputs are shared with the
+   light dashboard, so the board repaints them instead of shipping new markup. */
+body #appShell .et-board .period-fields{margin-top:0}
+body #appShell .et-board .period-fields label{
+ color:var(--et-muted)!important;
+ font-size:9.5px!important;
+ font-weight:600!important;
+ letter-spacing:.1em;
+}
+body #appShell .et-board .period-fields input{
+ border:1px solid var(--et-line)!important;
+ border-radius:10px!important;
+ background:var(--et-card-2)!important;
+ color:var(--et-ink)!important;
+ padding:6px 9px!important;
+ font-size:12.5px!important;
+ color-scheme:dark;
+}
+body #appShell .et-board .period-hint{color:var(--et-muted)!important}
+body #appShell .et-board .period-hint.is-error{color:var(--et-rose)!important;font-weight:600}
+body #appShell .et-board .period-fields input:focus-visible,
+body #appShell .et-board .period-fields .btn:focus-visible{
+ outline:2px solid var(--et-mint-3)!important;
+ outline-offset:2px;
+}
+
+/* Spend split — donut plus legend, each legend row is a reading. */
+body #appShell .et-baseline{stroke:var(--et-line)!important;stroke-width:1}
+body #appShell .et-split-fields{
+ display:flex;
+ align-items:flex-end;
+ gap:9px;
+ flex-wrap:wrap;
+ margin-bottom:14px;
+}
+body #appShell .et-split-fields[hidden]{display:none}
+body #appShell .et-split-fields label{
+ flex:0 1 128px;
+ min-width:0;
+ color:var(--et-muted)!important;
+ font-size:9.5px!important;
+ font-weight:600!important;
+ letter-spacing:.1em;
+ text-transform:uppercase;
+}
+body #appShell .et-split-fields input{
+ width:100%;
+ border:1px solid var(--et-line)!important;
+ border-radius:10px!important;
+ background:var(--et-card-2)!important;
+ color:var(--et-ink)!important;
+ padding:6px 9px!important;
+ font-size:12.5px!important;
+ color-scheme:dark;
+}
+body #appShell .et-split{
+ display:grid;
+ grid-template-columns:minmax(120px,168px) minmax(0,1fr);
+ align-items:center;
+ gap:18px;
+}
+body #appShell .et-donut svg{display:block;width:100%;height:auto}
+body #appShell .et-legend .et-c1{background:var(--et-violet)}
+body #appShell .et-legend .et-c2{background:var(--et-teal)}
+body #appShell .et-legend .et-c3{background:var(--et-amber)}
+body #appShell .et-legend .et-c4{background:var(--et-rose)}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media(max-width:1180px){
+ body #appShell .topbar{grid-template-columns:auto minmax(0,1fr) auto;gap:14px;padding:0 18px!important}
+ body #appShell .workspace-box{display:none!important}
+ body #appShell .et-span-3{grid-column:span 6}
+ body #appShell .et-span-4{grid-column:span 6}
+ body #appShell .et-span-5,body #appShell .et-span-7{grid-column:span 12}
+}
+@media(max-width:900px){
+ body #appShell .topbar{
+  height:auto!important;
+  min-height:64px!important;
+  grid-template-columns:auto 1fr;
+  grid-template-areas:"brand tools" "rail rail";
+  gap:10px 12px;
+  padding:12px 16px!important;
+  position:relative;
+ }
+ body #appShell .topbar-brand{grid-area:brand}
+ body #appShell .topbar-tools{grid-area:tools}
+ body #appShell .nav-rail{grid-area:rail;justify-content:flex-start;margin:0 -4px}
+ body #appShell .nav-rail .nav{max-width:100%;width:100%}
+ body #appShell .page-strip{padding:0 16px!important}
+ body #appShell #view{padding:16px 16px 44px!important}
+ body #appShell .site-footer{padding:16px 16px 22px!important}
+ body #appShell .et-span-3,body #appShell .et-span-4,body #appShell .et-span-6{grid-column:span 12}
+ body #appShell .et-card{padding:16px!important}
+ body #appShell .et-hero{padding:18px!important;min-height:170px}
+ body #appShell .et-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ body #appShell .et-split{grid-template-columns:minmax(120px,150px) minmax(0,1fr);gap:14px}
+}
+@media(max-width:620px){
+ body #appShell .et-metrics{grid-template-columns:1fr}
+ body #appShell .et-split{grid-template-columns:1fr}
+ body #appShell .et-donut{max-width:180px;margin:0 auto}
+ /* Four period choices do not fit a phone at their desktop width. */
+ body #appShell .et-hero-top{flex-wrap:wrap}
+ body #appShell .et-hero .et-seg{width:100%;justify-content:space-between}
+ body #appShell .et-hero .et-seg button{flex:1 1 0;padding:0 6px;font-size:11px;white-space:nowrap}
+ body #appShell .et-seg.et-seg-dark{flex-wrap:wrap}
+ body #appShell .et-seg.et-seg-dark button{flex:1 1 auto}
+}
+@media(max-width:620px){
+ body #appShell .workspace-switcher{display:none!important}
+ body #appShell .topbar-brand strong small{display:none}
+ body #appShell .page-strip #crumbRoot,body #appShell .page-strip .page-strip-sep{display:none}
+ body #appShell .page-strip .top-pill{font-size:9.5px!important;padding:4px 9px!important}
+ body #appShell .et-rec-actions .et-btn{flex:1 1 auto}
+}
+@media(prefers-reduced-motion:reduce){
+ body #appShell .et-rec,body #appShell .et-btn,body #appShell .nav-rail .nav-item,
+ body #appShell .et-open,body #appShell .topbar-icon{transition:none!important}
+ body #appShell .et-rec.is-in{animation:none!important}
+}
+
+/* ════════════════════════════════════════════════════════════
+   Dashboard de referência — moldura flutuante, título e grade
+   ════════════════════════════════════════════════════════════ */
+html:has(body #appShell:not(.hidden)),
+body:has(#appShell:not(.hidden)){
+ background:
+  radial-gradient(120% 100% at 12% -10%,#efe8fb 0%,#f7f4fc 42%,#e8e2f3 100%)!important;
+}
+body #appShell.app-shell:not(.hidden){
+ margin:20px auto!important;
+ max-width:1580px;
+ min-height:calc(100vh - 40px)!important;
+ border-radius:30px!important;
+ border:1px solid #23232b!important;
+ box-shadow:
+  0 44px 100px -48px #2b1b4d66,
+  0 0 0 1px #ffffff0a inset!important;
+ overflow:hidden;
+}
+body #appShell .app-main{min-height:calc(100vh - 40px)!important}
+body #appShell .topbar{
+ height:68px!important;
+ min-height:68px!important;
+ padding:0 24px!important;
+ border-bottom:0!important;
+ background:var(--et-canvas)!important;
+}
+body #appShell #view{padding:6px 24px 34px!important}
+body:has(.px-overview.et-board) .page-strip{display:none!important}
+
+body #appShell .et-title{
+ margin:6px 0 18px;
+ color:var(--et-ink)!important;
+ font-size:clamp(24px,2.6vw,31px)!important;
+ font-weight:600!important;
+ letter-spacing:-1.1px;
+ line-height:1.1;
+}
+
+body #appShell .et-stage{
+ display:grid;
+ grid-template-columns:minmax(0,1fr) 352px;
+ gap:16px;
+ align-items:start;
+}
+body #appShell .et-main{display:flex;flex-direction:column;gap:16px;min-width:0}
+body #appShell .et-duo{display:grid;grid-template-columns:1.04fr .96fr;gap:16px}
+body #appShell .et-rail{display:flex;flex-direction:column;gap:16px;min-width:0}
+
+/* ── Hero: faturamento ──────────────────────────────────── */
+body #appShell .et-hero{
+ position:relative;
+ overflow:hidden;
+ display:flex;
+ flex-direction:column;
+ min-height:214px;
+ padding:22px 24px 20px!important;
+ border:0!important;
+ border-radius:24px!important;
+ background:linear-gradient(140deg,#e2fcea 0%,#bdf6d3 34%,#8fe9b5 100%)!important;
+ color:#082415!important;
+ box-shadow:none!important;
+}
+body #appShell .et-hero::after{
+ content:"";position:absolute;right:-60px;bottom:-90px;width:300px;height:300px;
+ border-radius:50%;background:radial-gradient(circle at 34% 30%,#ffffffb0,#ffffff00 62%);
+ pointer-events:none;
+}
+body #appShell .et-hero-mark{
+ position:absolute;right:18px;top:6px;
+ font-size:92px;font-weight:800;letter-spacing:-6px;line-height:1;
+ color:#0b2a1812;pointer-events:none;user-select:none;
+}
+body #appShell .et-hero-head{position:relative;z-index:1;display:flex;align-items:center;gap:10px}
+body #appShell .et-hero-label{font-size:12.5px!important;font-weight:600!important;color:#13502e!important}
+body #appShell .et-hero-value{
+ position:relative;z-index:1;
+ display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+ margin-top:24px!important;
+}
+body #appShell .et-hero-value strong{
+ color:#07230f!important;
+ font-size:clamp(30px,3.3vw,40px)!important;
+ font-weight:700!important;
+ letter-spacing:-1.8px;
+ line-height:1;
+ font-variant-numeric:tabular-nums;
+}
+body #appShell .et-hero-sales{font-size:13px;font-weight:650;color:#1c6139!important}
+body #appShell .et-hero-note{
+ position:relative;z-index:1;
+ margin:10px 0 0!important;
+ color:#1e6a41!important;
+ font-size:11.5px!important;
+}
+body #appShell .et-hero-foot{position:relative;z-index:1;margin-top:auto;padding-top:22px;display:flex;flex-wrap:wrap;gap:9px}
+
+body #appShell .et-pills{display:flex;flex-wrap:wrap;gap:8px}
+body #appShell .et-pill{
+ appearance:none;
+ height:34px;padding:0 16px;
+ border-radius:999px;
+ border:1px solid #0b2a181a;
+ background:#ffffffe0;
+ color:#12341f;
+ font:600 12px/1 Inter,inherit;
+ cursor:pointer;
+ transition:background .16s ease,color .16s ease,transform .12s ease;
+}
+body #appShell .et-pill:hover{background:#fff;transform:translateY(-1px)}
+body #appShell .et-pill.on{background:#082415;color:#e9fff2;border-color:transparent}
+body #appShell .et-pill:focus-visible{outline:2px solid #082415;outline-offset:2px}
+
+/* ── Cartões do trilho direito ──────────────────────────── */
+body #appShell .et-kpi{
+ display:flex;flex-direction:column;gap:9px;
+ padding:16px!important;
+ border:1px solid var(--et-line)!important;
+ border-radius:20px!important;
+ background:var(--et-card)!important;
+ min-width:0;
+}
+body #appShell .et-kpi-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+body #appShell .et-kpi-label{font-size:11.5px!important;font-weight:600!important;color:var(--et-muted)!important}
+body #appShell .et-kpi-icon{
+ width:28px;height:28px;border-radius:9px;
+ display:grid;place-items:center;
+ background:#ffffff0a;color:var(--et-ink-2);
+}
+body #appShell .et-kpi-icon svg{width:15px;height:15px}
+body #appShell .et-kpi-value{
+ color:var(--et-ink)!important;
+ font-size:27px!important;font-weight:700!important;
+ letter-spacing:-1.2px;line-height:1;
+ font-variant-numeric:tabular-nums;
+}
+body #appShell .et-kpi-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+body #appShell .et-kpi-foot small{font-size:10.5px;color:var(--et-muted)}
+body #appShell .et-kpi-note{margin:0!important;font-size:11px!important;color:var(--et-muted)!important}
+body #appShell .et-kpi-note b{color:var(--et-ink-2)!important;font-weight:650}
+body #appShell .et-kpi-link{
+ appearance:none;height:24px;padding:0 11px;
+ border-radius:999px;border:1px solid var(--et-line);
+ background:#ffffff0a;color:var(--et-ink-2);
+ font:600 10.5px/1 Inter,inherit;cursor:pointer;
+}
+body #appShell .et-kpi-link:hover{background:#ffffff14;color:var(--et-ink)}
+
+body #appShell .et-campaign-body{display:flex;align-items:center;gap:12px;padding-top:2px;min-width:0}
+body #appShell .et-campaign-thumb{
+ width:64px;height:64px;flex:0 0 64px;
+ border-radius:14px;overflow:hidden;
+ background:#ffffff08;display:grid;place-items:center;
+}
+body #appShell .et-campaign-thumb img,
+body #appShell .et-campaign-thumb video{width:100%;height:100%;object-fit:cover}
+body #appShell .et-campaign-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
+body #appShell .et-campaign-copy strong{
+ color:var(--et-ink)!important;font-size:12.5px!important;
+ line-height:1.25;overflow:hidden;
+ display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+}
+body #appShell .et-campaign-copy small{font-size:10.5px;color:var(--et-muted);white-space:nowrap}
+body #appShell .et-campaign-copy b{display:flex;align-items:baseline;gap:5px;color:var(--et-ink);font-size:13.5px}
+body #appShell .et-campaign-copy b i{font-style:normal;font-size:10px;font-weight:500;color:var(--et-muted)}
+
+/* ── Blocos (recomendações e conversas) ─────────────────── */
+body #appShell .et-block{display:flex;flex-direction:column;gap:10px;min-width:0}
+body #appShell .et-block.et-subs{
+ padding:14px!important;
+ border:1px solid var(--et-line)!important;
+ border-radius:20px!important;
+ background:var(--et-card)!important;
+}
+body #appShell .et-block-head{display:flex;align-items:center;gap:8px}
+body #appShell .et-block-head h2{
+ margin:0!important;font-size:13px!important;font-weight:600!important;
+ color:var(--et-ink)!important;letter-spacing:-.2px;
+}
+body #appShell .et-block-count{
+ min-width:19px;height:19px;padding:0 5px;border-radius:999px;
+ display:grid;place-items:center;
+ background:#ffffff12;color:var(--et-ink-2);
+ font-size:10px;font-weight:700;
+}
+body #appShell .et-block-link{
+ margin-left:auto;appearance:none;border:0;background:none;
+ color:var(--et-muted);font:600 11px/1 Inter,inherit;cursor:pointer;
+}
+body #appShell .et-block-link:hover{color:var(--et-ink)}
+body #appShell .et-block-feedback{font-size:10.5px;color:var(--et-muted);min-height:0}
+
+body #appShell .et-recs .et-stack{position:relative;padding-top:36px}
+body #appShell .et-rec{
+ position:relative!important;
+ display:flex;flex-direction:column;gap:11px;
+ padding:16px!important;
+ border:0!important;border-radius:20px!important;
+ background:linear-gradient(150deg,#9d7bff 0%,#6a49ea 52%,#4326c4 100%)!important;
+ color:#fff!important;
+ max-height:none!important;
+ box-shadow:0 22px 46px -20px #4b2fd680;
+ transform:none!important;
+}
+body #appShell .et-recs .et-rec:nth-child(1){z-index:3}
+body #appShell .et-recs .et-rec:nth-child(2){
+ position:absolute!important;top:18px;left:14px;right:14px;
+ z-index:2;height:150px;overflow:hidden;opacity:.92;
+ transform:none!important;
+ background:linear-gradient(150deg,#7a5fe2 0%,#4b2fbe 100%)!important;
+}
+body #appShell .et-recs .et-rec:nth-child(3){
+ position:absolute!important;top:0;left:28px;right:28px;
+ z-index:1;height:140px;overflow:hidden;opacity:.72;
+ transform:none!important;
+ background:linear-gradient(150deg,#32d7a6 0%,#0f8f68 100%)!important;
+}
+body #appShell .et-recs .et-rec:nth-child(n+4){display:none!important}
+body #appShell .et-recs .et-rec.is-out{
+ opacity:0!important;
+ transform:translateX(52px) scale(.96)!important;
+ transition:opacity .28s ease,transform .28s ease!important;
+}
+body #appShell .et-rec .et-rec-kind{
+ display:inline-flex;align-items:center;
+ padding:3px 9px;border-radius:999px;
+ background:#ffffff26;color:#fff!important;
+ font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+}
+body #appShell .et-rec .et-rec-when{color:#ffffffb8!important;font-size:10px!important;background:none!important;padding:0!important}
+body #appShell .et-rec .et-rec-title{
+ margin:0!important;color:#fff!important;
+ font-size:13.5px!important;font-weight:600!important;line-height:1.4;
+ display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+}
+body #appShell .et-rec .et-rec-facts{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+body #appShell .et-rec .et-rec-facts li{
+ padding:4px 8px;border-radius:8px;
+ background:#ffffff1f;color:#ffffffdd!important;
+ font-size:10px;line-height:1.35;
+ display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+body #appShell .et-rec .et-rec-actions{display:flex;flex-wrap:wrap;gap:7px}
+body #appShell .et-rec .et-btn{height:31px;padding:0 13px;font-size:11.5px;border-color:#ffffff2e!important;background:#ffffff1f!important;color:#fff!important}
+body #appShell .et-rec .et-btn:hover{background:#ffffff33!important}
+body #appShell .et-rec .et-btn.primary{background:#fff!important;color:#341d9e!important;border-color:transparent!important}
+body #appShell .et-rec .ov-rec-amount input{border-color:#ffffff33!important;background:#ffffff1f!important;color:#fff!important}
+body #appShell .et-rec .ov-rec-note{color:#ffffffcc!important;font-size:10.5px!important;margin:0!important}
+body #appShell .et-rec .ov-rec-note.is-error{color:#ffe1e7!important}
+
+body #appShell .et-subs-list{display:flex;flex-direction:column;gap:2px}
+body #appShell .et-sub-row{
+ display:flex;align-items:center;gap:10px;
+ padding:8px 6px;border-radius:12px;min-width:0;
+}
+body #appShell .et-sub-row:hover{background:#ffffff07}
+body #appShell .et-sub-avatar{
+ width:34px;height:34px;flex:0 0 34px;border-radius:50%;
+ display:grid;place-items:center;
+ background:linear-gradient(145deg,#2c2c36,#191920);
+ color:var(--et-ink-2);font-size:12px;font-weight:700;
+}
+body #appShell .et-sub-copy{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+body #appShell .et-sub-copy strong{color:var(--et-ink)!important;font-size:12px!important;font-weight:600}
+body #appShell .et-sub-copy small{
+ color:var(--et-muted)!important;font-size:10.5px!important;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+body #appShell .et-open{
+ appearance:none;height:29px;padding:0 13px;flex:0 0 auto;
+ border-radius:999px;border:1px solid #ffffff1f!important;
+ background:#ffffff0d!important;color:var(--et-ink)!important;
+ font:600 11px/1 Inter,inherit;cursor:pointer;
+ transition:background .15s ease,border-color .15s ease;
+}
+body #appShell .et-open:hover{background:#ffffff1c!important;border-color:#ffffff33!important}
+body #appShell .et-open:focus-visible{outline:2px solid var(--et-mint-3);outline-offset:2px}
+
+/* ── Cartões grandes: fluxo e divisão de despesas ───────── */
+body #appShell .et-card{padding:18px!important;border-radius:20px!important}
+body #appShell .et-flow .et-chart{margin-top:6px}
+body #appShell .et-expense-split .et-split{
+ display:grid;grid-template-columns:150px minmax(0,1fr);
+ align-items:center;gap:14px;
+}
+body #appShell .et-expense-split .et-legend{
+ display:grid;grid-template-columns:1fr 1fr;gap:9px 16px;
+}
+body #appShell .et-expense-split .et-legend li{gap:7px}
+body #appShell .et-expense-split .et-donut svg{width:100%;height:auto}
+
+/* ── Responsivo ─────────────────────────────────────────── */
+@media(max-width:1180px){
+ body #appShell .et-stage{grid-template-columns:minmax(0,1fr) 320px}
+}
+@media(max-width:1020px){
+ body #appShell .et-stage{grid-template-columns:1fr}
+ body #appShell .et-rail{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+ body #appShell .et-block.et-recs{grid-column:span 2}
+}
+@media(max-width:760px){
+ body #appShell.app-shell:not(.hidden){margin:0!important;border-radius:0!important;min-height:100vh!important}
+ body #appShell #view{padding:4px 16px 28px!important}
+ body #appShell .et-duo{grid-template-columns:1fr}
+ body #appShell .et-rail{grid-template-columns:1fr}
+ body #appShell .et-block.et-recs{grid-column:auto}
+ body #appShell .et-title{font-size:24px!important;margin:2px 0 14px}
+ body #appShell .et-hero{min-height:0}
+}
+
+/* The floating frame keeps the board's own canvas; the Stripe layer still
+   declares a light app background with higher specificity. */
+body #appShell.app-shell:not(.hidden){
+ background:var(--et-canvas)!important;
+ color:var(--et-ink)!important;
+}
+body #appShell #view .et-card-title,
+body #appShell #view .et-block-head h2{color:var(--et-ink)!important}
+body #appShell #view .et-card-sub{color:var(--et-muted)!important}
+
+/* Header do card de despesas: o filtro precisa caber sem invadir o título. */
+body #appShell .et-expense-split .et-card-head{flex-wrap:wrap;gap:8px 10px}
+body #appShell .et-expense-split .et-card-head>div{min-width:0}
+body #appShell .et-expense-split .et-seg{padding:3px}
+body #appShell .et-expense-split .et-seg button{height:24px;padding:0 9px;font-size:10.5px}
+body #appShell .et-card-head{min-width:0}
+
+/* A moldura precisa de ar dos dois lados, não só em cima. */
+body #appShell.app-shell:not(.hidden){
+ width:calc(100% - 40px)!important;
+ max-width:min(1580px,calc(100% - 40px))!important;
+}
+/* O painel tem título próprio; a trilha de navegação some só nesta tela. */
+body:has(.px-overview.et-board) #appShell .page-strip{display:none!important}
+/* O fluxo e a divisão ocupam a altura que sobra, como na referência. */
+body #appShell .et-main{min-height:100%}
+body #appShell .et-duo{flex:1;align-items:stretch}
+body #appShell .et-duo>.et-card{display:flex;flex-direction:column}
+body #appShell .et-expense-split .et-split{flex:1}
+
+/* Na visão geral o topo espelha a referência: busca, notificações e conta. */
+body:has(.px-overview.et-board) #appShell .topbar .workspace-box{display:none!important}
+
+@media(max-width:900px){
+ body #appShell .topbar{height:auto!important;min-height:64px!important}
+}
+@media(max-width:760px){
+ body #appShell.app-shell:not(.hidden){
+  width:100%!important;
+  max-width:100%!important;
+  margin:0!important;
+  border-radius:0!important;
+  border:0!important;
+ }
+}
+
+/* Selo de variação dentro do hero mint. */
+body #appShell .et-hero .ov-rev-pill{
+ background:#0b2a181f!important;
+ color:#0a2a18!important;
+ border:0!important;
+ font-weight:700;
+}
+body #appShell .et-hero .ov-rev-pill.up{background:#0b2a1826!important;color:#07351b!important}
+body #appShell .et-hero .ov-rev-pill.down{background:#7a1c2e26!important;color:#6b1626!important}
+
+/* O esqueleto de carregamento usa o mesmo quadro, sem os enfeites do hero. */
+body #appShell #view .px-overview-loading .et-hero::after,
+body #appShell #view .px-overview-loading .et-hero-mark{display:none!important}
+
+/* Proporção da referência: o trilho ocupa pouco mais de um quarto da largura. */
+@media(min-width:1181px){
+ body #appShell .et-stage{grid-template-columns:minmax(0,1fr) 400px}
+}
+
+/* Campos de data dentro do hero mint: claros, como os pills. */
+body #appShell .et-hero .period-fields{width:100%;margin-top:0}
+body #appShell .et-hero .period-fields label{color:#13502e!important}
+body #appShell .et-hero .period-fields input{
+ background:#ffffffd9!important;
+ border:1px solid #0b2a1826!important;
+ color:#12341f!important;
+ color-scheme:light;
+}
+body #appShell .et-hero .period-fields .btn{
+ background:#fff!important;border:1px solid #0b2a181a!important;color:#12341f!important;
+}
+body #appShell .et-hero .period-hint{color:#1e6a41!important}
+body #appShell .et-hero .period-hint.is-error{color:#7d1d2c!important}
+
+/* ── Correções de acessibilidade e contraste ───────────── */
+body #appShell .et-btn:focus-visible,
+body #appShell .et-kpi-link:focus-visible,
+body #appShell .et-block-link:focus-visible,
+body #appShell .et-seg button:focus-visible,
+body #appShell .et-rec .et-btn:focus-visible{
+ outline:2px solid var(--et-mint-3)!important;
+ outline-offset:2px;
+}
+body #appShell .et-rec .et-rec-when{color:#ffffffe6!important}
+/* O terceiro cartão da pilha era verde com texto branco (1,8:1); azul mantém
+   a variedade da referência com contraste legível. */
+body #appShell .et-recs .et-rec:nth-child(3){
+ background:linear-gradient(150deg,#4f8dff 0%,#2a5fd0 100%)!important;
+}
+body #appShell .et-seg.et-seg-dark button{color:var(--et-ink-2)!important}
+body #appShell .et-board .period-hint.is-error{color:var(--et-rose)!important}
+
+/* ── Responsivo: a coluna do donut vence as regras antigas ── */
+@media(max-width:760px){
+ body #appShell .et-hero{min-height:0!important}
+ body #appShell .et-expense-split .et-split{grid-template-columns:1fr!important}
+ body #appShell .et-expense-split .et-legend{grid-template-columns:1fr 1fr}
+}
+
+/* ════════════════════════════════════════════════════════════
+   Ethereal — fidelidade total à referência (liquid glass)
+   grade 5/3/4, painel translúcido e cartões de vidro
+   ════════════════════════════════════════════════════════════ */
+
+/* Papel de parede desfocado: orbes lilás, rosa, menta e azul. */
+html:has(body #appShell:not(.hidden)),
+body:has(#appShell:not(.hidden)){
+ background:
+  radial-gradient(48% 46% at 16% 4%,rgba(174,148,255,.95) 0%,rgba(174,148,255,0) 62%),
+  radial-gradient(42% 40% at 90% 10%,rgba(255,196,225,.9) 0%,rgba(255,196,225,0) 60%),
+  radial-gradient(55% 55% at 80% 98%,rgba(150,240,205,.8) 0%,rgba(150,240,205,0) 62%),
+  radial-gradient(45% 45% at 4% 94%,rgba(196,214,255,.85) 0%,rgba(196,214,255,0) 60%),
+  linear-gradient(150deg,#efe9fb 0%,#e6def4 55%,#efe6f7 100%)!important;
+ background-attachment:fixed!important;
+}
+
+/* Painel de vidro escuro flutuando sobre o papel de parede. */
+body #appShell.app-shell:not(.hidden){
+ background:linear-gradient(155deg,rgba(20,20,26,.86) 0%,rgba(9,9,12,.93) 55%,rgba(8,8,10,.95) 100%)!important;
+ -webkit-backdrop-filter:blur(42px) saturate(140%);
+ backdrop-filter:blur(42px) saturate(140%);
+ border:1px solid rgba(255,255,255,.10)!important;
+ box-shadow:
+  0 70px 140px -52px rgba(46,22,92,.70),
+  0 24px 60px -40px rgba(0,0,0,.85),
+  inset 0 1px 0 rgba(255,255,255,.14),
+  inset 0 0 0 1px rgba(255,255,255,.03)!important;
+}
+body #appShell .topbar{background:transparent!important}
+
+/* Vidro nos controles do topo. */
+body #appShell .nav-rail .nav{
+ background:rgba(255,255,255,.055)!important;
+ border:1px solid rgba(255,255,255,.08)!important;
+ -webkit-backdrop-filter:blur(18px) saturate(150%);
+ backdrop-filter:blur(18px) saturate(150%);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.10)!important;
+}
+body #appShell .topbar-icon{
+ background:rgba(255,255,255,.055)!important;
+ border:1px solid rgba(255,255,255,.08)!important;
+ -webkit-backdrop-filter:blur(16px) saturate(150%);
+ backdrop-filter:blur(16px) saturate(150%);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.10);
+}
+body #appShell .nav-rail .nav-item.selected{
+ background:linear-gradient(180deg,#ffffff,#eceef3)!important;
+ color:#0b0b10!important;
+ box-shadow:0 6px 16px -8px rgba(255,255,255,.45),inset 0 1px 0 #fff!important;
+}
+
+/* Grade 5 / 3 / 4, como a referência. */
+body #appShell .et-board-grid{
+ display:grid!important;
+ grid-template-columns:repeat(12,minmax(0,1fr))!important;
+ grid-auto-rows:minmax(0,auto)!important;
+ gap:12px!important;
+ align-items:stretch!important;
+}
+body #appShell .et-board-grid>.et-hero{grid-column:1/span 5!important;grid-row:1/span 2!important}
+body #appShell .et-board-grid>.et-income{grid-column:6/span 3!important;grid-row:1!important}
+body #appShell .et-board-grid>.et-kpi-campaign{grid-column:6/span 3!important;grid-row:2!important}
+body #appShell .et-board-grid>.et-recs{grid-column:9/span 4!important;grid-row:1/span 2!important}
+body #appShell .et-board-grid>.et-flow{grid-column:1/span 4!important;grid-row:3/span 2!important}
+body #appShell .et-board-grid>.et-expense-split{grid-column:5/span 4!important;grid-row:3/span 2!important}
+body #appShell .et-board-grid>.et-subs{grid-column:9/span 4!important;grid-row:3/span 2!important}
+
+/* Superfície de vidro compartilhada pelos cartões. */
+body #appShell .px-overview.et-board :is(.et-card,.et-kpi,.et-block.et-subs){
+ background:linear-gradient(160deg,rgba(255,255,255,.075) 0%,rgba(255,255,255,.028) 58%,rgba(255,255,255,.018) 100%)!important;
+ border:1px solid rgba(255,255,255,.09)!important;
+ border-radius:18px!important;
+ box-shadow:
+  inset 0 1px 0 rgba(255,255,255,.10),
+  inset 0 -1px 0 rgba(0,0,0,.25),
+  0 24px 48px -34px rgba(0,0,0,.95)!important;
+ -webkit-backdrop-filter:blur(22px) saturate(150%);
+ backdrop-filter:blur(22px) saturate(150%);
+}
+body #appShell .px-overview.et-board .et-card:hover,
+body #appShell .px-overview.et-board .et-kpi:hover{
+ border-color:rgba(255,255,255,.14)!important;
+}
+
+/* ── Hero de vidro menta ────────────────────────────────── */
+body #appShell .et-board-grid>.et-hero{
+ background:
+  radial-gradient(120% 150% at 88% 118%,rgba(255,255,255,.55) 0%,rgba(255,255,255,0) 52%),
+  linear-gradient(135deg,#dcfde8 0%,#b8f7d0 40%,#8cecb4 100%)!important;
+ border:1px solid rgba(255,255,255,.55)!important;
+ border-radius:20px!important;
+ box-shadow:
+  inset 0 1px 0 rgba(255,255,255,.85),
+  inset 0 -12px 40px rgba(20,120,70,.10),
+  0 30px 60px -34px rgba(60,180,120,.55)!important;
+ overflow:hidden!important;
+}
+/* Silhueta cinza do cartão de saldo. */
+body #appShell .et-hero::before{
+ content:"";position:absolute;right:-26px;bottom:-70px;
+ width:250px;height:250px;
+ background:radial-gradient(circle at 36% 30%,#e9edf0 0%,#ccd2d8 42%,#aeb6be 64%,rgba(174,182,190,0) 72%);
+ border-radius:48% 52% 44% 56%/52% 46% 54% 48%;
+ opacity:.85;pointer-events:none;
+}
+body #appShell .et-hero::after{display:none!important}
+body #appShell .et-hero-mark{
+ color:#0b2a1810!important;
+ font-size:104px!important;
+ right:16px!important;top:0!important;
+}
+body #appShell .et-hero-value strong{font-size:clamp(30px,3.2vw,38px)!important;letter-spacing:-1.6px}
+body #appShell .et-hero .et-pill{
+ background:rgba(255,255,255,.92)!important;
+ border:1px solid rgba(255,255,255,.9)!important;
+ box-shadow:0 8px 18px -12px rgba(10,50,30,.5),inset 0 1px 0 #fff;
+}
+body #appShell .et-hero .et-pill.on{
+ background:#07220f!important;color:#eafff1!important;
+ border-color:transparent!important;
+}
+
+/* ── Cartões de recomendação: pilha colorida como a referência ── */
+body #appShell .et-recs .et-stack{padding-top:42px!important}
+body #appShell .et-recs .et-rec{
+ border-radius:16px!important;
+ box-shadow:0 30px 50px -28px rgba(40,18,110,.85),inset 0 1px 0 rgba(255,255,255,.36)!important;
+}
+body #appShell .et-recs .et-rec:nth-child(1){
+ background:linear-gradient(150deg,#a184ff 0%,#7050f2 42%,#4326c4 100%)!important;
+}
+body #appShell .et-recs .et-rec:nth-child(2){
+ top:20px!important;left:12px!important;right:12px!important;height:140px!important;
+ background:linear-gradient(150deg,#8367f2 0%,#4b2fbe 100%)!important;
+}
+body #appShell .et-recs .et-rec:nth-child(3){
+ top:0!important;left:24px!important;right:24px!important;height:130px!important;
+ background:linear-gradient(150deg,#3fdcb0 0%,#12855f 100%)!important;
+}
+body #appShell .et-recs .et-rec::after{
+ content:"";position:absolute;inset:0;border-radius:16px;pointer-events:none;
+ background:linear-gradient(115deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,0) 38%);
+}
+body #appShell .et-recs .et-rec>*{position:relative;z-index:1}
+
+/* ── Gráfico e legenda ──────────────────────────────────── */
+body #appShell .et-flow svg{filter:drop-shadow(0 12px 18px rgba(124,92,252,.18))}
+body #appShell .et-expense-split .et-legend .et-swatch{box-shadow:0 0 0 2px rgba(255,255,255,.06)}
+body #appShell .et-subs-list{gap:0!important}
+body #appShell .et-sub-row{padding:9px 4px!important}
+body #appShell .et-sub-row+.et-sub-row{border-top:1px solid rgba(255,255,255,.05)}
+
+/* ── Ajustes finos de tipografia e densidade ────────────── */
+body #appShell .px-overview.et-board .et-title{
+ font-size:clamp(24px,2.5vw,30px)!important;
+ letter-spacing:-1.2px!important;
+ margin:4px 0 14px!important;
+}
+body #appShell .px-overview.et-board :is(.et-card-title,.et-block-head h2){font-size:12.5px!important}
+body #appShell .px-overview.et-board :is(.et-card-sub){font-size:10.5px!important}
+body #appShell .px-overview.et-board .et-kpi-value{font-size:25px!important}
+
+/* ── Responsivo ─────────────────────────────────────────── */
+@media(max-width:1020px){
+ body #appShell .et-board-grid>.et-hero{grid-column:1/span 7!important;grid-row:1/span 2!important}
+ body #appShell .et-board-grid>.et-income{grid-column:8/span 5!important;grid-row:1!important}
+ body #appShell .et-board-grid>.et-kpi-campaign{grid-column:8/span 5!important;grid-row:2!important}
+ body #appShell .et-board-grid>.et-recs{grid-column:1/span 12!important;grid-row:3!important}
+ body #appShell .et-board-grid>.et-flow{grid-column:1/span 6!important;grid-row:4!important}
+ body #appShell .et-board-grid>.et-expense-split{grid-column:7/span 6!important;grid-row:4!important}
+ body #appShell .et-board-grid>.et-subs{grid-column:1/span 12!important;grid-row:5!important}
+}
+@media(max-width:760px){
+ body #appShell .et-board-grid{grid-template-columns:1fr!important;gap:12px!important}
+ body #appShell .et-board-grid>*{grid-column:1/-1!important;grid-row:auto!important}
+}
+
+/* ── Refinos de fidelidade ──────────────────────────────── */
+/* Mais papel de parede à vista, como na referência. */
+body #appShell.app-shell:not(.hidden){
+ width:calc(100% - 56px)!important;
+ max-width:min(1500px,calc(100% - 56px))!important;
+ margin:28px auto!important;
+ min-height:calc(100vh - 56px)!important;
+ border-radius:30px!important;
+}
+body #appShell .app-main{min-height:calc(100vh - 56px)!important}
+
+/* A silhueta cinza é menor e mais discreta. */
+body #appShell .et-hero::before{
+ width:190px!important;height:190px!important;
+ right:-18px!important;bottom:-56px!important;
+ opacity:.72!important;
+ background:radial-gradient(circle at 36% 30%,#eaeef1 0%,#cfd5db 44%,#b3bac2 62%,rgba(179,186,194,0) 71%)!important;
+}
+
+/* Cartões laterais com a altura da referência. */
+body #appShell .et-board-grid>.et-income,
+body #appShell .et-board-grid>.et-kpi-campaign{min-height:104px}
+
+/* Recomendação frontal mais saturada, brilho mais sutil. */
+body #appShell .et-recs .et-rec::after{
+ background:linear-gradient(115deg,rgba(255,255,255,.13) 0%,rgba(255,255,255,0) 34%)!important;
+}
+body #appShell .et-recs .et-rec:nth-child(1){
+ background:linear-gradient(150deg,#9c7dff 0%,#6a48ee 40%,#3b1fb8 100%)!important;
+}
+body #appShell .et-recs .et-rec .et-rec-kind{
+ background:rgba(255,255,255,.22)!important;
+ backdrop-filter:blur(6px);
+}
+body #appShell .et-recs .et-rec .et-rec-title{color:#fff!important;opacity:.98}
+
+/* Vidro dos cartões levemente mais claro para ler sobre o painel. */
+body #appShell .px-overview.et-board :is(.et-card,.et-kpi,.et-block.et-subs){
+ background:linear-gradient(160deg,rgba(255,255,255,.085) 0%,rgba(255,255,255,.033) 58%,rgba(255,255,255,.022) 100%)!important;
+}
+
+/* Cartão já respondido continua vívido; só a etiqueta muda de cor. */
+body #appShell .et-recs .et-rec.is-muted{filter:none!important;opacity:.94!important}
+body #appShell .et-recs .et-rec.is-done{filter:none!important;opacity:.94!important}
+body #appShell .et-recs .et-rec.is-muted .et-rec-kind{background:rgba(255,255,255,.16)!important}
+
+/* Brilho colorido atravessando o vidro, como na referência. */
+body #appShell.app-shell:not(.hidden){position:relative}
+body #appShell.app-shell:not(.hidden)::before{
+ content:"";position:absolute;inset:0;pointer-events:none;z-index:0;
+ border-radius:inherit;
+ background:
+  radial-gradient(42% 34% at 94% 4%,rgba(168,128,255,.30) 0%,rgba(168,128,255,0) 70%),
+  radial-gradient(46% 38% at 2% 100%,rgba(124,92,252,.26) 0%,rgba(124,92,252,0) 70%),
+  radial-gradient(38% 30% at 62% 104%,rgba(90,240,180,.12) 0%,rgba(90,240,180,0) 70%),
+  radial-gradient(30% 26% at 34% -6%,rgba(255,196,225,.12) 0%,rgba(255,196,225,0) 70%);
+}
+body #appShell.app-shell:not(.hidden)>.app-main{position:relative;z-index:1}
+
+/* No celular a grade vira uma coluna de verdade (vence os spans nomeados). */
+@media(max-width:760px){
+ body #appShell .px-overview.et-board .et-board-grid{grid-template-columns:1fr!important}
+ body #appShell .px-overview.et-board .et-board-grid>*{
+  grid-column:1/-1!important;
+  grid-row:auto!important;
+ }
+}
+
+/* ── Pontos da referência: número, selos, bolhas e ícones ── */
+
+/* Valor com símbolo sobrescrito, como "120,456,50 $". */
+body #appShell .et-hero-value strong sup{
+ font-size:.42em;
+ font-weight:700;
+ letter-spacing:0;
+ vertical-align:super;
+ margin-right:5px;
+ opacity:.9;
+}
+
+/* Botão circular de atualizar ao lado dos pills do período. */
+body #appShell .et-hero-refresh{
+ appearance:none;
+ width:34px;height:34px;flex:0 0 34px;
+ display:grid;place-items:center;
+ border-radius:50%;
+ border:1px solid rgba(9,40,23,.18);
+ background:#ffffffe6;
+ color:#0d3520;
+ cursor:pointer;
+ box-shadow:0 8px 18px -12px rgba(10,50,30,.55),inset 0 1px 0 #fff;
+ transition:transform .16s ease,background .16s ease;
+}
+body #appShell .et-hero-refresh:hover{background:#fff;transform:rotate(-18deg)}
+body #appShell .et-hero-refresh svg{width:15px;height:15px}
+body #appShell .et-hero-refresh:focus-visible{outline:2px solid #082415;outline-offset:2px}
+
+/* Leads: valor grande e selo de variação na mesma linha. */
+body #appShell .et-kpi-metric{display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-width:0}
+body #appShell .et-kpi-sub{margin:2px 0 0!important;font-size:10.5px!important;color:var(--et-muted)!important}
+body #appShell .et-income{padding:16px 16px 14px!important}
+body #appShell .et-income .et-kpi-value{font-size:27px!important}
+
+/* Pílulas de valor sobre as barras e destaque do mês atual. */
+body #appShell .et-chart-pill{fill:rgba(255,255,255,.10)}
+body #appShell .et-chart-pill.is-now{fill:rgba(47,214,165,.22)}
+body #appShell .et-chart-value.is-now{fill:#c9fbe4}
+body #appShell .et-chart-value{font-size:9.5px}
+
+/* "Total" acima do valor no centro do donut. */
+body #appShell .et-donut-label{
+ fill:var(--et-muted);
+ font-size:9.5px;
+ font-weight:600;
+ letter-spacing:.08em;
+ text-transform:uppercase;
+}
+
+/* Fileira de avatares circulares, como os ícones de assinaturas. */
+body #appShell .et-subs-icons{display:flex;align-items:center;gap:0;margin:2px 0 10px}
+body #appShell .et-subs-icon{
+ width:42px;height:42px;border-radius:50%;
+ display:grid;place-items:center;
+ margin-left:-10px;
+ border:2px solid #141419;
+ background:linear-gradient(150deg,#7c5cfc,#3b22b8);
+ color:#fff;
+ font-size:13px;font-weight:700;
+ box-shadow:0 8px 18px -10px rgba(0,0,0,.8);
+}
+body #appShell .et-subs-icon:first-child{margin-left:0}
+body #appShell .et-subs-icon:nth-child(2){background:linear-gradient(150deg,#2fd6a5,#0f8f68)}
+body #appShell .et-subs-icon:nth-child(3){background:linear-gradient(150deg,#f7b955,#c07a12)}
+body #appShell .et-subs-icon:nth-child(4){background:linear-gradient(150deg,#f4609b,#b52a63)}
+body #appShell .et-subs-icon:nth-child(5){background:linear-gradient(150deg,#4f8dff,#2a5fd0)}
+
+/* O bloco de cartões é um painel de vidro, como "My cards". */
+body #appShell .px-overview.et-board .et-block.et-recs{
+ padding:14px!important;
+ border:1px solid rgba(255,255,255,.09)!important;
+ border-radius:18px!important;
+ background:linear-gradient(160deg,rgba(255,255,255,.07) 0%,rgba(255,255,255,.025) 60%,rgba(255,255,255,.018) 100%)!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 24px 48px -34px rgba(0,0,0,.95)!important;
+ -webkit-backdrop-filter:blur(22px) saturate(150%);
+ backdrop-filter:blur(22px) saturate(150%);
+}
+body #appShell .et-recs .et-stack{padding-top:38px!important}
+body #appShell .et-recs .et-rec:nth-child(1){min-height:150px}
+
+/* ── Ajustes de fidelidade em telas médias ──────────────── */
+/* Os quatro filtros do hero cabem em uma linha, como na referência. */
+@media(max-width:1260px){
+ body #appShell .et-hero .et-pill{height:31px;padding:0 12px;font-size:11.5px}
+ body #appShell .et-hero-foot{gap:7px}
+ body #appShell .et-hero-refresh{width:31px;height:31px;flex-basis:31px}
+}
+/* O cartão da frente cresce com o conteúdo; só os de trás são recortados. */
+body #appShell .et-recs .et-rec:nth-child(1){
+ min-height:0!important;
+ overflow:visible!important;
+ max-height:none!important;
+}
+body #appShell .et-recs .et-rec:nth-child(1) .et-rec-title{-webkit-line-clamp:4}
+/* Legenda da despesa em uma coluna quando o cartão é estreito. */
+@media(max-width:1260px){
+ body #appShell .et-expense-split .et-legend{grid-template-columns:1fr!important}
+}
+/* A forma cinza do hero encosta na borda direita, como na foto. */
+body #appShell .et-hero::before{
+ right:-46px!important;bottom:-64px!important;
+ width:210px!important;height:210px!important;
+ opacity:.55!important;
+}
+
+/* Cartões de recomendação rolam dentro do próprio painel, sem invadir a linha
+   de baixo; o conteúdo do cartão da frente precisa mostrar as ações. */
+body #appShell .px-overview.et-board .et-block.et-recs{overflow:auto!important}
+body #appShell .et-recs .et-rec{gap:9px!important;padding:14px!important}
+@media(max-width:1260px){
+ body #appShell .et-hero .et-pill{padding:0 10px;font-size:11px;height:30px}
+}
+
+/* O esqueleto não mostra a forma cinza nem o brilho do hero. */
+body #appShell #view .px-overview-loading .et-hero::before,
+body #appShell #view .px-overview-loading .et-hero::after{display:none!important}
+body #appShell #view .px-overview-loading .et-recs .et-stack{padding-top:0!important}
+
+/* O cartão de recomendação mostra a pergunta e as ações; a explicação fica no
+   título do cartão para não empurrar os botões para fora. */
+body #appShell .et-recs .et-rec .et-rec-facts{display:none!important}
+body #appShell .et-recs .et-rec .et-rec-title{-webkit-line-clamp:4!important}
+body #appShell .px-overview.et-board .et-block.et-recs{overflow:hidden!important}
+
+/* A divisão de despesas nunca deixa a legenda estourar o cartão. */
+body #appShell .et-expense-split .et-split{
+ grid-template-columns:minmax(104px,132px) minmax(0,1fr)!important;
+ gap:12px!important;
+}
+body #appShell .et-expense-split .et-legend{min-width:0!important}
+body #appShell .et-expense-split .et-legend li{min-width:0!important}
+body #appShell .et-expense-split .et-legend-label{font-size:10.5px!important}
+body #appShell .et-expense-split .et-legend-value{font-size:11px!important}
+
+/* A pilha mostra mais dos cartões de trás, como na referência. */
+body #appShell .et-recs .et-stack{padding-top:66px!important}
+body #appShell .et-recs .et-rec:nth-child(2){
+ top:34px!important;left:10px!important;right:10px!important;height:170px!important;
+}
+body #appShell .et-recs .et-rec:nth-child(3){
+ top:0!important;left:20px!important;right:20px!important;height:160px!important;
+}
+body #appShell .et-recs .et-rec:nth-child(2) .et-rec-title,
+body #appShell .et-recs .et-rec:nth-child(3) .et-rec-title{opacity:.55}
+
+/* Espaço para o cartão da frente com os botões de decisão. */
+body #appShell .px-overview.et-board .et-block.et-recs{min-height:248px}
+body #appShell .et-recs .et-stack{padding-top:58px!important}
+body #appShell .et-recs .et-rec:nth-child(2){top:30px!important;height:160px!important}
+body #appShell .et-recs .et-rec:nth-child(3){top:0!important;height:150px!important}
+
+/* ═══ Iteração Ralph 1 — vidro perceptível, cor forte, brilho ═══ */
+
+/* Papel de parede mais luminoso para o vidro ter o que desfocar. */
+html:has(body #appShell:not(.hidden)),
+body:has(#appShell:not(.hidden)){
+ background:
+  radial-gradient(52% 48% at 13% 0%,rgba(150,108,255,1) 0%,rgba(150,108,255,0) 66%),
+  radial-gradient(46% 44% at 93% 7%,rgba(255,166,214,.95) 0%,rgba(255,166,214,0) 64%),
+  radial-gradient(62% 60% at 84% 102%,rgba(116,246,196,.92) 0%,rgba(116,246,196,0) 66%),
+  radial-gradient(50% 48% at 0% 98%,rgba(166,196,255,.92) 0%,rgba(166,196,255,0) 64%),
+  linear-gradient(150deg,#ece4fd 0%,#ded1f4 52%,#e9ddf8 100%)!important;
+ background-attachment:fixed!important;
+}
+
+/* Painel de vidro de verdade: mais translúcido, com halo colorido. */
+body #appShell.app-shell:not(.hidden){
+ background:linear-gradient(155deg,rgba(24,21,34,.72) 0%,rgba(13,11,20,.82) 52%,rgba(9,8,15,.86) 100%)!important;
+ -webkit-backdrop-filter:blur(30px) saturate(175%);
+ backdrop-filter:blur(30px) saturate(175%);
+ border:1px solid rgba(255,255,255,.16)!important;
+ box-shadow:
+  0 90px 170px -64px rgba(62,26,140,.80),
+  0 0 120px -12px rgba(146,104,255,.42),
+  inset 0 1px 0 rgba(255,255,255,.24),
+  inset 0 -1px 0 rgba(255,255,255,.05)!important;
+}
+
+/* Brilho interno mais presente nos cantos. */
+body #appShell.app-shell:not(.hidden)::before{
+ background:
+  radial-gradient(44% 36% at 96% 2%,rgba(172,132,255,.42) 0%,rgba(172,132,255,0) 70%),
+  radial-gradient(48% 40% at 0% 102%,rgba(120,84,255,.34) 0%,rgba(120,84,255,0) 70%),
+  radial-gradient(40% 32% at 64% 104%,rgba(86,244,182,.18) 0%,rgba(86,244,182,0) 70%),
+  radial-gradient(34% 28% at 30% -6%,rgba(255,186,220,.20) 0%,rgba(255,186,220,0) 70%)!important;
+}
+
+/* Cartões de vidro: superfície mais clara e fio de luz no topo. */
+body #appShell .px-overview.et-board :is(.et-card,.et-kpi,.et-block.et-subs){
+ background:linear-gradient(160deg,rgba(255,255,255,.13) 0%,rgba(255,255,255,.055) 52%,rgba(255,255,255,.03) 100%)!important;
+ border:1px solid rgba(255,255,255,.13)!important;
+ box-shadow:
+  inset 0 1px 0 rgba(255,255,255,.18),
+  inset 0 -12px 32px rgba(0,0,0,.28),
+  0 34px 64px -38px rgba(0,0,0,1)!important;
+ -webkit-backdrop-filter:blur(20px) saturate(165%);
+ backdrop-filter:blur(20px) saturate(165%);
+}
+
+/* Hero com verde mais forte e brilho só à direita. */
+body #appShell .et-board-grid>.et-hero{
+ background:
+  radial-gradient(78% 110% at 104% 106%,rgba(255,255,255,.42) 0%,rgba(255,255,255,0) 46%),
+  linear-gradient(133deg,#d6ffe6 0%,#a9f8ca 36%,#68e2a2 100%)!important;
+ border:1px solid rgba(255,255,255,.65)!important;
+ box-shadow:
+  inset 0 1px 0 rgba(255,255,255,.95),
+  inset 0 -16px 44px rgba(14,110,62,.16),
+  0 34px 74px -30px rgba(40,190,120,.72)!important;
+}
+
+/* Cartões de recomendação mais saturados. */
+body #appShell .et-recs .et-rec:nth-child(1){
+ background:linear-gradient(150deg,#ab8dff 0%,#7049f7 36%,#3918b6 100%)!important;
+ box-shadow:0 32px 60px -26px rgba(86,44,226,.92),inset 0 1px 0 rgba(255,255,255,.42)!important;
+}
+body #appShell .et-recs .et-rec:nth-child(2){
+ background:linear-gradient(150deg,#8d6dff 0%,#4526c0 100%)!important;
+}
+body #appShell .et-recs .et-rec:nth-child(3){
+ background:linear-gradient(150deg,#41e2b4 0%,#0b8a62 100%)!important;
+}
+body #appShell .et-recs .et-rec .et-btn.primary{
+ background:#fff!important;color:#2a1290!important;
+ box-shadow:0 10px 22px -12px rgba(0,0,0,.6)!important;
+}
+
+/* Barras e donut mais vivos. */
+body #appShell .et-flow rect[fill^="url(#etFlowPast)"]{filter:saturate(1.15)}
+body #appShell .et-expense-split .et-swatch{box-shadow:0 0 10px -2px currentColor}
+
+/* Avatares das conversas com cor cheia. */
+body #appShell .et-subs-icon{box-shadow:0 10px 20px -10px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.35)}
+
+/* Iteração 1b — o painel volta a ser quase preto; o brilho fica nas bordas. */
+body #appShell.app-shell:not(.hidden){
+ background:linear-gradient(155deg,rgba(22,20,30,.84) 0%,rgba(12,11,18,.90) 52%,rgba(9,8,14,.92) 100%)!important;
+}
+body #appShell.app-shell:not(.hidden)::before{
+ background:
+  radial-gradient(42% 34% at 97% 0%,rgba(168,128,255,.28) 0%,rgba(168,128,255,0) 70%),
+  radial-gradient(46% 38% at 0% 104%,rgba(118,82,252,.24) 0%,rgba(118,82,252,0) 70%),
+  radial-gradient(36% 28% at 62% 106%,rgba(86,244,182,.12) 0%,rgba(86,244,182,0) 70%),
+  radial-gradient(30% 24% at 28% -8%,rgba(255,186,220,.14) 0%,rgba(255,186,220,0) 70%)!important;
+}
+
+/* Os cartões de trás são só a borda da pilha: sem status nem botões cortados. */
+body #appShell .et-recs .et-rec:nth-child(2) :is(.et-rec-when,.et-rec-actions,.ov-rec-amount),
+body #appShell .et-recs .et-rec:nth-child(3) :is(.et-rec-when,.et-rec-actions,.ov-rec-amount){display:none!important}
+
+/* Esqueleto: mesmos materiais do board, com altura final. */
+body #appShell #view .px-overview-loading :is(.px-load-card,.et-card,.et-hero,.et-kpi,.et-block){
+ background:linear-gradient(160deg,rgba(255,255,255,.07),rgba(255,255,255,.03))!important;
+ border:1px solid rgba(255,255,255,.10)!important;
+ border-radius:18px!important;
+}
+body #appShell #view .px-overview-loading :is(.et-flow,.et-expense-split,.et-subs){min-height:232px}
+body #appShell #view .px-overview-loading .et-kpi{min-height:104px}
+body #appShell #view .px-overview-loading .et-block.et-recs{min-height:248px}
+
+/* Iteração 2 — vidro mais espesso e com mais refração. */
+body #appShell.app-shell:not(.hidden){
+ -webkit-backdrop-filter:blur(46px) saturate(190%);
+ backdrop-filter:blur(46px) saturate(190%);
+}
+body #appShell .px-overview.et-board :is(.et-card,.et-kpi,.et-block.et-subs){
+ -webkit-backdrop-filter:blur(26px) saturate(180%);
+ backdrop-filter:blur(26px) saturate(180%);
+ box-shadow:
+  inset 0 1px 0 rgba(255,255,255,.22),
+  inset 0 -12px 32px rgba(0,0,0,.30),
+  0 34px 64px -38px rgba(0,0,0,1)!important;
+}

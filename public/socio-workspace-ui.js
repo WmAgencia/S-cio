@@ -13,12 +13,16 @@
  const optional=async(api,path)=>{try{return {data:await api(path),ok:true};}catch(error){return {data:null,ok:false,reason:String(error?.message||'Dados indisponíveis').slice(0,120)};}};
  // Small per-company GET cache removes the blank transition on repeat visits.
  // In-flight calls are shared; values expire quickly and manual refresh clears them.
- const getCache=new Map();const snapshots=new Map();const posterCache=new Map();const billingAutoAttempts=new Map();let selectedTenant=null,renderSerial=0;
+ const getCache=new Map();const snapshots=new Map();const posterCache=new Map();const billingAutoAttempts=new Map();let selectedTenant=null,renderSerial=0,periodDraft=null;
+ // The spend breakdown answers to its own window, independent of the headline
+ // filter: an owner comparing this month's revenue against today's spend breakdown
+ // must not have one choice silently rewrite the other.
+ const splitState={preset:'month',from:null,to:null};
  let liveRefreshTimer=null,liveRefreshSerial=0,liveRefreshBusy=false;
  const stopLiveRefresh=()=>{if(liveRefreshTimer){clearInterval(liveRefreshTimer);liveRefreshTimer=null;}liveRefreshSerial++;};
  const invalidateRender=()=>{renderSerial++;stopLiveRefresh();};
  const forTenant=me=>{const id=[me?.tenant?.id||'',me?.user?.id||'',me?.user?.role||''].join(':');
-  if(selectedTenant!==id){stopLiveRefresh();window.SocioMetaBilling?.dispose();getCache.clear();posterCache.clear();billingAutoAttempts.clear();snapshots.clear();selectedTenant=id;}
+  if(selectedTenant!==id){stopLiveRefresh();window.SocioMetaBilling?.dispose();getCache.clear();posterCache.clear();billingAutoAttempts.clear();snapshots.clear();periodDraft=null;splitState.preset='month';splitState.from=null;splitState.to=null;selectedTenant=id;}
  };
  const clearCache=()=>{stopLiveRefresh();getCache.clear();posterCache.clear();snapshots.clear();selectedTenant=null;};
  const startLiveRefresh=(root,kind,renderId,refresh,updateWhilePlaying)=>{
@@ -73,20 +77,16 @@
   if(kind==='overview'){
    // Final-geometry placeholders: no white default cards, wrong balances or
    // empty rectangles while ad providers and company KPIs are loading.
-   root.innerHTML='<div class="px-workspace px-overview px-overview-loading" aria-busy="true">'+
-    '<section class="px-budget-top"><div class="px-budget-top-heading"><strong>Controle de verba</strong></div>'+
-    '<div class="px-budget-top-grid">'+Array.from({length:googleAdsVisible()?2:1},()=>'<article class="px-budget-account px-load-card" aria-hidden="true">'+
-      '<div class="px-load-brand">'+skeleton+skeleton+'</div>'+
-      '<div class="px-load-metrics">'+skeleton+skeleton+skeleton+'</div>'+
-      '</article>').join('')+'</div></section>'+
-    '<div class="ov-board">'+
-     '<div class="ov-kpi-stack">'+Array.from({length:4},()=>'<article class="px-kpi px-load-card" aria-hidden="true">'+
-      skeleton+skeleton+skeleton+'</article>').join('')+'</div>'+
-     '<div class="ov-rail"><div class="ov-rail-inner">'+
-      '<div class="ov-rail-head"><div><span class="ov-rail-eyebrow">SÓCIO</span><h2>Recomendações</h2></div></div>'+
-      '<div class="ov-rec-list">'+Array.from({length:2},()=>'<article class="ov-rec px-load-card" aria-hidden="true">'+
-       skeleton+skeleton+skeleton+'</article>').join('')+'</div>'+
-     '</div></div>'+
+   root.innerHTML='<div class="px-workspace px-overview px-overview-loading et-board" aria-busy="true">'+
+    '<h1 class="et-title">Visão geral</h1>'+
+    '<div class="et-board-grid px-overview-skeleton" aria-hidden="true">'+
+     '<section class="et-hero px-load-card">'+skeleton+skeleton+skeleton+'</section>'+
+     '<article class="et-kpi et-income px-load-card">'+skeleton+skeleton+'</article>'+
+     '<article class="et-kpi px-load-card">'+skeleton+skeleton+'</article>'+
+     '<article class="et-block et-recs et-card px-load-card">'+skeleton+skeleton+skeleton+'</article>'+
+     '<article class="et-card et-flow px-load-card">'+skeleton+skeleton+skeleton+'</article>'+
+     '<article class="et-card et-expense-split px-load-card">'+skeleton+skeleton+skeleton+'</article>'+
+     '<article class="et-block et-subs px-load-card">'+skeleton+skeleton+'</article>'+
     '</div>'+
     '<p class="px-load-status" role="status">Consultando dados confirmados da empresa…</p>'+
     '</div>';
@@ -193,26 +193,6 @@
  const kpi=(label,value,meta,icon='overview',tone='purple')=>'<article class="px-kpi"><div class="px-kpi-top"><span class="px-kpi-label">'+esc(label)+'</span><span class="px-kpi-icon '+tone+'">'+kpiIcon(icon)+'</span></div>'+
   '<strong class="px-kpi-number">'+esc(value)+'</strong><small>'+esc(meta)+'</small></article>';
  const empty=(text)=>'<p class="px-muted">'+esc(text)+'</p>';
- const chart=(points)=>{
-  const values=(Array.isArray(points)?points:[]).map(x=>({date:String(x.date||''),inbound:Number(x.inbound)||0,outbound:Number(x.outbound)||0}));
-  if(!values.length)return empty('Sem histórico de mensagens neste período.');
-  const max=Math.max(1,...values.map(x=>Math.max(x.inbound,x.outbound)));
-  const path=k=>values.map((d,i)=>(i?'L':'M')+(16+i/(Math.max(1,values.length-1))*712).toFixed(1)+','+(190-(d[k]/max)*162).toFixed(1)).join(' ');
-  const defs='<defs><linearGradient id="pxChartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7654ee" stop-opacity=".21"/><stop offset="1" stop-color="#7654ee" stop-opacity="0"/></linearGradient></defs>';
-  const floor=190,xlast=16+(values.length-1)/Math.max(1,values.length-1)*712;
-  const area=path('inbound')+' L'+xlast+','+floor+' L16,'+floor+'Z';
-  const guides=[.25,.5,.75,1].map(r=>'<line x1="16" x2="728" y1="'+(190-r*162)+'" y2="'+(190-r*162)+'" stroke="#e8e4f3" stroke-width="1" stroke-dasharray="4 7"/>').join('');
-  const hoverPoints=values.map((d,i)=>{
-   const x=(16+i/Math.max(1,values.length-1)*712).toFixed(1);
-   const y=(190-d.inbound/max*162).toFixed(1);
-   const label=esc(d.date+' — '+d.inbound+' recebidas, '+d.outbound+' enviadas');
-   return '<circle class="px-chart-hit" tabindex="0" cx="'+x+'" cy="'+y+'" r="9" fill="transparent" aria-label="'+label+'"><title>'+label+'</title></circle>';
-  }).join('');
-  return '<svg class="px-svg" viewBox="0 0 748 212" preserveAspectRatio="none" role="img" aria-label="Gráfico de mensagens recebidas em roxo e enviadas em verde">'+defs+guides+
-   '<path d="'+area+'" fill="url(#pxChartFill)"/><path d="'+path('inbound')+'" stroke="#7650ed" fill="none" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>'+
-   '<path d="'+path('outbound')+'" stroke="#16a778" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'+hoverPoints+'</svg>'+
-   '<div class="px-axis"><span>'+esc(values[0].date)+'</span><span>'+esc(values[Math.floor(values.length/2)].date)+'</span><span>'+esc(values.at(-1).date)+'</span></div>';
- };
  const section=(title,subtitle,content,aside='')=>'<section class="px-panel"><div class="px-panel-head"><div><h2>'+esc(title)+'</h2><p>'+esc(subtitle)+'</p></div>'+aside+'</div>'+content+'</section>';
  const formattedDaily=(cents,currency)=>money(Number(cents||0)/100,currency)+'/dia';
  const actionButtons=(kind,obj,manage=true)=>{
@@ -338,12 +318,25 @@
    activeAds:adList.filter(x=>(x.effective_status||x.status)==='ACTIVE').length,
    best:daily.filter(x=>Number(x.clicks)>0).sort((a,b)=>Number(b.clicks)-Number(a.clicks))[0]||null};
  }
- async function overview({root,api,me,navigate,activityRange='1m',progressive=false}){
+ async function overview({root,api,me,navigate,periodPreset='7d',periodFrom=null,periodTo=null,progressive=false,
+  splitPreset=splitState.preset,splitFrom=splitState.from,splitTo=splitState.to}){
   const renderId=++renderSerial;
-  const range=['7d','1m','90d'].includes(activityRange)?activityRange:'1m';
+  // One period decides every tile on the board: Hoje, 7 dias, Mês atual or a
+  // custom range. An incomplete custom range never reaches the server, which
+  // would reject it, and never leaves the board showing a window it did not ask
+  // for — it simply falls back to the last valid choice.
+  const preset=['today','7d','month','custom'].includes(periodPreset)?periodPreset:'7d';
+  const isDay=value=>/^\d{4}-\d{2}-\d{2}$/.test(String(value||''));
+  const customOk=preset==='custom'&&isDay(periodFrom)&&isDay(periodTo)&&periodFrom<=periodTo;
+  const activePreset=preset==='custom'&&!customOk?'7d':preset;
+  const windowFrom=customOk?periodFrom:null,windowTo=customOk?periodTo:null;
+  const periodQuery='preset='+activePreset+(activePreset==='custom'?
+   '&from='+encodeURIComponent(windowFrom)+'&to='+encodeURIComponent(windowTo):'');
+  // Re-renders keep the owner's choice, including raw dates of a half-filled form.
+  const keepPeriod={periodPreset:preset,periodFrom,periodTo};
   forTenant(me);
   if(!root.querySelector('.px-overview'))setPreview(root,'overview');
-  const authorized=can(me,'audit.read'),ads=can(me,'marketing.read');
+  const ads=can(me,'marketing.read');
   // Google Ads may not yet have project OAuth or a selected customer.
   // Its campaigns route returns 503 when disabled: don't poll it every 30s.
   const googleOverview=async()=>{
@@ -353,60 +346,92 @@
     return {ok:false,data:null,skipped:'google_not_connected'};
    return cached(api,'/api/google-ads/campaigns?period=today',60000);
   };
+  // Revenue has its own endpoint so a company without the Meta Ads module still
+  // sees what it sold. It is an own-database read, fast enough for the first paint.
+  const revenueCall=cached(api,'/api/dashboard/revenue',30000);
+  const periodCall=cached(api,'/api/dashboard/period?'+periodQuery,20000);
+  const campaignPeriodCall=ads?periodCall.then(result=>{
+   const span=result?.ok===true?result.data?.period:null;
+   if(!isDay(span?.from)||!isDay(span?.to))return {ok:false};
+   return cached(api,'/api/marketing/tools/insights?since='+encodeURIComponent(span.from)+
+    '&until='+encodeURIComponent(span.to),16000);
+  }):Promise.resolve({ok:false});
+  // The spend breakdown carries its own period control, so it resolves its own
+  // window. When both controls point at the same window the cache serves one read.
+  const splitOk=['today','7d','month','custom'].includes(splitPreset)?splitPreset:'month';
+  const splitCustomOk=splitOk==='custom'&&isDay(splitFrom)&&isDay(splitTo)&&splitFrom<=splitTo;
+  const splitActive=splitOk==='custom'&&!splitCustomOk?'month':splitOk;
+  const splitQuery='preset='+splitActive+(splitActive==='custom'?
+   '&from='+encodeURIComponent(splitFrom)+'&to='+encodeURIComponent(splitTo):'');
+  const splitPeriodCall=cached(api,'/api/dashboard/period?'+splitQuery,20000);
+  const splitSpendCall=splitPeriodCall.then(splitPeriod=>{
+   const span=splitPeriod?.ok===true?splitPeriod.data?.period:null;
+   const from=span?.from||(splitActive==='custom'?splitFrom:null);
+   const to=span?.to||(splitActive==='custom'?splitTo:null);
+   if(!isDay(from)||!isDay(to))return {ok:false,period:null,data:null};
+   if(!ads)return {ok:false,period:span,data:null};
+   return cached(api,'/api/marketing/tools/insights?since='+encodeURIComponent(from)+
+    '&until='+encodeURIComponent(to),16000).then(insights=>({
+     ok:insights?.ok===true,data:insights?.data||null,reason:insights?.reason||'',
+     period:span||{from,to}
+    }));
+  });
+  // The last customer messages the assistant answered come from the inbox module.
+  const inboxCall=can(me,'inbox.read')?
+   cached(api,'/api/inbox/v2',20000).catch(()=>({data:null,ok:false})):Promise.resolve({data:null,ok:false});
   const calls=[
-   cached(api,'/api/dashboard',12000),
-   cached(api,'/api/dashboard/activity?range='+range,16000),
-   cached(api,'/api/waakg/channels',12000),
-   authorized?cached(api,'/api/reports/monitor',16000):Promise.resolve({data:null,ok:false}),
    ads?loadMeta(api,'today').catch(()=>null):Promise.resolve(null),
-   ads&&googleAdsVisible()?googleOverview():Promise.resolve({ok:false}),
-   ads?cached(api,'/api/marketing/tools/finance',45000):Promise.resolve({ok:false}),
-   ads?cached(api,'/api/marketing/browser/status',30000):Promise.resolve({ok:false}),
    ads?cached(api,'/api/marketing/traffic?limit=12',30000):Promise.resolve({ok:false}),
   ];
-  // First paint: operational counts render as soon as the fast own-company APIs
-  // finish. Meta, finance and Google continue separately (sometimes >2 seconds).
-  // The second paint reuses the already settled request cache, not new requests.
-  const later=progressive&&ads?Promise.all(calls.slice(4)):null;
-  const base=progressive?[
-   ...calls.slice(0,4),
-   Promise.resolve(null),Promise.resolve({ok:false}),Promise.resolve({ok:false}),Promise.resolve({ok:false}),Promise.resolve({ok:false})
-  ]:calls;
-  const [dashboard,activity,wa,monitor,meta,google,metaBilling,browserBilling,traffic]=await Promise.all(base);
+  // First paint: the own-company revenue window renders at once; Meta answers
+  // separately (sometimes >2 seconds). The second paint reuses the already
+  // settled request cache, never new requests.
+  const later=progressive&&ads?Promise.all(calls):null;
+  const skip=()=>Promise.resolve({ok:false});
+  const base=progressive?[Promise.resolve(null),...calls.slice(1).map(skip)]:calls;
+  const [results,revenue,period,splitSpend,inbox,campaignPeriod]=await Promise.all([Promise.all(base),revenueCall,periodCall,
+   progressive?Promise.resolve({ok:false}):splitSpendCall,inboxCall,
+   progressive?Promise.resolve({ok:false}):campaignPeriodCall]);
+  const [meta,traffic]=results;
   if(renderId!==renderSerial)return;
-  const d=dashboard.data||{},realWa=Array.isArray(wa.data)?wa.data.filter(c=>c.status==='connected').length:0;
-  const metaReady=meta?.insights.ok===true,googleReady=google.ok===true;
-  const googleMicros=googleReady?Number(google.data?.summary?.costMicros||0)/1e6:null;
-  const googleCode=google.data?.currencyCode||null;
-  const finance=metaBilling?.ok?metaBilling.data?.finance:null;
-  // Meta OAuth grants access to campaigns; a saved billing browser session is
-  // separate. Do not imply that opening Meta in an external tab logs this in.
-  const billingSession=browserBilling?.ok===true?
-   (browserBilling.data?.configured===false?'unconfigured':
-    browserBilling.data?.session_present===true?'connected':'disconnected'):'unknown';
-  const metaBillingUrl=(()=>{
-   try{
-    const url=new URL(metaBilling?.data?.paymentsUrl);
-    return url.protocol==='https:'&&url.hostname==='adsmanager.facebook.com'?
-     url.href:null;
-   }catch{return null;}
-  })();
-  const moneyMinor=(minor,currency)=>{
-   if(!Number.isSafeInteger(minor)||minor<0||!/^[A-Z]{3}$/.test(currency||''))return '—';
-   try{
-    const digits=new Intl.NumberFormat('en-US',{style:'currency',currency})
-     .resolvedOptions().maximumFractionDigits;
-    return money(minor/Math.pow(10,digits),currency);
-   }catch{return '—';}
+  const rev=revenue?.ok===true?revenue.data:null;
+  const metaReady=meta?.insights.ok===true;
+  // Everything below answers the same window the owner picked. When an endpoint
+  // fails the tile says so instead of showing a number from another period.
+  const periodData=period?.ok===true?period.data:null;
+  const periodConversations=periodData?.conversations||null;
+  const periodSales=periodData?.sales??null;
+  const splitRows=splitSpend?.ok===true&&Array.isArray(splitSpend.data?.items)?splitSpend.data.items:[];
+  const splitSpendValue=splitRows.reduce((sum,x)=>sum+(Number(x.spend)||0),0);
+  const splitClicks=splitRows.reduce((sum,x)=>sum+(Number(x.clicks)||0),0);
+  const purchasesFor=row=>{
+   if(Number.isFinite(Number(row.purchases))&&row.purchases!=null)return Number(row.purchases);
+   const actions=Array.isArray(row.actions)?row.actions:[];
+   // Meta can include the same purchase under overlapping aliases. Prefer the
+   // aggregate count, then the website count, rather than counting it twice.
+   for(const kind of ['omni_purchase','purchase','offsite_conversion.fb_pixel_purchase']){
+    const action=actions.find(item=>item.action_type===kind);
+    if(action)return Number(action.value)||0;
+   }
+   return 0;
   };
-  const daily=activity.data?.points||[],received=daily.reduce((n,x)=>n+(Number(x.inbound)||0),0),sent=daily.reduce((n,x)=>n+(Number(x.outbound)||0),0);
-  const connectedWa=Array.isArray(wa.data)?wa.data.filter(w=>w.status==='connected'):[];
-  const bestCampaign=meta?.best||meta?.list?.find(c=>(c.effective_status||c.status)==='ACTIVE')||null;
+  const splitPurchases=splitRows.reduce((sum,x)=>sum+purchasesFor(x),0);
+  const splitPeriodSpan=splitSpend?.period||null;
+  const conversations=inbox?.ok===true&&Array.isArray(inbox.data?.conversations)?
+   inbox.data.conversations.filter(item=>item.channel_provider!=='instagram'&&item.handling_mode==='ai_assist')
+    .sort((a,b)=>(Date.parse(b.last_message_at)||0)-(Date.parse(a.last_message_at)||0)):[];
+  const campaignMetrics=campaignPeriod?.ok&&Array.isArray(campaignPeriod.data?.items)?campaignPeriod.data.items:[];
+  const campaignPurchases=campaignMetrics.filter(item=>purchasesFor(item)>0);
+  const rankedCampaign=campaignPurchases.length?
+   campaignPurchases.slice().sort((a,b)=>(Number(a.spend)||0)/purchasesFor(a)-
+    (Number(b.spend)||0)/purchasesFor(b))[0]:
+   campaignMetrics.filter(item=>Number(item.clicks)>0).sort((a,b)=>Number(b.clicks)-Number(a.clicks))[0];
+  const bestCampaign=rankedCampaign||meta?.list?.find(c=>(c.effective_status||c.status)==='ACTIVE')||null;
   const bestCampaignId=String(bestCampaign?.campaign_id||bestCampaign?.id||'');
   const featuredAds=meta?.adList?.filter(ad=>String(ad.campaign_id||'')===bestCampaignId)||[];
   const featuredAd=featuredAds.find(ad=>(ad.effective_status||ad.status)==='ACTIVE')||featuredAds[0]||null;
   const featuredThumb=posterFromAd(featuredAd);
-  const featuredIsRanked=Boolean(meta?.best);
+  const featuredIsRanked=Boolean(rankedCampaign);
   const trafficLabels={pause:'Pausar anúncio',scale:'Aumentar orçamento',broaden_audience:'Ampliar público',duplicate_campaign:'Duplicar campanha',hold:'Sem ação'};
   const trafficStatusLabels={awaiting_approval:'Aguardando aprovação',executing:'Aplicando',done:'Aplicado',failed:'Falhou',skipped:'Ignorado'};
   const trafficPending=traffic?.ok&&Array.isArray(traffic.data?.items)?
@@ -416,216 +441,264 @@
   // are grey and quiet, so the eye goes to what still needs a decision.
   const recAnswerLabel={done:'Aplicado',failed:'Falhou',skipped:'Ignorado',dismissed:'Recusado',
    executing:'Aplicando'};
+  // Each recommendation is one card in the stack; answering it animates the card
+  // out and the next one moves forward.
   const recCard=item=>{
    const pending=item.status==='awaiting_approval';
    const state=pending?'is-pending':(item.status==='done'?'is-done':'is-muted');
    const status=pending?'Aguardando você':(recAnswerLabel[item.status]||trafficStatusLabels[item.status]||item.status||'');
-   return '<article class="ov-rec '+state+'" data-rec-id="'+esc(item.id)+'">'+
-    '<div class="ov-rec-head"><span class="ov-rec-action">'+esc(trafficLabels[item.action]||item.action||'Ajuste')+'</span>'+
-     '<span class="ov-rec-status">'+esc(status)+'</span></div>'+
-    '<p class="ov-rec-question">'+esc(item.question||item.reason||item.explanation||'Ajuste na campanha')+'</p>'+
-    (item.explanation?'<small class="ov-rec-detail">'+esc(item.explanation)+'</small>':'')+
-    (pending?'<div class="ov-rec-actions" role="group" aria-label="Responder recomendação">'+
-      '<button type="button" class="btn sm primary" data-rec-answer="approve">Sim</button>'+
-      '<button type="button" class="btn sm soft" data-rec-answer="dismiss">Não</button>'+
-      '<button type="button" class="btn sm soft" data-rec-other>Outro valor</button></div>'+
+   return '<article class="ov-rec et-rec '+state+'" data-rec-id="'+esc(item.id)+'"'+
+    (item.explanation?' title="'+esc(item.explanation)+'"':'')+'>'+
+    '<div class="et-rec-top"><span class="et-rec-kind">'+esc(trafficLabels[item.action]||item.action||'Ajuste')+'</span>'+
+     '<span class="ov-rec-status et-rec-when">'+esc(status)+'</span></div>'+
+    '<p class="et-rec-title ov-rec-question">'+esc(item.question||item.reason||item.explanation||'Ajuste na campanha')+'</p>'+
+    (item.explanation?'<ul class="et-rec-facts"><li class="ov-rec-detail">'+esc(item.explanation)+'</li></ul>':'')+
+    (pending?'<div class="et-rec-actions ov-rec-actions" role="group" aria-label="Responder recomendação">'+
+      '<button type="button" class="et-btn primary" data-rec-answer="approve">Aprovar</button>'+
+      '<button type="button" class="et-btn ghost" data-rec-answer="dismiss">Recusar</button>'+
+      '<button type="button" class="et-btn ghost" data-rec-other>Outro valor</button></div>'+
      '<div class="ov-rec-amount" hidden><input type="text" inputmode="decimal" maxlength="12" '+
       'placeholder="Valor diário em reais" aria-label="Valor diário em reais" value="'+
       (item.targetBudgetCents?(item.targetBudgetCents/100).toFixed(2).replace('.',','):'')+'">'+
-      '<button type="button" class="btn sm primary" data-rec-apply>Aplicar</button></div>':'')+
+      '<button type="button" class="et-btn primary" data-rec-apply>Aplicar</button></div>':'')+
     '<p class="ov-rec-note" role="status" aria-live="polite" hidden></p></article>';
   };
   const trafficList=traffic?.ok&&Array.isArray(traffic.data?.items)?traffic.data.items:[];
   const pendingItems=trafficList.filter(item=>item.status==='awaiting_approval').slice(0,3);
-  const settledItems=trafficList.filter(item=>item.status!=='awaiting_approval').slice(0,6);
-  const trafficRail='<aside class="ov-rail" aria-label="Recomendações de tráfego">'+
-   '<div class="ov-rail-inner">'+
-    '<div class="ov-rail-head"><div><span class="ov-rail-eyebrow">SÓCIO</span><h2>Recomendações</h2></div>'+
-     (trafficPending?'<span class="ov-rail-count">'+trafficPending+'</span>':'')+'</div>'+
-    '<div class="ov-rec-list">'+
-     (traffic?.ok?
-      ((pendingItems.length||settledItems.length)?pendingItems.concat(settledItems).map(recCard).join(''):
-       '<p class="ov-rail-empty">Nada para decidir agora. O Sócio revisa as campanhas a cada 6 horas.</p>'):
-      '<p class="ov-rail-empty">'+esc(traffic?.reason||'Recomendações indisponíveis agora.')+'</p>')+
-    '</div>'+
-    '<div class="ov-rail-foot"><button type="button" class="btn sm soft" data-px-traffic-review>Analisar agora</button>'+
-     '<span class="ov-rail-feedback" data-px-traffic-feedback role="status" aria-live="polite"></span></div>'+
-   '</div></aside>';
-  // A prepaid balance is not the Meta account's "balance" (often payable),
-  // nor the daily campaign budget. Do not infer prepaid credit from spend.
-  const budgetHeaderItem=(provider,label,brand,connected,spent,currency,billing,pending=progressive&&ads)=>{
-   if(pending&&provider==='meta_ads'){
-    return '<article class="px-budget-account px-budget-meta-ribbon px-budget-meta-pending" data-budget-provider="meta_ads" aria-busy="true" aria-label="Consultando limite de gastos e gasto de hoje da Meta">'+
-     '<div class="px-budget-meta-summary"><div class="px-budget-meta-brand"><span class="px-brand-dot meta"></span><strong>Meta Ads</strong></div>'+
-     '<div class="px-budget-meta-metric"><span>Limite disponível</span><span class="px-load-line" aria-hidden="true"></span></div>'+
-     '<div class="px-budget-meta-metric"><span>Gasto hoje</span><span class="px-load-line" aria-hidden="true"></span></div></div>'+
-     '<div class="px-budget-meta-action" aria-hidden="true"><span class="px-load-line px-budget-meta-action-placeholder"></span></div></article>';
-   }
-   if(pending){
-    return '<article class="px-budget-account px-load-card px-budget-provider-pending" data-budget-provider="'+provider+'" aria-busy="true">'+
-     '<div class="px-budget-account-main"><div class="px-budget-brand"><span class="px-brand-dot '+brand+'"></span>'+
-     '<strong>'+esc(label)+'</strong><small>Consultando informações da conta…</small></div>'+
-     '<div class="px-budget-stats" aria-hidden="true"><span class="px-load-line"></span><span class="px-load-line"></span><span class="px-load-line"></span></div></div>'+
-     '<p class="px-load-status" role="status">Consultando dados confirmados…</p></article>';
-   }
-   const spending=connected?money(spent,currency):'—';
-   const funds=billing?.finance?.availableFundsMinor;
-   const fundsAvailable=Number.isSafeInteger(funds)&&funds>=0;
-   const cap=billing?.finance?.spendCapRemainingMinor;
-   const capAvailable=Number.isSafeInteger(cap)&&cap>=0;
-   const currencyCode=billing?.finance?.currency||currency;
-   const prepay=billing?.finance?.isPrepaid===true;
-   const balanceAlert=billing?.alert;
-   const browserObserved=billing?.finance?.availableFundsSource==='meta_billing_browser';
-   const billingStatus=billing?.finance?.availableFundsStatus;
-   const billingExplanation=provider==='meta_ads'&&!fundsAvailable&&connected?
-    billingSession==='disconnected'?'A conta de anúncios está conectada. Consulte o saldo e faça recargas no faturamento oficial da Meta.':
-    billingSession==='connected'?'O saldo ainda não foi confirmado. Consulte o faturamento da Meta para verificar os valores.':
-    billingSession==='unconfigured'?'O navegador de faturamento está desativado no servidor.':
-    billingStatus==='field_restricted'?'A Meta restringiu a consulta do saldo pela API. É necessária uma leitura do faturamento.':
-    prepay?'A conta é pré-paga, mas a Meta não retornou o saldo pela API. Consulte o faturamento.':
-    billingStatus==='not_prepaid'?'Esta conta utiliza faturamento; não há saldo pré-pago informado.':
-    'A consulta financeira não retornou saldo verificável.':'';
-   const checkedAt=billing?.finance?.checkedAt;
-   let checkedLabel='';
-   if(checkedAt&&Number.isFinite(Date.parse(checkedAt)))checkedLabel='Consultado às '+
-    new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}).format(new Date(checkedAt));
-   const displayFunds=fundsAvailable?moneyMinor(funds,currencyCode):'Não disponível';
-   const status=pending?'Consultando dados da conta…':!ads?'Sem permissão':!connected?'Conta não autorizada':
-    fundsAvailable?(browserObserved?'Saldo observado no faturamento Meta':'Saldo pré-pago confirmado'):
-    provider==='meta_ads'&&billingSession==='disconnected'?'Faturamento ainda não conectado':
-    provider==='meta_ads'&&billingSession==='connected'?'Aguardando leitura do faturamento':
-    prepay?'Saldo pré-pago não retornado':
-    billing?.finance?.isPrepaid===false?'Cobrança automática / faturamento':'Tipo de cobrança não identificado';
-   const limitText=capAvailable?'Limite de gastos restante: '+moneyMinor(cap,currencyCode):'';
-   const paymentUrl=billing?.paymentsUrl||null;
-   if(provider==='meta_ads'){
-    // Meta's spendCapRemainingMinor is the remaining ACCOUNT SPENDING LIMIT.
-    // It is not necessarily a verified prepaid wallet balance.
-    const availableLimit=capAvailable?moneyMinor(cap,currencyCode):'Não disponível';
-    const todaySpend=connected&&Number.isFinite(Number(spent))&&Number(spent)>=0?
-     money(spent,currency):'Não disponível';
-    return '<article class="px-budget-account px-budget-meta-ribbon" data-budget-provider="meta_ads">'+
-     '<div class="px-budget-meta-summary">'+
-      '<div class="px-budget-meta-brand"><span class="px-brand-dot meta"></span><strong>Meta Ads</strong></div>'+
-      '<div class="px-budget-meta-metric" title="Limite de gastos restante na conta de anúncios. Não representa saldo pré-pago.">'+
-       '<span>Limite disponível</span><strong>'+esc(availableLimit)+'</strong></div>'+
-      '<div class="px-budget-meta-metric"><span>Gasto hoje</span><strong>'+esc(todaySpend)+'</strong></div>'+
-     '</div>'+
-     '<div class="px-budget-meta-action">'+
-      (paymentUrl?'<a class="px-budget-recharge-cta" href="'+esc(paymentUrl)+'" target="_blank" rel="noopener noreferrer" title="Abrir o faturamento oficial da Meta em uma nova aba">Abrir recarga na Meta <span aria-hidden="true">↗</span></a>':
-      '<button class="px-budget-recharge-cta" type="button" disabled title="Link oficial de recarga indisponível nesta conta">Abrir recarga na Meta <span aria-hidden="true">↗</span></button>')+
-     '</div></article>';
-   }
-   return '<article class="px-budget-account" data-budget-provider="'+provider+'">'+
-    '<div class="px-budget-account-main"><div class="px-budget-brand"><span class="px-brand-dot '+brand+'"></span>'+
-      '<strong>'+label+'</strong><small>'+esc(status)+'</small></div>'+
-      '<div class="px-budget-stats">'+
-       '<div class="px-budget-stat px-budget-balance"><span>Saldo disponível</span><strong>'+esc(displayFunds)+'</strong></div>'+
-       '<div class="px-budget-stat"><span>Gasto hoje</span><strong>'+spending+'</strong></div>'+
-       '<div class="px-budget-stat"><span>Duração estimada</span><strong>'+((Number.isFinite(balanceAlert?.daysLeft)&&balanceAlert?.state!=='unknown')?esc(balanceAlert.daysLeft)+' dias':'—')+'</strong></div>'+
-      '</div></div>'+
-    (limitText?'<small class="px-budget-limit">'+esc(limitText)+'</small>':'')+
-    (billingExplanation?'<small class="px-budget-limit">'+esc(billingExplanation)+'</small>':'')+
-    (checkedLabel?'<small class="px-budget-limit">'+esc(checkedLabel)+'</small>':'')+
-    (balanceAlert&&['low','critical'].includes(balanceAlert.state)?'<p class="px-budget-warning" role="status">'+esc(balanceAlert.reason)+'</p>':'')+
-    (provider==='meta_ads'&&paymentUrl?'<div class="px-budget-recharge-footer"><span class="px-budget-recharge-caption">Recargas e pagamentos pela plataforma oficial</span><a class="px-budget-recharge-cta" href="'+esc(paymentUrl)+'" target="_blank" rel="noopener noreferrer" title="Abrir a recarga oficial da Meta em uma nova aba">Abrir recarga na Meta <span aria-hidden="true">↗</span></a></div>':'')+
-    (provider!=='meta_ads'?'<div class="px-budget-meter" role="img" aria-label="Percentual restante não verificado"></div>':'')+
-    '</article>';
+  const trafficRail='<div class="et-stack">'+
+    (traffic?.ok?
+     (pendingItems.length?pendingItems.map(recCard).join(''):
+      '<p class="ov-rail-empty">Nada para decidir agora. O Sócio revisa as campanhas a cada 6 horas.</p>'):
+     '<p class="ov-rail-empty">'+esc(traffic?.reason||'Recomendações indisponíveis agora.')+'</p>')+
+   '</div>';
+  // Every revenue number comes from a sale the owner confirmed himself —
+  // nothing is projected or inferred from conversations.
+  const brl=cents=>money(Number(cents||0)/100,'BRL');
+  const dayLabel=value=>value?value.slice(8,10)+'/'+value.slice(5,7):'';
+  const compactMoney=cents=>{
+   const value=Number(cents||0)/100;
+   if(value>=1e6)return 'R$ '+(value/1e6).toFixed(1).replace('.',',')+' mi';
+   if(value>=1e3)return 'R$ '+(value>=1e4?Math.round(value/1e3):(value/1e3).toFixed(1).replace('.',','))+' mil';
+   return 'R$ '+Math.round(value);
   };
-
-  const budgetTopHtml=(state={})=>{
-   const pending=state.pending??(progressive&&ads);
-   const ready=state.metaReady??metaReady,currency=state.currency??meta?.currency,spent=state.spent??meta?.spend;
-   const fin=state.finance??finance;
-   const billing=state.billing||(metaBillingUrl?
-    {finance:fin,paymentsUrl:metaBillingUrl,alert:metaBilling.data?.balanceAlert}:
-    {finance:fin,alert:metaBilling.data?.balanceAlert});
-   return '<section class="px-budget-top" aria-label="Verba disponível nas contas publicitárias">'+
-    '<div class="px-budget-top-heading"><strong>Controle de verba</strong></div>'+
-    '<div class="px-budget-top-grid">'+
-     budgetHeaderItem('meta_ads','Meta Ads','meta',ready,spent,currency,billing,pending)+
-     (googleAdsVisible()?budgetHeaderItem('google_ads','Google Ads','google',
-      state.googleReady??googleReady,state.googleMicros??googleMicros,state.googleCode??googleCode,
-      state.googlePending??pending):'')+
-    '</div></section>';
+  // One control decides the window for the whole board, so the owner reads a
+  // single period instead of guessing which filter each panel is obeying.
+  const presetNames={today:'Hoje','7d':'Últimos 7 dias',month:'Mês atual',custom:'Personalizado'};
+  const periodWindow=periodData?.period||null;
+  const periodName=periodWindow?
+   (activePreset==='custom'?dayLabel(periodWindow.from)+' a '+dayLabel(periodWindow.to):
+    presetNames[activePreset]):presetNames[activePreset];
+  const previousName=periodWindow?
+   dayLabel(periodWindow.previousFrom)+' a '+dayLabel(periodWindow.previousTo):'';
+  const deltaPill=(current,previous)=>{
+   if(current==null||previous==null)return '';
+   const title=' title="Versus '+esc(previousName||'o período anterior')+'"';
+   if(previous===0)return current===0?
+    '<span class="ov-rev-pill flat"'+title+'>0%</span>':
+    '<span class="ov-rev-pill up"'+title+'>novo</span>';
+   const change=Math.round((current-previous)/previous*100);
+   return '<span class="ov-rev-pill '+(change>0?'up':change<0?'down':'flat')+'"'+title+'>'+
+    (change>0?'▲':change<0?'▼':'—')+' '+number(Math.abs(change))+'%</span>';
   };
-  root.innerHTML='<div class="px-workspace px-overview">'+
-   budgetTopHtml()+
-   '<div class="ov-board">'+
-    '<div class="ov-kpi-stack">'+
-     kpi('Conversas em aberto',number(d.openConversations),'Atendimento da empresa','inbox')+
-     kpi('WhatsApps conectados',number(realWa),'Sessões vinculadas','whatsapp','green')+
-     kpi('Mensagens hoje',number(d.messagesReceivedToday),'Recebidas · horário de Brasília','messages','blue')+
-     kpi('Campanhas ativas',metaReady?number(meta.activeCampaigns):'—','Situação atual da Meta','campaigns','indigo')+
-    '</div>'+
-    trafficRail+
+  const monthShort=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const draft=periodDraft?.open?periodDraft:null;
+  const formOpen=preset==='custom'||!!draft;
+  const fromValue=draft?draft.from:isDay(periodFrom)?periodFrom:(isDay(periodWindow?.from)?periodWindow.from:'');
+  const toValue=draft?draft.to:isDay(periodTo)?periodTo:(isDay(periodWindow?.to)?periodWindow.to:'');
+  const todayStamp=(()=>{
+   try{return new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'});}
+   catch{return '';}
+  })();
+  const heroCents=periodSales?Number(periodSales.revenueCents)||0:null;
+  const heroSales=periodSales?Number(periodSales.confirmed)||0:null;
+  const heroDelta=periodSales?deltaPill(heroCents,Number(periodSales.previousRevenueCents)||0):'';
+  // The hero's four choices are the dashboard's single window; leads and money
+  // below answer the same one.
+  const periodSeg=on=>'<div class="et-pills" role="group" aria-label="Período do faturamento">'+
+   [['today','Hoje'],['7d','Últimos 7 dias'],['month','Esse mês']].map(([value,label])=>
+    '<button type="button" class="et-pill'+(activePreset===value?' on':'')+'"'+
+    ' data-period-preset="'+value+'" aria-pressed="'+(activePreset===value)+'">'+label+'</button>').join('')+
+   '<button type="button" class="et-pill'+(activePreset==='custom'?' on':'')+'" data-period-custom aria-expanded="'+on+'">'+
+   'Personalizado</button></div>';
+  const heroAmount=heroCents==null?'—':new Intl.NumberFormat('pt-BR',
+   {minimumFractionDigits:2,maximumFractionDigits:2}).format(heroCents/100);
+  const hero='<section class="et-hero" aria-label="Faturamento total">'+
+   '<span class="et-hero-mark" aria-hidden="true">R$</span>'+
+   '<div class="et-hero-head"><span class="et-hero-label">Faturamento total</span></div>'+
+   '<div class="et-hero-value"><strong><sup>R$</sup>'+heroAmount+'</strong>'+
+    '<span class="et-hero-sales">'+(heroSales==null?'—':number(heroSales))+
+     ' venda'+(heroSales===1?'':'s')+'</span>'+(heroDelta||'')+'</div>'+
+   '<p class="et-hero-note">'+esc(periodSales?'Somente vendas confirmadas por você · '+periodName:
+     'Somente vendas confirmadas por você')+'</p>'+
+   '<div class="et-hero-foot">'+periodSeg(formOpen)+
+    '<button type="button" class="et-hero-refresh" data-px-refresh aria-label="Atualizar painel" title="Atualizar painel">'+
+    '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/></svg></button></div>'+
+   '<div class="period-fields" '+(formOpen?'':'hidden ')+'data-period-fields>'+
+    '<label>De<input type="date" data-period-from value="'+esc(fromValue)+'"'+(todayStamp?' max="'+todayStamp+'"':'')+'></label>'+
+    '<label>Até<input type="date" data-period-to value="'+esc(toValue)+'"'+(todayStamp?' max="'+todayStamp+'"':'')+'></label>'+
+    '<button type="button" class="btn sm soft" data-period-apply>Aplicar</button>'+
+    '<span class="period-hint'+(draft?.error?' is-error':'')+'" data-period-hint role="status">'+
+     (draft?.error?esc(draft.error):'')+'</span></div></section>';
+  // Leads are conversations the ads brought in, over the same window as revenue.
+  const incomeCard='<section class="et-kpi et-income" aria-label="Leads no WhatsApp">'+
+   '<div class="et-kpi-head"><span class="et-kpi-label">Leads no WhatsApp</span></div>'+
+   '<div class="et-kpi-metric"><strong class="et-kpi-value">'+
+    (periodConversations?number(periodConversations.started):'—')+'</strong>'+
+    (periodConversations?deltaPill(periodConversations.started,periodConversations.previousStarted):'')+'</div>'+
+   '<p class="et-kpi-sub">'+(periodConversations?'no período selecionado':'indisponível agora')+'</p>'+
+   '<p class="et-kpi-note">'+(periodConversations?
+     '<b>'+number(periodConversations.open)+'</b> conversa(s) em aberto agora':
+     'Aguardando o período')+'</p></section>';
+  // The expense slot belongs to the campaign that is performing best, because
+  // that is the one the owner can act on today.
+  const campaignCard='<section class="et-kpi et-kpi-campaign" aria-label="Campanha em destaque">'+
+   '<div class="et-kpi-head"><span class="et-kpi-label">Campanha em destaque</span>'+
+    '<button type="button" class="et-kpi-link" data-px-marketing>Ver</button></div>'+
+   (bestCampaign?'<div class="et-campaign-body">'+
+     '<span class="et-campaign-thumb" data-campaign-preview>'+
+      posterView(featuredThumb,'Criativo da campanha '+String(bestCampaign.campaign_name||bestCampaign.name||''))+'</span>'+
+     '<span class="et-campaign-copy"><strong>'+
+      esc(bestCampaign.campaign_name||bestCampaign.name||bestCampaignId)+'</strong>'+
+      '<small>'+(featuredIsRanked?number(bestCampaign.clicks)+' cliques · '+esc(periodName):'Ativa · sem métricas no período')+'</small>'+
+      '<b>'+(featuredIsRanked?money(bestCampaign.spend,meta?.currency):'—')+'<i>gastos no período</i></b></span></div>':
+    '<p class="et-muted">Nenhuma campanha encontrada na conta Meta.</p>')+'</section>';
+  const flowMonths=Array.isArray(rev?.months)?rev.months:[];
+  const flowPeak=Math.max(1,...flowMonths.map(m=>Number(m.revenueCents)||0));
+  const flowW=360,flowTop=30,flowBase=170,slot=flowW/(flowMonths.length||6),barW=46;
+  const flowPrevious=index=>Number(flowMonths[index-1]?.revenueCents)||0;
+  const flowBars=flowMonths.map((month,index)=>{
+    const cents=Number(month.revenueCents)||0;
+    const height=cents>0?Math.max(8,Math.round(cents/flowPeak*(flowBase-flowTop))):3;
+    const x=Math.round(index*slot+(slot-barW)/2);
+    const y=flowBase-height;
+    const last=index===flowMonths.length-1;
+    const label=monthShort[Number(String(month.month).slice(5,7))-1]||String(month.month||'');
+    const pillW=Math.max(46,Math.round(compactMoney(cents).length*6.4));
+    const pillX=Math.round(x+barW/2-pillW/2);
+    const pillY=Math.max(2,y-(last?30:24));
+    const previous=flowPrevious(index);
+    const change=previous>0?Math.round((cents-previous)/previous*100):null;
+    return '<g>'+
+     (cents>0?'<rect class="et-chart-pill'+(last?' is-now':'')+'" x="'+pillX+'" y="'+pillY+
+      '" width="'+pillW+'" height="19" rx="9.5"/>'+
+      '<text class="et-chart-value'+(last?' is-now':'')+'" x="'+(x+barW/2)+'" y="'+(pillY+13)+
+      '" text-anchor="middle">'+(last?'+':'')+esc(compactMoney(cents))+'</text>':'')+
+     '<rect x="'+x+'" y="'+y+'" width="'+barW+'" height="'+height+'" rx="12'+
+     '" fill="url(#'+(last?'etFlowNow':'etFlowPast')+')"><title>'+
+     esc(label+' · '+(cents?brl(cents):'sem vendas confirmadas')+
+      (change!=null?' · '+(change>0?'+':'')+change+'% no mês anterior':''))+'</title></rect>'+
+     '<text class="et-chart-axis" x="'+(x+barW/2)+'" y="'+(flowBase+26)+
+      '" text-anchor="middle">'+esc(label)+'</text></g>';
+  }).join('');
+  const flowCard='<section class="et-card et-flow" aria-label="Fluxo de faturamento">'+
+   '<div class="et-card-head"><div><h2 class="et-card-title">Fluxo de faturamento</h2>'+
+    '<p class="et-card-sub">Mês atual e os últimos cinco meses</p></div></div>'+
+   (flowMonths.length?'<div class="et-chart"><svg viewBox="0 0 360 208" role="img" aria-label="Faturamento dos últimos seis meses">'+
+    '<defs><linearGradient id="etFlowPast" x1="0" y1="0" x2="0" y2="1">'+
+     '<stop offset="0" stop-color="#a494b8"/><stop offset="1" stop-color="#736184"/></linearGradient>'+
+    '<linearGradient id="etFlowNow" x1="0" y1="0" x2="0" y2="1">'+
+     '<stop offset="0" stop-color="#e1b5f6"/><stop offset="1" stop-color="#a28bc2"/></linearGradient></defs>'+
+    '<line class="et-baseline" x1="0" y1="'+flowBase+'" x2="360" y2="'+flowBase+'"/>'+
+    flowBars+'</svg></div>':
+    '<div class="et-chart-empty">Nenhuma venda confirmada ainda. O gráfico aparece quando você confirmar o primeiro comprovante.</div>')+'</section>';
+  const splitSorted=splitRows.slice().sort((a,b)=>(Number(b.spend)||0)-(Number(a.spend)||0));
+  const splitTop=splitSorted.slice(0,5);
+  const splitRingTotal=splitTop.reduce((sum,row)=>sum+(Number(row.spend)||0),0)||splitSpendValue;
+  const splitPalette=['#f5dc69','#f39bb6','#ad94e1','#9cd7ad','#f5b394'];
+  let splitCursor=0;
+  const splitArcs=splitTop.length&&splitRingTotal>0?splitTop.map((row,index)=>{
+    const share=(Number(row.spend)||0)/splitRingTotal*100;
+    const length=Math.max(share-0.9,0.4);
+    const arc='<circle cx="100" cy="100" r="76" fill="none" stroke="'+splitPalette[index%5]+
+     '" stroke-width="22" pathLength="100" stroke-dasharray="'+length.toFixed(2)+' 100"'+
+     ' stroke-dashoffset="'+(-splitCursor).toFixed(2)+'" stroke-linecap="round"><title>'+
+     esc(String(row.name||row.campaign_name||row.campaignName||'Campanha')+' · '+
+      money(Number(row.spend)||0,meta?.currency))+'</title></circle>';
+    splitCursor+=share;
+    return arc;
+  }).join(''):'<circle cx="100" cy="100" r="76" fill="none" stroke="#ffffff12" stroke-width="22"/>';
+  const splitCpc=splitClicks>0?money(splitSpendValue/splitClicks,meta?.currency):'—';
+  const splitConversion=splitClicks>0?splitPurchases/splitClicks*100:null;
+  const splitWindowName=splitPeriodSpan&&isDay(splitPeriodSpan.from)&&isDay(splitPeriodSpan.to)?
+   dayLabel(splitPeriodSpan.from)+' a '+dayLabel(splitPeriodSpan.to):presetNames[splitActive];
+  const splitFieldsOpen=splitPreset==='custom';
+  const splitLegend=[
+   ['Cliques',number(splitClicks),'et-c1'],
+   ['Custo por clique',splitCpc,'et-c2'],
+   ['Campanhas ativas',metaReady?number(meta.activeCampaigns):'—','et-c3'],
+   ['Taxa de conversão',splitConversion==null?'—':splitConversion.toFixed(2).replace('.',',')+'%','et-c4']
+  ].map(([label,value,tone])=>'<li><i class="et-swatch '+tone+'"></i><span class="et-legend-label">'+
+   esc(label)+'</span><span class="et-legend-value">'+value+'</span></li>').join('');
+  const splitPicker='<div class="et-seg et-seg-dark" role="group" aria-label="Período do gasto">'+
+   [['today','Hoje'],['7d','7 dias'],['month','Esse mês']].map(([value,label])=>
+    '<button type="button" data-split-preset="'+value+'" aria-pressed="'+(splitActive===value)+'"'+
+    ' class="'+(splitActive===value?'on':'')+'">'+label+'</button>').join('')+
+   '<button type="button" data-split-custom aria-expanded="'+splitFieldsOpen+'"'+
+   ' class="'+(splitActive==='custom'?'on':'')+'">Personalizado</button></div>';
+  const splitCard='<section class="et-card et-expense-split" aria-label="Métricas de anúncios">'+
+   '<div class="et-card-head"><div><h2 class="et-card-title">Métricas de anúncios</h2>'+
+    '<p class="et-card-sub">Meta Ads · investimento por campanha</p></div>'+splitPicker+'</div>'+
+   '<div class="et-split-fields" '+(splitFieldsOpen?'':'hidden ')+'data-split-fields>'+
+    '<label>De<input type="date" data-split-from value="'+esc(isDay(splitFrom)?splitFrom:fromValue)+'"'+
+     (todayStamp?' max="'+todayStamp+'"':'')+'></label>'+
+    '<label>Até<input type="date" data-split-to value="'+esc(isDay(splitTo)?splitTo:toValue)+'"'+
+     (todayStamp?' max="'+todayStamp+'"':'')+'></label>'+
+    '<button type="button" class="btn sm soft" data-split-apply>Aplicar</button>'+
+    '<span class="period-hint" data-split-hint role="status"></span></div>'+
+   '<div class="et-split">'+
+    '<div class="et-donut"><svg viewBox="0 0 200 200" role="img" aria-label="Investimento por campanha">'+
+     '<g transform="rotate(-90 100 100)">'+splitArcs+'</g>'+
+     '<text class="et-donut-label" x="100" y="88" text-anchor="middle">Total</text>'+
+     '<text class="et-donut-center" x="100" y="111" text-anchor="middle">'+
+      esc(splitSpendValue>0?money(splitSpendValue,meta?.currency):'—')+'</text>'+
+     '<text class="et-donut-center-sub" x="100" y="130" text-anchor="middle">'+
+      esc(splitSpendValue>0?splitWindowName.toUpperCase():'SEM INVESTIMENTO')+'</text></svg></div>'+
+    '<ul class="et-legend">'+splitLegend+'</ul></div>'+
+   (splitSpend?.ok?'':'<p class="et-muted">A Meta não respondeu agora. O valor volta na próxima leitura.</p>')+
+   '</section>';
+  const conversationsCard='<section class="et-block et-subs" aria-label="Conversas no WhatsApp">'+
+   '<div class="et-block-head"><h2>Conversas no WhatsApp</h2>'+
+    (conversations.length?'<span class="et-block-count">'+number(conversations.length)+'</span>':'')+
+    '<button type="button" class="et-block-link" data-px-inbox>Ver todas <span aria-hidden="true">›</span></button></div>'+
+   // A fileira de avatares é a marca da referência: pessoas reais desta empresa.
+   (conversations.length?'<div class="et-subs-icons">'+conversations.slice(0,5).map(item=>{
+     const name=String(item.customer_name||item.customer_phone||'Cliente');
+     return '<span class="et-subs-icon" title="'+esc(name)+'" aria-hidden="true">'+
+      esc(name.charAt(0).toUpperCase()||'C')+'</span>';
+    }).join('')+'</div>':'')+
+   (conversations.length?'<div class="et-subs-list">'+conversations.slice(0,4).map(item=>{
+     const name=String(item.customer_name||item.customer_phone||'Cliente');
+     const raw=item.last_message;
+     const preview=typeof raw==='string'?raw:(raw&&typeof raw==='object'?
+      String(raw.body||raw.text||raw.preview||''):'');
+     return '<div class="et-sub-row"><span class="et-sub-avatar">'+
+      esc(name.charAt(0).toUpperCase()||'C')+'</span>'+
+      '<div class="et-sub-copy"><strong>'+esc(name)+'</strong><small>'+
+      esc(preview.slice(0,64)||'Sem mensagens ainda')+'</small></div>'+
+      (item.handling_mode==='ai_assist'?'<span class="et-tag active">IA</span>':'')+
+      '<button type="button" class="et-open" data-open-conversation="'+esc(item.id)+'">Abrir</button></div>';
+    }).join('')+'</div>':'<div class="et-stack-empty">Nenhuma conversa ainda. Conecte um WhatsApp para começar.</div>')+'</section>';
+  const recsBlock='<section class="et-block et-recs" aria-label="Recomendações">'+
+   '<div class="et-block-head"><h2>Recomendações</h2>'+
+    (trafficPending?'<span class="et-block-count">'+number(trafficPending)+'</span>':'')+
+    '<button type="button" class="et-block-link" data-px-traffic-review>Analisar</button></div>'+
+   trafficRail+
+   '<span class="ov-rail-feedback et-block-feedback" data-px-traffic-feedback role="status" aria-live="polite"></span></section>';
+  root.innerHTML='<div class="px-workspace px-overview et-board">'+
+   '<h1 class="et-title">Visão geral</h1>'+
+   '<div class="et-board-grid">'+
+    hero+
+    incomeCard+
+    campaignCard+
+    recsBlock+
+    flowCard+
+    splitCard+
+    conversationsCard+
    '</div>'+
    '<p class="px-live-indicator"><span class="px-live-dot"></span>'+(progressive?'Indicadores da empresa disponíveis · consultando anúncios em segundo plano':'Atualização automática a cada 60 segundos · indicadores retornados pelos provedores')+'</p>'+
-   '<section class="px-ad-performance" aria-label="Desempenho da Meta Ads">'+
-    '<div class="px-section-heading"><div><h2>Publicidade</h2><p>Indicadores dos anúncios da Meta, quando disponíveis</p></div></div>'+
-   '<div class="px-ads-strip">'+
-    '<article class="px-ads-metric"><div><span class="px-brand-dot meta"></span><strong>Cliques</strong><small>Meta Ads · hoje</small></div><b>'+
-     (metaReady?number(meta.clicks):progressive?'Consultando…':'Não disponível')+'</b>'+
-     '<small>'+(metaReady?'Cliques confirmados pela conta autorizada':'Aguardando acesso à conta da Meta')+'</small></article>'+
-       (googleAdsVisible()?
-   '<article class="px-ads-metric"><div><span class="px-brand-dot google"></span><strong>Google Ads</strong><small>Gasto hoje</small></div><b>'+(googleReady?money(googleMicros,googleCode):'Não disponível')+'</b>'+
-     '<small>'+(googleReady?'Moeda da conta: '+(googleCode||'não identificada'):'Requer OAuth, conta selecionada e API autorizada')+'</small></article>'
-   :'')+
-   '<article class="px-ads-metric"><div><span class="px-brand-dot purple"></span><strong>Custo por clique</strong><small>Meta Ads · hoje</small></div><b>'+
-     (metaReady&&meta.clicks?money(meta.spend/meta.clicks,meta.currency):progressive?'Consultando…':'Não disponível')+'</b>'+
-     '<small>'+(metaReady&&meta.clicks?'Valor calculado a partir de gasto e cliques confirmados':'Sem CPC verificável neste período')+'</small></article>'+
-   '</div></section>'+
-   '<div class="px-dual">'+
-    section('Atividade de conversas','Mensagens recebidas e enviadas, conforme o período selecionado',
-     '<div class="px-graph-counts"><div><span>Recebidas</span><strong>'+number(received)+'</strong></div><div><span>Enviadas</span><strong>'+number(sent)+'</strong></div><div><span>Volume total</span><strong>'+number(received+sent)+'</strong></div></div>'+
-     '<div class="px-chart-wrap">'+chart(daily)+'</div>'+
-     '<div class="px-legend"><span><i class="px-dot purple"></i> Recebidas</span><span><i class="px-dot green"></i> Enviadas</span></div>',
-     '<div class="px-chart-actions" role="group" aria-label="Período do gráfico">'+
-       [['7d','7 dias'],['1m','30 dias'],['90d','90 dias']].map(([value,label])=>
-        '<button type="button" class="px-range-btn '+(range===value?'active':'')+'" data-px-chart-range="'+value+'" aria-pressed="'+(range===value)+'">'+label+'</button>').join('')+
-       '</div>')+
-    section('Campanha em destaque','Destaque com métricas de hoje e miniatura do anúncio associado',
-     bestCampaign?'<div class="px-featured-item">'+
-      '<div class="px-feature-media" data-campaign-preview>'+posterView(featuredThumb,'Criativo da campanha '+String(bestCampaign.campaign_name||bestCampaign.name||''))+'</div>'+
-      '<div class="px-feature-details"><span class="px-feature-label">'+(featuredIsRanked?'Campanha com mais cliques hoje':'Campanha ativa · sem cliques confirmados hoje')+'</span>'+
-      '<strong>'+esc(bestCampaign.campaign_name||bestCampaign.name||bestCampaignId)+'</strong>'+
-      '<div class="px-feature-stats"><span>Cliques <b>'+(featuredIsRanked?number(bestCampaign.clicks):'—')+'</b></span>'+
-      '<span>Gasto <b>'+(featuredIsRanked?money(bestCampaign.spend,meta?.currency):'—')+'</b></span></div></div></div>':
-     empty('Nenhuma campanha encontrada na conta Meta selecionada.'),
-     '<button class="btn sm soft" data-px-marketing type="button">Ver Meta Ads</button>')+
-   '</div>'+
-   section('Seus WhatsApps','Números conectados disponíveis para o atendimento',
-    connectedWa.length?'<div class="px-wa-overview-list">'+connectedWa.slice(0,8).map(w=>
-     '<div><span class="px-live-dot on"></span><div><strong>'+esc(w.label||'WhatsApp')+'</strong><small>'+esc(w.phone||'Número vinculado')+'</small></div><span class="px-status on">Conectado</span></div>').join('')+
-     (connectedWa.length>8?'<small>Mais '+number(connectedWa.length-8)+' número(s).</small>':'')+'</div>':
-     empty('Nenhum WhatsApp conectado no momento.'),
-     '<button type="button" class="btn sm soft" data-px-connections>+ Conectar WhatsApp</button>')+
    '<p class="px-provenance">Indicadores consolidados por empresa. Métricas publicitárias dependem das permissões das contas autorizadas; conversões atribuídas por anúncios não são comprovantes de pagamento. Nenhum número indisponível é substituído por uma estimativa.</p>'+
   '</div>';
   snapshots.set('overview',root.innerHTML);
-  // The wallet panel needs only the account status, today's totals and the
-  // finance read. Paint it as soon as those land instead of waiting for the
-  // campaign, adset and ad listings the rest of the page needs.
-  if(progressive&&ads){
-   Promise.all([
-    cached(api,'/api/marketing/official/status',25000),
-    cached(api,'/api/marketing/tools/insights?period=today',16000),
-    calls[6]
-   ]).then(([status,insights,financeResult])=>{
-    if(renderId!==renderSerial||!root.isConnected||!root.querySelector('.px-overview'))return;
-    const section=root.querySelector('.px-budget-top');
-    if(!section)return;
-    const items=Array.isArray(insights?.data?.items)?insights.data.items:[];
-    const spend=items.reduce((sum,x)=>sum+(Number(x.spend)||0),0);
-    const fin=financeResult?.ok?financeResult.data?.finance:null;
-    const url=(()=>{try{const u=new URL(financeResult?.data?.paymentsUrl);return u.protocol==='https:'&&u.hostname==='adsmanager.facebook.com'?u.href:null;}catch{return null;}})();
-    section.outerHTML=budgetTopHtml({pending:false,metaReady:insights?.ok===true,
-     spent:spend,currency:selectedCurrency(status?.data),finance:fin,
-     billing:url?{finance:fin,paymentsUrl:url,alert:financeResult?.data?.balanceAlert}:
-      {finance:fin,alert:financeResult?.data?.balanceAlert},googlePending:true});
-   }).catch(()=>{});
-  }
   if(featuredAd){
    const placeholder=root.querySelector('[data-campaign-preview]');
    cached(api,'/api/marketing/tools/ad-media?adId='+encodeURIComponent(featuredAd.id),25000).then(result=>{
@@ -640,8 +713,47 @@
    }).catch(()=>{});
   }
 
-  root.querySelectorAll('[data-px-chart-range]').forEach(button=>button.addEventListener('click',()=>
-   overview({root,api,me,navigate,activityRange:button.dataset.pxChartRange})));
+  // One period control owns every number on the board. A preset repaints at
+  // once with the own-database reads and lets Meta arrive in the second paint;
+  // a custom range only goes out when both dates are real and in order.
+  const rerender=next=>overview({root,api,me,navigate,...next,progressive:true});
+  root.querySelectorAll('[data-period-preset]').forEach(button=>button.addEventListener('click',()=>{
+   const value=button.dataset.periodPreset;
+   if(value===activePreset)return;
+   periodDraft=null;
+   rerender({periodPreset:value,periodFrom:null,periodTo:null});
+  }));
+  const periodFields=root.querySelector('[data-period-fields]');
+  const periodHint=root.querySelector('[data-period-hint]');
+  const readDraft=()=>({open:true,
+   from:String(periodFields?.querySelector('[data-period-from]')?.value||''),
+   to:String(periodFields?.querySelector('[data-period-to]')?.value||'')});
+  root.querySelector('[data-period-custom]')?.addEventListener('click',()=>{
+   if(!periodFields)return;
+   periodFields.hidden=!periodFields.hidden;
+   periodDraft=periodFields.hidden?null:readDraft();
+   root.querySelector('[data-period-custom]')?.setAttribute('aria-expanded',String(!periodFields.hidden));
+   if(!periodFields.hidden)periodFields.querySelector('[data-period-from]')?.focus();
+  });
+  ['[data-period-from]','[data-period-to]'].forEach(selector=>{
+   periodFields?.querySelector(selector)?.addEventListener('input',()=>{
+    if(periodDraft)periodDraft={...readDraft(),error:''};
+   });
+  });
+  root.querySelector('[data-period-apply]')?.addEventListener('click',()=>{
+   const from=String(periodFields?.querySelector('[data-period-from]')?.value||'');
+   const to=String(periodFields?.querySelector('[data-period-to]')?.value||'');
+   const fail=text=>{
+    periodDraft={...readDraft(),error:text};
+    if(!periodHint)return;
+    periodHint.textContent=text;
+    periodHint.classList.add('is-error');
+   };
+   if(!isDay(from)||!isDay(to))return fail('Escolha a data inicial e a final.');
+   if(from>to)return fail('A data inicial precisa vir antes da data final.');
+   periodDraft=null;
+   rerender({periodPreset:'custom',periodFrom:from,periodTo:to});
+  });
   const trafficFeedback=root.querySelector('[data-px-traffic-feedback]');
   root.querySelector('[data-px-traffic-review]')?.addEventListener('click',async()=>{
    if(!trafficFeedback)return;
@@ -670,10 +782,14 @@
     buttons.forEach(button=>{button.disabled=true;});
     try{
      const result=await api('/api/marketing/traffic/decision','POST',{id:card.dataset.recId,...payload});
-     card.classList.remove('is-pending','is-muted');card.classList.add('is-done');
+     card.classList.remove('is-pending','is-muted');card.classList.add('is-done','is-out');
      say(result?.dismissed?'Tudo bem. Não mexi na campanha.':'Feito. Mudança aplicada.');
      getCache.clear();
-     setTimeout(()=>{overview({root,api,me,navigate,activityRange:range});},1400);
+     // Let the answered card slide out before the next one moves forward.
+     setTimeout(()=>{
+      if(renderId!==renderSerial||!root.isConnected||!root.querySelector('.px-overview'))return;
+      void overview({root,api,me,navigate,...keepPeriod});
+     },900);
     }catch(error){
      buttons.forEach(button=>{button.disabled=false;});
      say('Não consegui aplicar: '+String(error?.message||'tente novamente.'),true);
@@ -694,63 +810,63 @@
    });
   });
 
-  // With a previously authorized billing browser, read the Meta wallet on
-  // entry and at most every five minutes. OAuth for ads does not share the
-  // separate billing-browser login, so never imply that an unsaved session
-  // can be reused from an external facebook.com tab.
-  if(ads&&metaReady&&can(me,'marketing.manage')&&!document.hidden){
-   const scope=selectedTenant+':'+String(metaBilling?.data?.account?.id||'');
-   const lastAttempt=billingAutoAttempts.get(scope)||0,now=Date.now();
-   const checked=Date.parse(finance?.checkedAt||'');
-   const recentBrowserValue=finance?.availableFundsSource==='meta_billing_browser'&&
-    Number.isFinite(checked)&&now-checked<5*60000;
-   const verifiedApiValue=finance?.availableFundsSource==='meta_stored_balance'&&
-    Number.isSafeInteger(finance?.availableFundsMinor);
-   if(!recentBrowserValue&&!verifiedApiValue&&now-lastAttempt>=5*60000){
-    billingAutoAttempts.set(scope,now);
-    void (async()=>{
-     const state=await cached(api,'/api/marketing/browser/status',60000);
-     if(state?.ok!==true||state.data?.session_present!==true)return;
-     const result=await api('/api/marketing/billing/refresh','POST',{background:true});
-     if(result?.state!=='observed'||!result.observation||
-        renderId!==renderSerial||scope!==selectedTenant+':'+String(metaBilling?.data?.account?.id||'')||
-        !root.isConnected||!root.querySelector('.px-overview'))return;
-     getCache.delete('/api/marketing/tools/finance');
-     await overview({root,api,me,navigate,activityRange:range});
-    })().catch(()=>{/* The card continues to show unavailable/stale, not a fabricated balance. */});
-   }
-  }
-
   if(progressive&&ads){
    // Never hold up the dashboard for an ad provider. If the visitor switches
    // pages meanwhile, renderSerial stops the stale secondary paint.
    void later.then(()=>{
     if(renderId!==renderSerial||!root.isConnected||!root.querySelector('.px-overview'))return;
-    return overview({root,api,me,navigate,activityRange:range,progressive:false});
+    return overview({root,api,me,navigate,...keepPeriod,progressive:false});
    }).catch(()=>{});
   }else startLiveRefresh(root,'overview',renderId,
-   ()=>overview({root,api,me,navigate,activityRange:range}),
+   ()=>overview({root,api,me,navigate,...keepPeriod}),
+   // Every number on the board answers the chosen window, so a live refresh
+   // repaints the board instead of patching individual elements: a late
+   // provider never writes a figure into a tile it does not own.
    async()=>{
-    const [nextMeta,nextGoogle,nextDashboard]=await Promise.all([
-     ads?loadMeta(api,'today').catch(()=>null):Promise.resolve(null),
-     ads?googleOverview():Promise.resolve(null),
-     optional(api,'/api/dashboard')
-    ]);
-    if(renderId!==renderSerial||!root.querySelector('.px-overview'))return;
-    const cells=root.querySelectorAll('.px-ads-strip .px-ads-metric>b');
-    if(nextMeta?.insights.ok&&cells[0])cells[0].textContent=money(nextMeta.spend,nextMeta.currency);
-    if(nextGoogle?.ok&&cells[1])cells[1].textContent=money(Number(nextGoogle.data?.summary?.costMicros||0)/1e6,nextGoogle.data?.currencyCode);
-    if(nextMeta?.insights.ok&&cells[2])cells[2].textContent=number(nextMeta.clicks)+' cliques';
-    const first=root.querySelectorAll('.px-kpi-grid .px-kpi-number');
-    if(nextDashboard?.ok){
-     if(first[0])first[0].textContent=number(nextDashboard.data?.openConversations);
-     if(first[2])first[2].textContent=number(nextDashboard.data?.messagesReceivedToday);
-    }
-    displayLiveTime(root);
+    getCache.clear();
+    await overview({root,api,me,navigate,...keepPeriod,progressive:false});
    });
+  // The spend card owns its own window, so its control never touches the
+  // headline period. The choice lives in module state and survives a repaint.
+  const splitFields=root.querySelector('[data-split-fields]');
+  const splitHint=root.querySelector('[data-split-hint]');
+  root.querySelectorAll('[data-split-preset]').forEach(button=>button.addEventListener('click',()=>{
+   const value=button.dataset.splitPreset;
+   if(value===splitState.preset)return;
+   splitState.preset=value;splitState.from=null;splitState.to=null;
+   rerender(keepPeriod);
+  }));
+  root.querySelector('[data-split-custom]')?.addEventListener('click',()=>{
+   if(!splitFields)return;
+   splitFields.hidden=!splitFields.hidden;
+   // Opening the date fields changes nothing yet; closing them restores the
+   // last applied window, so no state is written before Aplicar.
+   if(splitFields.hidden){
+    if(splitState.preset==='custom'){splitState.preset='month';splitState.from=null;splitState.to=null;}
+    rerender(keepPeriod);
+   }else splitFields.querySelector('[data-split-from]')?.focus();
+  });
+  root.querySelector('[data-split-apply]')?.addEventListener('click',()=>{
+   const from=String(splitFields?.querySelector('[data-split-from]')?.value||'');
+   const to=String(splitFields?.querySelector('[data-split-to]')?.value||'');
+   const fail=text=>{
+    if(!splitHint)return;
+    splitHint.textContent=text;
+    splitHint.classList.add('is-error');
+   };
+   if(!isDay(from)||!isDay(to))return fail('Escolha a data inicial e a final.');
+   if(from>to)return fail('A data inicial precisa vir antes da data final.');
+   splitState.preset='custom';splitState.from=from;splitState.to=to;
+   rerender(keepPeriod);
+  });
+  // A refresh circle sits next to the period pills, like the reference's "+".
+  root.querySelector('[data-px-refresh]')?.addEventListener('click',()=>{
+   getCache.clear();
+   void overview({root,api,me,navigate,...keepPeriod,progressive:true});
+  });
+  root.querySelectorAll('[data-open-conversation]').forEach(button=>button.addEventListener('click',()=>
+   navigate('inbox',button.dataset.openConversation)));
   root.querySelector('[data-px-inbox]')?.addEventListener('click',()=>navigate('inbox'));
-  root.querySelector('[data-px-products]')?.addEventListener('click',()=>navigate('products'));
-  root.querySelector('[data-px-connections]')?.addEventListener('click',()=>navigate('connections'));
   root.querySelector('[data-px-marketing]')?.addEventListener('click',()=>navigate('marketing'));
  }
  async function marketing({root,api,me,navigate,period='last_7d',campaignId=null,adsetId=null}){

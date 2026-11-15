@@ -1,54 +1,168 @@
 /*
- * Overview board: the company indicators as one quiet column on the left, and
- * Sócio's traffic recommendations on the right at the same height. Pending
- * recommendations breathe slowly; answered ones stay grey and out of the way.
- * Loaded before the canonical Stripe layer, so the rules that Stripe pins with
- * !important are overridden with a more specific selector, never by load order.
+ * Overview board, Power BI style: the Meta Ads budget on top, then the revenue
+ * band, then a 12-column grid where every panel is one question — how much
+ * came in, which campaign paid, what needs a decision, where the money is
+ * going. Charts are hand-built SVG so bar widths and ring arcs are attributes,
+ * never inline styles, which the page's style-src 'self' policy would drop.
+ * Pending recommendations breathe slowly; answered ones stay grey and quiet.
+ * Loaded before the canonical Stripe layer, so anything Stripe pins with
+ * !important needs a more specific selector rather than load order.
  */
-.ov-board{
- display:grid;grid-template-columns:minmax(0,.82fr) minmax(0,1.18fr);
- gap:14px;align-items:stretch;min-width:0;
-}
-
-.ov-kpi-stack{display:flex;flex-direction:column;gap:10px;min-width:0}
-
-body #appShell #view .px-overview .ov-kpi-stack .px-kpi{
- min-height:0!important;padding:13px 16px!important;
- border-radius:12px!important;gap:4px!important;
-}
-body #appShell #view .px-overview .ov-kpi-stack .px-kpi-number{
- font-size:clamp(23px,2.6vw,29px)!important;
-}
-body #appShell #view .px-overview .ov-kpi-stack .px-kpi small{font-size:10.5px!important}
-
-/* ---- recommendation rail ---- */
-.ov-rail{position:relative;min-width:0}
-.ov-rail-inner{
- position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;
+.bi-band{
  background:#fff;border:1px solid var(--line,#e5e7eb);border-radius:12px;
  box-shadow:var(--shadow,0 3px 16px rgba(27,39,60,.035));
+ padding:14px 16px 15px;margin-bottom:14px;min-width:0;
 }
-.ov-rail-head{
- display:flex;align-items:center;justify-content:space-between;gap:10px;
- padding:13px 16px 11px;border-bottom:1px solid #eff1f5;
+.bi-band-head{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.bi-band-title{flex:1 1 auto;min-width:0}
+.bi-band-title h2{margin:0;font-size:15px;letter-spacing:-.025em;color:var(--ink,#202735)}
+.bi-band-title p{margin:2px 0 0;font-size:11.5px;line-height:1.4;color:var(--muted,#667085)}
+
+.bi-kpi-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;min-width:0}
+.bi-band .bi-kpi-row{margin-top:12px}
+.bi-kpi-ops{margin-bottom:14px}
+.bi-kpi{
+ display:flex;flex-direction:column;gap:3px;min-width:0;
+ border:1px solid #eceef2;border-radius:11px;background:#fcfcfd;padding:11px 13px;
 }
-.ov-rail-eyebrow{font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;color:var(--purple,#605dec)}
-.ov-rail-head h2{margin:2px 0 0;font-size:15px;letter-spacing:-.025em;color:var(--ink,#202735)}
+.bi-kpi-label{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:#667085}
+.bi-kpi-value{
+ font-size:clamp(21px,2.4vw,27px);line-height:1.12;letter-spacing:-.035em;
+ color:var(--ink,#202735);font-variant-numeric:tabular-nums;
+}
+.bi-kpi-meta{font-size:11px;line-height:1.35;color:#8a94a6}
+
+.bi-grid{
+ display:grid;grid-template-columns:repeat(12,minmax(0,1fr));
+ gap:14px;align-items:start;margin-bottom:14px;min-width:0;
+}
+.bi-panel{
+ display:flex;flex-direction:column;min-width:0;
+ background:#fff;border:1px solid var(--line,#e5e7eb);border-radius:12px;
+ box-shadow:var(--shadow,0 3px 16px rgba(27,39,60,.035));
+ padding:13px 15px 14px;
+}
+.bi-span-4{grid-column:span 4}
+.bi-span-6{grid-column:span 6}
+.bi-span-8{grid-column:span 8}
+.bi-span-12{grid-column:span 12}
+.bi-panel-head{
+ display:flex;align-items:flex-start;justify-content:space-between;
+ gap:10px;flex-wrap:wrap;margin-bottom:4px;
+}
+.bi-panel-head>div{min-width:0}
+.bi-panel-head h2{margin:0;font-size:13.5px;letter-spacing:-.02em;color:var(--ink,#202735)}
+.bi-panel-head p{margin:2px 0 0;font-size:11px;line-height:1.4;color:#8a94a6}
+.bi-panel-chip{
+ flex:0 0 auto;align-self:flex-start;padding:3px 9px;border-radius:999px;
+ background:#f2f1ff;color:#4f46c9;font-size:10.5px;font-weight:700;white-space:nowrap;
+}
+.bi-empty-note{margin:12px 0 0;font-size:12.5px;line-height:1.5;color:var(--muted,#667085);max-width:64ch}
+
+/* ---- bar chart: one bar per day, the best day in brand purple ---- */
+.bi-chart{margin:6px 0 0;min-width:0}
+.bi-chart svg{display:block;width:100%;height:auto;overflow:visible}
+.bi-gline{stroke:#eff1f5;stroke-width:1}
+.bi-glabel{font-size:8.5px;fill:#98a1b0;font-variant-numeric:tabular-nums}
+.bi-axis-line{stroke:#e5e7eb;stroke-width:1}
+.bi-bar{fill:#c9c5f7;transition:fill .15s ease}
+.bi-bar.is-peak{fill:#605dec}
+.bi-bar:hover{fill:#8b7cf7}
+.bi-chart-foot{display:flex;gap:10px 22px;flex-wrap:wrap;font-size:11px;color:#8a94a6}
+.bi-chart-foot b{
+ display:block;margin-top:1px;font-size:13px;letter-spacing:-.02em;
+ color:var(--ink,#202735);font-variant-numeric:tabular-nums;
+}
+
+/* ---- horizontal ranking bars ---- */
+.bi-bars{display:flex;flex-direction:column;gap:11px;margin-top:10px;min-width:0}
+.bi-bar-row{min-width:0}
+.bi-bar-head{display:flex;align-items:center;gap:7px;min-width:0}
+.bi-bar-head strong{
+ flex:1 1 auto;min-width:0;font-size:12px;font-weight:600;color:#3a4356;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.bi-bar-head b{
+ flex:0 0 auto;font-size:12px;color:var(--ink,#202735);font-variant-numeric:tabular-nums;
+}
+.bi-rank{
+ flex:0 0 auto;width:18px;height:18px;border-radius:6px;display:grid;place-items:center;
+ background:#f2f1ff;color:#5b4fd0;font-size:10px;font-weight:700;
+}
+.bi-brand-dot{flex:0 0 auto;width:7px;height:7px;border-radius:50%}
+.bi-brand-dot.meta{background:#1877f2}
+.bi-brand-dot.google{background:#ea4335}
+.bi-brand-dot.purple{background:#605dec}
+.bi-bar-track{margin-top:5px;height:6px;min-width:0}
+.bi-bar-track svg{display:block;width:100%;height:6px}
+.bi-bar-bg{fill:#f1f2f6}
+.bi-bar-fill.sales{fill:#605dec}
+.bi-bar-fill.meta{fill:#1877f2}
+.bi-bar-row small{display:block;margin-top:4px;font-size:10.5px;color:#98a1b0}
+
+.bi-mini-stats{
+ display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:10px;
+ font-size:11.5px;color:#667085;min-width:0;
+}
+.bi-mini-stats b{color:#3a4356;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* ---- campaign status ring ---- */
+.bi-donut-wrap{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:8px;min-width:0}
+.bi-donut{position:relative;flex:0 0 auto;width:112px;height:112px}
+.bi-donut svg{display:block;width:100%;height:100%}
+.bi-donut-track{fill:none;stroke:#f1f2f6;stroke-width:2.8}
+.bi-donut-value-ring{
+ fill:none;stroke:#605dec;stroke-width:2.8;stroke-linecap:round;
+ transition:stroke-dasharray .4s ease;
+}
+.bi-donut-number{
+ position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+ justify-content:center;gap:1px;pointer-events:none;
+}
+.bi-donut-number strong{
+ font-size:21px;line-height:1;letter-spacing:-.035em;color:var(--ink,#202735);
+ font-variant-numeric:tabular-nums;
+}
+.bi-donut-number small{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:#8a94a6}
+.bi-legend-list{
+ list-style:none;margin:0;padding:0;display:flex;flex-direction:column;
+ gap:7px;min-width:0;flex:1 1 120px;
+}
+.bi-legend-list li{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#667085;min-width:0}
+.bi-legend-list b{margin-left:auto;color:#3a4356;font-weight:600;font-variant-numeric:tabular-nums}
+.bi-dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%}
+.bi-dot.is-active{background:#605dec}
+.bi-dot.is-paused{background:#d5d3f2}
+.bi-dot.is-total{background:#dfe2e8}
+
+/* ---- paid media metric cards ---- */
+.bi-media-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px;min-width:0}
+.bi-media-grid .px-ads-metric{
+ display:flex;flex-direction:column;gap:5px;min-width:0;
+ border:1px solid #eceef2;border-radius:11px;background:#fcfcfd;padding:10px 12px;
+}
+.bi-media-grid .px-ads-metric>div{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.bi-media-grid .px-ads-metric strong{font-size:12px;color:#3a4356}
+.bi-media-grid .px-ads-metric>b{
+ font-size:20px;letter-spacing:-.03em;color:var(--ink,#202735);font-variant-numeric:tabular-nums;
+}
+.bi-media-grid .px-ads-metric small{font-size:10.5px;line-height:1.35;color:#98a1b0}
+
+/* ---- traffic recommendations: cards fill the panel, never a fixed rail ---- */
+.bi-rec{display:flex;flex-direction:column;min-width:0;min-height:0}
+.bi-rec .ov-rec-list{
+ display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+ gap:10px;padding:0;margin-top:4px;max-height:430px;overflow-y:auto;
+}
+.bi-rec .ov-rail-foot{padding:10px 0 0;margin-top:12px;border-top:1px solid #f1f2f6}
+
 .ov-rail-count{
  min-width:24px;height:24px;padding:0 7px;border-radius:999px;
  display:grid;place-items:center;background:var(--purple,#605dec);color:#fff;
  font-size:11.5px;font-weight:700;letter-spacing:0;
 }
-.ov-rec-list{
- flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
- display:flex;flex-direction:column;gap:10px;padding:12px;
- scrollbar-width:thin;
-}
 .ov-rail-empty{margin:6px 2px;font-size:12.5px;line-height:1.5;color:var(--muted,#667085)}
-.ov-rail-foot{
- display:flex;align-items:center;gap:10px;flex-wrap:wrap;
- padding:10px 14px;border-top:1px solid #eff1f5;
-}
+.ov-rail-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .ov-rail-feedback{font-size:11.5px;line-height:1.4;color:var(--muted,#667085);min-width:0}
 
 .ov-rec{
@@ -101,13 +215,104 @@ body #appShell #view .px-overview .ov-kpi-stack .px-kpi small{font-size:10.5px!i
 .ov-rec.is-muted .ov-rec-action{color:#667085}
 .ov-rec.is-done .ov-rec-status{background:#f2f3f6;color:#5d6a7e}
 
-@media(max-width:930px){
- .ov-board{grid-template-columns:1fr}
- .ov-rail{position:static}
- .ov-rail-inner{position:static;max-height:none}
- .ov-rec-list{max-height:440px}
-}
-
 @media(prefers-reduced-motion:reduce){
  .ov-rec.is-pending{animation:none!important;border-color:#d9d5ff}
+}
+
+/* ---- revenue tiles ---- */
+.ov-rev-pending{
+ margin-left:auto;padding:4px 10px;border-radius:999px;background:#fff5e5;color:#8a5a12;
+ font-size:11px;font-weight:600;white-space:nowrap;
+}
+.bi-kpi.ov-rev-tile{padding:11px 13px;gap:0}
+.bi-kpi.ov-rev-tile.has-value{background:#fbfaff;border-color:#e7e4fd}
+.ov-rev-tile-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ov-rev-label{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:#667085}
+.ov-rev-value{
+ display:block;margin-top:5px;font-size:clamp(19px,2.3vw,25px);line-height:1.15;
+ letter-spacing:-.035em;color:var(--ink,#202735);font-variant-numeric:tabular-nums;
+}
+.ov-rev-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:5px;font-size:11.5px;color:#667085}
+.ov-rev-meta b{color:#3a4356;font-weight:600}
+.ov-rev-base{display:block;margin-top:5px;font-size:10.5px;line-height:1.35;color:#8a94a6}
+.ov-rev-pill{
+ flex:0 0 auto;padding:2px 7px;border-radius:999px;font-size:10.5px;font-weight:700;
+ font-variant-numeric:tabular-nums;letter-spacing:0;
+}
+.ov-rev-pill.up{background:#e8f7ef;color:#1a7f52}
+.ov-rev-pill.down{background:#fdecee;color:#ba3c49}
+.ov-rev-pill.flat{background:#f2f3f6;color:#6b7484;font-weight:600}
+.ov-rev-note{margin:10px 0 0;font-size:12px;line-height:1.5;color:#667085}
+.ov-rev-empty{
+ margin-top:11px;padding:12px 13px;border:1px dashed #dcd9f6;border-radius:11px;background:#fbfaff;
+}
+.ov-rev-empty strong{display:block;font-size:13px;color:var(--ink,#202735)}
+.ov-rev-empty p{margin:4px 0 0;font-size:12px;line-height:1.5;color:#667085;max-width:62ch}
+
+/* Below this width a half-panel would shrink the chart until its own axis
+   labels stopped being readable, so the board stacks instead of squeezing. */
+@media(max-width:1180px){
+ .bi-kpi-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .bi-grid{grid-template-columns:1fr}
+ .bi-span-4,.bi-span-6,.bi-span-8,.bi-span-12{grid-column:auto}
+}
+
+@media(max-width:760px){
+ .bi-kpi-row{grid-template-columns:1fr 1fr}
+ .bi-kpi-rev{grid-template-columns:1fr}
+ .bi-panel{padding:12px 13px 13px}
+ .bi-band{padding:13px 14px 14px}
+ .bi-donut{width:104px;height:104px}
+ .bi-media-grid{grid-template-columns:1fr 1fr}
+ .ov-rev-pending{margin-left:0}
+}
+
+/* ---- one period control for the whole board ---- */
+.period-picker{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.period-seg{display:inline-flex;align-items:center;gap:2px;padding:3px;border-radius:999px;background:#f2f3f6}
+.period-btn{
+ appearance:none;border:0;background:transparent;color:#5c6577;cursor:pointer;
+ padding:5px 11px;border-radius:999px;font:inherit;font-size:11.5px;font-weight:600;
+ white-space:nowrap;transition:background .15s ease,color .15s ease;
+}
+.period-btn:hover{color:#3a4356}
+.period-btn.active{background:#fff;color:#3a2fbf;box-shadow:0 1px 3px rgba(32,39,53,.14)}
+.period-custom{
+ appearance:none;border:1px solid #dfe2ea;background:#fff;color:#5c6577;cursor:pointer;
+ padding:6px 12px;border-radius:999px;font:inherit;font-size:11.5px;font-weight:600;
+ white-space:nowrap;transition:border-color .15s ease,color .15s ease;
+}
+.period-custom:hover{border-color:#c9cdd8;color:#3a4356}
+.period-custom[aria-expanded="true"]{border-color:#605dec;color:#3a2fbf;background:#f7f6ff}
+.period-fields{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-top:10px}
+.period-fields[hidden]{display:none}
+.period-fields label{
+ display:flex;flex-direction:column;gap:3px;flex:0 1 142px;min-width:0;
+ font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:#667085;
+}
+.period-fields input{
+ width:100%;padding:5px 8px;border:1px solid #dfe2ea;border-radius:8px;background:#fff;
+ font:inherit;font-size:12.5px;color:var(--ink,#202735);
+}
+.period-hint{font-size:11.5px;line-height:1.4;color:#667085}
+.period-hint.is-error{color:#ba3c49;font-weight:600}
+.period-band .bi-kpi-row+.bi-kpi-row{margin-top:10px}
+.period-foot{
+ display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+ margin-top:12px;padding-top:10px;border-top:1px solid #eef0f4;
+ font-size:11.5px;color:#667085;
+}
+.period-foot b{color:#3a4356;font-weight:700;font-variant-numeric:tabular-nums}
+.period-foot .px-live-dot{margin-right:5px}
+.period-btn:focus-visible,.period-custom:focus-visible,.period-fields input:focus-visible,
+.period-fields .btn:focus-visible{outline:2px solid #605dec;outline-offset:2px}
+
+@media(max-width:760px){
+ .period-picker{width:100%}
+ .period-seg{flex:1 1 100%}
+ .period-btn{flex:1 1 0;text-align:center}
+ .period-custom{flex:0 0 auto}
+ .period-fields label{flex:1 1 128px}
+ .period-band .bi-kpi-rev{grid-template-columns:1fr 1fr}
+ .period-foot{gap:10px 14px}
 }

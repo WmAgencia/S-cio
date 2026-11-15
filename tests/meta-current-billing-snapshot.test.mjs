@@ -51,14 +51,14 @@ test('billing worker visits current page and parses the rendered account snapsho
  assert(!code.includes("new URL('https://adsmanager.facebook.com/billing_hub/payment_settings/')"));
  assert(code.includes("NEVER click Avançar/Pagar"));
 });
-test('overview syncs a saved billing session no more than once per five minutes, and shows stale readings as unavailable',()=>{
+test('overview no longer reads the billing wallet; the server route still verifies it on demand',()=>{
  const ui=readFileSync(new URL('../public/socio-workspace-ui.js',import.meta.url),'utf8');
  const server=readFileSync(new URL('../server.mjs',import.meta.url),'utf8');
- assert(ui.includes("'/api/marketing/browser/status'"));
- assert(ui.includes("state.data?.session_present!==true"));
- assert(ui.includes("'/api/marketing/billing/refresh','POST',{background:true}"));
- assert(ui.includes('now-lastAttempt>=5*60000'));
- assert(ui.includes("getCache.delete('/api/marketing/tools/finance')"));
+ assert.equal(ui.includes("'/api/marketing/browser/status'"),false);
+ assert.equal(ui.includes("'/api/marketing/billing/refresh'"),false);
+ assert.equal(ui.includes("'/api/marketing/tools/finance'"),false);
+ assert.equal(ui.includes('fundsAvailable'),false,'the dashboard renders no wallet value at all');
+ // A stale reading can only be produced where billing is still read: the API.
  assert(server.includes("background:billingRoute[1]==='refresh'&&data.background===true"));
- assert(ui.includes("fundsAvailable?moneyMinor(funds,currencyCode):'Não disponível'"));
+ assert(server.includes("/^\\/api\\/marketing\\/billing\\/(refresh|prepare|pix)$/"));
 });

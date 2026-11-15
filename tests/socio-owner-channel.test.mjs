@@ -366,7 +366,8 @@ async function recommendationRun({command,decisionId,extra}={}){
   if(/SELECT u\.id AS user_id/.test(sql))return {rowCount:1,rows:[{user_id:'u1',role:'owner',
    platform_owner:false,active_tenant_id:tenantId,tenant_status:'active',features:{},tenant_name:'Loja'}]};
   if(/state IN \('preparing','awaiting_confirmation'\)/.test(sql))return {rowCount:0,rows:[]};
-  if(/SELECT id,action FROM socio_traffic_decisions/.test(sql))return {rowCount:1,rows:[{id:decisionId,action:'scale'}]};
+  if(/SELECT id,action,notified_at FROM socio_traffic_decisions/.test(sql))
+   return {rowCount:1,rows:[{id:decisionId,action:'scale',notified_at:new Date(Date.now()-60000)}]};
   if(/UPDATE socio_traffic_decisions SET notified_at=now\(\)/.test(sql))return {rowCount:1,rows:[{id:decisionId}]};
   return {rowCount:1,rows:[]};
  });

@@ -3,7 +3,7 @@
 <head>
  <meta charset="utf-8">
  <meta name="viewport" content="width=device-width, initial-scale=1">
- <meta name="theme-color" content="#f7f8fa">
+ <meta name="theme-color" content="#08080a">
  <meta name="description" content="Sócio — seu atendimento trabalha com você. Uma plataforma Consecom Brasil.">
  <title>Sócio — Sua empresa sempre presente</title>
  <link rel="stylesheet" href="/app.css">
@@ -16,8 +16,10 @@
  <link rel="stylesheet" href="/socio-executive.css">
  <link rel="stylesheet" href="/socio-master.css">
  <link rel="stylesheet" href="/socio-autopilot.css?v=20261116f">
- <link rel="stylesheet" href="/socio-overview.css?v=20261116a">
+ <link rel="stylesheet" href="/socio-overview.css?v=20261122b">
  <link rel="stylesheet" href="/socio-stripe-system.css?v=20261113r">
+ <link rel="stylesheet" href="/socio-ethereal.css?v=20261124e">
+ <link rel="stylesheet" href="/socio-reference.css?v=20261114d">
  <script src="/socio-icons.js?v=20261113a" defer></script>
  <script src="/socio-product-features.js?v=20261112a" defer></script>
  <script src="/meta-browser-ui.js" defer></script>
@@ -37,7 +39,7 @@
  <script src="/socio-interview-ui.js?v=20261113a" defer></script>
  <script src="/meta-billing-ui.js" defer></script>
  <script src="/socio-orb-mesh.js?v=20261113e" defer></script>
- <script src="/socio-workspace-ui.js?v=20261116l" defer></script>
+ <script src="/socio-workspace-ui.js?v=20261124a" defer></script>
  <script src="/socio-thalita-ui.js?v=20261113a" defer></script>
  <script src="/socio-orb-ui.js?v=20261113p" defer></script>
  <script src="/socio-master-dashboard.js" defer></script>
@@ -89,52 +91,72 @@
 </div>
 
 <div id="appShell" class="app-shell hidden" data-workspace="production">
- <aside class="sidebar">
-  <div class="sidebar-logo"><div class="brand-mark">s<span>.</span></div><div><strong>Sócio</strong><small>por Consecom</small></div></div>
-  <div class="workspace-switcher hidden" id="workspaceSwitcher" role="tablist" aria-label="Ambiente do Sócio">
-   <span class="workspace-switcher-thumb" aria-hidden="true"></span>
-   <button type="button" role="tab" data-workspace-target="production" aria-selected="true" tabindex="0"><span class="ws-mark" aria-hidden="true">P</span><span>Produção</span></button>
-   <button type="button" role="tab" data-workspace-target="master" aria-selected="false" tabindex="-1"><span class="ws-mark" aria-hidden="true">M</span><span>Master</span></button>
-  </div>
-  <div class="workspace-box"><span class="workspace-circle" id="workspaceInitial">C</span><div class="workspace-label"><small id="workspaceKind">AMBIENTE DE PRODUÇÃO</small><strong id="workspaceName">Empresa</strong></div><span class="workspace-chevron">⌄</span></div>
-  <div class="sidebar-label" id="productionMenuLabel">MENU PRINCIPAL</div>
-  <nav class="nav" id="productionNav" aria-label="Menu do painel de produção">
-   <button data-view="overview" class="nav-item selected"><span class="nav-symbol">◈</span> Visão geral</button>
-   <button data-view="inbox" class="nav-item"><span class="nav-symbol">▤</span> WhatsApp</button>
-   <button data-view="connections" class="nav-item"><span class="nav-symbol">⌁</span> Conexões</button>
-   <button data-view="marketing" class="nav-item"><span class="nav-symbol">◇</span> Meta Ads</button>
-   <button data-view="products" class="nav-item"><span class="nav-symbol">▦</span> Produtos e serviços</button>
-   <div class="sidebar-label inner">INTELIGÊNCIA</div>
-   <button data-view="orb" class="nav-item"><span class="nav-symbol">◉</span> Conversar com IA</button>
-   <button data-view="training" class="nav-item"><span class="nav-symbol">✳</span> Inteligência Artificial</button>
-   <div class="sidebar-label inner">ADMINISTRAÇÃO</div>
-   <button data-view="team" class="nav-item" id="teamNav"><span class="nav-symbol">♙</span> Equipe</button>
-  </nav>
-  <nav class="nav master-side-nav hidden" id="masterNav" aria-label="Menu do painel Master">
-   <div class="sidebar-label inner master-nav-title" id="masterMenuLabel">ADMINISTRAÇÃO DO SAAS</div>
-   <button data-view="masterOverview" class="nav-item selected"><span class="nav-symbol">▤</span> Dashboard</button>
-   <button data-view="admin" class="nav-item"><span class="nav-symbol">▧</span> Empresas</button>
-   <button data-view="masterPlans" class="nav-item"><span class="nav-symbol">▥</span> Planos e métricas</button>
-  </nav>
-  <div class="sidebar-bottom">
-   <button type="button" class="nav-item" data-view="settings"><span class="nav-symbol">⚙</span> Configurações da conta</button>
-   <button id="logoutBtn" class="nav-item logout"><span class="nav-symbol">↪</span> Sair da conta</button>
-  </div>
- </aside>
  <div class="app-main">
   <header class="topbar">
-   <div class="topbar-leading">
-    <button id="quickSearchBtn" class="quick-search" type="button" aria-label="Pesquisar páginas do Sócio" aria-haspopup="dialog">
+   <div class="topbar-brand">
+    <img class="et-logo" src="/socio-logo.svg" width="40" height="40" alt="">
+    <strong>Sócio<small>por Consecom</small></strong>
+   </div>
+   <div class="nav-rail">
+    <div class="workspace-switcher hidden" id="workspaceSwitcher" role="tablist" aria-label="Ambiente do Sócio">
+     <span class="workspace-switcher-thumb" aria-hidden="true"></span>
+     <button type="button" role="tab" data-workspace-target="production" aria-selected="true" tabindex="0"><span class="ws-mark" aria-hidden="true">P</span><span>Produção</span></button>
+     <button type="button" role="tab" data-workspace-target="master" aria-selected="false" tabindex="-1"><span class="ws-mark" aria-hidden="true">M</span><span>Master</span></button>
+    </div>
+    <div class="sidebar-label" id="productionMenuLabel">MENU PRINCIPAL</div>
+    <nav class="nav" id="productionNav" aria-label="Menu do painel de produção">
+     <button data-view="overview" class="nav-item selected"><span class="nav-symbol">◈</span> Visão geral</button>
+     <button data-view="inbox" class="nav-item"><span class="nav-symbol">▤</span> WhatsApp</button>
+     <button data-view="connections" class="nav-item"><span class="nav-symbol">⌁</span> Conexões</button>
+     <button data-view="marketing" class="nav-item"><span class="nav-symbol">◇</span> Meta Ads</button>
+     <button data-view="products" class="nav-item"><span class="nav-symbol">▦</span> Produtos e serviços</button>
+     <div class="sidebar-label inner">INTELIGÊNCIA</div>
+     <button data-view="orb" class="nav-item"><span class="nav-symbol">◉</span> Conversar com IA</button>
+     <button data-view="training" class="nav-item"><span class="nav-symbol">✳</span> Inteligência Artificial</button>
+     <div class="sidebar-label inner">ADMINISTRAÇÃO</div>
+     <button data-view="team" class="nav-item" id="teamNav"><span class="nav-symbol">♙</span> Equipe</button>
+    </nav>
+    <nav class="nav master-side-nav hidden" id="masterNav" aria-label="Menu do painel Master">
+     <div class="sidebar-label inner master-nav-title" id="masterMenuLabel">ADMINISTRAÇÃO DO SAAS</div>
+     <button data-view="masterOverview" class="nav-item selected"><span class="nav-symbol">▤</span> Dashboard</button>
+     <button data-view="admin" class="nav-item"><span class="nav-symbol">▧</span> Empresas</button>
+     <button data-view="masterPlans" class="nav-item"><span class="nav-symbol">▥</span> Planos e métricas</button>
+    </nav>
+   </div>
+   <div class="topbar-tools">
+    <div class="workspace-box"><span class="workspace-circle" id="workspaceInitial">C</span><div class="workspace-label"><small id="workspaceKind">AMBIENTE DE PRODUÇÃO</small><strong id="workspaceName">Empresa</strong></div><span class="workspace-chevron">⌄</span></div>
+    <button id="quickSearchBtn" class="topbar-icon" type="button" aria-label="Pesquisar páginas do Sócio" aria-haspopup="dialog">
      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke="currentColor"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
      <span>Buscar no Sócio</span><span class="shortcut">⌘ / Ctrl + K</span>
     </button>
-    <div class="breadcrumb"><span id="crumbRoot">Sócio</span> <span>/</span> <strong id="topTitle">Visão geral</strong></div>
-   </div>
-   <div class="top-right">
-    <span class="top-pill"><i></i> Ambiente privado</span>
-    <div class="user-profile"><div class="user-chip" id="userChip">SC</div><div class="user-profile-copy"><strong id="userName">Sócio</strong><small id="userRole">Seu espaço de trabalho</small></div></div>
+    <details class="topbar-notify" id="notifyMenu">
+     <summary class="topbar-icon is-circled" aria-label="Notificações" aria-haspopup="menu">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke="currentColor"><path d="M18 8.6a6 6 0 0 0-12 0c0 6-2.2 7.4-2.2 7.4h16.4S18 14.6 18 8.6"/><path d="M13.8 19.6a2.1 2.1 0 0 1-3.6 0"/></svg>
+      <span class="et-dot hidden" id="notifyDot" aria-hidden="true"></span>
+     </summary>
+     <div class="topbar-notify-panel" role="menu" aria-label="Notificações do Sócio">
+      <div class="topbar-notify-head"><strong>Notificações</strong><small id="notifyCount">Tudo em dia</small></div>
+      <div class="topbar-notify-list" id="notifyList"><div class="topbar-notify-empty">Nada pendente agora.</div></div>
+     </div>
+    </details>
+    <details class="user-menu" id="userMenu">
+     <summary aria-label="Sua conta">
+      <span class="user-chip" id="userChip">SC</span>
+     </summary>
+     <div class="user-menu-panel" role="menu" aria-label="Conta do Sócio">
+      <div class="user-menu-id"><strong id="userName">Sócio</strong><small id="userRole">Seu espaço de trabalho</small></div>
+      <div class="sidebar-bottom">
+       <button type="button" class="nav-item" data-view="settings"><span class="nav-symbol">⚙</span> Configurações da conta</button>
+       <button id="logoutBtn" class="nav-item logout"><span class="nav-symbol">↪</span> Sair da conta</button>
+      </div>
+     </div>
+    </details>
    </div>
   </header>
+  <div class="page-strip">
+   <span id="crumbRoot">Sócio</span><span class="page-strip-sep">/</span><strong id="topTitle">Visão geral</strong>
+   <span class="top-pill"><i></i> Ambiente privado</span>
+  </div>
   <main id="view" tabindex="-1"><div class="loading socio-page-loading" role="status" aria-live="polite"><span class="socio-loading-sigil" aria-hidden="true">✳</span><span class="socio-loading-title">Preparando seu espaço</span><span class="socio-loading-copy">Carregando as informações da sua empresa…</span></div></main>
   <footer class="site-footer">Sócio by Consecom <span>·</span> Tecnologia a favor das pessoas.</footer>
  </div>

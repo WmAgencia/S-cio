@@ -1,0 +1,9 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "socio-local",
+      "url": "http://127.0.0.1:4173"
+    }
+  ]
+}
