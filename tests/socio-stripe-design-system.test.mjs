@@ -18,13 +18,14 @@ const chrome=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/google-
  '/usr/bin/chromium','/usr/bin/chromium-browser','/opt/google/chrome/chrome'].find(x=>x&&existsSync(x));
 
 test('one canonical board theme replaces obsolete dark overrides',()=>{
- assert.equal(cssImports.at(-1),'/socio-reference.css');
+ assert.equal(cssImports.at(-1),'/socio-stripe-shell.css');
+ assert(!cssImports.includes('/socio-reference.css'));
  assert.match(html,/\/socio-stripe-system\.css\?v=[\w]+/);
  assert.match(html,/\/socio-ethereal\.css\?v=[\w]+/);
  assert(server.includes("'/socio-stripe-system.css'"));
  assert(server.includes("'/socio-ethereal.css'"));
  assert(server.includes("'/socio-reference.css'"));
- assert.match(html,/<meta name="theme-color" content="#08080a">/);
+ assert.match(html,/<meta name="theme-color" content="#f7f8fa">/);
  for(const old of ['socio-glass-motion.css','socio-glass-enforced.css',
   'socio-premium-polish.css','socio-contrast-audit.css',
   'socio-motion-refined.css','socio-luminous-glass.css']){
