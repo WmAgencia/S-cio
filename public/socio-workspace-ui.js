@@ -48,10 +48,13 @@
  };
  const cached=async(api,path,ttl=25000)=>{
   const existing=getCache.get(path),now=Date.now();
-  if(existing?.result&&now-existing.at<ttl)return existing.result;
+  if(existing?.result&&now<existing.expiresAt)return existing.result;
   if(existing?.pending)return existing.pending;
   const pending=optional(api,path).then(result=>{
-   getCache.set(path,{result,at:Date.now()});return result;
+   const completed=Date.now();
+   // Do not pin a temporary provider failure in the company cache for 25s.
+   getCache.set(path,{result,at:completed,expiresAt:completed+(result.ok?ttl:1500)});
+   return result;
   },error=>{getCache.delete(path);throw error;});
   getCache.set(path,{pending,at:now});return pending;
  };
@@ -386,11 +389,14 @@
   // First paint: the own-company revenue window renders at once; Meta answers
   // separately (sometimes >2 seconds). The second paint reuses the already
   // settled request cache, never new requests.
-  const later=progressive&&ads?Promise.all(calls):null;
+  // An inbox provider can take many seconds. Never block the first company
+  // dashboard paint on it; hydrate its list in the second pass.
+  const later=progressive?Promise.all(ads?[...calls,inboxCall]:[inboxCall]):null;
   const skip=()=>Promise.resolve({ok:false});
   const base=progressive?[Promise.resolve(null),...calls.slice(1).map(skip)]:calls;
   const [results,revenue,period,splitSpend,inbox,campaignPeriod]=await Promise.all([Promise.all(base),revenueCall,periodCall,
-   progressive?Promise.resolve({ok:false}):splitSpendCall,inboxCall,
+   progressive?Promise.resolve({ok:false}):splitSpendCall,
+   progressive?Promise.resolve({data:null,ok:false}):inboxCall,
    progressive?Promise.resolve({ok:false}):campaignPeriodCall]);
   const [meta,traffic]=results;
   if(renderId!==renderSerial)return;
@@ -418,7 +424,7 @@
   const splitPurchases=splitRows.reduce((sum,x)=>sum+purchasesFor(x),0);
   const splitPeriodSpan=splitSpend?.period||null;
   const conversations=inbox?.ok===true&&Array.isArray(inbox.data?.conversations)?
-   inbox.data.conversations.filter(item=>item.channel_provider!=='instagram'&&item.handling_mode==='ai_assist')
+   inbox.data.conversations.filter(item=>item.channel_provider!=='instagram')
     .sort((a,b)=>(Date.parse(b.last_message_at)||0)-(Date.parse(a.last_message_at)||0)):[];
   const campaignMetrics=campaignPeriod?.ok&&Array.isArray(campaignPeriod.data?.items)?campaignPeriod.data.items:[];
   const campaignPurchases=campaignMetrics.filter(item=>purchasesFor(item)>0);
@@ -675,7 +681,7 @@
       esc(preview.slice(0,64)||'Sem mensagens ainda')+'</small></div>'+
       (item.handling_mode==='ai_assist'?'<span class="et-tag active">IA</span>':'')+
       '<button type="button" class="et-open" data-open-conversation="'+esc(item.id)+'">Abrir</button></div>';
-    }).join('')+'</div>':'<div class="et-stack-empty">Nenhuma conversa ainda. Conecte um WhatsApp para começar.</div>')+'</section>';
+    }).join('')+'</div>':'<div class="et-stack-empty">'+(progressive?'Consultando as conversas recentes…':'Nenhuma conversa recente. Confira a conexão do WhatsApp.')+'</div>')+'</section>';
   const recsBlock='<section class="et-block et-recs" aria-label="Recomendações">'+
    '<div class="et-block-head"><h2>Recomendações</h2>'+
     (trafficPending?'<span class="et-block-count">'+number(trafficPending)+'</span>':'')+
@@ -829,7 +835,7 @@
    });
   });
 
-  if(progressive&&ads){
+  if(progressive){
    // Never hold up the dashboard for an ad provider. If the visitor switches
    // pages meanwhile, renderSerial stops the stale secondary paint.
    void later.then(()=>{
