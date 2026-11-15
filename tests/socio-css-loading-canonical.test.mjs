@@ -39,7 +39,9 @@ test('only one final canonical light shell; no dark overrides or invisible boot'
 test('GET timeout covers streamed body and dashboard does not block on inbox',()=>{
  const start=app.indexOf('async function api('),end=app.indexOf('function heading(',start);
  const api=app.slice(start,end);
- assert(api.indexOf('data=await resp.json()')<api.indexOf('finally{if(timeout)clearTimeout(timeout);}'));
+ assert(api.includes('data=await resp.json()'));
+ assert(api.indexOf('data=await resp.json()')<api.indexOf('if(timeout)clearTimeout(timeout);'));
+ assert.match(api,/navSignal\?\.removeEventListener\?\.\('abort',abortFromRoute\)/);
  assert.match(app,/routeFeedbackTimer=setTimeout\(\(\)=>\{/);
  assert.match(app,/\},180\)/);
  assert.match(app,/const navigationTicket=\+\+navigationEpoch/);
