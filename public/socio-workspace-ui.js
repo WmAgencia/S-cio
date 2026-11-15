@@ -900,9 +900,27 @@
   if(renderId!==renderSerial)return;
   const connected=data?.status.data?.connected===true,selected=!!data?.status.data?.selectedAccount;
   const campaigns=data?.list||[],ads=data?.adList||[],hasData=data?.insights.ok===true,currency=data?.currency;
+  const insightsMap=new Map((data?.daily||[]).map(x=>[String(x.campaign_id),x]));
   const decoratedCampaigns=campaigns.map(c=>{
    const matches=ads.filter(ad=>String(ad.campaign_id||'')===String(c.id));
    return {...c,topAd:matches.find(ad=>(ad.effective_status||ad.status)==='ACTIVE')||matches[0]||null};
+  });
+  // Keep the working set visible first. Within each status, put the campaigns
+  // with the strongest available result ahead of the rest (purchases, then
+  // clicks, then spend), while preserving Meta's order for ties.
+  const campaignRank=c=>{
+   const status=String(c.effective_status||c.status||'').toUpperCase();
+   const metric=insightsMap?.get?.(String(c.id))||{};
+   return {
+    active:status==='ACTIVE'?1:0,
+    purchases:Number(metric.purchases??metric.conversions??0)||0,
+    clicks:Number(metric.clicks)||0,
+    spend:Number(metric.spend)||0
+   };
+  };
+  decoratedCampaigns.sort((a,b)=>{
+   const ar=campaignRank(a),br=campaignRank(b);
+   return br.active-ar.active||br.purchases-ar.purchases||br.clicks-ar.clicks||br.spend-ar.spend;
   });
   const bestThumbnail=mediaUrl(data?.bestAd?.thumbnailUrl);
   const selectedCampaign=campaignId?decoratedCampaigns.find(c=>String(c.id)===String(campaignId)):null;
@@ -923,7 +941,6 @@
   const visibleAds=selectedAdset?(adsResult?.ok?adsResult.items:accountSetAds):selectedCampaign?[]:ads;
   const manage=can(me,'marketing.manage');
 
-  const insightsMap=new Map((data?.daily||[]).map(x=>[String(x.campaign_id),x]));
   const btn='<button type="button" class="btn soft" data-px-connect>Gerenciar conexões</button>';
   root.innerHTML='<div class="px-workspace px-marketing">'+
    '<div class="px-page-heading"><div><span class="px-eyebrow">MÍDIA PAGA · META ADS</span><h1>Campanhas e desempenho</h1>'+
