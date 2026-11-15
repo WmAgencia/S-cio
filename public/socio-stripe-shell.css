@@ -98,3 +98,56 @@ body #appShell :is(button,input,select,textarea,a):focus-visible{outline:2px sol
 @media(prefers-reduced-motion:reduce){
  body #appShell .nav-rail .nav-item{transition:none!important}
 }
+
+/* Override the still-required Ethereal component geometry without carrying its dark palette. */
+body #appShell{
+ --et-canvas:#f7f8fa;--et-frame:#fff;--et-card:#fff;--et-card-2:#f8f9fb;
+ --et-elev:#f2f4f9;--et-line:#e5e7eb;--et-line-soft:#eff1f5;
+ --et-ink:#202735;--et-ink-2:#344054;--et-muted:#667085;
+ --et-violet:#605dec;--et-violet-2:#716bef;--et-teal:#16865d;
+ color-scheme:light!important;
+}
+body #appShell.app-shell:not(.hidden){backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body #appShell .px-overview.et-board :is(.et-card,.et-kpi,.et-block.et-subs){
+ background:#fff!important;border:1px solid #e5e7eb!important;
+ box-shadow:0 2px 14px rgba(23,33,54,.04)!important;
+ backdrop-filter:none!important;-webkit-backdrop-filter:none!important;color:#202735!important;
+}
+body #appShell .et-hero{background:linear-gradient(130deg,#f1f0ff,#fafaff 68%,#fff)!important;border:1px solid #e4e1ff!important;color:#202735!important;box-shadow:none!important}
+body #appShell .et-hero :is(h1,h2,p,span,strong,small){color:#202735!important;text-shadow:none!important}
+body #appShell #view .et-card :is(h1,h2,h3,p,span,strong,small),
+body #appShell #view .et-kpi :is(h1,h2,h3,p,span,strong,small),
+body #appShell #view .et-block :is(h1,h2,h3,p,span,strong,small){text-shadow:none!important}
+body #appShell #view .et-kpi-value,
+body #appShell #view .et-card-title,
+body #appShell #view .et-block-head h2,
+body #appShell #view .et-legend-value{color:#202735!important}
+body #appShell #view .et-kpi-label,
+body #appShell #view .et-card-sub,
+body #appShell #view .et-legend-label{color:#667085!important}
+body #appShell #view .et-board-grid{display:grid!important;grid-template-columns:repeat(12,minmax(0,1fr))!important;grid-auto-rows:auto!important;gap:14px!important}
+body #appShell #view .et-board-grid>*{grid-row:auto!important;min-width:0!important}
+body #appShell #view .et-board-grid>.et-hero{grid-column:span 7!important}
+body #appShell #view .et-board-grid>.et-income{grid-column:span 5!important}
+body #appShell #view .et-board-grid>.et-kpi{grid-column:span 3!important}
+body #appShell #view .et-board-grid>.et-recs{grid-column:span 6!important}
+body #appShell #view .et-board-grid>.et-flow{grid-column:span 6!important}
+body #appShell #view .et-board-grid>.et-expense-split{grid-column:span 7!important}
+body #appShell #view .et-board-grid>.et-subs{grid-column:span 5!important}
+body #appShell #view .et-chart-pill{fill:#eef0fb!important}
+body #appShell #view .et-chart-value{fill:#344054!important}
+body #appShell #view .et-chart-grid{stroke:#e5e7eb!important}
+body #appShell .topbar :is(.nav-item,.workspace-switcher button){box-shadow:none!important}
+body #appShell #view .et-board :is(.et-card,.et-kpi,.et-block){filter:none!important}
+@media(max-width:900px){
+ body #appShell #view .et-board-grid>.et-hero,
+ body #appShell #view .et-board-grid>.et-income,
+ body #appShell #view .et-board-grid>.et-recs,
+ body #appShell #view .et-board-grid>.et-flow,
+ body #appShell #view .et-board-grid>.et-expense-split,
+ body #appShell #view .et-board-grid>.et-subs{grid-column:span 12!important}
+ body #appShell #view .et-board-grid>.et-kpi{grid-column:span 6!important}
+}
+@media(max-width:500px){
+ body #appShell #view .et-board-grid>.et-kpi{grid-column:span 12!important}
+}
