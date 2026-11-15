@@ -160,3 +160,15 @@ body #appShell .workspace-label small{background:transparent!important;box-shado
 body #appShell .workspace-box{background:#fff!important}
 body #appShell .workspace-label strong{color:#202735!important}
 body #appShell .workspace-label small{color:#667085!important}
+
+/* The former framed dark canvas used a higher-specificity :not(.hidden) selector. */
+body #appShell.app-shell:not(.hidden){
+ width:100%!important;max-width:100%!important;
+ min-height:100dvh!important;margin:0!important;padding:0!important;
+ background:#f7f8fa!important;color:#202735!important;
+ border:0!important;border-radius:0!important;
+ box-shadow:none!important;overflow:visible!important;
+}
+body:has(#appShell:not(.hidden)),html:has(body #appShell:not(.hidden)){
+ background:#f7f8fa!important;color:#202735!important;color-scheme:light!important;
+}
