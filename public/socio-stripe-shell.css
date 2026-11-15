@@ -401,3 +401,9 @@ body #appShell #view .socio-loading-overlay .socio-loading-copy{display:none!imp
  cursor:pointer}
 .socio-boot-status button:hover{background:#514ed5}
 .socio-boot-status:has(button){padding:16px;flex-wrap:wrap;text-align:center}
+
+/* Keep the Thalita launcher accessible without covering recommendation actions
+   on laptop-height screens; bottom-left sits over the read-only chart area. */
+@media(min-width:1061px) and (max-height:950px){
+ body:has(#appShell:not(.hidden)) #socioThalitaDock{right:auto!important;left:14px!important;bottom:12px!important}
+}
