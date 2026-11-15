@@ -395,3 +395,9 @@ body #appShell #view .socio-loading-overlay .socio-loading-copy{display:none!imp
  body #appShell #view .et-subs-icons{display:none!important}
  body #appShell #view .et-sub-row{min-height:0!important}
 }
+
+.socio-boot-status button{margin-left:8px;border:1px solid #bfc0f3;border-radius:9px;
+ background:#605dec;color:#fff;padding:9px 12px;font:650 12px Inter,system-ui,sans-serif;
+ cursor:pointer}
+.socio-boot-status button:hover{background:#514ed5}
+.socio-boot-status:has(button){padding:16px;flex-wrap:wrap;text-align:center}
