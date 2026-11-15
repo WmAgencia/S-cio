@@ -125,16 +125,16 @@ body #appShell #view .px-overview.et-board{display:flex;flex-direction:column;ga
 body #appShell #view .et-title{margin:0!important;font-size:clamp(25px,3vw,32px)!important;
  font-weight:700!important;letter-spacing:-.04em!important;color:#202735!important}
 body #appShell #view .et-board-grid{display:grid!important;
- grid-template-columns:repeat(12,minmax(0,1fr))!important;grid-auto-rows:minmax(0,auto)!important;
+ grid-template-columns:repeat(30,minmax(0,1fr))!important;grid-auto-rows:minmax(0,auto)!important;
  gap:16px!important;align-items:stretch;min-width:0}
 body #appShell #view .et-board-grid>*{min-width:0;grid-row:auto;overflow-wrap:anywhere}
-body #appShell #view .et-board-grid>.et-hero{grid-column:1/span 6!important;grid-row:1/span 2!important}
-body #appShell #view .et-board-grid>.et-income{grid-column:7/span 3!important;grid-row:1!important}
-body #appShell #view .et-board-grid>.et-kpi-campaign{grid-column:10/span 3!important;grid-row:1!important}
-body #appShell #view .et-board-grid>.et-recs{grid-column:7/span 6!important;grid-row:2!important}
-body #appShell #view .et-board-grid>.et-flow{grid-column:1/span 6!important;grid-row:3!important}
-body #appShell #view .et-board-grid>.et-expense-split{grid-column:7/span 6!important;grid-row:3!important}
-body #appShell #view .et-board-grid>.et-subs{grid-column:1/-1!important;grid-row:4!important}
+body #appShell #view .et-board-grid>.et-hero{grid-column:1/span 13!important;grid-row:1/span 2!important}
+body #appShell #view .et-board-grid>.et-income{grid-column:14/span 7!important;grid-row:1!important}
+body #appShell #view .et-board-grid>.et-kpi-campaign{grid-column:14/span 7!important;grid-row:2!important}
+body #appShell #view .et-board-grid>.et-recs{grid-column:21/span 10!important;grid-row:1/span 2!important}
+body #appShell #view .et-board-grid>.et-flow{grid-column:1/span 10!important;grid-row:3!important}
+body #appShell #view .et-board-grid>.et-expense-split{grid-column:11/span 10!important;grid-row:3!important}
+body #appShell #view .et-board-grid>.et-subs{grid-column:21/span 10!important;grid-row:3!important}
 body #appShell #view .px-overview.et-board :is(.et-card,.et-kpi,.et-block){
  padding:21px!important;min-height:125px;border-radius:15px!important;
  border:1px solid #e5e7eb!important;background:#fff!important;color:#202735!important;
@@ -355,3 +355,43 @@ body #appShell #view .socio-loading-overlay .socio-loading-copy{display:none!imp
 .socio-boot-status[hidden]{display:none!important}
 @keyframes socio-boot-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.socio-boot-spinner{animation:none!important}}
+
+/* Compact desktop viewports must retain readable data without huge cards. */
+@media(min-width:1061px) and (max-height:800px){
+ body #appShell .topbar{min-height:58px!important;padding-top:5px!important;padding-bottom:5px!important}
+ body #appShell .page-strip{min-height:34px!important;padding-top:5px!important;padding-bottom:5px!important}
+ body #appShell #view{padding-top:12px!important;padding-bottom:16px!important}
+ body #appShell #view .px-overview.et-board{gap:8px}
+ body #appShell #view .et-board-grid{gap:9px!important}
+ body #appShell #view .px-overview.et-board :is(.et-card,.et-kpi,.et-block){padding:12px!important;min-height:0!important}
+ body #appShell #view .px-overview.et-board .et-hero{padding:12px!important;min-height:194px!important}
+ body #appShell #view .et-hero-value{margin:5px 0}
+ body #appShell #view .et-hero-value strong{font-size:clamp(24px,3.1vw,38px)!important}
+ body #appShell #view .et-hero-note{margin-bottom:8px}
+ body #appShell #view .et-kpi-value{font-size:26px!important}
+ body #appShell #view .et-kpi{gap:5px}
+ body #appShell #view .et-card-head{gap:4px}
+ body #appShell #view .et-chart{min-height:120px}
+ body #appShell #view .et-chart svg{max-height:150px}
+ body #appShell #view .et-split{gap:6px;margin-top:5px}
+ body #appShell #view .et-donut svg{width:min(100%,130px)}
+ body #appShell #view .et-legend{gap:5px}
+ body #appShell #view .et-recs{gap:5px}
+ body #appShell #view .et-recs .et-stack{gap:5px}
+ body #appShell #view .et-rec{gap:5px;padding:8px!important}
+ body #appShell #view .et-rec:nth-child(n+2){display:none!important}
+ body #appShell #view .et-subs-icons{margin:5px 0}
+ body #appShell #view .et-subs-list{grid-template-columns:1fr;gap:4px;margin-top:5px}
+ body #appShell #view .et-sub-row{padding:5px}
+ body #appShell #view .site-footer{padding:8px}
+}
+@media(min-width:1061px) and (max-height:660px){
+ body #appShell #view .et-title{font-size:23px!important}
+ body #appShell #view .et-board-grid{gap:7px!important}
+ body #appShell #view .px-overview.et-board .et-hero{min-height:172px!important}
+ body #appShell #view .px-overview.et-board :is(.et-card,.et-kpi,.et-block){padding:9px!important}
+ body #appShell #view .et-chart{min-height:95px}
+ body #appShell #view .et-chart svg{max-height:118px}
+ body #appShell #view .et-subs-icons{display:none!important}
+ body #appShell #view .et-sub-row{min-height:0!important}
+}
