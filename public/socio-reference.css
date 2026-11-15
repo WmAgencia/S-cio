@@ -394,6 +394,7 @@ body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-date-marker{backgr
 body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-date-marker span{background:transparent!important;color:inherit!important}
 body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.card,.panel,.callout,.lucid-card,.ember-card,.ember-kpi,.px-kpi,.px-panel,.px-ads-metric,.px-conn-card,.master-panel,.master-kpi,.socio-clean-section,.socio-training-center,.socio-list-panel,.catalog-product,.quote-request-item,.commerce-lead-card,.ps-interview-welcome,.ps-chat-card,.ps-review,.ps-review-card,.ps-mode,.ps-optional-training,.socio-train-account,.socio-train-result,.socio-knowledge-edit,.socio-ops-panel,.socio-ops-grid>div,.quote-request-panel){
  background:linear-gradient(135deg,#252532,#1d202c)!important;
+ background-color:var(--page-panel)!important;
  border:1px solid var(--page-line)!important;border-radius:24px!important;
  color:var(--page-copy)!important;box-shadow:inset 0 1px #ffffff05,0 16px 32px -28px #000b!important;
  backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
@@ -422,6 +423,7 @@ body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.btn,button.primar
 }
 body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.btn.primary,button.primary,.wa-compose-send,.wa-inbox-connect,#newProduct,.px-campaign-confirm,.ps-primary){
  background:linear-gradient(110deg,#92e7db,#cceda2)!important;color:#152c25!important;border:1px solid #bcebb7!important;
+ background-color:#b6ecc8!important;
 }
 body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.btn.primary,button.primary,.wa-compose-send,.wa-inbox-connect,#newProduct,.px-campaign-confirm,.ps-primary) :is(span,small,strong,b,svg){color:inherit!important}
 body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.btn,button.soft,.wa-small-action,.wa-round-icon,.ps-mode,.ps-choices button):hover:not(:disabled){background:#413653!important;color:#fff!important;border-color:#a991c8!important}
@@ -524,7 +526,7 @@ body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog) .cata
 body #appShell[data-workspace] #view:not(:has(.et-board)) .px-notice{background:#28283b!important;color:#e3d7f2!important;border-color:#62516f!important}
 body #appShell[data-workspace] #view:not(:has(.et-board)) .px-notice :is(p,strong,small){color:inherit!important}
 body #appShell[data-workspace] #view:not(:has(.et-board)) .wa-thread-identity{color:#eee5f7!important}
-body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog,.command-box) :is(h1,h2,h3,strong,.section-title){color:#f5f1fc!important}
+body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog,.command-box) :is(h1,h2,h3,h4,strong,.section-title){color:#f5f1fc!important}
 body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog,.command-box) :is(p,small,label,legend,span,li){color:#c6bad6!important}
 body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog) :is(.socio-clean-section,.catalog-variant-row,.report-note-grid>div,.px-campaign-picker,.feature-choice){background:#161d2c!important;color:#e5dcee!important;border-color:#50465f!important}
 body:has(#appShell:not(.hidden)) :is(.socio-popup-surface,.ps-card-dialog,.socio-billing-dialog,.command-box) :is(input,select,textarea,option){background:#131b2a!important;color:#f5effb!important;border:1px solid #645775!important;color-scheme:dark!important;box-shadow:none!important}
@@ -555,3 +557,9 @@ body:has(#appShell:not(.hidden)) #socioThalitaDock .px-assistant-window>header s
  body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.ai-guide-tabs,.settings-tabs) button{flex:1 1 auto;white-space:normal!important}
  body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.view-heading,.px-page-heading,.ai-guide-head,.master-hero){align-items:flex-start!important;flex-wrap:wrap!important}
 }
+
+/* Contrast coverage for shared report widgets and legacy integrations. */
+body #appShell[data-workspace] .breadcrumb strong{color:#e1ddea!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-graph-counts,.px-wa-overview-list>div){background:#202432!important;border-color:#51475f!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-legend span,.px-budget-meta-metric span,.px-graph-counts span){color:#c5bad5!important}
+body #appShell[data-workspace] #view:not(:has(.et-board)) .px-budget-meta-action .px-budget-recharge-cta{background:#b6ecc8!important;color:#152c25!important;border-color:#b6ecc8!important}
