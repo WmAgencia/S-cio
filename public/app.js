@@ -499,7 +499,7 @@ async function channels(){
   const phone=c.phone?.startsWith('pending-')?'Aguardando leitura do QR Code':c.phone;
   return '<div class="wa-number-row"><div class="wa-number-icon">'+(ok?'✓':'◌')+'</div>'+
    '<div class="wa-number-info"><strong>'+e(c.label)+'</strong><small>'+e(phone)+'</small></div>'+
-   '<span class="badge '+(ok?'green':'yellow')+'">'+(ok?'Conectado':'Aguardando')+'</span>'+
+   '<span class="badge '+(ok?'gray':'yellow')+'" data-wa-badge="'+e(c.id)+'">'+(ok?'Verificando':'Aguardando')+'</span>'+
    '<div class="wa-number-actions">'+
    '<button class="btn sm soft" type="button" data-wa-check="'+e(c.id)+'">Verificar</button>'+
    (canManage?
@@ -509,8 +509,8 @@ async function channels(){
    '</div><span class="wa-number-feedback" data-wa-state="'+e(c.id)+'" aria-live="polite"></span></div>';
  }).join('');
  view.innerHTML=heading('CANAIS DE ATENDIMENTO','Conecte seus WhatsApps.','Um QR Code por número, com acesso exclusivo aos dados da sua empresa.')+
- '<div class="wa-status-strip"><div><span class="wa-status-dot"></span><strong>'+e(connected)+'</strong><small>Conectados</small></div>'+
- '<div><span class="wa-status-dot amber"></span><strong>'+e(pending)+'</strong><small>Aguardando QR</small></div>'+
+ '<div class="wa-status-strip"><div><span class="wa-status-dot"></span><strong data-wa-live-count>0</strong><small>Conectados verificados</small></div>'+
+ '<div><span class="wa-status-dot amber"></span><strong data-wa-awaiting-count>'+e(linked.length)+'</strong><small>Pendentes de verificação</small></div>'+
  '<div><span class="wa-status-dot gray"></span><strong>'+e(linked.length)+'</strong><small>Sessões vinculadas</small></div></div>'+
  '<div class="wa-layout"><section class="card card-pad wa-setup">'+
  '<div class="wa-setup-heading"><span class="wa-setup-icon">▣</span><div><h2>Conectar via QR Code</h2>'+
@@ -579,14 +579,45 @@ async function channels(){
   clearTimeout(waQrTimer);$('#waQrPanel').classList.add('hidden');
  });
  view.querySelectorAll('[data-wa-qr]').forEach(button=>button.addEventListener('click',()=>showWaQr(button.dataset.waQr)));
- view.querySelectorAll('[data-wa-check]').forEach(button=>button.addEventListener('click',async()=>{
+ const waButtons=[...view.querySelectorAll('[data-wa-check]')];
+ const checkWaLive=async button=>{
+  if(!button.isConnected)return;
   const id=button.dataset.waCheck;
   const feedback=view.querySelector('[data-wa-state="'+id+'"]');
+  const badge=view.querySelector('[data-wa-badge="'+id+'"]');
+  button.disabled=true;
   try{
    const status=await api('/api/waakg/channels/'+id+'/status');
-   feedback.textContent=status.connected?'Conexão verificada':'Aguardando conexão ou número divergente';
-  }catch(err){feedback.textContent=errMsg(err);}
- }));
+   if(!badge?.isConnected)return;
+   const online=status.connected===true;
+   badge.dataset.waLive=online?'yes':'no';
+   badge.className='badge '+(online?'green':'yellow');
+   badge.textContent=online?'Conectado agora':'Desconectado';
+   if(feedback)feedback.textContent=online?'Conexão confirmada pelo gateway.':
+    'Sessão não conectada. Clique em Reconectar e escaneie o QR Code no celular.';
+  }catch(error){
+   if(badge?.isConnected){
+    badge.dataset.waLive='no';
+    badge.className='badge gray';
+    badge.textContent='Não verificado';
+   }
+   if(feedback)feedback.textContent=errMsg(error);
+  }finally{
+   button.disabled=false;
+   const confirmed=view.querySelectorAll('[data-wa-badge][data-wa-live="yes"]').length;
+   const liveCount=view.querySelector('[data-wa-live-count]');
+   const awaitingCount=view.querySelector('[data-wa-awaiting-count]');
+   if(liveCount)liveCount.textContent=String(confirmed);
+   if(awaitingCount)awaitingCount.textContent=String(Math.max(0,linked.length-confirmed));
+  }
+ };
+ waButtons.forEach(button=>button.addEventListener('click',()=>{void checkWaLive(button);}));
+ // A saved "connected" flag is not proof of a live WhatsApp session.
+ // Verify each channel after rendering, without sending any messages.
+ void (async()=>{for(const button of waButtons){
+  if(!button.isConnected)break;
+  await checkWaLive(button);
+ }})();
  view.querySelectorAll('[data-wa-control]').forEach(button=>button.addEventListener('click',async()=>{
   const id=button.dataset.waId,command=button.dataset.waControl;
   if(command==='logout'&&!confirm('Desconectar este WhatsApp e apagar a sessão autorizada?'))return;
