@@ -118,13 +118,13 @@ function badge(text,color='gray'){return '<span class="badge '+color+'">'+e(text
 function panel(title,description,body){return '<div class="card"><div class="panel-head"><div><h2>'+e(title)+'</h2>'+ (description?'<p>'+e(description)+'</p>':'')+'</div></div>'+body+'</div>';}
 function formValues(form){return Object.fromEntries(new FormData(form).entries());}
 function setLoading(){
- const old=view.querySelector('[data-socio-loading-overlay]');old?.remove();
+ const old=view.querySelector('[data-socio-loading-overlay]');if(old?.parentNode)old.parentNode.removeChild(old);
  view.setAttribute('aria-busy','true');
  const overlay=document.createElement('div');overlay.dataset.socioLoadingOverlay='';
  overlay.className='socio-loading-overlay';overlay.innerHTML='<div class="loading socio-page-loading" role="status" aria-live="polite"><span class="socio-loading-sigil" aria-hidden="true">✳</span><span class="socio-loading-title">Preparando seu espaço</span><span class="socio-loading-copy">Carregando as informações da sua empresa…</span></div>';
  view.appendChild(overlay);
 }
-function finishLoading(){view.querySelector('[data-socio-loading-overlay]')?.remove();view.removeAttribute('aria-busy');}
+function finishLoading(){const overlay=view.querySelector('[data-socio-loading-overlay]');if(overlay?.parentNode)overlay.parentNode.removeChild(overlay);view.removeAttribute('aria-busy');}
 function setupAuth(initialized){
  $('#authScreen').classList.remove('hidden');$('#appShell').classList.add('hidden');
  $('#loginForm').classList.toggle('hidden',!initialized);
