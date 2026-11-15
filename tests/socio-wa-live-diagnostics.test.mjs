@@ -144,3 +144,17 @@ test('owner-only diagnostics route and UI do not send or expose WhatsApp credent
  assert.doesNotMatch(module,/sendGatewayMessage|deliverToConversation|gatewayControl|sendGatewayText/);
  assert.match(server,/\[socio wa live binding\]/);
 });
+
+
+test('WhatsApp page checks each live session and never calls a saved connected flag verified',()=>{
+ const ui=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ assert.match(ui,/data-wa-badge/);
+ assert.match(ui,/data-wa-live-count/);
+ assert.match(ui,/data-wa-awaiting-count/);
+ assert.match(ui,/status\.connected===true/);
+ assert.match(ui,/badge\.textContent=online\?'Conectado agora':'Desconectado'/);
+ assert.match(ui,/Clique em Reconectar e escaneie o QR Code/);
+ assert.match(ui,/for\(const button of waButtons\)/);
+ assert.match(ui,/await checkWaLive\(button\)/);
+ assert.match(ui,/Nenhuma mensagem foi enviada/);
+});
