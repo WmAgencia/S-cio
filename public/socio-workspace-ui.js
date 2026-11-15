@@ -692,10 +692,7 @@
     flowCard+
     splitCard+
     conversationsCard+
-   '</div>'+
-   '<p class="px-live-indicator"><span class="px-live-dot"></span>'+(progressive?'Indicadores da empresa disponíveis · consultando anúncios em segundo plano':'Atualização automática a cada 60 segundos · indicadores retornados pelos provedores')+'</p>'+
-   '<p class="px-provenance">Indicadores consolidados por empresa. Métricas publicitárias dependem das permissões das contas autorizadas; conversões atribuídas por anúncios não são comprovantes de pagamento. Nenhum número indisponível é substituído por uma estimativa.</p>'+
-  '</div>';
+   '</div></div>';
   snapshots.set('overview',root.innerHTML);
   if(featuredAd){
    const placeholder=root.querySelector('[data-campaign-preview]');
