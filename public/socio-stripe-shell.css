@@ -151,3 +151,12 @@ body #appShell #view .et-board :is(.et-card,.et-kpi,.et-block){filter:none!impor
 @media(max-width:500px){
  body #appShell #view .et-board-grid>.et-kpi{grid-column:span 12!important}
 }
+
+/* Contrast: inherited old workspace tags must never paint dark over graphite text. */
+body #appShell .workspace-box,
+body #appShell .workspace-label,
+body #appShell .workspace-label strong,
+body #appShell .workspace-label small{background:transparent!important;box-shadow:none!important}
+body #appShell .workspace-box{background:#fff!important}
+body #appShell .workspace-label strong{color:#202735!important}
+body #appShell .workspace-label small{color:#667085!important}
