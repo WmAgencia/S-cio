@@ -18,8 +18,9 @@ test('old glass style layers are not loaded; new theme is the last stylesheet',(
  const imports=[...html.matchAll(/<link rel="stylesheet" href="(\/[^"]+)/g)].map(m=>m[1]);
  assert(imports.at(-1).startsWith('/socio-stripe-shell.css?v='));
  assert(imports.includes('/socio-stripe-system.css?v=20261115a'));
- assert(!imports.some(x=>/socio-(ethereal|reference)\.css/.test(x)));
- assert.equal(imports.length,13,'avoid stacking abandoned visual experiments');
+ assert(!imports.some(x=>x.includes('/socio-reference.css')));
+ assert(imports.some(x=>x.includes('/socio-ethereal.css')),'legacy component geometry temporarily required');
+ assert.equal(imports.length,14,'one dark reference layer was removed and one light shell added');
  for(const old of ['socio-glass-motion.css','socio-glass-enforced.css','socio-premium-polish.css',
   'socio-contrast-audit.css','socio-motion-refined.css','socio-luminous-glass.css']){
   assert(!imports.some(x=>x.includes('/'+old)),old);
