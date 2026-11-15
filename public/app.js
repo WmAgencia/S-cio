@@ -490,6 +490,7 @@ async function channels(){
   api('/api/channels'),api('/api/waakg/config'),api('/api/waakg/channels')
  ]);
  const canManage=state.me.user.platformOwner||(state.me.user.permissions||[]).includes('training.manage');
+ const canDiagnose=state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role);
  const connected=linked.filter(c=>c.status==='connected').length;
  const pending=linked.length-connected;
  const legacy=data.filter(c=>!linked.some(x=>x.id===c.id));
@@ -533,8 +534,13 @@ async function channels(){
  (legacy.length?'<details class="wa-legacy"><summary>'+e(legacy.length)+' cadastro(s) antigos sem sessão QR</summary>'+
  '<p class="form-note">Estes cadastros não significam uma conexão ativa. Para autorizar um WhatsApp, use o QR Code.</p>'+
  '<div>'+legacy.map(c=>'<div class="wa-legacy-item">'+e(c.label)+' · '+e(c.phone)+'</div>').join('')+'</div></details>':'')+
- '<p class="form-note wa-readonly">A conexão por QR permite leitura e análise do histórico disponível. O envio automático de mensagens permanece desativado.</p>'+
- '</section></div>';
+ '<p class="form-note wa-readonly">A conexão por QR permite leitura e análise do histórico disponível. Verifique abaixo se o envio automático está habilitado neste ambiente.</p>'+
+ '</section></div>'+
+ (canDiagnose?'<section class="card card-pad wa-live-audit" aria-label="Diagnóstico do WhatsApp">'+
+ '<div class="panel-head"><div><h2>Diagnóstico em tempo real</h2><p>Confere o número da sessão, o recebimento e a configuração da IA, sem enviar mensagens.</p></div></div>'+
+ '<button type="button" class="btn soft" id="waLiveDiagnostics">Verificar integração agora</button>'+
+ '<p id="waLiveDiagnosticsResult" class="form-note" role="status" aria-live="polite">Nenhuma verificação executada.</p>'+
+ '</section>':'');
  $('#waakgSelfConnect')?.addEventListener('submit',async ev=>{
   ev.preventDefault();
   const label=val(ev.currentTarget,'label');
@@ -544,6 +550,30 @@ async function channels(){
    await channels();
    await showWaQr(channel.id);
   });
+ });
+ $('#waLiveDiagnostics')?.addEventListener('click',async()=>{
+  const button=$('#waLiveDiagnostics'),output=$('#waLiveDiagnosticsResult');
+  if(!output||!button)return;
+  button.disabled=true;output.textContent='Verificando a sessão e os registros recentes...';
+  try{
+   const status=await api('/api/waakg/diagnostics');
+   const gateway=status.gateway||{},flags=status.flags||{};
+   const lines=[
+    'Números confirmados diretamente pelo WA-AKG: '+(gateway.verified||0),
+    'Sessões desconectadas, divergentes ou indisponíveis: '+
+     ((gateway.disconnected||0)+(gateway.numberMismatch||0)+(gateway.unreachable||0)),
+    'Mensagens recebidas nas últimas 24 horas: '+(status.inboundLast24h||0),
+    'Conversas internas de proprietário/admin identificadas: '+(status.internalOwnerConversations||0),
+    'Sincronização automática: '+(flags.liveSyncEnabled?'habilitada':'desabilitada'),
+    'Agente IA da empresa: '+(flags.agentEnabled?'habilitado':'desabilitado'),
+    'Envio WhatsApp: '+(flags.outboundEnabled?'habilitado':'desabilitado'),
+    'Respostas automáticas: '+(flags.autoReplyEnabled?'habilitadas':'desabilitadas'),
+    ...(status.blockers||[]).map(item=>'Atenção: '+item),
+    'Diagnóstico somente leitura. Nenhuma mensagem foi enviada.'
+   ];
+   output.textContent=lines.join(' • ');
+  }catch(error){output.textContent=errMsg(error);}
+  finally{button.disabled=false;}
  });
  $('#waQrClose')?.addEventListener('click',()=>{
   clearTimeout(waQrTimer);$('#waQrPanel').classList.add('hidden');

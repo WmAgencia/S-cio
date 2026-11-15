@@ -46,6 +46,7 @@ import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {normalizeTaxId,validCpf,taxIdType as taxIdTypeOf,claimTrial,trialEndFrom,readTrial} from './socio-trial.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
 import {processLiveInboxSync} from './inbox-live-sync.mjs';
+import {auditLiveWhatsAppBindings,diagnoseTenantWhatsApp} from './socio-wa-live-diagnostics.mjs';
 import {processNextAiReply,buildAiInstructions} from './ai-replies.mjs';
 import {normalizeLabHistory,buildLabInput,polishCustomerReply,reviewReplyStyle} from './socio-intelligence.mjs';
 import {analyzeSocioContinuity} from './socio-prospector-continuity.mjs';
@@ -1203,6 +1204,12 @@ async function handle(req,res){
   return json(res,200,{configured:gatewayConfigured(),mode:'read_only',selfService:true,
    limitations:'Até 50 conversas retornadas pelo gateway por sessão; até 400 mensagens por conversa. Histórico antigo pode não estar disponível.'});
  }
+ if(method==='GET'&&pathname==='/api/waakg/diagnostics'){
+  needRole(a,['owner','admin']);
+  assertApiFeature(a.features,'/api/inbox');
+  res.setHeader('Cache-Control','private,no-store');
+  return json(res,200,await diagnoseTenantWhatsApp(pool,a));
+ }
  if(method==='GET'&&pathname==='/api/waakg/channels'){
   const r=await query(
    'SELECT l.channel_id AS id,ch.label,ch.phone,ch.status,l.created_at FROM waakg_links l JOIN channels ch ON ch.id=l.channel_id AND ch.tenant_id=l.tenant_id WHERE l.tenant_id=$1 ORDER BY l.created_at DESC',
@@ -2300,6 +2307,12 @@ async function main(){
      sessions:Array.isArray(result.data)?result.data.length:0})))
    .catch(error=>console.warn('[socio gateway private]',JSON.stringify({reachable:false,
      code:Number(error?.status||503)})));
+  // At startup verify the tenant-bound phone, not merely that a gateway session exists.
+  // No session ids, numbers, messages or user identities are logged.
+  void auditLiveWhatsAppBindings(pool,{limit:5})
+   .then(summary=>console.info('[socio wa live binding]',JSON.stringify(summary)))
+   .catch(error=>console.warn('[socio wa live binding]',JSON.stringify({
+    readOnly:true,errorCode:String(error?.code||'READ_FAILED').slice(0,30)})));
  }
  // Expired windows are useless; drop them so the table stays proportional to
  // recent traffic instead of growing forever.
