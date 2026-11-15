@@ -2,6 +2,7 @@
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,workspace:'production',aiTab:'training',catalogSearch:'',catalogStock:'all'};
+let routeFeedbackTimer=null, navigationEpoch=0, routeAbortController=null;
 const googleAdsVisible=()=>globalThis.SocioProductFeatures?.googleAdsVisible===true;
 const featureLabels={whatsapp:'Atendimento WhatsApp',catalog:'Produtos e serviços',meta_ads:'Meta Ads',ai:'Inteligência Artificial',team:'Equipe'};
 const featureView={inbox:'whatsapp',products:'catalog',marketing:'meta_ads',training:'ai',team:'team'};
@@ -95,13 +96,30 @@ async function api(path,method='GET',body,headers={},options={}){
  const controller=method==='GET'&&!opts.signal&&typeof AbortController==='function'?new AbortController():null;
  const timeout=controller?setTimeout(()=>controller.abort(),18000):null;
  if(controller)opts.signal=controller.signal;
+ // Cancel obsolete reads when the user navigates to another screen.
+ // Never cancel an explicit state-changing request.
+ const navSignal=method==='GET'&&controller?routeAbortController?.signal:null;
+ const abortFromRoute=()=>controller?.abort();
+ if(navSignal?.aborted)controller.abort();
+ else navSignal?.addEventListener?.('abort',abortFromRoute,{once:true});
  if(body!==undefined){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
  if(method!=='GET'&&state.csrf)opts.headers['X-CSRF-Token']=state.csrf;
- let resp;
- try{resp=await fetch(path,opts);}
- catch(error){if(controller?.signal.aborted)throw new Error('Tempo limite da consulta atingido. Tente novamente.');throw error;}
- finally{if(timeout)clearTimeout(timeout);}
- const data=await resp.json().catch(()=>({error:'Erro de conexão.'}));
+ let resp,data;
+ try{
+  resp=await fetch(path,opts);
+  // Keep the timeout active while streaming/parsing JSON. A hung response
+  // body used to bypass the 18s GET deadline after the headers arrived.
+  data=await resp.json().catch(error=>{
+   if(controller?.signal.aborted)throw error;
+   return {error:'Erro de conexão.'};
+  });
+ }catch(error){
+  if(controller?.signal.aborted)throw new Error('Tempo limite da consulta atingido. Tente novamente.');
+  throw error;
+ }finally{
+  if(timeout)clearTimeout(timeout);
+  navSignal?.removeEventListener?.('abort',abortFromRoute);
+ }
  if(!resp.ok){if(resp.status===401&&state.me){state.me=null;boot();}throw new Error(data.error||'Falha ao acessar o servidor.');}
  return data;
 }
@@ -118,15 +136,33 @@ function badge(text,color='gray'){return '<span class="badge '+color+'">'+e(text
 function panel(title,description,body){return '<div class="card"><div class="panel-head"><div><h2>'+e(title)+'</h2>'+ (description?'<p>'+e(description)+'</p>':'')+'</div></div>'+body+'</div>';}
 function formValues(form){return Object.fromEntries(new FormData(form).entries());}
 function setLoading(){
- const old=view.querySelector('[data-socio-loading-overlay]');if(old?.parentNode)old.parentNode.removeChild(old);
+ // Keep the last completed screen visible while a new route loads. The
+ // indicator appears only for calls slower than a normal interaction and
+ // never blocks pointer events or blurs the page.
+ clearTimeout(routeFeedbackTimer);
+ const previous=view.querySelector?.('[data-socio-loading-overlay]');
+ if(previous?.parentNode)previous.parentNode.removeChild(previous);
  view.setAttribute('aria-busy','true');
- const markup='<div data-socio-loading-overlay class="socio-loading-overlay"><div class="loading socio-page-loading" role="status" aria-live="polite"><span class="socio-loading-sigil" aria-hidden="true">✳</span><span class="socio-loading-title">Preparando seu espaço</span><span class="socio-loading-copy">Carregando as informações da sua empresa…</span></div></div>';
- if(typeof document?.createElement==='function'){
-  const overlay=document.createElement('div');overlay.dataset.socioLoadingOverlay='';overlay.className='socio-loading-overlay';overlay.innerHTML=markup.match(/>(.*)<\/div>$/s)?.[1]||'';view.appendChild(overlay);
- }else view.innerHTML=(view.innerHTML||'')+markup;
+ routeFeedbackTimer=setTimeout(()=>{
+  if(!view?.isConnected||!view.hasAttribute?.('aria-busy'))return;
+  if(typeof document?.createElement!=='function')return;
+  const badge=document.createElement('div');
+  badge.dataset.socioLoadingOverlay='';
+  badge.className='socio-loading-overlay';
+  badge.setAttribute('role','status');
+  badge.innerHTML='<span class="loading socio-page-loading"><span class="socio-loading-sigil" aria-hidden="true">✳</span><span class="socio-loading-title">Atualizando a tela…</span></span>';
+  view.appendChild(badge);
+ },180);
 }
-function finishLoading(){const overlay=view.querySelector?.('[data-socio-loading-overlay]');if(overlay?.parentNode)overlay.parentNode.removeChild(overlay);view.removeAttribute?.('aria-busy');}
+function finishLoading(){
+ clearTimeout(routeFeedbackTimer);
+ routeFeedbackTimer=null;
+ const badge=view.querySelector?.('[data-socio-loading-overlay]');
+ if(badge?.parentNode)badge.parentNode.removeChild(badge);
+ view.removeAttribute?.('aria-busy');
+}
 function setupAuth(initialized){
+ $('#socioBootStatus')?.setAttribute('hidden','');
  $('#authScreen').classList.remove('hidden');$('#appShell').classList.add('hidden');
  $('#loginForm').classList.toggle('hidden',!initialized);
  $('#setupForm').classList.toggle('hidden',initialized);
@@ -135,6 +171,11 @@ function setupAuth(initialized){
  $('#authError').textContent='';
 }
 async function boot(){
+ // Invalidate pending page navigation before creating a new auth context.
+ if(routeAbortController)routeAbortController.abort();
+ routeAbortController=null;
+ navigationEpoch++;
+ finishLoading();
  try{
   const bootstrap=await api('/api/bootstrap');
   try{
@@ -143,6 +184,7 @@ async function boot(){
    state.workspace=workspaceFromLocation();
    state.view=initialWorkspaceView();
    $('#authScreen').classList.add('hidden');$('#appShell').classList.remove('hidden');
+   $('#socioBootStatus')?.setAttribute('hidden','');
    $('#workspaceName').textContent=me.tenant.name;
    $('#workspaceInitial').textContent=(me.tenant.name[0]||'S').toUpperCase();
    $('#userChip').textContent=me.user.name.split(/\s+/).slice(0,2).map(v=>v[0]).join('').toUpperCase();
@@ -250,6 +292,11 @@ async function changeView(next,conversationId=null){
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
  $('#topTitle').textContent=titles[next]||'Sócio';
  updateWorkspaceUrl();
+ const navigationTicket=++navigationEpoch;
+ if(typeof AbortController==='function'){
+  routeAbortController?.abort();
+  routeAbortController=new AbortController();
+ }
  setLoading();
  try{
   if(next==='orb'&&globalThis.SocioOrbUI){
@@ -273,8 +320,13 @@ async function changeView(next,conversationId=null){
   if(next==='masterOverview'||next==='masterPlans')
    await globalThis.SocioMasterDashboard.render({root:view,api,me:state.me,navigate:changeView,
     mode:next==='masterPlans'?'plans':'overview'});
+  if(navigationTicket===navigationEpoch)finishLoading();
+ }catch(error){
+  if(navigationTicket!==navigationEpoch)return;
   finishLoading();
- }catch(error){finishLoading();view.innerHTML=empty('alert', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
+  view.innerHTML=empty('alert', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');
+  $('#retryView')?.addEventListener('click',()=>changeView(next));
+ }
 }
 
 function chartNumber(value){const n=Number(value);return Number.isFinite(n)&&n>0?Math.round(n):0;}
