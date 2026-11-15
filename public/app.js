@@ -117,7 +117,14 @@ function empty(icon,title,description,action=''){
 function badge(text,color='gray'){return '<span class="badge '+color+'">'+e(text)+'</span>';}
 function panel(title,description,body){return '<div class="card"><div class="panel-head"><div><h2>'+e(title)+'</h2>'+ (description?'<p>'+e(description)+'</p>':'')+'</div></div>'+body+'</div>';}
 function formValues(form){return Object.fromEntries(new FormData(form).entries());}
-function setLoading(){view.innerHTML='<div class="loading socio-page-loading" role="status" aria-live="polite"><span class="socio-loading-sigil" aria-hidden="true">✳</span><span class="socio-loading-title">Preparando seu espaço</span><span class="socio-loading-copy">Carregando as informações da sua empresa…</span></div>';}
+function setLoading(){
+ const old=view.querySelector('[data-socio-loading-overlay]');old?.remove();
+ view.setAttribute('aria-busy','true');
+ const overlay=document.createElement('div');overlay.dataset.socioLoadingOverlay='';
+ overlay.className='socio-loading-overlay';overlay.innerHTML='<div class="loading socio-page-loading" role="status" aria-live="polite"><span class="socio-loading-sigil" aria-hidden="true">✳</span><span class="socio-loading-title">Preparando seu espaço</span><span class="socio-loading-copy">Carregando as informações da sua empresa…</span></div>';
+ view.appendChild(overlay);
+}
+function finishLoading(){view.querySelector('[data-socio-loading-overlay]')?.remove();view.removeAttribute('aria-busy');}
 function setupAuth(initialized){
  $('#authScreen').classList.remove('hidden');$('#appShell').classList.add('hidden');
  $('#loginForm').classList.toggle('hidden',!initialized);
@@ -265,7 +272,8 @@ async function changeView(next,conversationId=null){
   if(next==='masterOverview'||next==='masterPlans')
    await globalThis.SocioMasterDashboard.render({root:view,api,me:state.me,navigate:changeView,
     mode:next==='masterPlans'?'plans':'overview'});
- }catch(error){view.innerHTML=empty('alert', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
+  finishLoading();
+ }catch(error){finishLoading();view.innerHTML=empty('alert', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
 }
 
 function chartNumber(value){const n=Number(value);return Number.isFinite(n)&&n>0?Math.round(n):0;}
