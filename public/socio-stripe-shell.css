@@ -1,0 +1,347 @@
+/* Sócio · Canonical Stripe-inspired application shell, 15 Nov 2026.
+   Single structural layer for top navigation + executive overview.
+   Replaces the conflicting dark Ethereal/Reference stylesheets.
+   The original Stripe design system continues to own module components.
+   No backdrop filters on loading states or analytic cards. */
+:root{color-scheme:light;--bg:#f7f8fa;--surface:#fff;--ink:#202735;
+ --muted:#667085;--line:#e5e7eb;--purple:#605dec;--purple-light:#f0efff;}
+html:has(body #appShell:not(.hidden)),
+body:has(#appShell:not(.hidden)){background:#f7f8fa!important;color:#202735!important;color-scheme:light!important}
+body #appShell{
+ --et-canvas:#f7f8fa;--et-card:#fff;--et-elev:#fbfcff;
+ --et-ink:#202735;--et-ink-2:#344054;--et-muted:#667085;
+ --et-line:#e5e7eb;--et-line-soft:#edf0f5;
+ --et-violet:#605dec;--et-mint-1:#e9f8ef;--et-mint-2:#c7eade;
+ --et-mint-3:#16865d;--et-rose:#ba3c49;
+ color-scheme:light!important;color:#202735!important;
+}
+body #appShell.app-shell:not(.hidden){display:block!important;width:100%!important;min-height:100dvh!important;
+ margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;
+ overflow:visible!important;background:#f7f8fa!important}
+body #appShell .app-main{min-height:100dvh!important;min-width:0;background:#f7f8fa!important;color:#202735!important}
+body #appShell .topbar{position:sticky!important;top:0;z-index:90;
+ display:grid!important;grid-template-columns:auto minmax(0,1fr) auto!important;
+ align-items:center!important;gap:16px!important;min-height:70px!important;height:auto!important;
+ padding:9px clamp(16px,2.6vw,38px)!important;margin:0!important;
+ border:0!important;border-bottom:1px solid #e5e7eb!important;border-radius:0!important;
+ background:#fff!important;color:#202735!important;box-shadow:none!important;
+ backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body #appShell .topbar-brand{display:flex;align-items:center;gap:9px;min-width:0;white-space:nowrap}
+body #appShell .topbar-brand .et-logo{width:34px!important;height:34px!important;min-width:34px;object-fit:contain;
+ border:0!important;box-shadow:none!important;background:none!important}
+body #appShell .topbar-brand strong{display:flex;flex-direction:column;color:#202735!important;
+ font-weight:730!important;letter-spacing:-.04em!important;font-size:17px!important;line-height:1.15}
+body #appShell .topbar-brand strong small{font-size:9px;font-weight:500;letter-spacing:.07em;color:#667085!important}
+body #appShell .nav-rail{min-width:0;display:flex;align-items:center;justify-content:center;gap:8px}
+body #appShell .nav-rail .sidebar-label{display:none!important}
+body #appShell .nav-rail .nav{display:flex!important;flex-direction:row!important;align-items:center;
+ gap:2px!important;width:auto!important;max-width:100%;min-width:0;min-height:43px;
+ padding:4px!important;border:1px solid #e5e7eb!important;border-radius:12px!important;
+ background:#f7f8fa!important;box-shadow:none!important;overflow-x:auto!important;overflow-y:hidden!important;
+ scrollbar-width:thin;scrollbar-color:#d9dce7 transparent;scroll-behavior:smooth}
+body #appShell .nav-rail .nav-item{display:inline-flex!important;align-items:center;justify-content:center;
+ flex:0 0 auto;gap:7px;width:auto!important;min-height:34px!important;height:34px!important;
+ padding:0 11px!important;border:1px solid transparent!important;border-radius:9px!important;
+ background:transparent!important;color:#586376!important;box-shadow:none!important;
+ font-size:12px!important;font-weight:570!important;white-space:nowrap;line-height:1.2;
+ transition:background .16s ease,color .16s ease,border-color .16s ease}
+body #appShell .nav-rail .nav-item:hover{background:#eef0f7!important;color:#252c44!important}
+body #appShell .nav-rail .nav-item.selected{background:#fff!important;color:#514ed5!important;
+ border-color:#e2e3f0!important;box-shadow:0 1px 3px #171e3312!important}
+body #appShell .nav-rail .nav-item .nav-symbol{display:grid;place-items:center;width:16px;min-width:16px;
+ height:17px;color:inherit!important;font-size:15px}
+body #appShell .nav-rail .nav-item .nav-symbol svg{width:16px;height:16px}
+body #appShell .nav-rail :is(.nav.hidden,.nav-item.hidden,.workspace-switcher.hidden){display:none!important}
+body #appShell .workspace-switcher{position:relative;display:flex!important;align-items:center;gap:2px;
+ padding:3px;margin:0;background:#f1f1fe!important;border:1px solid #e2e0fa!important;
+ border-radius:10px!important;box-shadow:none!important}
+body #appShell .workspace-switcher.hidden{display:none!important}
+body #appShell .workspace-switcher-thumb{display:none!important}
+body #appShell .workspace-switcher button{display:inline-flex!important;align-items:center;gap:5px;
+ padding:5px 10px!important;min-height:31px!important;border:0!important;border-radius:8px!important;
+ background:transparent!important;color:#565b7c!important;font-size:11px!important;font-weight:630!important;
+ white-space:nowrap;box-shadow:none!important}
+body #appShell .workspace-switcher button[aria-selected="true"]{background:#fff!important;color:#514ed5!important;
+ box-shadow:0 1px 4px #22264512!important}
+body #appShell .workspace-switcher .ws-mark{display:grid;place-items:center;width:17px;height:17px;
+ border-radius:6px;background:#e5e4ff;color:#514ed5;font-size:10px;font-weight:750}
+body #appShell .topbar-tools{display:flex;align-items:center;justify-content:flex-end;gap:9px;min-width:0}
+body #appShell .topbar-tools .hidden{display:none!important}
+body #appShell .workspace-box{display:flex;align-items:center;gap:8px;min-width:0;
+ max-width:185px;margin:0!important;padding:6px 9px!important;background:#fafbfc!important;
+ border:1px solid #e5e7eb!important;border-radius:10px!important;box-shadow:none!important;color:#344054!important}
+body #appShell .workspace-circle{width:28px;height:28px;min-width:28px;border-radius:8px;background:#eeeaff!important;color:#514ed5!important;
+ display:grid;place-items:center;font-size:12px;font-weight:760}
+body #appShell .workspace-label{min-width:0;overflow:hidden}
+body #appShell .workspace-label small{display:block;font-size:9px!important;white-space:nowrap;
+ text-transform:uppercase;letter-spacing:.05em;color:#667085!important}
+body #appShell .workspace-label strong{display:block;max-width:118px;overflow:hidden;text-overflow:ellipsis;
+ white-space:nowrap;font-size:11px!important;color:#344054!important}
+body #appShell .workspace-chevron{color:#748198!important}
+body #appShell .topbar-icon{display:flex;align-items:center;justify-content:center;gap:6px;
+ min-width:35px;min-height:35px;border:1px solid #e5e7eb!important;border-radius:10px!important;
+ background:#fff!important;color:#596477!important;box-shadow:none!important}
+body #appShell .topbar-icon:hover{background:#f4f5fb!important;border-color:#cccff1!important}
+body #appShell .topbar-icon svg{width:18px;height:18px;stroke:currentColor}
+body #appShell #quickSearchBtn{width:36px;min-width:36px;overflow:hidden;white-space:nowrap}
+body #appShell #quickSearchBtn span{display:none!important}
+body #appShell .topbar-notify,body #appShell .user-menu{position:relative}
+body #appShell .topbar-notify>summary,body #appShell .user-menu>summary{list-style:none;cursor:pointer}
+body #appShell .topbar-notify>summary::-webkit-details-marker,
+body #appShell .user-menu>summary::-webkit-details-marker{display:none}
+body #appShell .topbar-notify-panel,body #appShell .user-menu-panel{position:absolute;top:calc(100% + 12px);
+ right:0;z-index:200;width:min(310px,calc(100vw - 24px));padding:12px!important;
+ background:#fff!important;color:#202735!important;border:1px solid #e5e7eb!important;
+ border-radius:14px!important;box-shadow:0 14px 45px #141c301d!important}
+body #appShell .topbar-notify:not([open]) .topbar-notify-panel,
+body #appShell .user-menu:not([open]) .user-menu-panel{display:none!important}
+body #appShell .topbar-notify-head,body #appShell .user-menu-id{display:flex;flex-direction:column;
+ gap:4px;padding:8px 10px;border-bottom:1px solid #edf0f5;margin-bottom:8px}
+body #appShell .topbar-notify-panel :is(strong,b),body #appShell .user-menu-panel :is(strong,b){color:#202735!important}
+body #appShell .topbar-notify-panel :is(p,small),body #appShell .user-menu-panel :is(p,small){color:#667085!important}
+body #appShell .user-menu-panel .sidebar-bottom{margin:0;padding:4px 0 0!important;border:0!important;background:transparent!important}
+body #appShell .user-menu-panel .nav-item{display:flex!important;width:100%!important;
+ padding:9px 12px!important;text-align:left!important;color:#344054!important;
+ border:0!important;border-radius:9px!important;background:transparent!important}
+body #appShell .user-menu-panel .nav-item:hover{background:#f3f4ff!important;color:#514ed5!important}
+body #appShell .user-chip{background:#efedff!important;color:#514ed5!important;border-radius:50%!important}
+body #appShell .page-strip{display:flex;align-items:center;gap:8px;min-height:44px;
+ padding:8px clamp(16px,2.6vw,38px)!important;border-bottom:1px solid #eef0f4!important;
+ color:#667085!important;background:#f7f8fa!important;font-size:12px}
+body #appShell .page-strip strong{font-weight:680;color:#202735!important}
+body #appShell .page-strip .top-pill{margin-left:auto!important;color:#667085!important}
+body #appShell #view{width:100%;max-width:1510px;min-width:0;min-height:calc(100dvh - 185px);
+ position:relative!important;margin:0 auto!important;padding:24px clamp(16px,3vw,42px) 50px!important;
+ color:#202735!important;color-scheme:light!important;background:transparent!important}
+body #appShell[data-workspace="master"] .app-main,
+body #appShell[data-workspace="master"] #view{background:#f7f8fc!important}
+body #appShell .site-footer{padding:16px 22px!important;color:#667085!important;
+ background:transparent!important;border-top:1px solid #edf0f4!important;text-align:center!important;font-size:11px!important}
+body #appShell :is(a,button,input,select,textarea,[tabindex]):focus-visible{outline:2px solid #605dec!important;outline-offset:3px!important}
+body #appShell :is([hidden],.hidden){display:none!important}
+/* Executive dashboard: structural grid formerly defined only by the dark theme. */
+body #appShell #view .px-overview.et-board{display:flex;flex-direction:column;gap:18px;
+ padding:0!important;background:transparent!important;color:#202735!important}
+body #appShell #view .et-title{margin:0!important;font-size:clamp(25px,3vw,32px)!important;
+ font-weight:700!important;letter-spacing:-.04em!important;color:#202735!important}
+body #appShell #view .et-board-grid{display:grid!important;
+ grid-template-columns:repeat(12,minmax(0,1fr))!important;grid-auto-rows:minmax(0,auto)!important;
+ gap:16px!important;align-items:stretch;min-width:0}
+body #appShell #view .et-board-grid>*{min-width:0;grid-row:auto;overflow-wrap:anywhere}
+body #appShell #view .et-board-grid>.et-hero{grid-column:1/span 6!important;grid-row:1/span 2!important}
+body #appShell #view .et-board-grid>.et-income{grid-column:7/span 3!important;grid-row:1!important}
+body #appShell #view .et-board-grid>.et-kpi-campaign{grid-column:10/span 3!important;grid-row:1!important}
+body #appShell #view .et-board-grid>.et-recs{grid-column:7/span 6!important;grid-row:2!important}
+body #appShell #view .et-board-grid>.et-flow{grid-column:1/span 6!important;grid-row:3!important}
+body #appShell #view .et-board-grid>.et-expense-split{grid-column:7/span 6!important;grid-row:3!important}
+body #appShell #view .et-board-grid>.et-subs{grid-column:1/-1!important;grid-row:4!important}
+body #appShell #view .px-overview.et-board :is(.et-card,.et-kpi,.et-block){
+ padding:21px!important;min-height:125px;border-radius:15px!important;
+ border:1px solid #e5e7eb!important;background:#fff!important;color:#202735!important;
+ box-shadow:0 2px 12px #1e293b08!important;
+ backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body #appShell #view .px-overview.et-board .et-hero{
+ display:flex;flex-direction:column;justify-content:space-between;
+ padding:23px!important;min-height:260px;border-radius:16px!important;
+ border:1px solid #dad9fa!important;background:linear-gradient(125deg,#f1f0ff,#fafaff 65%,#eff4ff)!important;
+ box-shadow:none!important;color:#202735!important}
+body #appShell #view .et-hero-mark{display:none!important}
+body #appShell #view .et-hero-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+body #appShell #view .et-hero-label{font-size:13px;font-weight:680;letter-spacing:-.01em;color:#565c8a!important}
+body #appShell #view .et-hero-value{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:15px 0}
+body #appShell #view .et-hero-value strong{font-size:clamp(28px,4.2vw,52px)!important;line-height:1.1;
+ font-weight:710;letter-spacing:-.05em;color:#202735!important}
+body #appShell #view .et-hero-value sup{font-size:.42em;vertical-align:baseline;margin-right:6px}
+body #appShell #view .et-hero-sales{font-size:12px;color:#667085}
+body #appShell #view .et-hero-note{font-size:12px;line-height:1.5;color:#667085!important;margin:0 0 15px}
+body #appShell #view .et-hero-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+body #appShell #view .et-pills,body #appShell #view .et-seg{display:flex;align-items:center;gap:4px;
+ padding:4px!important;border:1px solid #e5e7eb!important;background:#f5f6fa!important;
+ border-radius:10px!important;max-width:100%;flex-wrap:wrap}
+body #appShell #view .et-pill,body #appShell #view .et-seg button{min-height:30px;padding:6px 10px;
+ border:0!important;border-radius:7px!important;background:transparent!important;
+ font-weight:600;font-size:11px;color:#667085!important;white-space:nowrap}
+body #appShell #view .et-pill:hover,body #appShell #view .et-seg button:hover{background:#eaeaf7!important}
+body #appShell #view .et-pill.on,body #appShell #view .et-seg button.on{background:#fff!important;
+ color:#514ed5!important;box-shadow:0 1px 4px #20273510!important}
+body #appShell #view .et-hero-refresh{display:grid;place-items:center;height:32px;width:32px;
+ background:#fff!important;color:#605dec!important;border:1px solid #e2e3f5!important;
+ border-radius:9px!important}
+body #appShell #view .et-hero-refresh svg{height:16px;width:16px}
+body #appShell #view :is(.period-fields,.et-split-fields){display:flex;align-items:end;gap:8px;
+ flex-wrap:wrap;margin-top:9px}
+body #appShell #view :is(.period-fields,.et-split-fields) label{display:flex;flex-direction:column;gap:4px;
+ min-width:100px;flex:1 1 120px;font-size:11px;color:#667085}
+body #appShell #view :is(.period-fields,.et-split-fields) input{min-height:34px!important;
+ width:100%;min-width:0;border:1px solid #d6dbe5!important;background:#fff!important;color:#202735!important}
+body #appShell #view :is(.period-hint,.et-muted){font-size:11px;color:#667085!important;line-height:1.5}
+body #appShell #view .period-hint.is-error{color:#ba3c49!important}
+body #appShell #view .et-kpi{display:flex;flex-direction:column;gap:10px;justify-content:flex-start}
+body #appShell #view .et-kpi-head,body #appShell #view .et-card-head,body #appShell #view .et-block-head{
+ display:flex;align-items:flex-start;justify-content:space-between;gap:10px;min-width:0}
+body #appShell #view .et-kpi-label{color:#667085!important;font-size:12px;font-weight:660}
+body #appShell #view .et-kpi-value{font-size:clamp(26px,3vw,38px)!important;font-weight:710;
+ line-height:1.1;color:#202735!important;letter-spacing:-.045em}
+body #appShell #view :is(.et-kpi-sub,.et-kpi-note){margin:0;color:#667085!important;font-size:11px;line-height:1.5}
+body #appShell #view .et-kpi-note b{color:#202735!important}
+body #appShell #view :is(.et-kpi-link,.et-block-link,.et-open){display:inline-flex;align-items:center;gap:4px;
+ justify-content:center;flex:0 0 auto;min-height:29px;
+ border:1px solid #e3e4fb!important;background:#f5f5ff!important;
+ color:#514ed5!important;border-radius:9px!important;padding:5px 10px!important;font-weight:660;font-size:11px}
+body #appShell #view :is(.et-kpi-link,.et-block-link,.et-open):hover{background:#e8e8ff!important}
+body #appShell #view .et-campaign-body{display:flex;align-items:center;gap:10px;min-width:0}
+body #appShell #view .et-campaign-thumb{display:grid;place-items:center;width:54px;height:54px;
+ min-width:54px;border-radius:10px;overflow:hidden;background:#f1f2f7;color:#667085}
+body #appShell #view .et-campaign-thumb :is(img,video){width:100%;height:100%;object-fit:cover}
+body #appShell #view .et-campaign-copy{min-width:0;flex:1}
+body #appShell #view .et-campaign-copy strong{font-size:12px;line-height:1.4;
+ color:#202735!important;overflow-wrap:anywhere}
+body #appShell #view .et-card-title,body #appShell #view .et-block-head h2{margin:0;
+ color:#202735!important;font-size:14px!important;font-weight:685!important;line-height:1.4}
+body #appShell #view .et-card-sub{margin:4px 0 0;font-size:11px;color:#667085!important}
+body #appShell #view .et-block-count{min-width:19px;text-align:center;border-radius:6px;
+ padding:2px 6px;color:#514ed5;background:#efefff;font-size:11px}
+body #appShell #view .et-chart{width:100%;flex:1;min-height:160px;display:flex;align-items:flex-end}
+body #appShell #view .et-chart svg{display:block;width:100%;height:auto;max-height:245px}
+body #appShell #view .et-chart-axis{font-size:10px;fill:#667085}
+body #appShell #view .et-chart-value{font-size:10px;fill:#202735}
+body #appShell #view .et-baseline{stroke:#e5e7eb}
+body #appShell #view .et-chart-empty{min-height:160px;display:grid;place-items:center;
+ color:#667085!important;font-size:12px;text-align:center}
+body #appShell #view .et-split{display:grid;grid-template-columns:minmax(140px,1fr) minmax(0,1fr);
+ gap:12px;align-items:center;min-width:0;flex:1;margin-top:8px}
+body #appShell #view .et-donut{max-width:100%;display:grid;place-items:center}
+body #appShell #view .et-donut svg{display:block;width:min(100%,190px);height:auto}
+body #appShell #view .et-donut :is(.et-donut-label,.et-donut-center-sub){fill:#667085}
+body #appShell #view .et-donut-center{font-size:17px;font-weight:700;fill:#202735}
+body #appShell #view .et-donut-center-sub{font-size:10px}
+body #appShell #view .et-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:10px;list-style:none;margin:0;padding:0;min-width:0}
+body #appShell #view .et-legend li{display:grid;grid-template-columns:4px minmax(0,1fr);gap:3px 8px;min-width:0}
+body #appShell #view .et-swatch{grid-row:1/span 2;width:4px;height:100%;min-height:22px;border-radius:3px;background:#605dec}
+body #appShell #view .et-swatch.et-c1{background:#605dec}
+body #appShell #view .et-swatch.et-c2{background:#3e74cc}
+body #appShell #view .et-swatch.et-c3{background:#16865d}
+body #appShell #view .et-swatch.et-c4{background:#df8b4e}
+body #appShell #view .et-legend-label{font-size:11px;color:#667085!important;line-height:1.4}
+body #appShell #view .et-legend-value{font-size:13px;font-weight:680;color:#202735!important;overflow-wrap:anywhere}
+body #appShell #view .et-recs{display:flex;flex-direction:column;gap:10px}
+body #appShell #view .et-recs .et-stack{display:grid;gap:9px;min-width:0}
+body #appShell #view .et-rec{display:flex;flex-direction:column;gap:9px;position:relative!important;
+ min-height:0!important;height:auto!important;inset:auto!important;
+ padding:13px!important;border-radius:11px!important;background:#f8f8ff!important;
+ border:1px solid #e5e5f5!important;box-shadow:none!important;color:#202735!important;
+ opacity:1!important;transform:none!important}
+body #appShell #view .et-rec:nth-child(n+3){display:none!important}
+body #appShell #view .et-rec.is-out{display:none!important}
+body #appShell #view .et-rec :is(.et-rec-kind,.et-rec-title,.ov-rec-question){color:#344054!important}
+body #appShell #view .et-rec-title{font-size:12px!important;font-weight:675!important;line-height:1.4!important}
+body #appShell #view .et-rec .ov-rec-status{display:inline-flex;align-items:center;min-height:24px;
+ background:#e5e4ff!important;color:#514ed5!important;padding:4px 9px!important;
+ border-radius:999px;font-size:10px!important;font-weight:650!important}
+body #appShell #view .et-rec :is(.et-rec-actions,.et-rec-top){display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+body #appShell #view .et-rec .et-btn{min-height:30px;border:1px solid #d8dbef!important;
+ border-radius:8px!important;padding:5px 10px!important;background:#fff!important;
+ color:#514ed5!important;font-size:11px;font-weight:640}
+body #appShell #view .et-rec .et-btn.primary{background:#605dec!important;color:#fff!important;border-color:#605dec!important}
+body #appShell #view .et-rec .ov-rec-note{font-size:11px;color:#667085!important}
+body #appShell #view .ov-rail-empty,body #appShell #view .et-stack-empty{display:flex;align-items:center;
+ min-height:90px;color:#667085!important;font-size:12px!important;line-height:1.6}
+body #appShell #view .et-subs-icons{display:flex;gap:0;margin:12px 0}
+body #appShell #view .et-subs-icon{display:grid;place-items:center;width:29px;height:29px;
+ min-width:29px;border:2px solid #fff;border-radius:50%;background:#ecebff;color:#514ed5;
+ font-size:12px;font-weight:690;margin-left:-5px}
+body #appShell #view .et-subs-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:9px;margin-top:11px}
+body #appShell #view .et-sub-row{display:flex;align-items:center;gap:10px;min-width:0;
+ border:1px solid #edf0f5;border-radius:10px;padding:10px}
+body #appShell #view .et-sub-avatar{display:grid;place-items:center;width:34px;height:34px;
+ min-width:34px;border-radius:10px;background:#ecebff;color:#514ed5;font-weight:730}
+body #appShell #view .et-sub-copy{flex:1;min-width:0}
+body #appShell #view .et-sub-copy strong{display:block;overflow:hidden;text-overflow:ellipsis;
+ white-space:nowrap;font-size:12px;color:#202735!important}
+body #appShell #view .et-sub-copy small{display:block;overflow:hidden;text-overflow:ellipsis;
+ white-space:nowrap;font-size:11px;color:#667085!important}
+body #appShell #view .et-tag{font-size:10px;padding:3px 6px;border-radius:6px;
+ background:#e9f8ef;color:#16865d}
+/* First-paint skeleton and lightweight navigation feedback. */
+body #appShell #view .px-overview-loading{min-height:380px}
+body #appShell #view .px-load-card{border:1px solid #e5e7eb!important;background:#fff!important;
+ border-radius:14px!important;min-height:100px;overflow:hidden}
+body #appShell #view .px-load-line{display:block;height:13px;max-width:100%;
+ background:linear-gradient(90deg,#eff0f6 0%,#f7f8fb 50%,#eff0f6 100%);
+ background-size:200% 100%;border-radius:6px;margin:9px 0;
+ animation:socio-loading-sheen 1.8s ease-in-out infinite}
+body #appShell #view .px-load-line:nth-child(1){width:55%}
+body #appShell #view .px-load-line:nth-child(2){width:78%}
+body #appShell #view .px-load-line:nth-child(3){width:48%}
+body #appShell #view .px-load-status{font-size:12px;color:#667085!important}
+body #appShell #view .socio-loading-overlay{position:absolute!important;top:10px;right:15px;left:auto!important;
+ bottom:auto!important;z-index:35!important;display:flex;align-items:center;
+ width:max-content;max-width:calc(100% - 30px);min-height:33px;padding:7px 11px;
+ border:1px solid #e5e7eb!important;border-radius:10px!important;background:#fff!important;
+ color:#596477!important;box-shadow:0 4px 14px #20273514!important;
+ backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+ pointer-events:none!important;animation:socio-progress-in .14s ease both!important}
+body #appShell #view .socio-loading-overlay .socio-page-loading{display:flex!important;gap:8px;
+ align-items:center;margin:0!important;padding:0!important;min-height:0!important;
+ background:transparent!important;border:0!important;box-shadow:none!important;color:#667085!important}
+body #appShell #view .socio-loading-overlay .socio-loading-sigil{display:inline-block;color:#605dec;font-size:14px}
+body #appShell #view .socio-loading-overlay .socio-loading-title{font-size:11px;white-space:nowrap;color:#667085}
+body #appShell #view .socio-loading-overlay .socio-loading-copy{display:none!important}
+@keyframes socio-loading-sheen{to{background-position:-200% 0}}
+@keyframes socio-progress-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media(max-width:1330px){
+ body #appShell .workspace-box{display:none!important}
+ body #appShell .topbar{gap:10px!important}
+ body #appShell .nav-rail .nav-item{padding:0 9px!important;font-size:11px!important}
+}
+@media(max-width:1060px){
+ body #appShell .topbar{grid-template-columns:auto minmax(0,1fr)!important;row-gap:7px!important}
+ body #appShell .nav-rail{grid-column:1/-1;grid-row:2;justify-content:stretch}
+ body #appShell .nav-rail .nav{width:100%!important;justify-content:flex-start!important}
+ body #appShell .topbar-tools{grid-column:2;grid-row:1}
+ body #appShell .et-board-grid>.et-hero{grid-column:1/span 7!important;grid-row:1/span 2!important}
+ body #appShell .et-board-grid>.et-income{grid-column:8/span 5!important;grid-row:1!important}
+ body #appShell .et-board-grid>.et-kpi-campaign{grid-column:8/span 5!important;grid-row:2!important}
+ body #appShell .et-board-grid>.et-recs{grid-column:1/-1!important;grid-row:3!important}
+ body #appShell .et-board-grid>.et-flow{grid-column:1/span 6!important;grid-row:4!important}
+ body #appShell .et-board-grid>.et-expense-split{grid-column:7/span 6!important;grid-row:4!important}
+ body #appShell .et-board-grid>.et-subs{grid-column:1/-1!important;grid-row:5!important}
+}
+@media(max-width:720px){
+ body #appShell .topbar{min-height:64px!important;padding:9px 12px!important}
+ body #appShell .topbar-brand strong{font-size:15px!important}
+ body #appShell .topbar-brand strong small{display:none}
+ body #appShell .topbar-brand .et-logo{width:28px!important;height:28px!important;min-width:28px}
+ body #appShell .nav-rail{overflow:hidden}
+ body #appShell .nav-rail .nav{min-height:40px;flex-wrap:nowrap!important;overflow-x:auto!important;
+  -webkit-overflow-scrolling:touch}
+ body #appShell .nav-rail .nav-item{min-height:31px!important;height:31px!important;padding:0 9px!important;
+  font-size:11px!important;flex:0 0 auto!important}
+ body #appShell .workspace-switcher button{font-size:10px!important;padding:4px 7px!important}
+ body #appShell #view{padding:17px 12px 35px!important}
+ body #appShell #view .et-board-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:11px!important}
+ body #appShell #view .et-board-grid>.et-hero{grid-column:1/-1!important;grid-row:auto!important}
+ body #appShell #view .et-board-grid>.et-income{grid-column:1!important;grid-row:auto!important}
+ body #appShell #view .et-board-grid>.et-kpi-campaign{grid-column:2!important;grid-row:auto!important}
+ body #appShell #view .et-board-grid>.et-recs,body #appShell #view .et-board-grid>.et-flow,
+ body #appShell #view .et-board-grid>.et-expense-split,
+ body #appShell #view .et-board-grid>.et-subs{grid-column:1/-1!important;grid-row:auto!important}
+ body #appShell #view .px-overview.et-board :is(.et-card,.et-kpi,.et-block){padding:15px!important}
+ body #appShell #view .et-hero-value strong{font-size:34px!important}
+ body #appShell #view .et-split{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+ body #appShell #view .et-subs-list{grid-template-columns:1fr}
+ body #appShell #view .et-legend{grid-template-columns:1fr 1fr}
+ body #appShell #view .et-kpi-value{font-size:27px!important}
+}
+@media(max-width:390px){
+ body #appShell .topbar-brand strong{display:none!important}
+ body #appShell .et-hero-value strong{font-size:29px!important}
+ body #appShell #view .et-split{grid-template-columns:1fr}
+ body #appShell #view .et-legend{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(prefers-reduced-motion:reduce){
+ body #appShell :is(.nav-item,.et-pill,.et-seg button,.btn){transition:none!important}
+ body #appShell #view :is(.px-load-line,.socio-loading-overlay){animation:none!important}
+}
