@@ -62,6 +62,17 @@ test('Chromium computes the approved dark materials with readable cards and an u
   assert.equal(data.topBackdrop,'none');
   assert.equal(data.cardBackdrop,'none');
   assert.equal(data.assistantPosition,'fixed');
+  for(const width of [1900,1440,390]){
+   await page.setViewportSize({width,height:900});
+   const bounds=await page.locator('#appShell').evaluate(el=>{
+    const r=el.getBoundingClientRect();
+    return {x:r.x,y:r.y,width:r.width,height:r.height,viewport:innerWidth};
+   });
+   assert.equal(bounds.x,0,'The application starts at the browser left edge');
+   assert.equal(bounds.y,0,'The application starts at the browser top edge');
+   assert.equal(bounds.width,bounds.viewport,'The application fills the browser width');
+   assert(bounds.height>=900,'The application fills the browser height');
+  }
   console.log('Ethereal surface material verified: '+JSON.stringify(data));
  }finally{await browser.close();}
 });
