@@ -45,12 +45,13 @@ function harness(traffic=[]){
  return {root,requests,navigation,buttons,render};
 }
 
-test('dashboard opens the selected WhatsApp conversation, with newest AI chats first',async()=>{
+test('dashboard opens the selected WhatsApp conversation, including recent human chats',async()=>{
  const h=harness();await h.render();
- assert.deepEqual(h.buttons.map(button=>button.dataset.openConversation),['new','old']);
+ assert.deepEqual(h.buttons.map(button=>button.dataset.openConversation),['human','new','old']);
  h.buttons[0].click();
- assert.deepEqual(h.navigation,[['inbox','new']]);
- assert.doesNotMatch(h.root.innerHTML,/Humano|Instagram IA/);
+ assert.deepEqual(h.navigation,[['inbox','human']]);
+ assert.match(h.root.innerHTML,/Humano/);
+ assert.doesNotMatch(h.root.innerHTML,/Instagram IA/);
 });
 
 test('answered recommendations stay out of the stack, including after the final answer',async()=>{
