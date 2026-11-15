@@ -563,3 +563,25 @@ body #appShell[data-workspace] .breadcrumb strong{color:#e1ddea!important}
 body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-graph-counts,.px-wa-overview-list>div){background:#202432!important;border-color:#51475f!important}
 body #appShell[data-workspace] #view:not(:has(.et-board)) :is(.px-legend span,.px-budget-meta-metric span,.px-graph-counts span){color:#c5bad5!important}
 body #appShell[data-workspace] #view:not(:has(.et-board)) .px-budget-meta-action .px-budget-recharge-cta{background:#b6ecc8!important;color:#152c25!important;border-color:#b6ecc8!important}
+
+/* Application canvas fills the browser; only content cards have rounded edges. */
+html:has(body #appShell:not(.hidden)),
+body:has(#appShell:not(.hidden)){
+ margin:0!important;min-height:100%!important;width:100%!important;
+ background:#03040b!important;
+}
+body #appShell.app-shell:not(.hidden)[data-workspace]{
+ width:100%!important;max-width:none!important;min-height:100vh!important;
+ min-height:100dvh!important;margin:0!important;padding:0!important;
+ border:0!important;border-radius:0!important;box-shadow:none!important;
+ overflow:visible!important;
+}
+body #appShell[data-workspace] .app-main{
+ min-height:100vh!important;min-height:100dvh!important;width:100%!important;
+}
+body #appShell[data-workspace] #view{
+ flex:1;max-width:none!important;min-width:0;margin:0!important;
+}
+body #appShell[data-workspace] #view .px-workspace{
+ max-width:none!important;width:100%!important;
+}
