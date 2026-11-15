@@ -20,6 +20,7 @@ const stubPool=handler=>({calls:[],query:async function(sql,args=[]){
 const configured={
  id:groupId,tenant_id:tenantId,group_id:groupId,channel_id:channelId,status:'active',
  group_jid:'123456789012345@g.us',session_id:'socio_session_12345678',
+ authorized_owner_phone:'5515888888888',
  channel_phone:'5515999999999',whatsapp_destination:null,
  ad_page_id:'123456789012345',ad_city_key:'1234567',ad_city_name:'São Paulo',
  ad_daily_budget_cents:5000,ad_age_min:18,ad_age_max:65,ad_genders:[],last_video_id:'987654321'
@@ -115,7 +116,7 @@ test('Polling stores unseen inbound text and media idempotently',async()=>{
  const pool=stubPool((sql,args)=>{
   if(/FROM socio_owner_groups g/.test(sql)&&/last_seen_at NULLS FIRST/.test(sql))
    return {rowCount:1,rows:[{id:groupId,tenant_id:tenantId,group_jid:'123456789012345@g.us',
-    session_id:'socio_session_12345678'}]};
+    session_id:'socio_session_12345678',authorized_owner_phone:'5515888888888'}]};
   if(/INSERT INTO socio_owner_commands/.test(sql)){inserted.push(args);return {rowCount:1,rows:[]};}
   return {rowCount:1,rows:[]};
  });
@@ -124,7 +125,8 @@ test('Polling stores unseen inbound text and media idempotently',async()=>{
   return [
    {fromMe:true,keyId:'own-1',type:'text',content:'resposta do sócio'},
    {fromMe:false,keyId:'msg-1',type:'text',content:'criar campanha',participant:'5515888888888@s.whatsapp.net'},
-   {fromMe:false,keyId:'msg-2',type:'video',content:'confira'},
+   {fromMe:false,keyId:'msg-2',type:'video',content:'confira',participant:'5515888888888@s.whatsapp.net'},
+   {fromMe:false,keyId:'untrusted-1',type:'text',content:'APROVAR',participant:'5515777777777@s.whatsapp.net'},
    {fromMe:false,keyId:'msg-3',type:'sticker',content:'👍'},
    {fromMe:false,keyId:'x',type:'text',content:'curto'}
   ];
@@ -133,12 +135,13 @@ test('Polling stores unseen inbound text and media idempotently',async()=>{
  assert.equal(result.stored,2);
  assert.deepEqual(inserted.map(a=>[a[3],a[4],a[5],a[6],a[7]]),[
   ['msg-1','5515888888888@s.whatsapp.net','text','criar campanha',null],
-  ['msg-2',null,'video','confira','msg-2']]);
+  ['msg-2','5515888888888@s.whatsapp.net','video','confira','msg-2']]);
  assert.ok(pool.calls.some(c=>/UPDATE socio_owner_groups SET last_seen_at/.test(c.sql)));
 });
 
 const claimCmd=(overrides={})=>({id:commandId,tenant_id:tenantId,group_id:groupId,kind:'text',
- body:'ajuda',state:'received',attempts:1,context:{},media_message_id:null,...overrides});
+ body:'ajuda',state:'received',attempts:1,context:{},media_message_id:null,
+ sender_jid:'5515888888888@s.whatsapp.net',...overrides});
 
 function commandPool({group=configured,command=claimCmd(),prepare,execute}={}){
  const replies=[];
@@ -427,4 +430,32 @@ test('The autopilot asks once per recommendation and never repeats it',async()=>
  assert.deepEqual(delivered,['b1'],'only the question never asked is sent');
  assert.deepEqual(marked,['b1']);
  assert.equal(result.notified,1);
+});
+
+
+test('Owner commands are rejected for other group participants and missing sender',async()=>{
+ for(const sender_jid of ['5515777777777@s.whatsapp.net',null,'5515888888888@lid']){
+  const {run,replies,pool}=commandPool({command:claimCmd({body:'APROVAR',sender_jid})});
+  const result=await run({approveTraffic:async()=>{throw Error('Unauthorized command executed');}});
+  assert.equal(result.rejected,true);
+  assert.equal(result.reason,'OWNER_SENDER_UNAUTHORIZED');
+  assert.equal(replies.length,0);
+  assert.ok(pool.calls.some(c=>/OWNER_SENDER_UNAUTHORIZED/.test(JSON.stringify(c.args))));
+ }
+});
+test('Owner group provisioning excludes non-owner users',async()=>{
+ const pool=stubPool(sql=>{
+  if(/FROM channels ch JOIN waakg_links l/.test(sql))return {rowCount:1,rows:[{
+   channel_id:channelId,tenant_id:tenantId,phone:'5515999999999',session_id:'socio_session_12345678'}]};
+  if(/SELECT phone FROM users/.test(sql)){
+   assert.match(sql,/role='owner'/);
+   return {rowCount:1,rows:[{phone:'5515888888888'}]};
+  }
+  return {rowCount:1,rows:[]};
+ });
+ let participants=null;
+ await provisionOwnerGroups(pool,{env,status:async()=>({connected:true,connectedNumber:'5515999999999'}),
+  create:async(_session,_name,users)=>{participants=users;return {jid:'123456789012345@g.us'};},
+  send:async()=>({sent:true})});
+ assert.deepEqual(participants,['5515888888888@s.whatsapp.net']);
 });
