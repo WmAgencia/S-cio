@@ -5,7 +5,7 @@ const load=p=>readFileSync(new URL('../public/'+p,import.meta.url),'utf8');
 
 test('Legacy dashboard business components remain while canonical Stripe light system is final',()=>{
  const html=load('index.html'),legacy=load('ember-theme.css'),css=load('prospector-socio.css');
- assert.match(html,/meta name="theme-color" content="#08080a"/);
+ assert.match(html,/meta name="theme-color" content="#f7f8fa"/);
  assert.ok(html.indexOf('/socio-stripe-system.css')>html.indexOf('/prospector-socio.css'));
  assert.doesNotMatch(html,/href="\/socio-glass-enforced\.css/);
  assert.match(load('socio-stripe-system.css'),/--stripe-accent:#605dec/);
