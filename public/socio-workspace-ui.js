@@ -558,9 +558,7 @@
      '<span class="et-campaign-thumb" data-campaign-preview>'+
       posterView(featuredThumb,'Criativo da campanha '+String(bestCampaign.campaign_name||bestCampaign.name||''))+'</span>'+
      '<span class="et-campaign-copy"><strong>'+
-      esc(bestCampaign.campaign_name||bestCampaign.name||bestCampaignId)+'</strong>'+
-      '<small>'+(featuredIsRanked?number(bestCampaign.clicks)+' cliques · '+esc(periodName):'Ativa · sem métricas no período')+'</small>'+
-      '<b>'+(featuredIsRanked?money(bestCampaign.spend,meta?.currency):'—')+'<i>gastos no período</i></b></span></div>':
+      esc(bestCampaign.campaign_name||bestCampaign.name||bestCampaignId)+'</strong></span></div>':
     '<p class="et-muted">Nenhuma campanha encontrada na conta Meta.</p>')+'</section>';
   const flowMonths=Array.isArray(rev?.months)?rev.months:[];
   const flowPeak=Math.max(1,...flowMonths.map(m=>Number(m.revenueCents)||0));
@@ -712,6 +710,30 @@
     if(result.data?.quality==='thumbnail_only')placeholder?.classList.add('px-media-lowres');
    }).catch(()=>{});
   }
+
+  // Give the first paint a readable count-up instead of a sudden jump.
+  const animateBoardValues=()=>{
+   const nodes=root.querySelectorAll('.et-hero-value strong,.et-kpi-value,.et-legend-value,.et-donut-center');
+   nodes.forEach(node=>{
+    if(node.dataset.countAnimated)return;
+    const text=node.textContent||'';
+    const match=text.match(/^(.*?)([\d.,]+)([^\d]*)$/);
+    if(!match)return;
+    const raw=Number(match[2].replace(/\./g,'').replace(',','.'));
+    if(!Number.isFinite(raw)||raw===0)return;
+    node.dataset.countAnimated='true';
+    const prefix=match[1],suffix=match[3],decimals=(match[2].split(',')[1]||'').length;
+    const start=performance.now(),duration=720;
+    const tick=now=>{
+     const p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3);
+     const value=(raw*eased).toLocaleString('pt-BR',{minimumFractionDigits:decimals,maximumFractionDigits:decimals});
+     node.textContent=prefix+value+suffix;
+     if(p<1)requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+   });
+  };
+  animateBoardValues();
 
   // One period control owns every number on the board. A preset repaints at
   // once with the own-database reads and lets Meta arrive in the second paint;
