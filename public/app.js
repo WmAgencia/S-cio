@@ -2,7 +2,7 @@
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const state={me:null,view:'overview',dashboard:null,csrf:'',currentConversation:null,workspace:'production',aiTab:'training',catalogSearch:'',catalogStock:'all'};
-let routeFeedbackTimer=null, navigationEpoch=0;
+let routeFeedbackTimer=null, navigationEpoch=0, routeAbortController=null;
 const googleAdsVisible=()=>globalThis.SocioProductFeatures?.googleAdsVisible===true;
 const featureLabels={whatsapp:'Atendimento WhatsApp',catalog:'Produtos e serviços',meta_ads:'Meta Ads',ai:'Inteligência Artificial',team:'Equipe'};
 const featureView={inbox:'whatsapp',products:'catalog',marketing:'meta_ads',training:'ai',team:'team'};
@@ -96,6 +96,12 @@ async function api(path,method='GET',body,headers={},options={}){
  const controller=method==='GET'&&!opts.signal&&typeof AbortController==='function'?new AbortController():null;
  const timeout=controller?setTimeout(()=>controller.abort(),18000):null;
  if(controller)opts.signal=controller.signal;
+ // Cancel obsolete reads when the user navigates to another screen.
+ // Never cancel an explicit state-changing request.
+ const navSignal=method==='GET'&&controller?routeAbortController?.signal:null;
+ const abortFromRoute=()=>controller?.abort();
+ if(navSignal?.aborted)controller.abort();
+ else navSignal?.addEventListener?.('abort',abortFromRoute,{once:true});
  if(body!==undefined){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
  if(method!=='GET'&&state.csrf)opts.headers['X-CSRF-Token']=state.csrf;
  let resp,data;
@@ -110,7 +116,10 @@ async function api(path,method='GET',body,headers={},options={}){
  }catch(error){
   if(controller?.signal.aborted)throw new Error('Tempo limite da consulta atingido. Tente novamente.');
   throw error;
- }finally{if(timeout)clearTimeout(timeout);}
+ }finally{
+  if(timeout)clearTimeout(timeout);
+  navSignal?.removeEventListener?.('abort',abortFromRoute);
+ }
  if(!resp.ok){if(resp.status===401&&state.me){state.me=null;boot();}throw new Error(data.error||'Falha ao acessar o servidor.');}
  return data;
 }
@@ -162,6 +171,11 @@ function setupAuth(initialized){
  $('#authError').textContent='';
 }
 async function boot(){
+ // Invalidate pending page navigation before creating a new auth context.
+ if(routeAbortController)routeAbortController.abort();
+ routeAbortController=null;
+ navigationEpoch++;
+ finishLoading();
  try{
   const bootstrap=await api('/api/bootstrap');
   try{
@@ -279,6 +293,10 @@ async function changeView(next,conversationId=null){
  $('#topTitle').textContent=titles[next]||'Sócio';
  updateWorkspaceUrl();
  const navigationTicket=++navigationEpoch;
+ if(typeof AbortController==='function'){
+  routeAbortController?.abort();
+  routeAbortController=new AbortController();
+ }
  setLoading();
  try{
   if(next==='orb'&&globalThis.SocioOrbUI){
