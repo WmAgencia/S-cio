@@ -31,7 +31,7 @@ test('static handler preserves HTML revalidation and sends versioned CSS browser
  assert.match(server,/res\.writeHead\(304,headers\)/);
  assert.match(server,/public,max-age=86400/);
  assert.match(server,/Vary':'Accept-Encoding/);
- assert.match(html,/socio-stripe-shell\.css\?v=20261115a/);
+ assert.match(html,/socio-stripe-shell\.css\?v=20261115b/);
  assert.doesNotMatch(html,/href="\/socio-reference\.css/);
  assert.match(html,/<meta name="theme-color" content="#f7f8fa">/);
 });
