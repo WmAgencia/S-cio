@@ -16,7 +16,10 @@ test('Stripe-inspired paper, ink, violet and border are the only canonical palet
 });
 test('old glass style layers are not loaded; new theme is the last stylesheet',()=>{
  const imports=[...html.matchAll(/<link rel="stylesheet" href="(\/[^"]+)/g)].map(m=>m[1]);
- assert(imports.at(-1).startsWith('/socio-reference.css?v='));
+ assert(imports.at(-1).startsWith('/socio-stripe-shell.css?v='));
+ assert(imports.includes('/socio-stripe-system.css?v=20261115a'));
+ assert(!imports.some(x=>/socio-(ethereal|reference)\.css/.test(x)));
+ assert.equal(imports.length,13,'avoid stacking abandoned visual experiments');
  for(const old of ['socio-glass-motion.css','socio-glass-enforced.css','socio-premium-polish.css',
   'socio-contrast-audit.css','socio-motion-refined.css','socio-luminous-glass.css']){
   assert(!imports.some(x=>x.includes('/'+old)),old);
@@ -24,7 +27,8 @@ test('old glass style layers are not loaded; new theme is the last stylesheet',(
  assert(server.includes("'/socio-stripe-system.css'"));
  assert(server.includes("'/socio-ethereal.css'"));
  assert(server.includes("'/socio-reference.css'"));
- assert.match(html,/meta name="theme-color" content="#08080a"/);
+ assert.match(html,/meta name="theme-color" content="#f7f8fa"/);
+ assert.match(read('public/socio-stripe-shell.css'),/grid-template-columns:repeat\(12,minmax\(0,1fr\)\)/);
 });
 test('single stylesheet has balanced blocks and accessible motion modes',()=>{
  const content=css.replace(/\/\*[\s\S]*?\*\//g,'');
