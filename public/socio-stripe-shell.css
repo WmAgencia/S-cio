@@ -172,3 +172,11 @@ body #appShell.app-shell:not(.hidden){
 body:has(#appShell:not(.hidden)),html:has(body #appShell:not(.hidden)){
  background:#f7f8fa!important;color:#202735!important;color-scheme:light!important;
 }
+
+/* Legacy sidebar still appears in older company setups and audit fixtures. */
+body #appShell .sidebar,
+body #appShell[data-workspace="master"] .sidebar{
+ background:#f5f6f9!important;color:#202735!important;
+ border-right:1px solid #e5e7eb!important;box-shadow:none!important;
+}
+body #appShell .sidebar .workspace-box{background:#fff!important;color:#202735!important}
