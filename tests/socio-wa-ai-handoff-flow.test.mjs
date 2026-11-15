@@ -50,7 +50,7 @@ test('WA-AKG mocked read -> tenant-owned inbox -> AI transient failure -> one co
  [channel,tenant,ownerPhone]);
  await pool.query("INSERT INTO waakg_links(id,tenant_id,channel_id,session_id) VALUES($1,$2,$3,$4)",
  [randomUUID(),tenant,channel,session]);
- await pool.query("UPDATE agents SET enabled=true WHERE tenant_id=$1",[tenant]);
+ await pool.query("INSERT INTO agents(tenant_id,enabled) VALUES($1,true)",[tenant]);
  const gatewayReads=[],gatewaySends=[];
  let messages=[inbound('incoming-1','Olá, qual é o horário?',180)];
  const sync=async()=>processLiveInboxSync(pool,{
@@ -91,7 +91,7 @@ test('WA-AKG mocked read -> tenant-owned inbox -> AI transient failure -> one co
   }
  });
  const failed=await processNextAiReply(pool,{env,respond,deliver});
- assert.equal(failed.failed,true);
+ assert.equal(failed.failed,true,'unexpected AI result: '+JSON.stringify(failed));
  assert.equal(failed.retryScheduled,true);
  assert.deepEqual(await count(pool,tenant,chat),{inbound:1});
  assert.equal(providerCalls,0);
