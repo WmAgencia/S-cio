@@ -180,3 +180,9 @@ body #appShell[data-workspace="master"] .sidebar{
  border-right:1px solid #e5e7eb!important;box-shadow:none!important;
 }
 body #appShell .sidebar .workspace-box{background:#fff!important;color:#202735!important}
+
+body #appShell .sidebar .nav-item.selected,
+body #appShell[data-workspace="master"] .sidebar .nav-item.selected{
+ background:#f0efff!important;color:#514ed5!important;
+ border-color:#e4e1ff!important;text-shadow:none!important;
+}
