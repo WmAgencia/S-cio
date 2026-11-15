@@ -109,7 +109,7 @@ test('Two real HTTP tenants isolate WhatsApp, products/media, training, Meta dec
    [ids.channel,tenant,'Canal '+letter,'55159999'+(letter==='A'?'1111':'2222')]);
   await db.query(
    "INSERT INTO conversations(id,tenant_id,channel_id,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5)",
-   [ids.conversation,tenant,'Cliente '+letter,'55158888'+(letter==='A'?'1111':'2222')].map((x,i)=>i===2?ids.channel:x)
+   [ids.conversation,tenant,ids.channel,'Cliente '+letter,'55158888'+(letter==='A'?'1111':'2222')]
   );
   await db.query(
    "INSERT INTO messages(id,tenant_id,conversation_id,direction,body) VALUES($1,$2,$3,'inbound',$4)",
