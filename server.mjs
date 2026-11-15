@@ -22,6 +22,7 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
+import {createWorkerBackoff} from './socio-worker-backoff.mjs';
 import {validateTenantFeatures,parseTenantFeatures,filterPermissions,assertApiFeature} from './tenant-features.mjs';
 import {startPipeboardOAuth,finishPipeboardOAuth,listPipeboardOAuth,revokePipeboardOAuth,oauthClientMetadata,testPipeboardConnection} from './marketing-oauth.mjs';
 import {instagramHostedReady,beginInstagramHosted,instagramHostedStatus,disconnectInstagramHosted} from './instagram-hosted.mjs';
@@ -2501,49 +2502,65 @@ saleEventWorker.unref();
  // AI only attempts replies if explicitly enabled, agent enabled and each
  // conversation handed over. Claims are durable to avoid duplicate messages.
  let replyBusy=false;
+ const replyBackoff=createWorkerBackoff({baseMs:10000,maxMs:120000});
  const aiReplyWorker=setInterval(async()=>{
-  if(replyBusy||workersBlocked())return;
+  if(replyBusy||workersBlocked()||!replyBackoff.canRun())return;
   replyBusy=true;
-  try{await reconcileConfirmedOutbox(pool);await processNextAiReply(pool);}
-  catch(e){console.warn('[socio-ai-reply]',String(e?.code||'REPLY_ERROR').slice(0,40));}
-  finally{replyBusy=false;}
+  try{await reconcileConfirmedOutbox(pool);await processNextAiReply(pool);replyBackoff.recovered();}
+  catch(error){
+   const pause=replyBackoff.failed();
+   console.warn('[socio-ai-reply]',JSON.stringify({code:String(error?.code||'REPLY_ERROR').slice(0,40),
+    retrySeconds:pause.delayMs/1000}));
+  }finally{replyBusy=false;}
  },6000);
  aiReplyWorker.unref();
- // Automatically move a supervised training run from scan to Markdown draft;
- // per-run database row locks make this safe across replicas.
+ // Supervised training is never sent to clients without approval.
  let autoBusy=false;
+ const autoBackoff=createWorkerBackoff({baseMs:15000,maxMs:300000});
  const autoWorker=setInterval(async()=>{
-  if(autoBusy||workersBlocked())return;
+  if(autoBusy||workersBlocked()||!autoBackoff.canRun())return;
   autoBusy=true;
-  try{await processNextAutoTraining(pool);}
-  catch(error){console.warn('[socio-auto-training]',String(error?.code||'worker-error').slice(0,55));}
-  finally{autoBusy=false;}
+  try{await processNextAutoTraining(pool);autoBackoff.recovered();}
+  catch(error){
+   const pause=autoBackoff.failed();
+   // Codes and counts only, never messages, numbers or SQL.
+   console.warn('[socio-auto-training]',JSON.stringify({
+    code:String(error?.code||'WORKER_ERROR').slice(0,48),
+    retrySeconds:pause.delayMs/1000,poolTotal:pool.totalCount,poolWaiting:pool.waitingCount}));
+  }finally{autoBusy=false;}
  },2400);
  autoWorker.unref();
- // One active worker per Node instance; row locks serialize jobs across replicas.
- // All results remain drafts until the tenant owner approves them.
+ // Row locks serialize these jobs across replicas; backoff prevents hot failures.
  let waBusy=false,waLastError=0;
+ const waBackoff=createWorkerBackoff({baseMs:10000,maxMs:120000});
  const waWorker=setInterval(async()=>{
-  if(waBusy||workersBlocked()||!gatewayConfigured())return;
+  if(waBusy||workersBlocked()||!gatewayConfigured()||!waBackoff.canRun())return;
   waBusy=true;
-  try{await processNextWaakgScan(pool);}
-  catch(err){if(Date.now()-waLastError>30000){
-    console.warn('[socio-waakg-worker]',String(err?.code||'worker-error').slice(0,70));
+  try{await processNextWaakgScan(pool);waBackoff.recovered();}
+  catch(error){
+   const pause=waBackoff.failed();
+   if(Date.now()-waLastError>30000){
+    console.warn('[socio-waakg-worker]',JSON.stringify({
+     code:String(error?.code||'WORKER_ERROR').slice(0,48),retrySeconds:pause.delayMs/1000}));
     waLastError=Date.now();
-  }}
-  finally{waBusy=false;}
+   }
+  }finally{waBusy=false;}
  },2200);
  waWorker.unref();
  let workerBusy=false,lastWorkerError=0;
+ const trainingBackoff=createWorkerBackoff({baseMs:10000,maxMs:120000});
  const worker=setInterval(async()=>{
-  if(workerBusy||workersBlocked())return;
+  if(workerBusy||workersBlocked()||!trainingBackoff.canRun())return;
   workerBusy=true;
-  try{await processNextAnalysisJob(pool);}
-  catch(error){if(Date.now()-lastWorkerError>30000){
-   console.warn('[socio-training-worker]',String(error?.code||error?.message||'error').slice(0,100));
-   lastWorkerError=Date.now();
-  }}
-  finally{workerBusy=false;}
+  try{await processNextAnalysisJob(pool);trainingBackoff.recovered();}
+  catch(error){
+   const pause=trainingBackoff.failed();
+   if(Date.now()-lastWorkerError>30000){
+    console.warn('[socio-training-worker]',JSON.stringify({
+     code:String(error?.code||'WORKER_ERROR').slice(0,48),retrySeconds:pause.delayMs/1000}));
+    lastWorkerError=Date.now();
+   }
+  }finally{workerBusy=false;}
  },750);
  worker.unref();
  const server=http.createServer((req,res)=>Promise.resolve(handle(req,res)).catch(e=>{
