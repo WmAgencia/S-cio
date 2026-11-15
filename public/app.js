@@ -144,11 +144,17 @@ function setupAuth(initialized){
 }
 async function boot(){
  try{
-  // Nothing to show yet: a quiet line instead of a curtain over an empty view.
-  if(!view.firstElementChild)setLoading();
-  const bootstrap=await api('/api/bootstrap');
+ // Nothing to show yet: a quiet line instead of a curtain over an empty view.
+ if(!view.firstElementChild)setLoading();
+ // Session and bootstrap state are independent read-only GETs; fetch together
+ // to remove one full round trip from every authenticated first paint.
+ const [bootstrap,session]=await Promise.all([
+  api('/api/bootstrap'),
+  api('/api/me').then(me=>({me}),error=>({error}))
+ ]);
   try{
-   const me=await api('/api/me');
+   if(session.error)throw session.error;
+   const me=session.me;
    state.me=me;state.csrf=me.csrf;
    state.workspace=workspaceFromLocation();
    state.view=initialWorkspaceView();
@@ -530,6 +536,7 @@ async function channels(){
   api('/api/channels'),api('/api/waakg/config'),api('/api/waakg/channels')
  ]);
  const canManage=state.me.user.platformOwner||(state.me.user.permissions||[]).includes('training.manage');
+ const canDiagnose=state.me.user.platformOwner||['owner','admin'].includes(state.me.user.role);
  const connected=linked.filter(c=>c.status==='connected').length;
  const pending=linked.length-connected;
  const legacy=data.filter(c=>!linked.some(x=>x.id===c.id));
@@ -538,7 +545,7 @@ async function channels(){
   const phone=c.phone?.startsWith('pending-')?'Aguardando leitura do QR Code':c.phone;
   return '<div class="wa-number-row"><div class="wa-number-icon">'+(ok?'✓':'◌')+'</div>'+
    '<div class="wa-number-info"><strong>'+e(c.label)+'</strong><small>'+e(phone)+'</small></div>'+
-   '<span class="badge '+(ok?'green':'yellow')+'">'+(ok?'Conectado':'Aguardando')+'</span>'+
+   '<span class="badge '+(ok?'gray':'yellow')+'" data-wa-badge="'+e(c.id)+'">'+(ok?'Verificando':'Aguardando')+'</span>'+
    '<div class="wa-number-actions">'+
    '<button class="btn sm soft" type="button" data-wa-check="'+e(c.id)+'">Verificar</button>'+
    (canManage?
@@ -548,8 +555,8 @@ async function channels(){
    '</div><span class="wa-number-feedback" data-wa-state="'+e(c.id)+'" aria-live="polite"></span></div>';
  }).join('');
  view.innerHTML=heading('CANAIS DE ATENDIMENTO','Conecte seus WhatsApps.','Um QR Code por número, com acesso exclusivo aos dados da sua empresa.')+
- '<div class="wa-status-strip"><div><span class="wa-status-dot"></span><strong>'+e(connected)+'</strong><small>Conectados</small></div>'+
- '<div><span class="wa-status-dot amber"></span><strong>'+e(pending)+'</strong><small>Aguardando QR</small></div>'+
+ '<div class="wa-status-strip"><div><span class="wa-status-dot"></span><strong data-wa-live-count>0</strong><small>Conectados verificados</small></div>'+
+ '<div><span class="wa-status-dot amber"></span><strong data-wa-awaiting-count>'+e(linked.length)+'</strong><small>Pendentes de verificação</small></div>'+
  '<div><span class="wa-status-dot gray"></span><strong>'+e(linked.length)+'</strong><small>Sessões vinculadas</small></div></div>'+
  '<div class="wa-layout"><section class="card card-pad wa-setup">'+
  '<div class="wa-setup-heading"><span class="wa-setup-icon">▣</span><div><h2>Conectar via QR Code</h2>'+
@@ -573,8 +580,13 @@ async function channels(){
  (legacy.length?'<details class="wa-legacy"><summary>'+e(legacy.length)+' cadastro(s) antigos sem sessão QR</summary>'+
  '<p class="form-note">Estes cadastros não significam uma conexão ativa. Para autorizar um WhatsApp, use o QR Code.</p>'+
  '<div>'+legacy.map(c=>'<div class="wa-legacy-item">'+e(c.label)+' · '+e(c.phone)+'</div>').join('')+'</div></details>':'')+
- '<p class="form-note wa-readonly">A conexão por QR permite leitura e análise do histórico disponível. O envio automático de mensagens permanece desativado.</p>'+
- '</section></div>';
+ '<p class="form-note wa-readonly">A conexão por QR permite leitura e análise do histórico disponível. Verifique abaixo se o envio automático está habilitado neste ambiente.</p>'+
+ '</section></div>'+
+ (canDiagnose?'<section class="card card-pad wa-live-audit" aria-label="Diagnóstico do WhatsApp">'+
+ '<div class="panel-head"><div><h2>Diagnóstico em tempo real</h2><p>Confere o número da sessão, o recebimento e a configuração da IA, sem enviar mensagens.</p></div></div>'+
+ '<button type="button" class="btn soft" id="waLiveDiagnostics">Verificar integração agora</button>'+
+ '<p id="waLiveDiagnosticsResult" class="form-note" role="status" aria-live="polite">Nenhuma verificação executada.</p>'+
+ '</section>':'');
  $('#waakgSelfConnect')?.addEventListener('submit',async ev=>{
   ev.preventDefault();
   const label=val(ev.currentTarget,'label');
@@ -585,18 +597,73 @@ async function channels(){
    await showWaQr(channel.id);
   });
  });
+ $('#waLiveDiagnostics')?.addEventListener('click',async()=>{
+  const button=$('#waLiveDiagnostics'),output=$('#waLiveDiagnosticsResult');
+  if(!output||!button)return;
+  button.disabled=true;output.textContent='Verificando a sessão e os registros recentes...';
+  try{
+   const status=await api('/api/waakg/diagnostics');
+   const gateway=status.gateway||{},flags=status.flags||{};
+   const lines=[
+    'Números confirmados diretamente pelo WA-AKG: '+(gateway.verified||0),
+    'Sessões desconectadas, divergentes ou indisponíveis: '+
+     ((gateway.disconnected||0)+(gateway.numberMismatch||0)+(gateway.unreachable||0)),
+    'Mensagens recebidas nas últimas 24 horas: '+(status.inboundLast24h||0),
+    'Conversas internas de proprietário/admin identificadas: '+(status.internalOwnerConversations||0),
+    'Sincronização automática: '+(flags.liveSyncEnabled?'habilitada':'desabilitada'),
+    'Agente IA da empresa: '+(flags.agentEnabled?'habilitado':'desabilitado'),
+    'Envio WhatsApp: '+(flags.outboundEnabled?'habilitado':'desabilitado'),
+    'Respostas automáticas: '+(flags.autoReplyEnabled?'habilitadas':'desabilitadas'),
+    ...(status.blockers||[]).map(item=>'Atenção: '+item),
+    'Diagnóstico somente leitura. Nenhuma mensagem foi enviada.'
+   ];
+   output.textContent=lines.join(' • ');
+  }catch(error){output.textContent=errMsg(error);}
+  finally{button.disabled=false;}
+ });
  $('#waQrClose')?.addEventListener('click',()=>{
   clearTimeout(waQrTimer);$('#waQrPanel').classList.add('hidden');
  });
  view.querySelectorAll('[data-wa-qr]').forEach(button=>button.addEventListener('click',()=>showWaQr(button.dataset.waQr)));
- view.querySelectorAll('[data-wa-check]').forEach(button=>button.addEventListener('click',async()=>{
+ const waButtons=[...view.querySelectorAll('[data-wa-check]')];
+ const checkWaLive=async button=>{
+  if(!button.isConnected)return;
   const id=button.dataset.waCheck;
   const feedback=view.querySelector('[data-wa-state="'+id+'"]');
+  const badge=view.querySelector('[data-wa-badge="'+id+'"]');
+  button.disabled=true;
   try{
    const status=await api('/api/waakg/channels/'+id+'/status');
-   feedback.textContent=status.connected?'Conexão verificada':'Aguardando conexão ou número divergente';
-  }catch(err){feedback.textContent=errMsg(err);}
- }));
+   if(!badge?.isConnected)return;
+   const online=status.connected===true;
+   badge.dataset.waLive=online?'yes':'no';
+   badge.className='badge '+(online?'green':'yellow');
+   badge.textContent=online?'Conectado agora':'Desconectado';
+   if(feedback)feedback.textContent=online?'Conexão confirmada pelo gateway.':
+    'Sessão não conectada. Clique em Reconectar e escaneie o QR Code no celular.';
+  }catch(error){
+   if(badge?.isConnected){
+    badge.dataset.waLive='no';
+    badge.className='badge gray';
+    badge.textContent='Não verificado';
+   }
+   if(feedback)feedback.textContent=errMsg(error);
+  }finally{
+   button.disabled=false;
+   const confirmed=view.querySelectorAll('[data-wa-badge][data-wa-live="yes"]').length;
+   const liveCount=view.querySelector('[data-wa-live-count]');
+   const awaitingCount=view.querySelector('[data-wa-awaiting-count]');
+   if(liveCount)liveCount.textContent=String(confirmed);
+   if(awaitingCount)awaitingCount.textContent=String(Math.max(0,linked.length-confirmed));
+  }
+ };
+ waButtons.forEach(button=>button.addEventListener('click',()=>{void checkWaLive(button);}));
+ // A saved "connected" flag is not proof of a live WhatsApp session.
+ // Verify each channel after rendering, without sending any messages.
+ void (async()=>{for(const button of waButtons){
+  if(!button.isConnected)break;
+  await checkWaLive(button);
+ }})();
  view.querySelectorAll('[data-wa-control]').forEach(button=>button.addEventListener('click',async()=>{
   const id=button.dataset.waId,command=button.dataset.waControl;
   if(command==='logout'&&!confirm('Desconectar este WhatsApp e apagar a sessão autorizada?'))return;

@@ -42,6 +42,12 @@ test('audit regressions against isolated PostgreSQL',
  const {url,drop}=await createTestDatabase('socio_audit_');
  // Same search_path the server sets, so unqualified fixture SQL lands in socio_app.
  const pool=new Pool({connectionString:url.href,options:'-c search_path=socio_app,pg_catalog'});let app;
+ // Disposable PostgreSQL databases can end idle sessions during CI teardown.
+ // Only expected admin-termination events on idle clients are tolerated;
+ // query failures still propagate normally through the awaited queries.
+ pool.on('error',error=>{
+  if(error?.code!=='57P01'&&error?.code!=='57P02')throw error;
+ });
  t.after(async()=>{
   if(app&&app.exitCode===null&&app.signalCode===null)await new Promise(resolve=>{
    const timer=setTimeout(()=>app.kill('SIGKILL'),2000);

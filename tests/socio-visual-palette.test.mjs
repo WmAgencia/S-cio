@@ -26,6 +26,7 @@ test('old glass style layers are not loaded; new theme is the last stylesheet',(
  assert(server.includes("'/socio-ethereal.css'"));
  assert(server.includes("'/socio-reference.css'"));
  assert.match(html,/meta name="theme-color" content="#08080a"/);
+ assert.match(read('public/socio-reference.css'),/socio-reference|et-|px-overview/);
 });
 test('single stylesheet has balanced blocks and accessible motion modes',()=>{
  const content=css.replace(/\/\*[\s\S]*?\*\//g,'');

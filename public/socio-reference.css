@@ -729,3 +729,13 @@ body #appShell #view .socio-loading-overlay .socio-page-loading{margin:0;box-sha
  body #appShell #view .et-board .et-legend-value{font-size:11px!important;line-height:13px!important}
  body #appShell #view .et-board .et-subs-icons{display:none!important}
 }
+
+/* Performance: avoid stacking full-screen and per-card backdrop blurs on mobile.
+   This retains the same surfaces, colors and layout without costly GPU sampling. */
+@media (max-width: 900px), (prefers-reduced-transparency: reduce) {
+ body #appShell.app-shell:not(.hidden),
+ body #appShell .px-overview.et-board :is(.et-card,.et-kpi,.et-block.et-subs) {
+  -webkit-backdrop-filter: none!important;
+  backdrop-filter: none!important;
+ }
+}

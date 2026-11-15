@@ -517,7 +517,7 @@
   const trafficRail='<div class="et-stack">'+
     (traffic?.ok?
      (pendingItems.length?pendingItems.map(recCard).join(''):
-      '<p class="ov-rail-empty">Nada para decidir agora. O Sócio revisa as campanhas a cada 6 horas.</p>'):
+      '<p class="ov-rail-empty">Nada para decidir agora. A revisão automática só funciona quando ativada pela administração.</p>'):
      '<p class="ov-rail-empty">'+esc(traffic?.reason||'Recomendações indisponíveis agora.')+'</p>')+
    '</div>';
   // Every revenue number comes from a sale the owner confirmed himself —

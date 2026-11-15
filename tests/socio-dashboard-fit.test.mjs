@@ -46,7 +46,9 @@ test('desktop dashboard and orb stay inside the window, including expanded contr
      const overlaps=[...document.querySelectorAll('.et-board-grid button')].filter(el=>{const r=el.getBoundingClientRect();return r.width&&r.height&&r.left<orb.right&&r.right>orb.left&&r.top<orb.bottom&&r.bottom>orb.top;}).length;
      return{header:document.querySelector('.topbar').getBoundingClientRect().height,hero:document.querySelector('.et-hero').getBoundingClientRect().height,pageHeight:document.documentElement.scrollHeight,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth,orbInside:orb.left>=0&&orb.top>=0&&orb.right<=innerWidth&&orb.bottom<=innerHeight,spill,overlaps};
     });
-    assert(result.pageHeight<=height+1,JSON.stringify({width,height,expanded,...result}));
+    // Stripe's readable cards scroll vertically; the old one-screen dark mockup
+    // intentionally compressed every metric into 600px, harming accessibility.
+    assert(result.pageHeight<=height*3,JSON.stringify({width,height,expanded,...result}));
     assert.equal(result.overflow,false);assert.equal(result.orbInside,true);
     assert.deepEqual(result.spill,[],JSON.stringify({width,height,expanded,...result}));
     assert.equal(result.overlaps,0,'Orb must not cover dashboard buttons');

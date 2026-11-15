@@ -20,8 +20,10 @@ import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectO
 
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
+import {getStaticAsset} from './static-assets.mjs';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
+import {createWorkerBackoff} from './socio-worker-backoff.mjs';
 import {validateTenantFeatures,parseTenantFeatures,filterPermissions,assertApiFeature} from './tenant-features.mjs';
 import {startPipeboardOAuth,finishPipeboardOAuth,listPipeboardOAuth,revokePipeboardOAuth,oauthClientMetadata,testPipeboardConnection} from './marketing-oauth.mjs';
 import {instagramHostedReady,beginInstagramHosted,instagramHostedStatus,disconnectInstagramHosted} from './instagram-hosted.mjs';
@@ -45,6 +47,7 @@ import {lookupCompany,validCnpj,normalizeCnpj} from './cnpj-lookup.mjs';
 import {normalizeTaxId,validCpf,taxIdType as taxIdTypeOf,claimTrial,trialEndFrom,readTrial} from './socio-trial.mjs';
 import {handleInboxApi} from './inbox-api.mjs';
 import {processLiveInboxSync} from './inbox-live-sync.mjs';
+import {auditLiveWhatsAppBindings,diagnoseTenantWhatsApp} from './socio-wa-live-diagnostics.mjs';
 import {processNextAiReply,buildAiInstructions} from './ai-replies.mjs';
 import {normalizeLabHistory,buildLabInput,polishCustomerReply,reviewReplyStyle} from './socio-intelligence.mjs';
 import {analyzeSocioContinuity} from './socio-prospector-continuity.mjs';
@@ -102,7 +105,10 @@ if(!['public','socio_app'].includes(dbSchema)||(isSupabaseDb&&dbSchema!=='socio_
  console.error('SOCIO_DB_SCHEMA must be socio_app for a Supabase database');
  process.exit(1);
 }
-const pool=new Pool({connectionString:DATABASE_URL,max:10,connectionTimeoutMillis:8000,idleTimeoutMillis:30000,
+// Per-process pool cap leaves headroom for jobs and other app replicas.
+const dbPoolRequested=Number(process.env.SOCIO_DB_POOL_MAX||4);
+const dbPoolMax=Number.isInteger(dbPoolRequested)?Math.min(8,Math.max(2,dbPoolRequested)):4;
+const pool=new Pool({connectionString:DATABASE_URL,max:dbPoolMax,connectionTimeoutMillis:12000,idleTimeoutMillis:20000,
  options:dbSchema==='socio_app'?'-c search_path=socio_app,pg_catalog':undefined});
 // Supabase's pooler closes idle connections; without this listener the error
 // event would be unhandled and Node would end the whole process.
@@ -318,9 +324,17 @@ async function handle(req,res){
  }
  if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/socio-semantic-turn.mjs','/socio-workspace-ui.js','/socio-thalita-ui.js','/socio-orb-ui.js','/socio-orb-mesh.js','/socio-executive.css','/socio-glass-motion.css','/socio-glass-motion.js','/socio-glass-enforced.css','/socio-premium-polish.css','/socio-contrast-audit.css','/socio-product-features.js','/socio-icons.js','/socio-entry-motion.js','/socio-motion.js','/socio-motion.css','/socio-motion-refined.css','/socio-luminous-glass.css','/socio-stripe-system.css','/socio-ethereal.css','/socio-reference.css','/socio-logo.svg','/socio-master.css','/socio-master-dashboard.js','/meta-billing-ui.js','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/owner-channel-ui.js','/socio-autopilot-ui.js','/socio-autopilot.css','/socio-overview.css','/socio-new-recommendation.mp3','/trial-input.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
-  const content=await readFile(new URL('./public'+file,import.meta.url));
-  res.writeHead(200,{'Content-Type':(file.endsWith('.js')||file.endsWith('.mjs'))?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':file.endsWith('.svg')?'image/svg+xml':file.endsWith('.mp3')?'audio/mpeg':'text/html; charset=utf-8','Cache-Control':'no-cache'});
-  return res.end(content);
+  const asset=await getStaticAsset(file,String(req.headers['accept-encoding']||''));
+  const versioned=new URL(req.url||'/', 'http://local').searchParams.has('v');
+  const headers={
+   'Content-Type':(file.endsWith('.js')||file.endsWith('.mjs'))?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':file.endsWith('.svg')?'image/svg+xml':file.endsWith('.mp3')?'audio/mpeg':'text/html; charset=utf-8',
+   'Cache-Control':file.endsWith('.html')?'no-cache':versioned?'public,max-age=86400':'no-cache',
+   'ETag':asset.etag,'Vary':'Accept-Encoding'
+  };
+  if(asset.encoding)headers['Content-Encoding']=asset.encoding;
+  if(req.headers['if-none-match']===asset.etag){res.writeHead(304,headers);return res.end();}
+  res.writeHead(200,headers);
+  return res.end(asset.body);
  }
  if(pathname==='/webhooks/whatsapp'&&method==='GET'){
   const url=new URL(req.url,'http://local'),mode=url.searchParams.get('hub.mode'),verify=url.searchParams.get('hub.verify_token'),challenge=url.searchParams.get('hub.challenge');
@@ -1198,6 +1212,12 @@ async function handle(req,res){
  if(method==='GET'&&pathname==='/api/waakg/config'){
   return json(res,200,{configured:gatewayConfigured(),mode:'read_only',selfService:true,
    limitations:'Até 50 conversas retornadas pelo gateway por sessão; até 400 mensagens por conversa. Histórico antigo pode não estar disponível.'});
+ }
+ if(method==='GET'&&pathname==='/api/waakg/diagnostics'){
+  needRole(a,['owner','admin']);
+  assertApiFeature(a.features,'/api/inbox');
+  res.setHeader('Cache-Control','private,no-store');
+  return json(res,200,await diagnoseTenantWhatsApp(pool,a));
  }
  if(method==='GET'&&pathname==='/api/waakg/channels'){
   const r=await query(
@@ -2283,16 +2303,7 @@ async function main(){
   const readiness=await schemaHealth();
   if(!readiness.ok)throw new Error('Private Supabase schema is not ready: '+readiness.error);
  }else await query(schema);
- // Google Ads was removed from this SaaS. Revoke any previously stored local
- // authorizations and legacy script secrets, without deleting historic metrics.
- // Idempotent: after the first successful deployment subsequent runs are no-ops.
- await query("UPDATE marketing_oauth_attempts SET consumed_at=now() "+
-  "WHERE provider='google' AND consumed_at IS NULL");
- await query("UPDATE marketing_oauth_grants SET status='disconnected',token_ciphertext=NULL,expires_at=NULL,"+
-  "last_read_status='not_tested',last_checked_at=NULL,last_account_count=0,updated_at=now() "+
-  "WHERE provider='google' AND (status<>'disconnected' OR token_ciphertext IS NOT NULL)");
- await query("UPDATE marketing_connections SET status='disabled',secret_ciphertext=NULL,updated_at=now() "+
-  "WHERE provider='google_ads_scripts' AND (status<>'disabled' OR secret_ciphertext IS NOT NULL)");
+ // Google Ads is hidden in the UI. Never revoke credentials during startup.
  // Storage probe checks the real private S3 endpoint without touching customer files.
  if(mediaConfigured())void checkMediaStorage()
   .then(x=>console.info('[socio product media]',JSON.stringify(x)))
@@ -2305,6 +2316,12 @@ async function main(){
      sessions:Array.isArray(result.data)?result.data.length:0})))
    .catch(error=>console.warn('[socio gateway private]',JSON.stringify({reachable:false,
      code:Number(error?.status||503)})));
+  // At startup verify the tenant-bound phone, not merely that a gateway session exists.
+  // No session ids, numbers, messages or user identities are logged.
+  void auditLiveWhatsAppBindings(pool,{limit:5})
+   .then(summary=>console.info('[socio wa live binding]',JSON.stringify(summary)))
+   .catch(error=>console.warn('[socio wa live binding]',JSON.stringify({
+    readOnly:true,errorCode:String(error?.code||'READ_FAILED').slice(0,30)})));
  }
  // Expired windows are useless; drop them so the table stays proportional to
  // recent traffic instead of growing forever.
@@ -2507,49 +2524,65 @@ saleEventWorker.unref();
  // AI only attempts replies if explicitly enabled, agent enabled and each
  // conversation handed over. Claims are durable to avoid duplicate messages.
  let replyBusy=false;
+ const replyBackoff=createWorkerBackoff({baseMs:10000,maxMs:120000});
  const aiReplyWorker=setInterval(async()=>{
-  if(replyBusy||workersBlocked())return;
+  if(replyBusy||workersBlocked()||!replyBackoff.canRun())return;
   replyBusy=true;
-  try{await reconcileConfirmedOutbox(pool);await processNextAiReply(pool);}
-  catch(e){console.warn('[socio-ai-reply]',String(e?.code||'REPLY_ERROR').slice(0,40));}
-  finally{replyBusy=false;}
+  try{await reconcileConfirmedOutbox(pool);await processNextAiReply(pool);replyBackoff.recovered();}
+  catch(error){
+   const pause=replyBackoff.failed();
+   console.warn('[socio-ai-reply]',JSON.stringify({code:String(error?.code||'REPLY_ERROR').slice(0,40),
+    retrySeconds:pause.delayMs/1000}));
+  }finally{replyBusy=false;}
  },6000);
  aiReplyWorker.unref();
- // Automatically move a supervised training run from scan to Markdown draft;
- // per-run database row locks make this safe across replicas.
+ // Supervised training is never sent to clients without approval.
  let autoBusy=false;
+ const autoBackoff=createWorkerBackoff({baseMs:15000,maxMs:300000});
  const autoWorker=setInterval(async()=>{
-  if(autoBusy||workersBlocked())return;
+  if(autoBusy||workersBlocked()||!autoBackoff.canRun())return;
   autoBusy=true;
-  try{await processNextAutoTraining(pool);}
-  catch(error){console.warn('[socio-auto-training]',String(error?.code||'worker-error').slice(0,55));}
-  finally{autoBusy=false;}
+  try{await processNextAutoTraining(pool);autoBackoff.recovered();}
+  catch(error){
+   const pause=autoBackoff.failed();
+   // Codes and counts only, never messages, numbers or SQL.
+   console.warn('[socio-auto-training]',JSON.stringify({
+    code:String(error?.code||'WORKER_ERROR').slice(0,48),
+    retrySeconds:pause.delayMs/1000,poolTotal:pool.totalCount,poolWaiting:pool.waitingCount}));
+  }finally{autoBusy=false;}
  },2400);
  autoWorker.unref();
- // One active worker per Node instance; row locks serialize jobs across replicas.
- // All results remain drafts until the tenant owner approves them.
+ // Row locks serialize these jobs across replicas; backoff prevents hot failures.
  let waBusy=false,waLastError=0;
+ const waBackoff=createWorkerBackoff({baseMs:10000,maxMs:120000});
  const waWorker=setInterval(async()=>{
-  if(waBusy||workersBlocked()||!gatewayConfigured())return;
+  if(waBusy||workersBlocked()||!gatewayConfigured()||!waBackoff.canRun())return;
   waBusy=true;
-  try{await processNextWaakgScan(pool);}
-  catch(err){if(Date.now()-waLastError>30000){
-    console.warn('[socio-waakg-worker]',String(err?.code||'worker-error').slice(0,70));
+  try{await processNextWaakgScan(pool);waBackoff.recovered();}
+  catch(error){
+   const pause=waBackoff.failed();
+   if(Date.now()-waLastError>30000){
+    console.warn('[socio-waakg-worker]',JSON.stringify({
+     code:String(error?.code||'WORKER_ERROR').slice(0,48),retrySeconds:pause.delayMs/1000}));
     waLastError=Date.now();
-  }}
-  finally{waBusy=false;}
+   }
+  }finally{waBusy=false;}
  },2200);
  waWorker.unref();
  let workerBusy=false,lastWorkerError=0;
+ const trainingBackoff=createWorkerBackoff({baseMs:10000,maxMs:120000});
  const worker=setInterval(async()=>{
-  if(workerBusy||workersBlocked())return;
+  if(workerBusy||workersBlocked()||!trainingBackoff.canRun())return;
   workerBusy=true;
-  try{await processNextAnalysisJob(pool);}
-  catch(error){if(Date.now()-lastWorkerError>30000){
-   console.warn('[socio-training-worker]',String(error?.code||error?.message||'error').slice(0,100));
-   lastWorkerError=Date.now();
-  }}
-  finally{workerBusy=false;}
+  try{await processNextAnalysisJob(pool);trainingBackoff.recovered();}
+  catch(error){
+   const pause=trainingBackoff.failed();
+   if(Date.now()-lastWorkerError>30000){
+    console.warn('[socio-training-worker]',JSON.stringify({
+     code:String(error?.code||'WORKER_ERROR').slice(0,48),retrySeconds:pause.delayMs/1000}));
+    lastWorkerError=Date.now();
+   }
+  }finally{workerBusy=false;}
  },750);
  worker.unref();
  const server=http.createServer((req,res)=>Promise.resolve(handle(req,res)).catch(e=>{
