@@ -20,6 +20,8 @@ test('desktop dashboard and orb stay inside the window, including expanded contr
    await page.addScriptTag({content:read('public/socio-thalita-ui.js')});
    await page.evaluate(async()=>{
     document.querySelector('#appShell').classList.remove('hidden');
+    // This fixture bypasses app.js bootstrap. Simulate its completed boot state.
+    document.querySelector('#socioBootStatus')?.setAttribute('hidden','');
     document.querySelector('#workspaceSwitcher').classList.remove('hidden');
     const api=async p=>{
      if(p.includes('/dashboard/period'))return{period:{from:'2026-11-08',to:'2026-11-14'},sales:{revenueCents:123400,confirmed:4},conversations:{started:56,open:4}};
