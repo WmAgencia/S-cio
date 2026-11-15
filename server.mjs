@@ -20,6 +20,7 @@ import {startOfficial,finishOfficial,officialStatus,officialAccounts,disconnectO
 
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
+import {getStaticAsset} from './static-assets.mjs';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
 import {createWorkerBackoff} from './socio-worker-backoff.mjs';
@@ -321,11 +322,19 @@ async function handle(req,res){
   const r=await query('SELECT EXISTS(SELECT 1 FROM users WHERE platform_owner=true) AS initialized');
   return json(res,200,{initialized:r.rows[0].initialized,groqConfigured:groqReady(),groqModel:groqModel()});
  }
- if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/socio-semantic-turn.mjs','/socio-workspace-ui.js','/socio-thalita-ui.js','/socio-orb-ui.js','/socio-orb-mesh.js','/socio-executive.css','/socio-glass-motion.css','/socio-glass-motion.js','/socio-glass-enforced.css','/socio-premium-polish.css','/socio-contrast-audit.css','/socio-product-features.js','/socio-icons.js','/socio-entry-motion.js','/socio-motion-refined.css','/socio-luminous-glass.css','/socio-stripe-system.css','/socio-ethereal.css','/socio-reference.css','/socio-logo.svg','/socio-master.css','/socio-master-dashboard.js','/meta-billing-ui.js','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/owner-channel-ui.js','/socio-autopilot-ui.js','/socio-autopilot.css','/socio-overview.css','/socio-new-recommendation.mp3','/trial-input.js','/meta-browser.css'].includes(pathname)){
+ if(method==='GET'&&['/','/index.html','/legal.css','/privacidade.html','/termos.html','/exclusao-dados.html','/app.js','/flow-images-ui.js','/flow-owner-ui.js','/inbox.js','/socio-ux.js','/app.css','/neo-theme.css','/cloud-theme.css','/ember-theme.css','/inbox.css','/socio-ux.css','/prospector-socio.css','/socio-interview-ui.js','/socio-francisca-live.mjs','/socio-semantic-turn.mjs','/socio-workspace-ui.js','/socio-thalita-ui.js','/socio-orb-ui.js','/socio-orb-mesh.js','/socio-executive.css','/socio-glass-motion.css','/socio-glass-motion.js','/socio-glass-enforced.css','/socio-premium-polish.css','/socio-contrast-audit.css','/socio-product-features.js','/socio-icons.js','/socio-entry-motion.js','/socio-motion-refined.css','/socio-luminous-glass.css','/socio-stripe-system.css','/socio-ethereal.css','/socio-reference.css','/socio-stripe-shell.css','/socio-logo.svg','/socio-master.css','/socio-master-dashboard.js','/meta-billing-ui.js','/ads-upload.js','/ads-media-ui.js','/meta-browser-ui.js','/meta-local-ui.js','/meta-official-ui.js','/meta-ads-tools-ui.js','/meta-advanced-ui.js','/meta-command-ui.js','/socio-ad-skills-ui.js','/meta-report-schedule-ui.js','/attribution-ui.js','/socio-integrations-ui.js','/owner-channel-ui.js','/socio-autopilot-ui.js','/socio-autopilot.css','/socio-overview.css','/socio-new-recommendation.mp3','/trial-input.js','/meta-browser.css'].includes(pathname)){
   const file=pathname==='/'?'/index.html':pathname;
-  const content=await readFile(new URL('./public'+file,import.meta.url));
-  res.writeHead(200,{'Content-Type':(file.endsWith('.js')||file.endsWith('.mjs'))?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':file.endsWith('.svg')?'image/svg+xml':file.endsWith('.mp3')?'audio/mpeg':'text/html; charset=utf-8','Cache-Control':'no-cache'});
-  return res.end(content);
+  const asset=await getStaticAsset(file,String(req.headers['accept-encoding']||''));
+  const versioned=new URL(req.url||'/', 'http://local').searchParams.has('v');
+  const headers={
+   'Content-Type':(file.endsWith('.js')||file.endsWith('.mjs'))?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':file.endsWith('.svg')?'image/svg+xml':file.endsWith('.mp3')?'audio/mpeg':'text/html; charset=utf-8',
+   'Cache-Control':file.endsWith('.html')?'no-cache':versioned?'public,max-age=86400':'no-cache',
+   'ETag':asset.etag,'Vary':'Accept-Encoding'
+  };
+  if(asset.encoding)headers['Content-Encoding']=asset.encoding;
+  if(req.headers['if-none-match']===asset.etag){res.writeHead(304,headers);return res.end();}
+  res.writeHead(200,headers);
+  return res.end(asset.body);
  }
  if(pathname==='/webhooks/whatsapp'&&method==='GET'){
   const url=new URL(req.url,'http://local'),mode=url.searchParams.get('hub.mode'),verify=url.searchParams.get('hub.verify_token'),challenge=url.searchParams.get('hub.challenge');
