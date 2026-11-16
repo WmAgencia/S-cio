@@ -38,7 +38,10 @@ body:has(#appShell:not(.hidden)){
  color-scheme:dark!important;
 }
 
-body #appShell.app-shell{
+/* The shell is shown in normal flow only when the app is open. Without the
+   :not(.hidden) guard this rule forced display:block and painted the whole
+   dashboard underneath the login screen. */
+body #appShell.app-shell:not(.hidden){
  display:block!important;
  width:100%!important;
  min-height:100vh!important;
@@ -2372,6 +2375,12 @@ body #appShell .px-overview.et-board :is(.et-card,.et-kpi,.et-block.et-subs){
    formulário à direita. Nenhum comportamento de login muda. */
 body:has(#authScreen:not(.hidden)){
  background:#07070a!important;
+}
+/* Belt and braces: while the login screen is open the app shell must never
+   paint, whatever order the modules finish loading in. */
+body:has(#authScreen:not(.hidden)) #appShell,
+body #appShell.app-shell.hidden{
+ display:none!important;
 }
 body #authScreen.auth-screen{
  background:
