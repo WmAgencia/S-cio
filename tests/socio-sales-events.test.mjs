@@ -70,7 +70,7 @@ test('real PostgreSQL: confirmed sales reach Meta once and only with an ad attri
   await db.query("INSERT INTO conversations(id,tenant_id,channel_id,customer_phone) VALUES($1,$2,$3,'5515944444444')",
    [cv,t,ch]);
   await db.query("INSERT INTO meta_official_grants(tenant_id,user_id,meta_user_id,token_encrypted,scopes,expires_at) "+
-   "VALUES($1,$2,'104',$3,'{ads_read,ads_management}',now()+interval '2 days')",
+   "VALUES($1,$2,'104',$3,'{ads_read,ads_management,whatsapp_business_management,whatsapp_business_manage_events}',now()+interval '2 days')",
    [t,u,sealMarketingSecret(JSON.stringify({tenant:t,user:u,token:'EAA-sales-token-'+'c'.repeat(40)}),env)]);
 
   const calls=[];

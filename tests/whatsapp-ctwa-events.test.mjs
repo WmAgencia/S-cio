@@ -62,7 +62,7 @@ test('real PostgreSQL: dataset cache, event delivery, retry and honest report',
   await db.query("INSERT INTO conversations(id,tenant_id,channel_id,customer_phone) VALUES($1,$2,$3,'5515988888888')",
    [cv,t,ch]);
   await db.query("INSERT INTO meta_official_grants(tenant_id,user_id,meta_user_id,token_encrypted,scopes,expires_at) "+
-   "VALUES($1,$2,'103',$3,'{ads_read,ads_management}',now()+interval '2 days')",
+   "VALUES($1,$2,'103',$3,'{ads_read,ads_management,whatsapp_business_management,whatsapp_business_manage_events}',now()+interval '2 days')",
    [t,u,sealMarketingSecret(JSON.stringify({tenant:t,user:u,token:'EAA-capi-token-'+'b'.repeat(40)}),env)]);
 
   const calls=[];
