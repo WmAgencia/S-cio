@@ -621,7 +621,7 @@ export async function trafficDiagnosis(decision,{env=process.env,fetchImpl=fetch
   limiteAutonomia:decision?.limits||null
  });
  try{
-  const result=await brainResponse({env,fetchImpl,effort:'high',maxOutputTokens:520,
+  const result=await brainResponse({env,fetchImpl,task:'analysis',maxOutputTokens:520,
    instructions:diagnosisInstructions,input});
   const text=String(result.reply||'').replace(/^```[a-z]*\n?|```$/g,'').trim();
   if(text.length<40)return null;

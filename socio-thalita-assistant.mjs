@@ -300,8 +300,9 @@ async function askThalitaCore(pool,a,body={},opts={}){
  // Generic guidance contains no sensitive customer data and cannot mutate anything.
  const prospectorHistory=history.map(turn=>({role:turn.role,content:turn.text}));
  const plan=voiceReplyPlan(message,prospectorHistory);
+ const strategicRequest=/\b(estrat[ée]gia|planejamento|plano estrat[ée]gico|p[úu]blico[- ]alvo|posicionamento)\b/i.test(message);
  const answer=await (opts.chat||brainResponse)({
-  effort:'high',
+  task:strategicRequest?'strategy':'guidance',
   instructions:voiceStyleInstruction({heard:message,history:prospectorHistory})+'\n'+
    'O estilo de resposta vem do módulo Francisca do Prospector, mas você é a Thalita do Sócio. '+
    'Responda SOMENTE como orientação quando não houver uma ferramenta específica; jamais alegue ter executado alteração, mensagem, cobrança, anúncio ou acessado dados de clientes. '+

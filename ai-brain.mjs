@@ -12,9 +12,13 @@ export const brainModel=(env=process.env)=>
  deepseekReady(env)?deepseekModel(env):groqModel(env,'planning');
 export async function brainResponse(options={}){
  const env=options.env||process.env;
+ // Cost rule: only an explicitly identified strategy-creation task may use
+ // high reasoning. Training, copy, reports, diagnosis and general guidance use
+ // low even when a caller forgets to choose an effort.
+ const effort=options.task==='strategy'?'high':'low';
  if(deepseekReady(env)){
   try{
-   return await deepseekResponse({...options,env});
+   return await deepseekResponse({...options,env,effort});
   }catch(error){
    // Losing the brain must not stall a campaign, but it must be visible: the
    // returned provider tells the caller Groq answered, not DeepSeek.
