@@ -25,17 +25,33 @@ const PENDING_SALES_SQL=[
  'ORDER BY s.confirmed_at LIMIT $1'
 ].join(' ');
 
+// A sale outside the 7-day click window cannot be attributed by Meta, so it never
+// becomes an event. It is still revenue in the panel; only delivery optimisation
+// loses it. The reason is returned so the owner can see why a sale has no event.
+export function saleEventSkipReason(row,{now=Date.now()}={}){
+ if(!row)return 'no_row';
+ if(row.source_type!=='ad')return 'not_from_ad';
+ if(!String(row.waba_id||'').trim())return 'no_waba';
+ if(!String(row.ctwa_clid||'').trim())return 'no_click_id';
+ const cents=Number(row.amount_cents);
+ if(!Number.isFinite(cents)||cents<=0)return 'no_amount';
+ const when=row.confirmed_at instanceof Date?row.confirmed_at:new Date(row.confirmed_at);
+ const ms=when.getTime();
+ if(!Number.isFinite(ms))return 'no_date';
+ if(ms>now+300000)return 'future_date';
+ if(now-ms>EVENT_WINDOW_MS)return 'outside_window';
+ return null;
+}
+
 export function buildSalePurchaseEvent(row,{now=Date.now()}={}){
- if(!row||row.source_type!=='ad')return null;
+ if(saleEventSkipReason(row,{now}))return null;
  const id=String(row.id||'').trim();
  const wabaId=String(row.waba_id||'').trim();
  const ctwaClid=String(row.ctwa_clid||'').trim();
  const cents=Number(row.amount_cents);
- if(!id||!wabaId||wabaId.length>64||!ctwaClid||ctwaClid.length>512)return null;
- if(!Number.isFinite(cents)||cents<=0)return null;
+ if(!id||wabaId.length>64||ctwaClid.length>512)return null;
  const when=row.confirmed_at instanceof Date?row.confirmed_at:new Date(row.confirmed_at);
  const ms=when.getTime();
- if(!Number.isFinite(ms)||ms>now+300000||now-ms>EVENT_WINDOW_MS)return null;
  return {
   event_name:'Purchase',
   event_time:Math.floor(ms/1000),
