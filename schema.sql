@@ -1386,3 +1386,8 @@ BEGIN
   END;
  END LOOP;
 END $$;
+
+-- The owner may let the AI answer only the conversations that arrived from a
+-- campaign (click-to-WhatsApp referral), never the organic ones. Off by default:
+-- without it the AI waits for a human to hand each conversation over.
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS campaign_leads_only boolean NOT NULL DEFAULT false;

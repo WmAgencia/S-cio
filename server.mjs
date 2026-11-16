@@ -1707,14 +1707,20 @@ async function handle(req,res){
  }
  if(method==='GET'&&pathname==='/api/agent'){
   requirePermission(a,'training.manage');
-  const r=await query('SELECT name,tone,instructions,knowledge_md,enabled,updated_at FROM agents WHERE tenant_id=$1',[a.active_tenant_id]);
+  const r=await query('SELECT name,tone,instructions,knowledge_md,enabled,campaign_leads_only,updated_at FROM agents WHERE tenant_id=$1',[a.active_tenant_id]);
   return json(res,200,r.rows[0]||{});
  }
  if(method==='PUT'&&pathname==='/api/agent'){
   needRole(a,['owner','admin']);const {data}=await body(req);
   if(!validText(data.name,80)||!validText(data.tone,300)||!validText(data.instructions,6000)||typeof data.enabled!=='boolean')throw fail(422,'Configuração inválida.');
-  const r=await query('UPDATE agents SET name=$2,tone=$3,instructions=$4,enabled=$5,updated_at=now() WHERE tenant_id=$1 RETURNING name,tone,instructions,knowledge_md,enabled',[a.active_tenant_id,data.name.trim(),data.tone.trim(),data.instructions.trim(),data.enabled]);
-  await audit(a,'agent.updated',{enabled:data.enabled});return json(res,200,r.rows[0]);
+  // Campaign-only is opt-in per owner; absent keeps the current choice.
+  const leadsOnly=typeof data.campaignLeadsOnly==='boolean'?data.campaignLeadsOnly:null;
+  const r=await query('UPDATE agents SET name=$2,tone=$3,instructions=$4,enabled=$5,'+
+   'campaign_leads_only=COALESCE($6,campaign_leads_only),updated_at=now() WHERE tenant_id=$1 '+
+   'RETURNING name,tone,instructions,knowledge_md,enabled,campaign_leads_only',
+   [a.active_tenant_id,data.name.trim(),data.tone.trim(),data.instructions.trim(),data.enabled,leadsOnly]);
+  await audit(a,'agent.updated',{enabled:data.enabled,campaignLeadsOnly:r.rows[0]?.campaign_leads_only===true});
+  return json(res,200,r.rows[0]);
  }
  // Prospector guided interview: per-company private draft, approval stays in /versions/:id/approve.
  if(method==='GET'&&pathname==='/api/training/interview'){
@@ -2265,6 +2271,20 @@ async function receiveWhatsApp(req,res){
    if(item.referral)
     await saveCtwaAttribution(c,{tenantId,channelId,conversationId:conv.rows[0].id,
      inboundMessageId:item.messageId,wabaId:item.wabaId,referral:item.referral,occurredAt:item.occurredAt});
+   // Campaign leads only: an owner whose agent is enabled and scoped to campaign
+   // traffic gets this conversation handed to the AI the moment it arrives from
+   // an ad referral. Organic arrivals stay with a human. The AI worker still
+   // rechecks ownership before sending anything.
+   if(item.referral)
+    await c.query("INSERT INTO conversation_ui_state(tenant_id,conversation_id,handling_mode,ai_activated_at,updated_at) "+
+     "SELECT $1,$2,'ai_assist',now(),now() FROM agents ag JOIN tenants t ON t.id=ag.tenant_id "+
+     "WHERE ag.tenant_id=$1 AND ag.enabled=true AND ag.campaign_leads_only=true "+
+     "AND t.status<>'paused' AND COALESCE((t.features->>'ai')::boolean,true)=true "+
+     "AND COALESCE((t.features->>'whatsapp')::boolean,true)=true "+
+     "ON CONFLICT(tenant_id,conversation_id) DO UPDATE SET handling_mode='ai_assist',"+
+     "ai_activated_at=COALESCE(conversation_ui_state.ai_activated_at,now()),updated_at=now() "+
+     "WHERE conversation_ui_state.handling_mode='human'",
+     [tenantId,conv.rows[0].id]);
    const evidence=detectSaleCandidate({body:item.body,caption:item.caption,
     fileName:item.fileName,mediaType:item.mediaType});
    if(evidence){

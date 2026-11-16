@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {processNextAiReply} from '../ai-replies.mjs';
 
 const env={
@@ -62,4 +63,15 @@ test('AI does not retry once WhatsApp send has been attempted',async()=>{
  assert.equal(sends,1);
  assert.equal(r.retryScheduled,false);
  assert.equal(updates.at(-1).args[2],'SEND_UNCONFIRMED');
+});
+
+test('a campaign-only agent never answers an organic conversation',async()=>{
+ const source=await readFile(new URL('../ai-replies.mjs',import.meta.url),'utf8');
+ assert.match(source,/ag\.campaign_leads_only IS NOT TRUE OR EXISTS\(/);
+ assert.match(source,/FROM wa_ctwa_attributions w WHERE w\.tenant_id=m\.tenant_id/);
+ const webhook=await readFile(new URL('../server.mjs',import.meta.url),'utf8');
+ assert.match(webhook,/ag\.campaign_leads_only=true/);
+ assert.match(webhook,/WHERE conversation_ui_state\.handling_mode='human'/);
+ assert.match(await readFile(new URL('../schema.sql',import.meta.url),'utf8'),
+  /ADD COLUMN IF NOT EXISTS campaign_leads_only boolean NOT NULL DEFAULT false/);
 });

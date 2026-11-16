@@ -41,12 +41,20 @@ export async function officialGraph(path,token,{env=process.env,request=fetch,pa
  // Never forward provider paging URLs (which can embed access tokens).
  return data;
 }
+// Ads permissions plus the WhatsApp Business event permissions that let a
+// confirmed click-to-WhatsApp conversation and a confirmed sale go back to Meta
+// as LeadSubmitted/Purchase. Requesting them here is the only way the owner's
+// reconnect can ever grant them.
+export const OFFICIAL_SCOPES=Object.freeze([
+ 'ads_read','ads_management','business_management',
+ 'whatsapp_business_management','whatsapp_business_manage_events'
+]);
 export async function startOfficial(pool,a,{env=process.env}={}){
  access(a,'marketing.manage');const c=officialConfig(env),state=randomBytes(32).toString('hex');
  await pool.query('DELETE FROM meta_official_states WHERE expires_at<now()');
  await pool.query("INSERT INTO meta_official_states(state_hash,tenant_id,user_id,session_hash,expires_at) VALUES($1,$2,$3,$4,now()+interval '10 minutes')",[hash(state),a.active_tenant_id,a.user_id,a.token_hash]);
  const url=new URL('https://www.facebook.com/'+c.version+'/dialog/oauth');
- for(const [k,v] of Object.entries({client_id:c.appId,redirect_uri:c.callback,state,response_type:'code',scope:'ads_read,ads_management,business_management'}))url.searchParams.set(k,v);
+ for(const [k,v] of Object.entries({client_id:c.appId,redirect_uri:c.callback,state,response_type:'code',scope:OFFICIAL_SCOPES.join(',')}))url.searchParams.set(k,v);
  return {authorizationUrl:url.href};
 }
 export async function finishOfficial(pool,state,code,{env=process.env,request=fetch}={}){

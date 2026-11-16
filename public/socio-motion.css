@@ -250,3 +250,10 @@ body #appShell #view{animation:none!important;transition:none!important;transfor
 @media(prefers-reduced-motion:no-preference){
  body #appShell #view.socio-workspace-enter{animation:none!important}
 }
+
+/* Opção de escopo da IA: só campanhas. */
+body #appShell .agent-campaign-only{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#fbfbfd;cursor:pointer}
+body #appShell .agent-campaign-only input{margin-top:2px;width:16px;height:16px;flex:none}
+body #appShell .agent-campaign-only span{display:flex;flex-direction:column;gap:3px}
+body #appShell .agent-campaign-only strong{font-size:12.5px;color:#202735}
+body #appShell .agent-campaign-only small{font-size:11.5px;line-height:1.45;color:#667085}

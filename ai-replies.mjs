@@ -50,13 +50,19 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
  // Ignore historical messages imported before AI takeover.
  const found=await pool.query(
   "SELECT m.id AS inbound_id,m.body,m.created_at,m.conversation_id,m.tenant_id,t.name AS tenant_name,t.features AS tenant_features,"+
-  "ag.name AS agent_name,ag.tone,ag.instructions,ag.knowledge_md "+
+  "ag.name AS agent_name,ag.tone,ag.instructions,ag.knowledge_md,ag.campaign_leads_only "+
   "FROM messages m JOIN conversation_ui_state st ON st.tenant_id=m.tenant_id AND st.conversation_id=m.conversation_id "+
   "JOIN agents ag ON ag.tenant_id=m.tenant_id AND ag.enabled=true "+
   "JOIN tenants t ON t.id=m.tenant_id AND t.status<>'paused' "+
   "JOIN conversations c ON c.id=m.conversation_id AND c.tenant_id=m.tenant_id "+
   "JOIN channels ch ON ch.id=c.channel_id AND ch.tenant_id=c.tenant_id AND ch.provider='waakg' AND ch.status='connected' "+
   "WHERE st.handling_mode='ai_assist' AND st.ai_activated_at IS NOT NULL "+
+  // Campaign-only agents answer a conversation solely when it arrived from an
+  // ad referral. Belt to the webhook's braces: a manual toggle on an organic
+  // conversation cannot make the AI speak for this owner.
+  "AND (ag.campaign_leads_only IS NOT TRUE OR EXISTS("+
+  " SELECT 1 FROM wa_ctwa_attributions w WHERE w.tenant_id=m.tenant_id "+
+  " AND w.conversation_id=m.conversation_id)) "+
   "AND COALESCE((t.features->>'ai')::boolean,true)=true AND COALESCE((t.features->>'whatsapp')::boolean,true)=true "+
   "AND c.status<>'resolved' AND m.direction='inbound' AND m.created_at>=st.ai_activated_at "+
   "AND m.created_at<now()-interval '8 seconds' "+

@@ -276,3 +276,15 @@ test('a sale outside the click window says why it is not sent',()=>{
  assert.equal(saleEventSkipReason({...row,source_type:'organic',confirmed_at:new Date(now)},{now}),'not_from_ad');
  assert.equal(saleEventSkipReason({...row,ctwa_clid:'',confirmed_at:new Date(now)},{now}),'no_click_id');
 });
+
+test('connecting Meta requests the WhatsApp event permissions, not only ads',async()=>{
+ const {OFFICIAL_SCOPES}=await import('../meta-official.mjs');
+ const source=await readFile(new URL('../meta-official.mjs',import.meta.url),'utf8');
+ assert(OFFICIAL_SCOPES.includes('whatsapp_business_management'));
+ assert(OFFICIAL_SCOPES.includes('whatsapp_business_manage_events'));
+ assert(OFFICIAL_SCOPES.includes('ads_read'));
+ // The dialog must use this list; a hardcoded ads-only scope is what kept the
+ // reconnect from ever granting event permissions.
+ assert.match(source,/scope:OFFICIAL_SCOPES\.join\(','\)/);
+ assert.doesNotMatch(source,/scope:'ads_read,ads_management,business_management'/);
+});
