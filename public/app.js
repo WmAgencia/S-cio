@@ -154,6 +154,8 @@ function formValues(form){return Object.fromEntries(new FormData(form).entries()
 // first visit to a section never looks frozen.
 function setLoading(request=navigationRequest){
  view.setAttribute('aria-busy','true');
+ // Only a blank view gets the wait line, and it is themed like the app so the
+ // first paint never shows a bare white page under the header.
  const empty=!view.firstElementChild;
  let line=view.querySelector('[data-socio-loading-line]');
  if(empty&&!line&&typeof document?.createElement==='function'){

@@ -2366,3 +2366,131 @@ body #appShell .px-overview.et-board :is(.et-card,.et-kpi,.et-block.et-subs){
   inset 0 -12px 32px rgba(0,0,0,.30),
   0 34px 64px -38px rgba(0,0,0,1)!important;
 }
+
+/* ═══ Tela de entrada — mesma identidade do painel Ethereal ══════════════
+   Fundo escuro com orbes de cor, arte à esquerda e um cartão de vidro com o
+   formulário à direita. Nenhum comportamento de login muda. */
+body:has(#authScreen:not(.hidden)){
+ background:#07070a!important;
+}
+body #authScreen.auth-screen{
+ background:
+  radial-gradient(48% 46% at 12% 0%,rgba(150,108,255,.55) 0%,rgba(150,108,255,0) 62%),
+  radial-gradient(40% 38% at 92% 8%,rgba(255,166,214,.42) 0%,rgba(255,166,214,0) 60%),
+  radial-gradient(52% 50% at 88% 100%,rgba(116,246,196,.34) 0%,rgba(116,246,196,0) 62%),
+  linear-gradient(150deg,#0a0812 0%,#07070a 55%,#0b0913 100%)!important;
+ color:#f5f6f7!important;
+ min-height:100dvh;
+}
+body #authScreen .auth-art{
+ background:transparent!important;
+ border:0!important;
+ color:#f5f6f7!important;
+ padding:64px clamp(28px,6vw,88px)!important;
+ justify-content:center;
+}
+body #authScreen .auth-art:after{
+ border-color:rgba(255,255,255,.07)!important;
+ box-shadow:0 0 0 95px rgba(255,255,255,.035),0 0 0 185px rgba(255,255,255,.02)!important;
+ opacity:1!important;
+}
+body #authScreen .auth-art .brand-mark.large{
+ font-family:Georgia,"Times New Roman",serif!important;
+ color:#fff!important;
+ font-weight:800!important;
+ letter-spacing:-.09em!important;
+ background:linear-gradient(140deg,#ffffff,#cfc7e8);
+ -webkit-background-clip:text;background-clip:text;
+ -webkit-text-fill-color:transparent;
+}
+body #authScreen .auth-art .brand-mark.large span{
+ -webkit-text-fill-color:#a78bff;
+}
+body #authScreen .auth-art .eyebrow{
+ color:#c9b6ff!important;
+ letter-spacing:.18em!important;
+ font-size:10px!important;
+}
+body #authScreen .auth-art h1{
+ color:#ffffff!important;
+ font-weight:600!important;
+ letter-spacing:-.035em!important;
+ max-width:520px;
+}
+body #authScreen .auth-art p{color:#a9a3b8!important}
+body #authScreen .auth-bottom{
+ color:#8f8a9e!important;
+ letter-spacing:.16em!important;
+}
+/* O formulário vive num cartão de vidro, como os painéis do sistema. */
+body #authScreen .auth-panel{
+ background:transparent!important;
+ display:grid;
+ place-items:center;
+ padding:clamp(20px,4vw,48px);
+}
+body #authScreen .auth-box{
+ max-width:400px;width:100%;
+ padding:34px 32px 30px!important;
+ border-radius:24px!important;
+ border:1px solid rgba(255,255,255,.13)!important;
+ background:linear-gradient(160deg,rgba(255,255,255,.11) 0%,rgba(255,255,255,.05) 52%,rgba(255,255,255,.03) 100%)!important;
+ box-shadow:
+  inset 0 1px 0 rgba(255,255,255,.2),
+  0 40px 90px -40px rgba(0,0,0,.95)!important;
+ -webkit-backdrop-filter:blur(28px) saturate(160%);
+ backdrop-filter:blur(28px) saturate(160%);
+}
+body #authScreen .auth-heading{margin-bottom:26px!important}
+body #authScreen .auth-heading .eyebrow{color:#b9a5ff!important;letter-spacing:.16em!important}
+body #authScreen .auth-heading h2{
+ color:#fff!important;font-weight:640!important;letter-spacing:-.035em!important;
+ font-size:30px!important;margin:10px 0 8px!important;
+}
+body #authScreen .auth-heading p{color:#a9a3b8!important}
+body #authScreen .form-stack label{color:#d7d2e2!important;font-weight:600!important}
+body #authScreen .form-stack :is(input,textarea,select){
+ background:rgba(255,255,255,.06)!important;
+ border:1px solid rgba(255,255,255,.14)!important;
+ border-radius:12px!important;
+ color:#fff!important;
+ padding:12px 13px!important;
+}
+body #authScreen .form-stack :is(input,textarea,select)::placeholder{color:#8b8798!important}
+body #authScreen .form-stack :is(input,textarea,select):focus{
+ border-color:#a78bff!important;outline:0!important;
+ box-shadow:0 0 0 3px rgba(167,139,255,.18)!important;
+ background:rgba(255,255,255,.09)!important;
+}
+body #authScreen .auth-password-toggle{
+ background:rgba(255,255,255,.08)!important;
+ border-color:rgba(255,255,255,.14)!important;
+ color:#d7d2e2!important;
+}
+body #authScreen .btn.primary,
+body #authScreen .form-stack .btn.primary{
+ background:linear-gradient(135deg,#b9f6d2,#5fdb9a)!important;
+ color:#07230f!important;border:0!important;
+ border-radius:999px!important;
+ font-weight:700!important;
+ height:46px!important;
+ box-shadow:0 14px 30px -18px rgba(95,219,154,.9)!important;
+}
+body #authScreen .btn.primary:hover{filter:brightness(1.04)}
+body #authScreen :is(.auth-error,.form-error){color:#ff9db0!important}
+body #authScreen .auth-footer{color:#8f8a9e!important;margin-top:26px!important}
+body #authScreen .help-card{
+ background:rgba(167,139,255,.12)!important;
+ border:1px solid rgba(167,139,255,.28)!important;
+ color:#d7cff7!important;border-radius:14px!important;
+}
+body #authScreen .mobile-brand{color:#fff!important;display:none}
+@media(max-width:780px){
+ body #authScreen .auth-panel{min-height:100dvh}
+ body #authScreen .mobile-brand{display:flex!important;color:#fff!important;margin-bottom:22px!important}
+ body #authScreen .mobile-brand span{-webkit-text-fill-color:#a78bff;color:#a78bff}
+ body #authScreen .mobile-brand small{color:#8f8a9e!important}
+}
+@media(prefers-reduced-motion:reduce){
+ body #authScreen .auth-box{backdrop-filter:none;-webkit-backdrop-filter:none}
+}

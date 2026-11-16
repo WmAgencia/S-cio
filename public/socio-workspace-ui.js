@@ -109,18 +109,19 @@
   const title=({overview:'Visão geral',marketing:'Meta Ads',connections:'Conexões'}[kind]||'Sócio');
   const skeleton='<span class="px-load-line" aria-hidden="true"></span>';
   if(kind==='overview'){
-   // Final-geometry placeholders: no white default cards, wrong balances or
-   // empty rectangles while ad providers and company KPIs are loading.
+   // The placeholder uses the exact board elements, in the exact order the real
+   // screen renders them: when the data lands, the grid keeps its geometry and
+   // nothing jumps. A different set of boxes here was the flash the owner saw.
    root.innerHTML='<div class="px-workspace px-overview px-overview-loading et-board" aria-busy="true">'+
     '<h1 class="et-title">Visão geral</h1>'+
     '<div class="et-board-grid px-overview-skeleton" aria-hidden="true">'+
      '<section class="et-hero px-load-card">'+skeleton+skeleton+skeleton+'</section>'+
      '<article class="et-kpi et-income px-load-card">'+skeleton+skeleton+'</article>'+
-     '<article class="et-kpi px-load-card">'+skeleton+skeleton+'</article>'+
-     '<article class="et-block et-recs et-card px-load-card">'+skeleton+skeleton+skeleton+'</article>'+
+     '<article class="et-kpi et-kpi-campaign px-load-card">'+skeleton+skeleton+'</article>'+
+     '<section class="et-block et-recs px-load-card">'+skeleton+skeleton+'</section>'+
      '<article class="et-card et-flow px-load-card">'+skeleton+skeleton+skeleton+'</article>'+
      '<article class="et-card et-expense-split px-load-card">'+skeleton+skeleton+skeleton+'</article>'+
-     '<article class="et-block et-subs px-load-card">'+skeleton+skeleton+'</article>'+
+     '<section class="et-block et-subs px-load-card">'+skeleton+skeleton+'</section>'+
     '</div>'+
     '<p class="px-load-status" role="status">Consultando dados confirmados da empresa…</p>'+
     '</div>';
@@ -514,11 +515,13 @@
   };
   const trafficList=traffic?.ok&&Array.isArray(traffic.data?.items)?traffic.data.items:[];
   const pendingItems=trafficList.filter(item=>item.status==='awaiting_approval').slice(0,3);
+  // A failed read shows an empty state, never a "nothing to do" that later
+  // flips: the owner must be able to tell "no decisions" from "did not load".
   const trafficRail='<div class="et-stack">'+
     (traffic?.ok?
      (pendingItems.length?pendingItems.map(recCard).join(''):
       '<p class="ov-rail-empty">Nada para decidir agora. A revisão automática só funciona quando ativada pela administração.</p>'):
-     '<p class="ov-rail-empty">'+esc(traffic?.reason||'Recomendações indisponíveis agora.')+'</p>')+
+     '<p class="ov-rail-empty">'+esc(traffic?.reason||'Recomendações não puderam ser consultadas agora.')+'</p>')+
    '</div>';
   // Every revenue number comes from a sale the owner confirmed himself —
   // nothing is projected or inferred from conversations.

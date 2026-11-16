@@ -106,12 +106,13 @@ if(!['public','socio_app'].includes(dbSchema)||(isSupabaseDb&&dbSchema!=='socio_
  console.error('SOCIO_DB_SCHEMA must be socio_app for a Supabase database');
  process.exit(1);
 }
-// Per-process pool cap leaves headroom for jobs and other app replicas. Four
-// connections made every parallel screen wait in line (a dashboard issues ~6
-// reads at once); twelve keeps concurrency under the server's own limit while
-// still leaving room for workers and other replicas.
-const dbPoolRequested=Number(process.env.SOCIO_DB_POOL_MAX||12);
-const dbPoolMax=Number.isInteger(dbPoolRequested)?Math.min(16,Math.max(2,dbPoolRequested)):12;
+// The Supabase pooler runs in session mode and caps the whole project at 15
+// clients (schema migrations and other workers share it). Four made parallel
+// screens queue; going to twelve hit EMAXCONNSESSION. Six is the balance: it
+// serves the dashboard's parallel reads and still leaves room for jobs, the
+// migration path and any second replica. Override only knowing the pool size.
+const dbPoolRequested=Number(process.env.SOCIO_DB_POOL_MAX||6);
+const dbPoolMax=Number.isInteger(dbPoolRequested)?Math.min(10,Math.max(2,dbPoolRequested)):6;
 const pool=new Pool({connectionString:DATABASE_URL,max:dbPoolMax,connectionTimeoutMillis:12000,idleTimeoutMillis:20000,
  options:dbSchema==='socio_app'?'-c search_path=socio_app,pg_catalog':undefined});
 // Supabase's pooler closes idle connections; without this listener the error
@@ -2649,14 +2650,31 @@ saleEventWorker.unref();
   }finally{workerBusy=false;}
  },750);
  worker.unref();
- const server=http.createServer((req,res)=>Promise.resolve(handle(req,res)).catch(e=>{
+ const server=http.createServer((req,res)=>{
+  // A client that hangs up mid-request is normal (tab closed, network blip).
+  // These socket errors are not application failures: swallowing them here
+  // keeps one dropped connection from restarting the whole service.
+  const quiet=error=>{
+   const code=error?.code;
+   if(['ECONNRESET','EPIPE','ECONNABORTED','ERR_STREAM_DESTROYED'].includes(code))return true;
+   return res.writableEnded||res.destroyed;
+  };
+  req.on('error',error=>{if(!quiet(error))console.error('request stream failed',error?.code||error?.message);});
+  res.on('error',error=>{if(!quiet(error))console.error('response stream failed',error?.code||error?.message);});
+  Promise.resolve(handle(req,res)).catch(e=>{
   const code=e.code;
   if(code==='23505')return json(res,409,{error:'Este e-mail, telefone ou identificador já está cadastrado.'});
   if(code==='23503')return json(res,409,{error:'Existe um registro vinculado que impede a alteração.'});
   if(!e.status)console.error('request failed',e?.message||e);
+  if(res.writableEnded||res.destroyed)return;
   if(!res.headersSent)json(res,e.status||500,{error:safeDetail(e)});
   else res.end();
- }));
+  });
+ });
+ // Malformed HTTP from a client must not crash the process either.
+ server.on('clientError',(error,socket)=>{
+  if(socket&&socket.writable)socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+ });
  server.listen(PORT,'0.0.0.0',()=>{
   console.log('Socio listening on '+PORT);
   // Warm only generic public voice acknowledgements, never tenant/customer data.
