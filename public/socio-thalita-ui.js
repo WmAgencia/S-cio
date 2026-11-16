@@ -111,7 +111,9 @@
     message,runId:turnRunId,history:recentHistory.slice(-6)
    },{},{signal:controller.signal});
    if(!isActive())return;
-   turnRunId=result.runId&&result.status==='ready'?result.runId:null;
+   // Keep the same campaign conversation while Thalita is collecting the
+   // briefing. Dropping the run here made short answers start a new campaign.
+   turnRunId=result.runId&&['collecting','ready','failed','executing'].includes(result.status)?result.runId:null;
    const answer=String(result.message||'Consulta concluída.');
    const remember=()=>{
     recentHistory.push({role:'user',text:message.slice(0,350)},{role:'assistant',text:answer.slice(0,350)});

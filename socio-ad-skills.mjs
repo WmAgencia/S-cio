@@ -10,6 +10,7 @@ import {resolveSelectedOfficialAccount} from './meta-official.mjs';
 import {readAdsTool,prepareAdsPlan,executeAdsPlan} from './meta-ads-tools.mjs';
 import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
 import {campaignDesign,planExplanation} from './socio-campaign-design.mjs';
+import {interpretCampaignTurn,mergeCampaignInterpretation,explainCampaignStrategy} from './socio-campaign-conversation.mjs';
 
 const bad=(status,message)=>Object.assign(new Error(message),{status});
 const digits=x=>String(x||'').replace(/\D/g,'');
@@ -352,9 +353,20 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
      ' Quando quiser começar, peça a ativação.' :
     creationFailure(executed)};
  }
- const brief=extractCampaignBrief(message,run.brief||{});
  // The last question asked decides how a short spoken answer is read.
  const asked=runId?run.brief?.asked:null;
+ const deterministicTurn=extractCampaignBrief(message,{});
+ let brief=extractCampaignBrief(message,run.brief||{});
+ // Regexes are a fast, deterministic floor. DeepSeek low is the conversational
+ // interpreter: it understands corrections and natural replies, while this
+ // module still validates every field and owns all Meta side effects.
+ const interpreted=await (opts.interpretCampaign||interpretCampaignTurn)({
+  message,previous:publicBrief(run.brief||{}),asked,env:opts.env||process.env,
+  respond:opts.respondCampaign
+ });
+ brief=mergeCampaignInterpretation(brief,interpreted.brief);
+ // Facts parsed directly from this turn take precedence over a model guess.
+ brief=mergeCampaignInterpretation(brief,deterministicTurn);
  const bare=message.trim().replace(/[.!]$/,'');
  if(runId&&run.brief&&!run.brief?.category&&!brief.category){
   const candidate=bare.replace(/[<>\r\n]/g,' ').replace(/\s+/g,' ');
@@ -388,10 +400,23 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
   const repeat=run.brief?.asked===prompt.slot;
   // The strategy comes before the creative: the owner hears the whole plan,
   // then sends the ad the plan already describes.
-  const strategy=prompt.slot==='media'&&!repeat?planExplanation(brief,campaignDesign(brief)):'';
+  let strategy='';
+  if(prompt.slot==='media'&&!repeat){
+   const design=campaignDesign(brief);
+   const intelligent=await (opts.explainStrategy||explainCampaignStrategy)({brief:publicBrief(brief),design,
+    env:opts.env||process.env,respond:opts.respondStrategy});
+   strategy=intelligent?.text||planExplanation(brief,design)||'';
+   if(intelligent){brief.strategyNarrative=intelligent.text;brief.strategyProvider=intelligent.provider||null;
+    await pool.query(
+     "UPDATE socio_skill_runs SET brief=$2::jsonb,updated_at=now() WHERE id=$1 AND tenant_id=$3 AND user_id=$4 AND status='collecting'",
+     [run.id,JSON.stringify(brief),a.active_tenant_id,a.user_id]);}
+  }
   return {skillId:'ads.campaign.launch',runId:run.id,status:'collecting',brief:publicBrief(brief),
    question:prompt.message,slot:prompt.slot,
-   message:strategy?strategy+'\n'+prompt.message:repeat?clarifyFor(prompt.slot,prompt.message):prompt.message,
+   message:[interpreted.acknowledgement,interpreted.answer,
+    strategy?strategy+'\n'+prompt.message:repeat?clarifyFor(prompt.slot,prompt.message):prompt.message]
+    .filter(Boolean).join('\n'),
+   conversationProvider:interpreted.provider||null,
    note:brief.destination==='whatsapp'?
     'Para conversas WhatsApp, a origem pode ser apenas indicativa conforme os dados do WA-AKG; não existe Pixel instalado dentro do WhatsApp.':null};
  }
@@ -439,7 +464,7 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
  await pool.query("UPDATE socio_skill_runs SET brief=$2::jsonb,plan_id=$3,pixel_plan_id=$4,status='ready',expires_at=now()+interval '15 minutes',updated_at=now() "+
   "WHERE id=$1 AND tenant_id=$5 AND user_id=$6 AND status='collecting'",
   [run.id,JSON.stringify(brief),plan.id,pixelPlanId,a.active_tenant_id,a.user_id]);
- const explanation=planExplanation(brief,design)||('Montei a campanha de '+brief.category+'. ');
+ const explanation=brief.strategyNarrative||planExplanation(brief,design)||('Montei a campanha de '+brief.category+'. ');
  return {skillId:'ads.campaign.launch',runId:run.id,status:'ready',brief:publicBrief(brief),planId:plan.id,design:design||null,
   creativeVariants:creativeDrafts.variants,selectedCreativeStyle:creativeDrafts.variants[0].style,
   copyProvider:creativeDrafts.copyProvider||'template',copyNote:creativeDrafts.copyNote||null,
