@@ -193,8 +193,14 @@ async function body(req,limit=900000){
 function sameOrigin(req){
  const o=req.headers.origin;
  if(o){
-  try{if(new URL(o).host!==req.headers.host)throw fail(403,'Origem não permitida.');}
-  catch{throw fail(403,'Origem não permitida.');}
+  let parsed;
+  try{parsed=new URL(o);}catch{throw fail(403,'Origem não permitida.');}
+  const host=String(req.headers.host||'').toLowerCase();
+  // Vercel forwards same-origin browser POSTs to the existing Railway backend.
+  // Only these exact two trusted origins may use this proxy path.
+  const fromVercel=parsed.origin==='https://s-cio.vercel.app'&&
+    (host==='socio-app-production-762c.up.railway.app'||host==='s-cio.vercel.app');
+  if(parsed.host!==host&&!fromVercel)throw fail(403,'Origem não permitida.');
  }
  if(req.headers['sec-fetch-site']==='cross-site')throw fail(403,'Origem não permitida.');
 }
