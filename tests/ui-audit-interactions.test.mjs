@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 const file=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
 const APP=file('public/app.js'),HTML=file('public/index.html'),CSS=file('public/socio-ux.css');
 
-function simulatedApp({features=null,products=[]}={}){
+function simulatedApp({features=null,products=[],fetchHook=null}={}){
  const nodes=new Map(),handlers=new Map();
  function node(id){
   if(!nodes.has(id)){
@@ -56,8 +56,11 @@ function simulatedApp({features=null,products=[]}={}){
  };
  const context={document,Date,URL,Intl,FormData,console,setTimeout,clearTimeout,
   window:{},
-  fetch:async u=>({ok:Object.hasOwn(values,u),status:Object.hasOwn(values,u)?200:404,
-   json:async()=>values[u]||{error:'Not found'}})};
+  fetch:async u=>{
+   const hooked=fetchHook?.(u);if(hooked!==undefined)return hooked;
+   return {ok:Object.hasOwn(values,u),status:Object.hasOwn(values,u)?200:404,
+    json:async()=>values[u]||{error:'Not found'}};
+  }};
  vm.createContext(context);vm.runInContext(APP,context,{timeout:4000});
  return {context,node,handlers};
 }
@@ -111,6 +114,18 @@ test('tenant hides modules and stops navigation even when caller invokes interna
  assert.equal(vm.runInContext('state.view',sim.context),'overview');
  await vm.runInContext("changeView('products')",sim.context);
  assert.match(sim.node('id:view').innerHTML,/Seu catálogo está vazio/);
+});
+test('a slow previous page cannot replace the page selected afterwards',async()=>{
+ let releaseProducts;
+ const delayed=new Promise(resolve=>{releaseProducts=()=>resolve({ok:true,status:200,json:async()=>[]});});
+ const sim=simulatedApp({fetchHook:url=>url==='/api/products'?delayed:undefined});
+ await new Promise(resolve=>setTimeout(resolve,60));
+ const old=vm.runInContext("changeView('products')",sim.context);
+ await vm.runInContext("changeView('overview')",sim.context);
+ releaseProducts();await old;await new Promise(resolve=>setTimeout(resolve,20));
+ assert.equal(vm.runInContext('state.view',sim.context),'overview');
+ assert.doesNotMatch(sim.node('id:view').innerHTML,/Seu catálogo está vazio|catalog-clean/);
+ assert.equal(sim.node('id:view').attributes['aria-busy'],undefined);
 });
 test('commerce is fully removed from the dashboard and server',()=>{
  assert.doesNotMatch(APP,/SocioSales|sales\.read|quote-requests|quote-alerts/);

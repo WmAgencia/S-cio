@@ -5,6 +5,7 @@
  'use strict';
  function create({api,e,toast,view,changeView,openQr,canManageMemory=false}){
   let conversations=[],active=null,thread=null,filter='all',search='',filterMessages='',selected=new Set();
+  let openRequest=0;
   let reply=null,menuId=null,pointer=null,longTimer=null,refreshTimer=null,searchTimer=null,draftTimer=null;
   let infoOpen=false,helpOpen=false,menuAt=null,team=null,lock=false,disposed=false,lastFetch=0,syncing=false,cancelSync=false,suppressClick=false,noteMode=false,sendKey=null,sendFingerprint=null;
   let prefs={fontScale:'normal',contrast:'normal',compact:false};
@@ -41,7 +42,7 @@
   function cleanup(){
    if(active)void saveDraft(active).catch(()=>{});
    if(mediaRecorder&&mediaRecorder.state==='recording')mediaRecorder.stop();
-   clearTimers();disposed=true;pointer=null;menuId=null;active=null;thread=null;selected.clear();
+   clearTimers();disposed=true;openRequest++;pointer=null;menuId=null;active=null;thread=null;selected.clear();
   }
   function layout(){
    const filters=[
@@ -532,15 +533,20 @@
    const same=active===id;
    if(!same&&active){clearTimeout(draftTimer);void saveDraft(active).catch(()=>{});}
    if(!same){selected.clear();reply=null;infoOpen=false;filterMessages='';noteMode=false;sendKey=null;sendFingerprint=null;closeMenu();}
-   active=id;
+   const request=++openRequest;
+   active=id;thread=null;
    const item=current();if(!item)return;
-   const result=await api('/api/conversations/'+id+'/history?limit=80');
-   if(disposed||active!==id)return;
-   thread=result;
    const main=byId('inboxMain');
    if(!main)return;
    // Inject the thread inside #inboxMain instead of replacing the section: the
    // click/input hosts stay attached to the live DOM between conversations.
+   main.innerHTML='<div class="wa-inbox-welcome" role="status" aria-live="polite"><h2>Carregando conversa…</h2><p>Abrindo o histórico de '+t(item.customer_name||item.customer_phone||'contato')+'.</p></div>';
+   wrap()?.classList.add('wa-show-thread');
+   renderList();
+   const result=await api('/api/conversations/'+id+'/history?limit=80');
+   if(disposed||active!==id||request!==openRequest)return;
+   thread=result;
+   if(byId('inboxMain')!==main)return;
    main.innerHTML=threadMarkup(item);
    wrap()?.classList.add('wa-show-thread');
    renderList();renderMessageList({keepScroll:background});
@@ -628,7 +634,7 @@
     .map(c=>draftDirty.has(c.id)&&old.has(c.id)?{...c,draft:old.get(c.id).draft}:c);
    renderList();
    if(!quiet&&active&&!conversations.some(c=>c.id===active)){
-    active=null;thread=null;
+    openRequest++;active=null;thread=null;
     if(byId('inboxMain'))byId('inboxMain').innerHTML='<div class="wa-inbox-welcome"><h2>Conversa fora do filtro</h2><p>Altere os filtros para encontrá-la novamente.</p></div>';
     wrap()?.classList.remove('wa-show-thread');
    }

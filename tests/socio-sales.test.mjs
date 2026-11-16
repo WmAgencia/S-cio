@@ -18,6 +18,11 @@ test('amount parsing accepts what a customer actually types',()=>{
  assert.equal(parseAmount('50,00'),5000);
  assert.equal(parseAmount('1.500'),150000);
  assert.equal(parseAmount('R$ 1.234,56'),123456);
+ assert.equal(parseAmount('R$ 1234,56'),123456);
+ assert.equal(parseAmount('1234,56'),123456);
+ assert.equal(parseAmount('R$ 12.50'),1250);
+ assert.equal(parseAmount('1500'),150000);
+ assert.equal(parseAmount('R$ -50,00'),null);
  assert.equal(parseAmount('pix de 89,90'),8990);
  assert.equal(parseAmount('recebi 120 reais'),12000);
  assert.equal(parseAmount('120 real'),12000);
@@ -192,6 +197,7 @@ test('real PostgreSQL: sale lifecycle from receipt to confirmed revenue',
 
   // A receipt without a value waits for the owner to say how much it was.
   assert.equal((await confirmSale(db,{tenantId:t1,id:loudText.sale.id})).reason,'amount_required');
+  assert.equal((await confirmSale(db,{tenantId:t1,id:loudText.sale.id,amountCents:25.5})).reason,'amount_required');
   const withValue=await confirmSale(db,{tenantId:t1,id:loudText.sale.id,amountCents:2500,
    by:'whatsapp'});
   assert.equal(withValue.ok,true);
@@ -224,6 +230,7 @@ test('real PostgreSQL: sale lifecycle from receipt to confirmed revenue',
 
   // Manual registration applies the conversation origin and is confirmed at once.
   assert.equal((await createManualSale(db,{tenantId:t1,amountCents:0})).reason,'amount_required');
+  assert.equal((await createManualSale(db,{tenantId:t1,amountCents:10.5})).reason,'amount_required');
   assert.equal((await createManualSale(db,{tenantId:t1,amountCents:100,conversationId:id()}))
    .reason,'conversation_not_found');
   assert.equal((await createManualSale(db,{tenantId:t1,amountCents:100,conversationId:cv2}))

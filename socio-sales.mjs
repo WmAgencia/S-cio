@@ -7,7 +7,9 @@ const RECEIPT=/(?:comprovante|recibo|paguei|pix feito|fiz o pix|mandei o pix|tra
 const SALE_YES=/^(?:sim|confirmo|confirmar|confirma|isso|exato|correto|foi venda|é venda|e venda|pode contar|contar como venda)\b/i;
 const SALE_NO=/^(?:n[ãa]o|nao|descarta|descartar|n[ãa]o foi|nao foi|n[ãa]o é venda|nao e venda|ignorar|ignora)\b/i;
 const SALE_BUTTON=/\[(?:Interactive|Button) Response\]\s*socio:sale:(confirm|reject):([0-9a-f-]{36})/i;
-const AMOUNT_ONLY=/^(?:r\$\s*)?(?:\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?$/i;
+const AMOUNT_TOKEN='(?:\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)';
+const AMOUNT_ONLY=new RegExp('^(?:r\\$\\s*)?'+AMOUNT_TOKEN+'\\s*(?:reais|real)?$','i');
+const validCents=value=>Number.isSafeInteger(Number(value))&&Number(value)>0&&Number(value)<=100000000;
 
 function centsOf(raw){
  let s=String(raw||'').replace(/\s/g,'');
@@ -22,11 +24,13 @@ function centsOf(raw){
 export function parseAmount(value){
  const t=clean(value,300);
  if(!t)return null;
- let m=t.match(/r\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/i);
- if(!m)m=t.match(/(\d{1,3}(?:\.\d{3})*,\d{1,2})\s*(?:reais|real)?/i);
- if(!m)m=t.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)\b/i);
- if(!m&&AMOUNT_ONLY.test(t))m=t.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/);
- if(!m&&SALE_YES.test(t))m=t.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/);
+ // Never accept a truncated prefix ("123" from "1234,56") or the positive
+ // substring of a negative amount. Both silently corrupt confirmed revenue.
+ if(/(?:r\$\s*)?-\s*\d/i.test(t))return null;
+ const token=new RegExp('(?<![\\d.,])('+AMOUNT_TOKEN+')(?![\\d.,])','i');
+ let m=t.match(new RegExp('r\\$\\s*'+token.source,'i'));
+ if(!m)m=t.match(new RegExp(token.source+'\\s*(?:reais|real)?\\b','i'));
+ if(!m&&(AMOUNT_ONLY.test(t)||SALE_YES.test(t)))m=t.match(token);
  return m?centsOf(m[1]):null;
 }
 
@@ -231,8 +235,8 @@ export async function confirmSale(pool,{tenantId,id,amountCents=null,by='owner'}
   'SELECT * FROM socio_sales WHERE tenant_id=$1 AND id=$2',[tenantId,id]);
  if(!found.rowCount)return {ok:false,reason:'not_found'};
  if(found.rows[0].status!=='pending')return {ok:false,reason:'resolved',sale:saleView(found.rows[0])};
- const amount=amountCents||(found.rows[0].amount_cents==null?null:Number(found.rows[0].amount_cents));
- if(!amount||amount<=0)return {ok:false,reason:'amount_required',sale:saleView(found.rows[0])};
+ const amount=amountCents==null?Number(found.rows[0].amount_cents):Number(amountCents);
+ if(!validCents(amount))return {ok:false,reason:'amount_required',sale:saleView(found.rows[0])};
  const result=await pool.query(
   "UPDATE socio_sales SET status='confirmed',amount_cents=$3,confirmed_at=now(),"+
   'confirmed_by=$4,updated_at=now() WHERE tenant_id=$1 AND id=$2 AND status=$5 RETURNING *',
@@ -251,7 +255,7 @@ export async function rejectSale(pool,{tenantId,id,by='owner'}){
 
 export async function createManualSale(pool,{tenantId,amountCents,conversationId=null,
  origin=null,createdBy='owner'}){
- if(!Number.isFinite(Number(amountCents))||Number(amountCents)<=0)return {ok:false,reason:'amount_required'};
+ if(!validCents(amountCents))return {ok:false,reason:'amount_required'};
  let conversation=null;
  if(conversationId){
   const found=await pool.query(
