@@ -81,6 +81,24 @@ test('late preferences and history responses do not overwrite the newly selected
  assert.notEqual(h.inbox.state.conversation.preferences.handling_mode,'ai_assist');
  h.inbox.cleanup();
 });
+test('a late history response cannot restore a chat selected before an A-B-A cycle',async()=>{
+ const h=await harness(),first=deferred(),second=deferred();let aRequests=0;
+ h.setHook(path=>{
+  if(path.includes('/conversations/'+A+'/history?'))return ++aRequests===1?first.promise:second.promise;
+ });
+ const stale=h.inbox.open(A);await tick();
+ await h.inbox.open(B);const latest=h.inbox.open(A);await tick();
+ first.resolve({conversation:{id:A,status:'open'},preferences:{draft:'stale'},hasMore:false,
+  capabilities:{whatsappSend:false},messages:[{id:randomUUID(),body:'Stale A'}]});
+ await stale;await tick();
+ assert.equal(h.inbox.state.conversation,null);
+ second.resolve({conversation:{id:A,status:'open'},preferences:{draft:'current'},hasMore:false,
+  capabilities:{whatsappSend:false},messages:[{id:randomUUID(),body:'Current A'}]});
+ await latest;await tick();
+ assert.equal(h.inbox.state.active,A);
+ assert.equal(h.inbox.state.conversation.messages[0].body,'Current A');
+ h.inbox.cleanup();
+});
 test('a pending autosave completes before the draft is cleared after note creation',async()=>{
  const h=await harness(),saving=deferred();
  h.setHook((path,method,data)=>path.endsWith('/ui')&&data?.draft==='Pending draft'?saving.promise:undefined);

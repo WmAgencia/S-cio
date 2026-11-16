@@ -83,6 +83,7 @@ const errMsg=error=>String(error?.message||'Não foi possível concluir a solici
 const view=$('#view');
 let toastTimer,trainingTimer,waQrTimer;
 let activeInbox=null;
+let navigationRequest=0,renderedNavigation=0,navigationRepairTimer=null;
 
 function toast(message,error=false){
  const el=$('#toast');el.textContent=message;el.className='toast'+(error?' error':'');
@@ -120,7 +121,7 @@ function formValues(form){return Object.fromEntries(new FormData(form).entries()
 // No "preparando ambiente" curtain: the view keeps the previous screen until
 // the chosen one paints. Only a truly empty view gets a quiet wait line, so the
 // first visit to a section never looks frozen.
-function setLoading(){
+function setLoading(request=navigationRequest){
  view.setAttribute('aria-busy','true');
  const empty=!view.firstElementChild;
  let line=view.querySelector('[data-socio-loading-line]');
@@ -129,8 +130,12 @@ function setLoading(){
   line.className='socio-loading-line';line.setAttribute('role','status');line.setAttribute('aria-live','polite');
   line.textContent='Carregando…';view.appendChild(line);
  }
+ if(line)line.dataset.navigation=String(request);
 }
-function finishLoading(){
+function finishLoading(request=navigationRequest){
+ if(request!==navigationRequest)return;
+ const line=view.querySelector?.('[data-socio-loading-line]');
+ if(line?.dataset?.navigation&&line.dataset.navigation!==String(request))return;
  view.querySelectorAll?.('[data-socio-loading-line]').forEach(node=>node.remove());
  view.removeAttribute?.('aria-busy');
 }
@@ -261,6 +266,7 @@ async function changeView(next,conversationId=null,{remount=false}={}){
    current&&current.classList.contains('px-'+next)?current:null;
   if(matches)return;
  }
+ const request=++navigationRequest;
  globalThis.SocioMetaBilling?.dispose();
  globalThis.SocioInterviewUI?.dispose();
  if(next!=='inbox'&&activeInbox){activeInbox.cleanup();activeInbox=null;}
@@ -292,7 +298,7 @@ async function changeView(next,conversationId=null,{remount=false}={}){
  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===next));
  $('#topTitle').textContent=titles[next]||'Sócio';
  updateWorkspaceUrl();
- setLoading();
+ setLoading(request);
  try{
   if(next==='orb'&&globalThis.SocioOrbUI){
    await globalThis.SocioOrbUI.render({root:view,api,me:state.me,csrfToken:state.csrf,navigate:changeView});
@@ -318,8 +324,21 @@ async function changeView(next,conversationId=null,{remount=false}={}){
   if(next==='masterOverview'||next==='masterPlans')
    await globalThis.SocioMasterDashboard.render({root:view,api,me:state.me,navigate:changeView,
     mode:next==='masterPlans'?'plans':'overview'});
-  finishLoading();
- }catch(error){finishLoading();view.innerHTML=empty('alert', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));}
+  if(request!==navigationRequest){
+   // If an older request painted after the current page had already settled,
+   // repaint the selected page before this navigation resolves. Otherwise the
+   // newer request is still responsible for the final paint.
+   if(renderedNavigation===navigationRequest){
+    clearTimeout(navigationRepairTimer);
+    await changeView(state.view,null,{remount:true});
+   }else setLoading(navigationRequest);
+   return;
+  }
+  renderedNavigation=request;finishLoading(request);
+ }catch(error){
+  if(request!==navigationRequest)return;
+  finishLoading(request);view.innerHTML=empty('alert', 'Não foi possível carregar',errMsg(error),'<button class="btn" id="retryView">Tentar novamente</button>');$('#retryView')?.addEventListener('click',()=>changeView(next));
+ }
 }
 
 function chartNumber(value){const n=Number(value);return Number.isFinite(n)&&n>0?Math.round(n):0;}
