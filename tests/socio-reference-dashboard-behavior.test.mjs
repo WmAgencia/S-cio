@@ -29,7 +29,7 @@ function harness(traffic=[]){
  const api=async path=>{
   requests.push(path);
   if(path.startsWith('/api/dashboard/period?'))return {period:{from:'2026-11-08',to:'2026-11-14'},
-   conversations:{started:12,previousStarted:6,open:2},sales:{revenueCents:123400,confirmed:4}};
+   leads:{campaign:12,previousCampaign:6},sales:{revenueCents:123400,confirmed:4}};
   if(path==='/api/dashboard/revenue')return {months:[]};
   if(path==='/api/inbox/v2')return {conversations:chats};
   if(path==='/api/marketing/official/status')return {selectedAccount:{currency:'BRL'}};
@@ -73,4 +73,6 @@ test('featured campaign uses the headline date range and spend conversion reads 
  assert.doesNotMatch(h.root.innerHTML,/gastos no período/);
  assert.match(h.root.innerHTML,/Taxa de conversão<\/span><span class="et-legend-value">10,00%/);
  assert.match(h.root.innerHTML,/4 vendas/);
+ assert.match(h.root.innerHTML,/vindos de campanhas no período/);
+ assert.match(h.root.innerHTML,/Uma conversa atribuída conta como <b>1 lead<\/b>/);
 });

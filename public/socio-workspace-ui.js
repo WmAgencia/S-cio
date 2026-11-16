@@ -448,7 +448,7 @@
   // Everything below answers the same window the owner picked. When an endpoint
   // fails the tile says so instead of showing a number from another period.
   const periodData=period?.ok===true?period.data:null;
-  const periodConversations=periodData?.conversations||null;
+  const periodLeads=periodData?.leads||null;
   const periodSales=periodData?.sales??null;
   const splitRows=splitSpend?.ok===true&&Array.isArray(splitSpend.data?.items)?splitSpend.data.items:[];
   const splitSpendValue=splitRows.reduce((sum,x)=>sum+(Number(x.spend)||0),0);
@@ -588,15 +588,16 @@
     '<button type="button" class="btn sm soft" data-period-apply>Aplicar</button>'+
     '<span class="period-hint'+(draft?.error?' is-error':'')+'" data-period-hint role="status">'+
      (draft?.error?esc(draft.error):'')+'</span></div></section>';
-  // Leads are conversations the ads brought in, over the same window as revenue.
+  // Leads are distinct conversations attributed to campaigns, never WhatsApp
+  // message volume or every conversation opened in the selected period.
   const incomeCard='<section class="et-kpi et-income" aria-label="Leads no WhatsApp">'+
    '<div class="et-kpi-head"><span class="et-kpi-label">Leads no WhatsApp</span></div>'+
    '<div class="et-kpi-metric"><strong class="et-kpi-value">'+
-    (periodConversations?number(periodConversations.started):'—')+'</strong>'+
-    (periodConversations?deltaPill(periodConversations.started,periodConversations.previousStarted):'')+'</div>'+
-   '<p class="et-kpi-sub">'+(periodConversations?'no período selecionado':'indisponível agora')+'</p>'+
-   '<p class="et-kpi-note">'+(periodConversations?
-     '<b>'+number(periodConversations.open)+'</b> conversa(s) em aberto agora':
+    (periodLeads?number(periodLeads.campaign):'—')+'</strong>'+
+    (periodLeads?deltaPill(periodLeads.campaign,periodLeads.previousCampaign):'')+'</div>'+
+   '<p class="et-kpi-sub">'+(periodLeads?'vindos de campanhas no período':'indisponível agora')+'</p>'+
+   '<p class="et-kpi-note">'+(periodLeads?
+     'Uma conversa atribuída conta como <b>1 lead</b>, independentemente das mensagens':
      'Aguardando o período')+'</p></section>';
   // The expense slot belongs to the campaign that is performing best, because
   // that is the one the owner can act on today.

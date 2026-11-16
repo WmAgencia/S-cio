@@ -6,7 +6,7 @@ import {parseTenantFeatures} from './tenant-features.mjs';
 import {getExecutiveMetrics} from './socio-executive-metrics.mjs';
 import {getTenantBusinessMonitor,formatBusinessMonitor} from './socio-business-monitor.mjs';
 import {speakToSocioSkill} from './socio-skill-router.mjs';
-import {groqResponse} from './groq-client.mjs';
+import {brainResponse} from './ai-brain.mjs';
 import {voiceReplyPlan,voiceStyleInstruction,polishVoiceReply} from './socio-thalita-dialogue-style.mjs';
 import {validateProduct} from './catalog.mjs';
 import {readAdsTool} from './meta-ads-tools.mjs';
@@ -300,8 +300,8 @@ async function askThalitaCore(pool,a,body={},opts={}){
  // Generic guidance contains no sensitive customer data and cannot mutate anything.
  const prospectorHistory=history.map(turn=>({role:turn.role,content:turn.text}));
  const plan=voiceReplyPlan(message,prospectorHistory);
- const answer=await (opts.chat||groqResponse)({
-  purpose:'planning',
+ const answer=await (opts.chat||brainResponse)({
+  effort:'high',
   instructions:voiceStyleInstruction({heard:message,history:prospectorHistory})+'\n'+
    'O estilo de resposta vem do módulo Francisca do Prospector, mas você é a Thalita do Sócio. '+
    'Responda SOMENTE como orientação quando não houver uma ferramenta específica; jamais alegue ter executado alteração, mensagem, cobrança, anúncio ou acessado dados de clientes. '+

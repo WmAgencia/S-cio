@@ -82,7 +82,7 @@ export async function processNextAnalysisJob(pool){
   // deterministic source; no model is ever credited when it did not answer.
   const enhanced=await groqKnowledgeDraft({...base,respond:brainResponse,ready:brainReady});
   const markdown=enhanced.markdown;
-  const report={...base.report,analysisProvider:enhanced.provider};
+  const report={...base.report,analysisProvider:enhanced.provider,analysisModel:enhanced.model||null};
 
   const version=await c.query('SELECT COALESCE(MAX(version),0)+1 AS version FROM training_versions WHERE tenant_id=$1',[job.tenant_id]);
   await c.query("INSERT INTO training_versions(id,tenant_id,job_id,version,status,knowledge_md,report_json) VALUES($1,$2,$3,$4,'draft',$5,$6)",

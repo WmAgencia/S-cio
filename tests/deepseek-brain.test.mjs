@@ -85,6 +85,15 @@ test('without the DeepSeek key nothing leaves for DeepSeek: Groq answers',async(
  assert.equal(result.reply,'resposta do groq');
  assert(calls.every(c=>c.url.startsWith('https://api.groq.com')),'no DeepSeek call is made');
 });
+test('training, campaigns and the owner assistant use the DeepSeek brain; customer chat stays on Groq',()=>{
+ const training=readFileSync(new URL('../analysis-jobs.mjs',import.meta.url),'utf8');
+ const thalita=readFileSync(new URL('../socio-thalita-assistant.mjs',import.meta.url),'utf8');
+ const replies=readFileSync(new URL('../ai-replies.mjs',import.meta.url),'utf8');
+ assert.match(training,/respond:brainResponse/);
+ assert.match(thalita,/opts\.chat\|\|brainResponse/);
+ assert.doesNotMatch(thalita,/groqResponse/);
+ assert.match(replies,/respond=groqResponse/);
+});
 test('a DeepSeek failure falls back to Groq and says so, never pretending DeepSeek answered',async()=>{
  const urls=[];
  const fetchImpl=async url=>{
