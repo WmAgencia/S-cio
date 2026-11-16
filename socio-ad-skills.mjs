@@ -10,7 +10,8 @@ import {resolveSelectedOfficialAccount} from './meta-official.mjs';
 import {readAdsTool,prepareAdsPlan,executeAdsPlan} from './meta-ads-tools.mjs';
 import {readAdvancedMetaTool} from './meta-ads-advanced.mjs';
 import {campaignDesign,planExplanation} from './socio-campaign-design.mjs';
-import {interpretCampaignTurn,mergeCampaignInterpretation,explainCampaignStrategy} from './socio-campaign-conversation.mjs';
+import {interpretCampaignTurn,mergeCampaignInterpretation,explainCampaignStrategy,
+ phraseCampaignQuestion} from './socio-campaign-conversation.mjs';
 
 const bad=(status,message)=>Object.assign(new Error(message),{status});
 const digits=x=>String(x||'').replace(/\D/g,'');
@@ -212,7 +213,8 @@ function publicBrief(b){
  return {category:b.category||null,cityName:b.cityName||null,dailyBudgetCents:b.dailyBudgetCents||null,
   destination:b.destination||null,goal:b.goal||null,genders:Array.isArray(b.genders)?b.genders:[],hasPhoto:Boolean(b.imageHash),hasVideo:Boolean(b.videoId),
   pageId:b.pageId||null,imageName:b.imageName||null,whatsappPhone:b.whatsappPhone||null,url:b.url||null,
-  cityKey:b.cityKey||null,countryCode:b.countryCode||null};
+  cityKey:b.cityKey||null,countryCode:b.countryCode||null,
+  claimNeedsProof:b.claimNeedsProof===true};
 }
 // Live execution log for the orb: the step ids are written by executeAdsPlan
 // right after each Meta call, so the page can report real progress instead of
@@ -411,12 +413,22 @@ export async function speakToAdSkill(pool,a,{message='',runId=null,imageHash=nul
      "UPDATE socio_skill_runs SET brief=$2::jsonb,updated_at=now() WHERE id=$1 AND tenant_id=$3 AND user_id=$4 AND status='collecting'",
      [run.id,JSON.stringify(brief),a.active_tenant_id,a.user_id]);}
   }
+  const natural=await (opts.phraseQuestion||phraseCampaignQuestion)({message,brief:publicBrief(brief),
+   slot:prompt.slot,question:repeat?clarifyFor(prompt.slot,prompt.message):prompt.message,
+   claimNeedsProof:brief.claimNeedsProof===true&&!run.brief?.claimWarningShown,
+   env:opts.env||process.env,respond:opts.respondCampaign});
+  if(natural&&brief.claimNeedsProof&&!run.brief?.claimWarningShown){
+   brief.claimWarningShown=true;
+   await pool.query(
+    "UPDATE socio_skill_runs SET brief=$2::jsonb,updated_at=now() WHERE id=$1 AND tenant_id=$3 AND user_id=$4 AND status='collecting'",
+    [run.id,JSON.stringify(brief),a.active_tenant_id,a.user_id]);
+  }
   return {skillId:'ads.campaign.launch',runId:run.id,status:'collecting',brief:publicBrief(brief),
    question:prompt.message,slot:prompt.slot,
-   message:[interpreted.acknowledgement,interpreted.answer,
-    strategy?strategy+'\n'+prompt.message:repeat?clarifyFor(prompt.slot,prompt.message):prompt.message]
-    .filter(Boolean).join('\n'),
-   conversationProvider:interpreted.provider||null,
+   message:[interpreted.answer,strategy,natural?.text||[
+    interpreted.acknowledgement,repeat?clarifyFor(prompt.slot,prompt.message):prompt.message
+   ].filter(Boolean).join('\n')].filter(Boolean).join('\n'),
+   conversationProvider:natural?.provider||interpreted.provider||null,
    note:brief.destination==='whatsapp'?
     'Para conversas WhatsApp, a origem pode ser apenas indicativa conforme os dados do WA-AKG; não existe Pixel instalado dentro do WhatsApp.':null};
  }
