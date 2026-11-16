@@ -106,9 +106,12 @@ if(!['public','socio_app'].includes(dbSchema)||(isSupabaseDb&&dbSchema!=='socio_
  console.error('SOCIO_DB_SCHEMA must be socio_app for a Supabase database');
  process.exit(1);
 }
-// Per-process pool cap leaves headroom for jobs and other app replicas.
-const dbPoolRequested=Number(process.env.SOCIO_DB_POOL_MAX||4);
-const dbPoolMax=Number.isInteger(dbPoolRequested)?Math.min(8,Math.max(2,dbPoolRequested)):4;
+// Per-process pool cap leaves headroom for jobs and other app replicas. Four
+// connections made every parallel screen wait in line (a dashboard issues ~6
+// reads at once); twelve keeps concurrency under the server's own limit while
+// still leaving room for workers and other replicas.
+const dbPoolRequested=Number(process.env.SOCIO_DB_POOL_MAX||12);
+const dbPoolMax=Number.isInteger(dbPoolRequested)?Math.min(16,Math.max(2,dbPoolRequested)):12;
 const pool=new Pool({connectionString:DATABASE_URL,max:dbPoolMax,connectionTimeoutMillis:12000,idleTimeoutMillis:20000,
  options:dbSchema==='socio_app'?'-c search_path=socio_app,pg_catalog':undefined});
 // Supabase's pooler closes idle connections; without this listener the error
@@ -204,13 +207,24 @@ function sameOrigin(req){
  }
  if(req.headers['sec-fetch-site']==='cross-site')throw fail(403,'Origem não permitida.');
 }
+// Every authenticated request resolves its session, and a screen issues six to
+// eight requests at once. A 20-second cache removes that repeated join without
+// weakening anything: logout, role changes and tenant pauses clear it first.
+const sessionCache=new Map();
+const SESSION_TTL_MS=20000;
+const clearSessionCache=()=>sessionCache.clear();
 async function sessionFor(req){
  const match=String(req.headers.cookie||'').match(/(?:^|;\s*)socio_session=([^;]+)/);
  if(!match)return null;
  let token;try{token=decodeURIComponent(match[1]);}catch{return null;}
  if(!token||token.length>256)return null;
- const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.phone,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status,t.features FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true AND (u.platform_owner=true OR u.tenant_id=s.active_tenant_id)",[hashToken(token)]);
- return result.rows[0]||null;
+ const key=hashToken(token),now=Date.now(),hit=sessionCache.get(key);
+ if(hit&&hit.at>now)return hit.value;
+ const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.phone,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status,t.features FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true AND (u.platform_owner=true OR u.tenant_id=s.active_tenant_id)",[key]);
+ const value=result.rows[0]||null;
+ if(sessionCache.size>2000)sessionCache.clear();
+ sessionCache.set(key,{value,at:now+SESSION_TTL_MS});
+ return value;
 }
 async function createSession(userId,tenantId,res){
  const token=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');
@@ -1067,7 +1081,7 @@ async function handle(req,res){
    await c.query('UPDATE users SET password_hash=$2 WHERE id=$1',[a.user_id,encrypted]);
    // Every session is revoked, including the one used for this request: if the
    // cookie had been stolen, the thief shares this token and must lose it too.
-   await c.query('DELETE FROM sessions WHERE user_id=$1',[a.user_id]);
+   await c.query('DELETE FROM sessions WHERE user_id=$1',[a.user_id]);clearSessionCache();
    const token=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');
    await c.query("INSERT INTO sessions(token_hash,user_id,active_tenant_id,csrf,expires_at) "+
     "VALUES($1,$2,$3,$4,now()+interval '7 days')",
@@ -1081,7 +1095,7 @@ async function handle(req,res){
   }catch(e){await c.query('ROLLBACK').catch(()=>{});throw e;}finally{c.release();}
  }
  if(method==='POST'&&pathname==='/api/logout'){
-  await query('DELETE FROM sessions WHERE token_hash=$1',[a.token_hash]);
+  await query('DELETE FROM sessions WHERE token_hash=$1',[a.token_hash]);clearSessionCache();
   res.setHeader('Set-Cookie',sessionCookie('',true));
   return json(res,200,{ok:true});
  }
@@ -2079,6 +2093,7 @@ async function handle(req,res){
     'UPDATE users SET role=$3,active=$4 WHERE tenant_id=$1 AND id=$2 RETURNING id,name,email,phone,role,active',
     [a.active_tenant_id,teamMember[1],nextRole,nextActive]);
    if(!nextActive)await c.query('DELETE FROM sessions WHERE user_id=$1',[teamMember[1]]);
+   clearSessionCache();
    await c.query('INSERT INTO audit(id,tenant_id,actor_id,action,metadata) VALUES($1,$2,$3,$4,$5)',
     [id(),a.active_tenant_id,a.user_id,'team.member_updated',
       JSON.stringify({userId:teamMember[1],before:{role:target.rows[0].role,active:target.rows[0].active},
@@ -2176,6 +2191,7 @@ async function handle(req,res){
   const name=data.name.trim(),plan=data.plan;
   const result=await query('UPDATE tenants SET name=$2,plan=$3 WHERE id=$1 RETURNING id,name,plan,status',
    [editMasterTenant[1],name,plan]);
+  clearSessionCache();
   await audit(a,'platform.tenant_profile_updated',{
    targetTenantId:editMasterTenant[1],before:{name:target.rows[0].name,plan:target.rows[0].plan},
    after:{name,plan},billingChanged:false});
@@ -2188,6 +2204,7 @@ async function handle(req,res){
   const features=validateTenantFeatures(data.features);
   const updated=await query("UPDATE tenants SET features=$2 WHERE id=$1 RETURNING id,features",
    [tenantFeaturesRoute[1],JSON.stringify(features)]);
+  clearSessionCache();
   if(!updated.rowCount)throw fail(404,'Empresa não encontrada.');
   await audit(a,'platform.tenant_features.updated',{targetTenantId:tenantFeaturesRoute[1],features});
   return json(res,200,updated.rows[0]);

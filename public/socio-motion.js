@@ -84,15 +84,13 @@
   nodes.forEach((node,index)=>{
    if(node.dataset.socioExpanded||typeof node.animate!=='function')return;
    node.dataset.socioExpanded='';
-   // Expands from a little smaller with a soft spring, so the card feels drawn
-   // rather than pasted. Opacity leads the scale by a few frames.
-   const spring='cubic-bezier(.2,.9,.25,1)';
+   // One short, composited entrance: fade leads, a tiny rise settles. No bounce
+   // overshoot (it read as jitter) and no long stagger (it read as slow).
    node.animate([
-    {opacity:0,transform:'scale(.93) translateY(10px)'},
-    {opacity:1,transform:'scale(1.008) translateY(-1px)',offset:.62},
-    {opacity:1,transform:'scale(1) translateY(0)'}
-   ],{duration:cheap()?260:400,delay:Math.min(index+indexBase,8)*(cheap()?18:42),
-      easing:spring,fill:'backwards'});
+    {opacity:0,transform:'translate3d(0,8px,0)'},
+    {opacity:1,transform:'translate3d(0,0,0)'}
+   ],{duration:cheap()?170:240,delay:Math.min(index+indexBase,7)*(cheap()?10:22),
+      easing:'cubic-bezier(.22,.8,.3,1)',fill:'backwards'});
   });
  };
  const growBars=root=>{
@@ -106,14 +104,14 @@
    const x=Number(bar.getAttribute('x'))||0,y=Number(bar.getAttribute('y'))||0;
    bar.style.transformOrigin=x+'px '+(y+height)+'px';
    bar.animate([{transform:'scaleY(0)'},{transform:'scaleY(1)'}],
-    {duration:cheap()?520:760,delay:Math.min(x/3,180),easing:'cubic-bezier(.22,.9,.24,1)',fill:'backwards'});
+    {duration:cheap()?380:520,delay:Math.min(x/6,120),easing:'cubic-bezier(.25,.8,.3,1)',fill:'backwards'});
   }
   for(const fill of root.querySelectorAll('[class*="bar-fill"],.px-kpi-meter > span,.bi-bar-fill')){
    if(fill.dataset.socioGrown)continue;
    fill.dataset.socioGrown='';
    if(typeof fill.animate==='function')
     fill.animate([{transform:'scaleX(0)'},{transform:'scaleX(1)'}],
-     {duration:720,easing:'cubic-bezier(.22,.9,.24,1)',fill:'backwards',transformOrigin:'left center'});
+     {duration:520,easing:'cubic-bezier(.25,.8,.3,1)',fill:'backwards',transformOrigin:'left center'});
   }
  };
  const drawDonuts=root=>{
@@ -127,7 +125,7 @@
    const offset=circle.getAttribute('stroke-dashoffset')||'0';
    circle.animate([{strokeDasharray:'0 '+rest,strokeDashoffset:offset},
     {strokeDasharray:dash,strokeDashoffset:offset}],
-    {duration:950,easing:'cubic-bezier(.3,.7,.2,1)',fill:'backwards'});
+    {duration:620,easing:'cubic-bezier(.3,.7,.2,1)',fill:'backwards'});
   }
  };
 
@@ -156,7 +154,7 @@
   }
   // Wait for one frame so the first paint is visible before numbers reset.
   requestAnimationFrame(()=>{
-   for(const [node,text] of targets)countTo(node,text,cheap()?650:920);
+   for(const [node,text] of targets)countTo(node,text,cheap()?420:620);
   });
   growBars(root);
   drawDonuts(root);

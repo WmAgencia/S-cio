@@ -636,32 +636,9 @@ body #appShell #view .et-board .et-campaign-thumb{width:118px!important;min-widt
 body #appShell #view .et-board .et-campaign-thumb :is(img,video){width:118px!important;height:auto!important;max-width:118px!important;max-height:68px!important;object-fit:contain!important;display:block!important}
  body #appShell #view .et-board .et-campaign-copy strong{font-size:11px!important;line-height:13px!important;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 
-/* Deliberate first-paint motion: panels grow into place, bars reveal from the
-   baseline, and the dashboard feels alive without changing its layout. */
-@keyframes socio-board-enter{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
-@keyframes socio-bar-grow{from{transform:scaleY(.04);transform-origin:bottom}to{transform:scaleY(1);transform-origin:bottom}}
-body #appShell #view .et-board-grid>section{animation:socio-board-enter .52s cubic-bezier(.2,.75,.25,1) both}
-body #appShell #view .et-board-grid>section:nth-child(2){animation-delay:.05s}
-body #appShell #view .et-board-grid>section:nth-child(3){animation-delay:.1s}
-body #appShell #view .et-board-grid>section:nth-child(4){animation-delay:.14s}
-body #appShell #view .et-board-grid>section:nth-child(5){animation-delay:.18s}
-body #appShell #view .et-board-grid>section:nth-child(6){animation-delay:.22s}
-body #appShell #view .et-board-grid>section:nth-child(7){animation-delay:.26s}
-body #appShell #view .et-flow .et-chart svg rect:not(.et-chart-pill){animation:socio-bar-grow .85s cubic-bezier(.2,.75,.25,1) both}
-body #appShell #view .et-flow .et-chart svg rect:nth-of-type(2){animation-delay:.06s}
-body #appShell #view .et-flow .et-chart svg rect:nth-of-type(3){animation-delay:.12s}
-body #appShell #view .et-flow .et-chart svg rect:nth-of-type(4){animation-delay:.18s}
-body #appShell #view .et-flow .et-chart svg rect:nth-of-type(5){animation-delay:.24s}
-body #appShell #view .et-flow .et-chart svg rect:nth-of-type(6){animation-delay:.30s}
-body #appShell #view .loading.socio-page-loading{display:grid!important;grid-template-columns:auto 1fr;grid-template-areas:'sig title' 'sig copy';align-items:center;column-gap:8px;row-gap:2px;text-align:left!important}
-body #appShell #view .socio-loading-sigil{grid-area:sig}
-body #appShell #view .socio-loading-title{grid-area:title;white-space:nowrap}
-body #appShell #view .socio-loading-copy{grid-area:copy;line-height:1.35}
-body #appShell #view{position:relative!important}
-body #appShell #view .socio-loading-overlay{position:absolute;inset:0;z-index:50;display:grid;place-items:center;background:color-mix(in srgb,var(--page-deep,#070812) 72%,transparent);backdrop-filter:blur(5px) saturate(1.25);-webkit-backdrop-filter:blur(5px) saturate(1.25);animation:socio-loading-fade .22s ease both}
-body #appShell #view .socio-loading-overlay .socio-page-loading{margin:0;box-shadow:0 18px 48px #0005}
-@keyframes socio-loading-fade{from{opacity:0}to{opacity:1}}
-@media (prefers-reduced-motion:reduce){body #appShell #view .et-board-grid>section,body #appShell #view .et-flow .et-chart svg rect{animation:none!important}}
+/* Entry motion lives in socio-motion.js alone: numbers count, bars grow and
+   cards expand from one timeline. A second CSS keyframe track here made every
+   card animate twice with different timing. */
 
 /* Apple-style material recipe: translucent tint, blur/saturation, and a
    one-pixel luminous rim. Keep it on the main surfaces only for performance. */
