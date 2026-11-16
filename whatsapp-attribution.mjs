@@ -86,7 +86,10 @@ export async function scanTrackingAttribution(pool){
   "JOIN wa_tracking_links l ON l.tenant_id=m.tenant_id AND l.channel_id=c.channel_id "+
   "AND l.active=true AND m.created_at>=l.created_at AND m.created_at<=l.expires_at "+
   "AND strpos(upper(m.body),'['||l.code||']')>0 "+
-  "WHERE m.direction='inbound' AND m.created_at>now()-interval '48 hours' "+
+  // Any inbound message inside the link's own validity window, not just the last
+  // 48 hours: a worker outage must never lose an arrival for good. The
+  // idempotent NOT EXISTS keeps a rescan from creating a second attribution.
+  "WHERE m.direction='inbound' AND m.created_at>now()-interval '90 days' "+
   "AND COALESCE((t.features->>'whatsapp')::boolean,true)=true "+
   "AND COALESCE((t.features->>'meta_ads')::boolean,true)=true "+
   "AND NOT EXISTS(SELECT 1 FROM wa_lead_attributions a "+

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {Pool} from 'pg';
-import {buildSalePurchaseEvent,sendPendingSaleEvents} from '../socio-sales-events.mjs';
+import {buildSalePurchaseEvent,sendPendingSaleEvents,saleEventSkipReason} from '../socio-sales-events.mjs';
 import {eventMessage} from '../whatsapp-ctwa-events.mjs';
 import {sealMarketingSecret} from '../marketing-integrations.mjs';
 
@@ -255,4 +255,24 @@ test('real PostgreSQL: confirmed sales reach Meta once and only with an ad attri
  }finally{
   await db.end();await root.query('DROP SCHEMA '+schema+' CASCADE');await root.end();
  }
+});
+
+test('a grant without WhatsApp event scopes is reported, never sent or blamed on the sale',async()=>{
+ const {grantCanSendEvents}=await import('../whatsapp-ctwa-events.mjs');
+ const adsOnly={scopes:['ads_read','ads_management','business_management']};
+ const withEvents={scopes:['ads_read','whatsapp_business_management','whatsapp_business_manage_events']};
+ assert.equal(grantCanSendEvents(adsOnly),false);
+ assert.equal(grantCanSendEvents(withEvents),true);
+ assert.equal(grantCanSendEvents(null),false);
+ assert.equal(grantCanSendEvents({scopes:'ads_read'}),false);
+});
+test('a sale outside the click window says why it is not sent',()=>{
+ const now=Date.now();
+ const row={id:'s1',source_type:'ad',waba_id:'1',ctwa_clid:'click',amount_cents:500,
+  confirmed_at:new Date(now-8*86400000)};
+ assert.equal(saleEventSkipReason(row,{now}),'outside_window');
+ assert.equal(buildSalePurchaseEvent(row,{now}),null);
+ assert.equal(saleEventSkipReason({...row,confirmed_at:new Date(now-86400000)},{now}),null);
+ assert.equal(saleEventSkipReason({...row,source_type:'organic',confirmed_at:new Date(now)},{now}),'not_from_ad');
+ assert.equal(saleEventSkipReason({...row,ctwa_clid:'',confirmed_at:new Date(now)},{now}),'no_click_id');
 });

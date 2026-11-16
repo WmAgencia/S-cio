@@ -12,6 +12,14 @@ const PERMISSION_HINT='A conexão Meta não tem a permissão de eventos do Whats
 
 export const isEnabled=env=>env.SOCIO_META_CTWA_CAPI_ENABLED==='true';
 
+// Whether the stored Meta grant can send WhatsApp events at all. Without these
+// scopes every send fails, so the worker skips with a visible reason instead of
+// burning attempts and leaving a misleading error on each row.
+export const EVENT_SCOPES=['whatsapp_business_management','whatsapp_business_manage_events'];
+export const grantCanSendEvents=grant=>
+ Array.isArray(grant?.scopes)&&EVENT_SCOPES.every(scope=>grant.scopes.includes(scope));
+export const MISSING_SCOPES_HINT=PERMISSION_HINT+' Reconecte a Meta em Conexões marcando essas permissões.';
+
 function graphUrl(config,path){
  return new URL('https://graph.facebook.com/'+config.version+'/'+path);
 }
@@ -168,7 +176,7 @@ export async function sendPendingCtwaEvents(pool,{limit=20,request=fetch,env=pro
  try{config=officialConfig(env);}
  catch{return {enabled:true,configured:false,checked:0,sent:0,failed:0,skipped:0,blocked:0};}
  const pending=await pool.query(PENDING_EVENTS_SQL,[Math.max(1,Math.min(Number(limit)||20,100))]);
- const grants=new Map(),datasets=new Map(),blockedWabas=new Map();
+ const grants=new Map(),datasets=new Map(),blockedWabas=new Map(),missingScopes=new Set();
  let sent=0,failed=0,skipped=0,blocked=0;
  for(const row of pending.rows){
   const event=buildCtwaConversionEvent(row,{now});
@@ -180,6 +188,9 @@ export async function sendPendingCtwaEvents(pool,{limit=20,request=fetch,env=pro
   }
   const grant=grants.get(row.tenant_id);
   if(!grant){skipped++;continue;}
+  // A grant without the WhatsApp event scopes cannot send; report it once per
+  // tenant instead of writing an error on every row.
+  if(!grantCanSendEvents(grant)){missingScopes.add(row.tenant_id);skipped++;continue;}
   const wabaId=String(row.waba_id);
   const key=row.tenant_id+':'+wabaId;
   const wabaError=blockedWabas.get(key);
@@ -248,5 +259,7 @@ export async function sendPendingCtwaEvents(pool,{limit=20,request=fetch,env=pro
    }else failed++;
   }
  }
- return {enabled:true,configured:true,checked:pending.rowCount,sent,failed,skipped,blocked};
+ return {enabled:true,configured:true,checked:pending.rowCount,sent,failed,skipped,blocked,
+  missingEventScopes:[...missingScopes],
+  reason:missingScopes.size?'META_EVENT_SCOPES_MISSING':null};
 }

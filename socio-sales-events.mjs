@@ -5,7 +5,7 @@
 import {officialConfig} from './meta-official.mjs';
 import {tenantMetaGrant} from './whatsapp-ctwa.mjs';
 import {isEnabled,classify,eventMessage,datasetMessage,provisionDataset,sendEvent,
- readDataset,DATASET_OK_SQL,DATASET_FAIL_SQL} from './whatsapp-ctwa-events.mjs';
+ readDataset,DATASET_OK_SQL,DATASET_FAIL_SQL,grantCanSendEvents} from './whatsapp-ctwa-events.mjs';
 
 const EVENT_WINDOW_MS=7*86400000;
 const RETRY_MS=15*60000;
@@ -72,7 +72,7 @@ export async function sendPendingSaleEvents(pool,{limit=20,request=fetch,env=pro
  try{config=officialConfig(env);}
  catch{return {enabled:true,configured:false,checked:0,sent:0,failed:0,skipped:0,blocked:0};}
  const pending=await pool.query(PENDING_SALES_SQL,[Math.max(1,Math.min(Number(limit)||20,100))]);
- const grants=new Map(),datasets=new Map(),blockedWabas=new Map();
+ const grants=new Map(),datasets=new Map(),blockedWabas=new Map(),missingScopes=new Set();
  let sent=0,failed=0,skipped=0,blocked=0;
  for(const row of pending.rows){
   const event=buildSalePurchaseEvent(row,{now});
@@ -84,6 +84,9 @@ export async function sendPendingSaleEvents(pool,{limit=20,request=fetch,env=pro
   }
   const grant=grants.get(row.tenant_id);
   if(!grant){skipped++;continue;}
+  // A grant without the WhatsApp event scopes cannot send; report it once per
+  // tenant instead of writing an error on every row.
+  if(!grantCanSendEvents(grant)){missingScopes.add(row.tenant_id);skipped++;continue;}
   const wabaId=String(row.waba_id);
   const key=row.tenant_id+':'+wabaId;
   const wabaError=blockedWabas.get(key);
@@ -153,5 +156,7 @@ export async function sendPendingSaleEvents(pool,{limit=20,request=fetch,env=pro
    }else failed++;
   }
  }
- return {enabled:true,configured:true,checked:pending.rowCount,sent,failed,skipped,blocked};
+ return {enabled:true,configured:true,checked:pending.rowCount,sent,failed,skipped,blocked,
+  missingEventScopes:[...missingScopes],
+  reason:missingScopes.size?'META_EVENT_SCOPES_MISSING':null};
 }
