@@ -78,6 +78,17 @@ test('the brain reports which provider actually answered',async()=>{
  assert.equal(deep.provider,'deepseek');
  assert.equal(deep.reply,'resposta do cerebro');
 });
+test('only strategy creation gets high reasoning; every other brain task is low',async()=>{
+ const low=capture(()=>ok('análise econômica'));
+ await brainResponse({instructions:'p',input:'d',task:'analysis',env:deepEnv,fetchImpl:low.fetchImpl});
+ assert.equal(low.calls[0].body.reasoning_effort,'low');
+ const strategy=capture(()=>ok('estratégia'));
+ await brainResponse({instructions:'p',input:'d',task:'strategy',env:deepEnv,fetchImpl:strategy.fetchImpl});
+ assert.equal(strategy.calls[0].body.reasoning_effort,'high');
+ const forgotten=capture(()=>ok('padrão econômico'));
+ await brainResponse({instructions:'p',input:'d',effort:'high',env:deepEnv,fetchImpl:forgotten.fetchImpl});
+ assert.equal(forgotten.calls[0].body.reasoning_effort,'low','callers cannot accidentally enable high');
+});
 test('without the DeepSeek key nothing leaves for DeepSeek: Groq answers',async()=>{
  const {calls,fetchImpl}=capture(()=>groqOk('resposta do groq'));
  const result=await brainResponse({instructions:'p',input:'d',env:groqEnv,fetchImpl});

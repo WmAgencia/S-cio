@@ -11,6 +11,7 @@ import {processOwnerSkillMedia} from './socio-owner-skill-media.mjs';
 import {ownerWhatsAppReadiness} from './socio-owner-skill-readiness.mjs';
 import {metaConnectionPreflight} from './meta-integration-preflight.mjs';
 import {saveMetaReportSchedule,listMetaReportSchedule,processDueMetaReport} from './meta-report-schedules.mjs';
+import {processDueDailyOwnerReport} from './socio-daily-owner-report.mjs';
 import {createTrackingLink,listTrackingLinks,deactivateTrackingLink,scanTrackingAttribution,trackingReport} from './whatsapp-attribution.mjs';
 import {readWhatsAppFunnel} from './whatsapp-funnel.mjs';
 import {whatsappWebhookItems,saveCtwaAttribution,readCtwaReport,resolvePendingCtwaAds} from './whatsapp-ctwa.mjs';
@@ -2496,6 +2497,23 @@ saleEventWorker.unref();
   finally{metaReportBusy=false;}
  },60000);
  metaReportsWorker.unref();
+ // At 20:00 America/Sao_Paulo every active "Meu Sócio" group receives one
+ // deterministic daily summary. Receipts make an ambiguous gateway response
+ // terminal, so the worker cannot duplicate a report.
+ let dailyOwnerReportBusy=false;
+ const dailyOwnerReportWorker=setInterval(async()=>{
+  if(dailyOwnerReportBusy||workersBlocked()||process.env.SOCIO_DAILY_OWNER_REPORTS_ENABLED!=='true')return;
+  dailyOwnerReportBusy=true;
+  try{
+   // Drain all due groups gradually. Each call claims at most one receipt.
+   for(let i=0;i<20;i++){
+    const result=await processDueDailyOwnerReport(pool);
+    if(!result.processed)break;
+   }
+  }catch(error){console.warn('[socio-daily-owner-report]',String(error?.code||'REPORT_ERROR').slice(0,40));}
+  finally{dailyOwnerReportBusy=false;}
+ },60000);
+ dailyOwnerReportWorker.unref();
  // Physically purge expired derived topic summaries on startup and hourly,
  // even if the feature was disabled after previously storing a memory.
  // Underlying customer messages are never deleted by this worker.
