@@ -22,7 +22,7 @@ test('desktop dashboard and orb stay inside the window, including expanded contr
     document.querySelector('#appShell').classList.remove('hidden');
     document.querySelector('#workspaceSwitcher').classList.remove('hidden');
     const api=async p=>{
-     if(p.includes('/dashboard/period'))return{period:{from:'2026-11-08',to:'2026-11-14'},sales:{revenueCents:123400,confirmed:4},conversations:{started:56,open:4}};
+     if(p.includes('/dashboard/period'))return{period:{from:'2026-11-08',to:'2026-11-14'},sales:{revenueCents:123400,confirmed:4},leads:{campaign:56,previousCampaign:41}};
      if(p.includes('/dashboard/revenue'))return{months:[6,7,8,9,10,11].map(month=>({month:'2026-'+String(month).padStart(2,'0'),revenueCents:123400}))};
      if(p.includes('/official/status'))return{selectedAccount:{currency:'BRL'}};
      if(p.includes('/tools/campaigns'))return{items:[{id:'campaign',name:'TEL | TRÁFEGO ABERTO | MULHERES 45–64 | SITE | NOV26',status:'ACTIVE'}]};

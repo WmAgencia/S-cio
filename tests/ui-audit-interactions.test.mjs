@@ -72,6 +72,9 @@ test('login uses accessible interactive controls with focus and motion fallback'
  assert.match(CSS,/feature-grid/);
  assert.match(APP,/setAttribute\('aria-pressed'/);
  assert.match(APP,/submit.disabled=true/);
+ assert.match(APP,/navigationPrefetch/);
+ assert.match(APP,/pointerenter/);
+ assert.match(APP,/apiReadCache/);
 });
 test('catalog populated UI includes photos, variants and statuses without emitting raw HTML',async()=>{
  const flag={whatsapp:true,catalog:true,meta_ads:false,ai:true,team:false};

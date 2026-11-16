@@ -1136,7 +1136,8 @@ async function handle(req,res){
    preset:qs.get('preset')||'7d',from:qs.get('from'),to:qs.get('to'),
    includeSales:allowed(a,'marketing.read')});
   if(!flags.whatsapp){summary.messages={inbound:0,outbound:0,total:0,previousInbound:0,previousOutbound:0};
-   summary.conversations={started:0,active:0,open:0,waiting:0,previousStarted:0};}
+   summary.conversations={started:0,active:0,open:0,waiting:0,previousStarted:0};
+   summary.leads={campaign:0,previousCampaign:0};}
   return json(res,200,summary);
  }
  // Floating Thalita: read tools for the active company; all writes need one-use approval.
@@ -1772,7 +1773,9 @@ async function handle(req,res){
  }
  if(method==='GET'&&pathname==='/api/training/auto'){
   requirePermission(a,'training.manage');
-  return json(res,200,{run:await autoTrainingStatus(pool,a.active_tenant_id),groqConfigured:groqReady(),groqModel:groqModel()});
+  return json(res,200,{run:await autoTrainingStatus(pool,a.active_tenant_id),
+   brainConfigured:brainReady(),brainProvider:brainProvider(),brainModel:brainModel(),
+   groqConfigured:groqReady(),groqModel:groqModel()});
  }
  if(method==='POST'&&pathname==='/api/training/auto'){
   needRole(a,['owner','admin']);

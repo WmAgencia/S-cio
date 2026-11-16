@@ -77,6 +77,26 @@ const CONVERSATIONS_SQL=windowSql+
  ' AND c.status=\'human\') AS waiting '+
  'FROM w';
 
+// A dashboard lead is not a WhatsApp message or every new conversation. It is
+// one distinct conversation with campaign-origin evidence. Official CTWA ad
+// referrals are confirmed by Meta; tracked links are included only when they
+// are explicitly tied to a campaign. If both identify the same conversation,
+// its earliest attribution counts once.
+const CAMPAIGN_LEADS_SQL=windowSql+
+ 'SELECT '+
+ 'count(*) FILTER (WHERE attributed_at>=w.cur_from AND attributed_at<w.cur_to)::int AS campaign,'+
+ 'count(*) FILTER (WHERE attributed_at>=w.prev_from AND attributed_at<w.cur_from)::int AS prev_campaign '+
+ 'FROM w LEFT JOIN ('+
+ ' SELECT DISTINCT ON (conversation_id) conversation_id,attributed_at FROM ('+
+ "  SELECT a.conversation_id,a.occurred_at AS attributed_at FROM wa_ctwa_attributions a WHERE a.tenant_id=$1 AND a.source_type='ad'"+
+ '  UNION ALL '+
+ '  SELECT a.conversation_id,m.created_at AS attributed_at FROM wa_lead_attributions a'+
+ '  JOIN wa_tracking_links l ON l.tenant_id=a.tenant_id AND l.id=a.link_id'+
+ '  JOIN messages m ON m.tenant_id=a.tenant_id AND m.id=a.inbound_message_id'+
+ "  WHERE a.tenant_id=$1 AND NULLIF(trim(l.campaign_id),'') IS NOT NULL"+
+ ' ) evidence ORDER BY conversation_id,attributed_at ASC'+
+ ' ) leads ON true GROUP BY w.cur_from,w.cur_to,w.prev_from';
+
 const SALES_SQL=windowSql+
  'SELECT '+
  'count(s.id) FILTER (WHERE s.confirmed_at>=w.cur_from AND s.confirmed_at<w.cur_to)::int AS confirmed,'+
@@ -91,9 +111,10 @@ export async function periodSummary(pool,tenantId,{preset='7d',from=null,to=null
  now=new Date(),includeSales=true}={}){
  const period=resolvePeriod({preset,from,to,now});
  const params=[tenantId,period.from,period.toExclusive,period.previousFrom];
- const [messages,conversations]=await Promise.all([
+ const [messages,conversations,campaignLeads]=await Promise.all([
   pool.query(MESSAGES_SQL,params),
   pool.query(CONVERSATIONS_SQL,params),
+  pool.query(CAMPAIGN_LEADS_SQL,params),
  ]);
  let sales=null;
  if(includeSales){
@@ -110,6 +131,7 @@ export async function periodSummary(pool,tenantId,{preset='7d',from=null,to=null
  }
  const m=messages.rows[0];
  const c=conversations.rows[0];
+ const leads=campaignLeads.rows[0];
  const inbound=m.inbound;
  const outbound=m.outbound;
  return {
@@ -121,7 +143,8 @@ export async function periodSummary(pool,tenantId,{preset='7d',from=null,to=null
    previousInbound:m.prev_inbound,previousOutbound:m.prev_outbound},
   conversations:{started:c.started,active:c.active,open:c.open,waiting:c.waiting,
    previousStarted:c.prev_started},
+  leads:{campaign:leads.campaign,previousCampaign:leads.prev_campaign},
   sales,
-  conversionPct:sales&&c.started>0?Math.round(sales.confirmed/c.started*1000)/10:null,
+  conversionPct:sales&&leads.campaign>0?Math.round(sales.confirmed/leads.campaign*1000)/10:null,
  };
 }

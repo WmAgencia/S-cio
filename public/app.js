@@ -84,12 +84,13 @@ const view=$('#view');
 let toastTimer,trainingTimer,waQrTimer;
 let activeInbox=null;
 let navigationRequest=0,renderedNavigation=0,navigationRepairTimer=null;
+const apiReadCache=new Map();
 
 function toast(message,error=false){
  const el=$('#toast');el.textContent=message;el.className='toast'+(error?' error':'');
  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.add('hidden'),5000);
 }
-async function api(path,method='GET',body,headers={},options={}){
+async function requestApi(path,method='GET',body,headers={},options={}){
  const opts={method,credentials:'same-origin',headers:{'Accept':'application/json',...headers}};
  if(options?.signal)opts.signal=options.signal;
  // A stalled GET must not keep a dashboard in "Carregando" forever.
@@ -105,6 +106,36 @@ async function api(path,method='GET',body,headers={},options={}){
  const data=await resp.json().catch(()=>({error:'Erro de conexão.'}));
  if(!resp.ok){if(resp.status===401&&state.me){state.me=null;boot();}throw new Error(data.error||'Falha ao acessar o servidor.');}
  return data;
+}
+
+// Navigation prefetches and the destination screen share the same short-lived
+// GET. This removes duplicate round trips without keeping operational numbers
+// stale: mutations invalidate everything and normal reads expire after 8s.
+function api(path,method='GET',body,headers={},options={}){
+ const cacheable=method==='GET'&&!options?.signal;
+ if(!cacheable){
+  if(method!=='GET')apiReadCache.clear();
+  return requestApi(path,method,body,headers,options);
+ }
+ const now=Date.now(),hit=apiReadCache.get(path);
+ if(hit&&now-hit.at<8000)return hit.value;
+ const pending=requestApi(path,method,body,headers,options).then(data=>{
+  apiReadCache.set(path,{at:Date.now(),value:Promise.resolve(data)});return data;
+ },error=>{apiReadCache.delete(path);throw error;});
+ apiReadCache.set(path,{at:now,value:pending});
+ return pending;
+}
+
+const navigationPrefetch={
+ overview:['/api/dashboard/revenue','/api/dashboard/period?preset=7d','/api/inbox/v2'],
+ inbox:['/api/inbox/v2'],
+ products:['/api/products','/api/products/storage'],
+ connections:['/api/marketing/oauth','/api/waakg/channels'],
+ marketing:['/api/marketing']
+};
+function prefetchView(name){
+ if(!state.me||name===state.view)return;
+ for(const path of navigationPrefetch[name]||[])void api(path).catch(()=>{});
 }
 
 
@@ -1252,14 +1283,14 @@ async function training(){
    (run?.messagesImported?'<p class="form-note">'+e(run.messagesImported)+' mensagens de texto novas importadas neste treinamento.</p>':'')+
    (run?.partialCoverage?'<p class="form-note">Cobertura parcial: o gateway limita o histórico a 50 conversas por número e até 400 mensagens por conversa. Não representa todo o WhatsApp.</p>':'')+
    (run?.errorCode?'<p class="form-error">Erro: '+e(run.errorCode)+'</p>':'')+
-   (!auto.groqConfigured?'<p class="form-note">A chave GROQ_API_KEY ainda não está configurada. A análise gera Markdown preliminar por regras; a síntese pelo Groq será habilitada quando a chave for instalada.</p>':
-    '<p class="form-note">Síntese pelo Groq habilitada. O conhecimento continua como rascunho até sua aprovação.</p>')+
+   (!auto.brainConfigured?'<p class="form-note">Nenhum cérebro de análise está configurado. O sistema gera somente um Markdown preliminar por regras.</p>':
+    '<p class="form-note">Síntese inteligente habilitada com '+e(auto.brainProvider==='deepseek'?'DeepSeek V4.1 Flash':'Groq (fallback)')+'. O conhecimento continua como rascunho até sua aprovação.</p>')+
    (!featureAvailable('whatsapp')?'<p class="form-note">O WhatsApp está desabilitado para esta empresa. O administrador Consecom pode habilitá-lo em Empresas.</p>':!connected.length?'<button type="button" class="btn soft" id="trainConnectWhatsApp">+ Conectar WhatsApp</button>':'')+
   '</section>'+
   (draft?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Markdown gerado · versão '+e(draft.version)+'</h2>'+
     '<span class="badge yellow">Aguardando aprovação</span></div>'+
     '<p class="form-note">'+e(draft.report?.summary||'Reveja o conteúdo antes de ativá-lo.')+'</p>'+
-    '<p class="form-note">Processamento: '+e(draft.report?.analysisProvider==='groq'?'Groq':draft.report?.analysisProvider==='deterministic_fallback'?'Síntese preliminar (Groq indisponível)':'Síntese preliminar')+'</p>'+
+    '<p class="form-note">Processamento: '+e(draft.report?.analysisProvider==='deepseek'?'DeepSeek V4.1 Flash':draft.report?.analysisProvider==='groq'?'Groq (fallback)':draft.report?.analysisProvider==='deterministic_fallback'?'Síntese preliminar (IA indisponível)':'Síntese preliminar')+'</p>'+
     '<textarea id="knowledgeDraft" class="socio-knowledge-edit" rows="15" maxlength="22000" aria-label="Markdown de conhecimento para revisão" '+(!canManage?'readonly':'')+'>'+e(draft.markdown||'')+'</textarea>'+
     (canManage?'<div class="socio-knowledge-actions"><button type="button" class="btn soft" id="analysisSave">Salvar ajustes</button>'+
     '<button type="button" class="btn primary" id="analysisApprove" data-id="'+e(draft.id)+'">Aprovar Markdown</button></div>':'')+'</section>':'')+
@@ -1963,9 +1994,14 @@ $('#setupForm').addEventListener('submit',async ev=>{
  try{const data=await api('/api/setup','POST',formValues(ev.currentTarget));state.csrf=data.csrf;await boot();}
  catch(err){$('#authError').textContent=errMsg(err);}
 });
-$$('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{
- if(b.dataset.view==='training')state.aiTab='training';
- changeView(b.dataset.view);
-}));
+$$('.nav-item[data-view]').forEach(b=>{
+ const warm=()=>prefetchView(b.dataset.view);
+ b.addEventListener('pointerenter',warm,{passive:true});
+ b.addEventListener('focus',warm);
+ b.addEventListener('click',()=>{
+  if(b.dataset.view==='training')state.aiTab='training';
+  changeView(b.dataset.view);
+ });
+});
 $('#logoutBtn').addEventListener('click',async()=>{globalThis.SocioWorkspaceUI?.clearCache();globalThis.SocioThalitaUI?.unmount();globalThis.SocioAutopilotUI?.dispose();globalThis.SocioOrbUI?.dispose();document.body?.classList?.remove('socio-orb-view');try{await api('/api/logout','POST',{});}catch{}state.me=null;state.csrf='';state.view='overview';boot();});
 boot();

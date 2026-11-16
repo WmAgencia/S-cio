@@ -70,8 +70,10 @@ test('real PostgreSQL: every tile answers inside the picked window',
    return value;
   };
   const message=async({conversationId,tenantId=t,direction='inbound',createdAt})=>{
+   const value=id();
    await db.query('INSERT INTO messages(id,tenant_id,conversation_id,direction,body,created_at)'+
-    ' VALUES($1,$2,$3,$4,$5,$6)',[id(),tenantId,conversationId,direction,'fixture',createdAt]);
+    ' VALUES($1,$2,$3,$4,$5,$6)',[value,tenantId,conversationId,direction,'fixture',createdAt]);
+   return value;
   };
   const sale=async({cents,confirmedAt=null,status='confirmed',tenantId=t,notifiedAt=null})=>{
    await db.query('INSERT INTO socio_sales(id,tenant_id,evidence_kind,evidence_excerpt,'+
@@ -95,7 +97,7 @@ test('real PostgreSQL: every tile answers inside the picked window',
    lastMessageAt:at('2026-10-05T09:30:00-03:00'),status:'resolved'});
   const f=await conversation({tenantId:t2,channelId:ch2,createdAt:at('2026-11-14T09:00:00-03:00')});
 
-  await message({conversationId:a,createdAt:at('2026-11-14T08:35:00-03:00')});
+  const firstA=await message({conversationId:a,createdAt:at('2026-11-14T08:35:00-03:00')});
   await message({conversationId:a,createdAt:at('2026-11-14T09:30:00-03:00')});
   await message({conversationId:g,createdAt:at('2026-11-14T12:05:00-03:00')});
   await message({conversationId:a,direction:'outbound',createdAt:at('2026-11-14T10:00:00-03:00')});
@@ -109,6 +111,26 @@ test('real PostgreSQL: every tile answers inside the picked window',
   await message({conversationId:d,createdAt:at('2026-11-01T23:30:00-03:00')});
   await message({conversationId:d,createdAt:at('2026-11-02T00:10:00-03:00')});
   await message({conversationId:f,tenantId:t2,createdAt:at('2026-11-14T09:10:00-03:00')});
+
+  const campaignLead=async({conversationId,channelId=ch,tenantId=t,occurredAt,sourceType='ad',suffix})=>{
+   await db.query('INSERT INTO wa_ctwa_attributions(id,tenant_id,channel_id,conversation_id,'+
+    'inbound_message_id,source_id,source_type,occurred_at,campaign_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+    [id(),tenantId,channelId,conversationId,'wamid.period.'+suffix,'1200000000'+suffix,sourceType,
+     occurredAt,sourceType==='ad'?'2385000000'+suffix:null]);
+  };
+  await campaignLead({conversationId:a,occurredAt:at('2026-11-14T08:35:00-03:00'),suffix:'101'});
+  await campaignLead({conversationId:g,occurredAt:at('2026-11-14T12:05:00-03:00'),suffix:'102'});
+  await campaignLead({conversationId:b,occurredAt:at('2026-11-13T11:00:00-03:00'),suffix:'103'});
+  await campaignLead({conversationId:c,occurredAt:at('2026-11-08T00:00:00-03:00'),suffix:'104'});
+  await campaignLead({conversationId:d,occurredAt:at('2026-11-02T00:10:00-03:00'),sourceType:'post',suffix:'105'});
+  await campaignLead({conversationId:f,channelId:ch2,tenantId:t2,
+   occurredAt:at('2026-11-14T09:10:00-03:00'),suffix:'106'});
+  // A tracked campaign link can corroborate CTWA, but must not double-count A.
+  const link=id();
+  await db.query("INSERT INTO wa_tracking_links(id,tenant_id,channel_id,account_id,label,campaign_id,code,created_at,expires_at) VALUES($1,$2,$3,'act_1234','Campanha A','2385000000101','SCABCDEF0123456789ABCD',$4,$5)",
+   [link,t,ch,at('2026-11-14T08:00:00-03:00'),at('2026-11-15T08:00:00-03:00')]);
+  await db.query("INSERT INTO wa_lead_attributions(id,tenant_id,conversation_id,inbound_message_id,link_id,method,confidence,created_at) VALUES($1,$2,$3,$4,$5,'message_code','indicative',$6)",
+   [id(),t,a,firstA,link,at('2026-11-14T08:40:00-03:00')]);
 
   await sale({cents:10000,confirmedAt:at('2026-11-14T13:00:00-03:00')});
   await sale({cents:5000,confirmedAt:at('2026-11-13T10:00:00-03:00')});
@@ -127,6 +149,7 @@ test('real PostgreSQL: every tile answers inside the picked window',
    previousInbound:1,previousOutbound:1});
   assert.deepEqual(today.conversations,{started:2,active:2,open:3,waiting:1,
    previousStarted:1});
+  assert.deepEqual(today.leads,{campaign:2,previousCampaign:1});
   assert.deepEqual(today.sales,{confirmed:1,revenueCents:10000,averageTicketCents:10000,
    previousConfirmed:1,previousRevenueCents:5000});
   assert.equal(today.conversionPct,50);
@@ -137,6 +160,7 @@ test('real PostgreSQL: every tile answers inside the picked window',
    previousInbound:2,previousOutbound:0});
   assert.deepEqual(week.conversations,{started:4,active:4,open:3,waiting:1,
    previousStarted:1});
+  assert.deepEqual(week.leads,{campaign:4,previousCampaign:0});
   assert.equal(week.sales.confirmed,3);
   assert.equal(week.sales.revenueCents,45000);
   assert.equal(week.sales.averageTicketCents,15000);
@@ -148,6 +172,7 @@ test('real PostgreSQL: every tile answers inside the picked window',
   assert.equal(month.messages.inbound,8);
   assert.equal(month.conversations.started,5);
   assert.equal(month.conversations.previousStarted,0);
+  assert.equal(month.leads.campaign,4);
   assert.equal(month.sales.revenueCents,45000);
 
   const custom=await periodSummary(db,t,{preset:'custom',from:'2026-11-10',to:'2026-11-11',now});
@@ -158,18 +183,21 @@ test('real PostgreSQL: every tile answers inside the picked window',
   assert.equal(custom.messages.previousOutbound,1);
   assert.equal(custom.conversations.started,0);
   assert.equal(custom.conversations.previousStarted,1);
+  assert.deepEqual(custom.leads,{campaign:0,previousCampaign:1});
   assert.equal(custom.sales.confirmed,1);
   assert.equal(custom.sales.revenueCents,30000);
   assert.equal(custom.conversionPct,null);
 
   const other=await periodSummary(db,t2,{preset:'today',now});
   assert.equal(other.messages.inbound,1);
+  assert.equal(other.leads.campaign,1);
   assert.equal(other.sales.revenueCents,99900);
   assert.equal(other.conversionPct,100);
 
   const empty=await periodSummary(db,t3,{preset:'7d',now});
   assert.equal(empty.messages.total,0);
   assert.equal(empty.conversations.open,0);
+  assert.deepEqual(empty.leads,{campaign:0,previousCampaign:0});
   assert.equal(empty.sales.confirmed,0);
   assert.equal(empty.sales.revenueCents,0);
   assert.equal(empty.sales.averageTicketCents,null);
@@ -181,6 +209,7 @@ test('real PostgreSQL: every tile answers inside the picked window',
   assert.equal(noSales.sales,null);
   assert.equal(noSales.conversionPct,null);
   assert.equal(noSales.messages.total,9);
+  assert.equal(noSales.leads.campaign,4);
 
   // A database that predates the sales table keeps working for everything else.
   await db.query('DROP TABLE socio_sales CASCADE');

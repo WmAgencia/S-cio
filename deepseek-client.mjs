@@ -1,6 +1,6 @@
-// DeepSeek V4.1 Flash is the campaign brain: strategy, copy and the reading of
-// the account. Conversation never comes through here — the WhatsApp reply, the
-// simulator and the orb stay on Groq. Every request uses the OpenAI-compatible
+// DeepSeek V4.1 Flash is the high-intelligence brain: training synthesis,
+// strategy, copy, account reading and the owner's Thalita/orb assistant. Only
+// customer-facing WhatsApp replies and their simulator stay on Groq. Every request uses the OpenAI-compatible
 // shape so a different provider can be adopted by changing the base URL.
 const DEFAULT_BASE='https://api.deepseek.com';
 const DEFAULT_MODEL='deepseek-flash';
