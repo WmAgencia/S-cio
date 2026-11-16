@@ -1,9 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [
+  "routes": [
     {
-      "source": "/:path*",
-      "destination": "https://socio-app-production-762c.up.railway.app/:path*"
+      "src": "/(.*)",
+      "dest": "https://socio-app-production-762c.up.railway.app/$1"
     }
   ]
 }
