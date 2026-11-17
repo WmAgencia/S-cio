@@ -25,6 +25,7 @@ import {getStaticAsset} from './static-assets.mjs';
 import {randomBytes,randomUUID,createHmac} from 'node:crypto';
 import {Pool} from 'pg';
 import {createWorkerBackoff} from './socio-worker-backoff.mjs';
+import {createOriginGuard} from './socio-origin-guard.mjs';
 import {validateTenantFeatures,parseTenantFeatures,filterPermissions,assertApiFeature} from './tenant-features.mjs';
 import {startPipeboardOAuth,finishPipeboardOAuth,listPipeboardOAuth,revokePipeboardOAuth,oauthClientMetadata,testPipeboardConnection} from './marketing-oauth.mjs';
 import {instagramHostedReady,beginInstagramHosted,instagramHostedStatus,disconnectInstagramHosted} from './instagram-hosted.mjs';
@@ -194,20 +195,9 @@ async function body(req,limit=900000){
  if(!data||typeof data!=='object'||Array.isArray(data))throw fail(400,'Envie um objeto JSON válido.');
  return {raw,data};
 }
-function sameOrigin(req){
- const o=req.headers.origin;
- if(o){
-  let parsed;
-  try{parsed=new URL(o);}catch{throw fail(403,'Origem não permitida.');}
-  const host=String(req.headers.host||'').toLowerCase();
-  // Vercel forwards same-origin browser POSTs to the existing Railway backend.
-  // Only these exact two trusted origins may use this proxy path.
-  const fromVercel=parsed.origin==='https://s-cio.vercel.app'&&
-    (host==='socio-app-production-762c.up.railway.app'||host==='s-cio.vercel.app');
-  if(parsed.host!==host&&!fromVercel)throw fail(403,'Origem não permitida.');
- }
- if(req.headers['sec-fetch-site']==='cross-site')throw fail(403,'Origem não permitida.');
-}
+// CSRF guard for browser mutations, with the proxy-aware host list living in
+// its own module so the rule itself can be tested without a database.
+const sameOrigin=createOriginGuard(process.env);
 // Every authenticated request resolves its session, and a screen issues six to
 // eight requests at once. A 20-second cache removes that repeated join without
 // weakening anything: logout, role changes and tenant pauses clear it first.
