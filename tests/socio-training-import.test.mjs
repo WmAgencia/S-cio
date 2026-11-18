@@ -24,6 +24,18 @@ test('mensagem recebida que cita a empresa é tratada como lado da empresa',()=>
  assert.match(markdown,/- CLIENTE: Quer que eu te mande a proposta\?/);
 });
 
+test('fala do dono gravada como recebida vira lado da empresa',()=>{
+ const {markdown}=buildConversationTrainingMarkdown({conversations:[conversation('e','Oficina',[
+  {direction:'inbound',body:'Bom dia, tudo bem?'},
+  {direction:'inbound',body:'Meu nome é Wesley, sou dono da agência. Queria fazer uma proposta.'},
+  {direction:'inbound',body:'A nossa proposta fica em R$ 350 para esse site.'},
+  {direction:'inbound',body:'Agradecemos o seu contato, retornaremos em breve.'}
+ ])]});
+ assert.equal((markdown.match(/- EMPRESA:/g)||[]).length,2);
+ assert.equal((markdown.match(/- CLIENTE:/g)||[]).length,2);
+ assert.match(markdown,/- CLIENTE: Agradecemos o seu contato/);
+});
+
 test('telefone, e-mail, link e documento não entram na amostra',()=>{
  const {markdown}=buildConversationTrainingMarkdown({
   businessPhone:'5515981732994',

@@ -8,6 +8,12 @@
 
 export const BUSINESS_PHONE_TAG='[telefone da empresa]';
 
+// Text the owner writes is about the business itself ("meu nome é", "a nossa
+// proposta", "a gente entrega"), while a customer's auto-reply usually describes
+// the other side ("agradecemos o seu contato"). It is a hint, not proof: the
+// message direction always wins.
+const OWNER_SIGNATURE=/\b(?:meu nome|sou (?:o|a|dono|dona|respons[áa]vel)|nossa (?:ag[êe]ncia|empresa|equipe|proposta)|a gente (?:faz|entrega|desenvolve|cria|monta)|n[óo]s (?:fazemos|entregamos|somos|trabalhamos)|dono d[ao] ag[êe]ncia)\b/i;
+
 const clean=value=>String(value||'')
  .replace(/[\r\n\t]+/g,' ')
  .replace(/\+?\d[\d().\s-]{8,}\d/g,'[telefone]')
@@ -40,7 +46,7 @@ export function buildConversationTrainingMarkdown({conversations=[],businessName
    else{
     const lower=text.toLocaleLowerCase('pt-BR');
     const named=[...owners].some(name=>name.length>3&&lower.includes(name));
-    if(named||(phone.length>=10&&digits(text).includes(phone)))side='EMPRESA';
+    if(named||(phone.length>=10&&digits(text).includes(phone))||OWNER_SIGNATURE.test(text))side='EMPRESA';
    }
    body.push('- '+side+': '+text);
    messages++;

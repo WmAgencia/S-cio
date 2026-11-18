@@ -16,6 +16,7 @@ export function inspectTrainingSource(input){
  const examples=[];
  const fromOwner=value=>String(value).toLocaleLowerCase('pt-BR')
   .includes('consecom')||/\bsou\s+wesley\b/i.test(value);
+ let lowPriority=0;
  for(const raw of lines){
   const customer=/^- CLIENTE:/.test(raw);
   // Imported samples already carry the side and the approved business name, so
@@ -31,9 +32,13 @@ export function inspectTrainingSource(input){
   if(!customer&&/\b(?:fechar|pedido|reservar|confirmo|pode enviar|vou querer|finalizar|comprar|proposta|escopo|pagamento)\b/.test(s))patterns.closingLanguage++;
   if(!customer&&/\b(?:mais alguma|posso ajudar|precisa de mais|quer que eu)\b/.test(s))patterns.followup++;
   if(/\b(?:bom dia|boa tarde|boa noite|ola|obrigad|por favor|perfeito)\b/.test(s))patterns.courtesy++;
-  // Only the owner's own wording teaches the assistant how to answer. A
-  // customer's message is context, never a model for the reply.
-  if(fromOwner(value)&&value.length>=22&&examples.length<5)examples.push(value.replace(/[#*<>]/g,''));
+  // Examples keep the owner's real wording, whichever side it was stored on:
+  // a proposal can arrive as "inbound" when the owner wrote from the phone. The
+  // customer's own message is only a last-resort sample when nothing else has a
+  // business signature.
+  if((fromOwner(value)||raw.startsWith('- EMPRESA:'))&&value.length>=22&&examples.length<5)
+   examples.unshift(value.replace(/[#*<>]/g,''));
+  else if(lowPriority<3&&value.length>=22&&!customer){lowPriority++;examples.push(value.replace(/[#*<>]/g,''));}
  }
  return {messageCount:lines.length,patterns,examples};
 }
