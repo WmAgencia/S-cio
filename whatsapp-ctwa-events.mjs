@@ -2,7 +2,7 @@
 // Meta can then optimize delivery for real conversations, not only clicks.
 // Default-off, idempotent per arrival, and it never invents a sale.
 import {createHmac} from 'node:crypto';
-import {officialConfig} from './meta-official.mjs';
+import {officialConfig,EVENT_SCOPES} from './meta-official.mjs';
 import {tenantMetaGrant} from './whatsapp-ctwa.mjs';
 
 const EVENT_WINDOW_MS=7*86400000;
@@ -15,7 +15,8 @@ export const isEnabled=env=>env.SOCIO_META_CTWA_CAPI_ENABLED==='true';
 // Whether the stored Meta grant can send WhatsApp events at all. Without these
 // scopes every send fails, so the worker skips with a visible reason instead of
 // burning attempts and leaving a misleading error on each row.
-export const EVENT_SCOPES=['whatsapp_business_management','whatsapp_business_manage_events'];
+// The permission list lives with the connector so both always agree.
+export {EVENT_SCOPES};
 export const grantCanSendEvents=grant=>
  Array.isArray(grant?.scopes)&&EVENT_SCOPES.every(scope=>grant.scopes.includes(scope));
 export const MISSING_SCOPES_HINT=PERMISSION_HINT+' Reconecte a Meta em Conexões marcando essas permissões.';

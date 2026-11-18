@@ -16,6 +16,13 @@
     data.connected?(data.writesEnabled?'Conta Meta conectada, com permissão para preparar operações. Execução exige prévia e confirmação.':
      'Conta Meta conectada somente para leitura. Reconecte com ads_management se quiser criar ou modificar anúncios.'):
     'Conecte sua conta Meta para autorizar o acesso.';
+   // Campaign leads and confirmed sales only reach Meta when the WhatsApp event
+   // permissions were granted at connect time. Show the gap before the owner
+   // wonders why the ad manager shows no conversations.
+   if(data.connected&&Array.isArray(data.missingEventScopes)&&data.missingEventScopes.length){
+    status.textContent+=' Falta a permissão de eventos do WhatsApp ('+data.missingEventScopes.join(', ')+
+     '): conversas e vendas ainda não voltam para a Meta. Reconecte a Meta em Conexões e marque essas permissões.';
+   }
    if(canManage){const b=button('Conectar com Facebook',async()=>{const r=await api('/api/marketing/official/connect','POST');location.assign(r.authorizationUrl);});b.disabled=!data.configured;}
    if(data.connected){
     const selected=document.createElement('p');selected.setAttribute('role','status');root.append(selected);

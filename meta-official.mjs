@@ -44,10 +44,11 @@ export async function officialGraph(path,token,{env=process.env,request=fetch,pa
 // Ads permissions plus the WhatsApp Business event permissions that let a
 // confirmed click-to-WhatsApp conversation and a confirmed sale go back to Meta
 // as LeadSubmitted/Purchase. Requesting them here is the only way the owner's
-// reconnect can ever grant them.
+// reconnect can ever grant them. Kept in one place: whatsapp-ctwa-events.mjs
+// re-exports this list so the connector and the event sender never disagree.
+export const EVENT_SCOPES=Object.freeze(['whatsapp_business_management','whatsapp_business_manage_events']);
 export const OFFICIAL_SCOPES=Object.freeze([
- 'ads_read','ads_management','business_management',
- 'whatsapp_business_management','whatsapp_business_manage_events'
+ 'ads_read','ads_management','business_management',...EVENT_SCOPES
 ]);
 export async function startOfficial(pool,a,{env=process.env}={}){
  access(a,'marketing.manage');const c=officialConfig(env),state=randomBytes(32).toString('hex');
@@ -105,10 +106,16 @@ export async function officialStatus(pool,a,{env=process.env}={}){
  const selected=await pool.query('SELECT account_id,account_name,currency,updated_at FROM meta_official_account_selections WHERE tenant_id=$1',[a.active_tenant_id]);
  const grant=r.rows[0],connected=configured&&Boolean(grant&&new Date(grant.expires_at)>new Date());
  const scopes=Array.isArray(grant?.scopes)?grant.scopes:[];
+ // A connection can read ads and still be unable to report a conversation or a
+ // sale back to Meta. Say which permissions are missing so the owner knows a
+ // reconnect is not cosmetic.
+ const missingEventScopes=connected?EVENT_SCOPES.filter(x=>!scopes.includes(x)):[];
  return {configured,appId:env.SOCIO_META_APP_ID||'2827016234367972',
   connected,grant:grant||null,selectedAccount:selected.rows[0]||null,
   writesEnabled:connected&&scopes.includes('ads_management'),
-  readsEnabled:connected&&scopes.includes('ads_read')};
+  readsEnabled:connected&&scopes.includes('ads_read'),
+  eventsEnabled:connected&&missingEventScopes.length===0,
+  missingEventScopes};
 }
 export async function officialAccounts(pool,a,{env=process.env,request=fetch,fresh=false}={}){
  access(a);

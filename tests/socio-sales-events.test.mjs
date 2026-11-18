@@ -278,11 +278,14 @@ test('a sale outside the click window says why it is not sent',()=>{
 });
 
 test('connecting Meta requests the WhatsApp event permissions, not only ads',async()=>{
- const {OFFICIAL_SCOPES}=await import('../meta-official.mjs');
+ const {OFFICIAL_SCOPES,EVENT_SCOPES}=await import('../meta-official.mjs');
  const source=await readFile(new URL('../meta-official.mjs',import.meta.url),'utf8');
  assert(OFFICIAL_SCOPES.includes('whatsapp_business_management'));
  assert(OFFICIAL_SCOPES.includes('whatsapp_business_manage_events'));
  assert(OFFICIAL_SCOPES.includes('ads_read'));
+ for(const scope of EVENT_SCOPES)assert(OFFICIAL_SCOPES.includes(scope),'a conexão precisa pedir '+scope);
+ assert.deepEqual([...EVENT_SCOPES].sort(),['whatsapp_business_manage_events','whatsapp_business_management'],
+  'a lista de permissões de evento é única para conectar e enviar');
  // The dialog must use this list; a hardcoded ads-only scope is what kept the
  // reconnect from ever granting event permissions.
  assert.match(source,/scope:OFFICIAL_SCOPES\.join\(','\)/);
