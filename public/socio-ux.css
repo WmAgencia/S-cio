@@ -97,6 +97,12 @@
 .socio-train-progress .progress-fill{background:linear-gradient(90deg,#f77b22,#ffbd66);border-radius:14px}
 .socio-train-percent{font-size:24px;color:#ffbb79;letter-spacing:-.8px}
 .socio-train-result .code-preview{max-height:500px;white-space:pre-wrap;overflow:auto;background:#1a110d}
+/* Importing the inbox is the fast path to a usable training base. It sits
+ after the primary action, quiet, so it never competes with it. */
+.socio-train-inbox{display:flex;flex-direction:column;align-items:center;gap:10px;max-width:600px;
+ margin-top:6px;padding-top:16px;border-top:1px solid #5d432833}
+.socio-train-inbox .form-note{margin:0}
+.socio-train-inbox .btn{min-height:38px;font-size:12px}
 @media(max-width:780px){
  .socio-popup-surface{padding:20px 14px;max-height:95dvh}
  .socio-qr-form,.socio-qr-pending{flex-direction:column;align-items:stretch}

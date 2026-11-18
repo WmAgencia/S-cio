@@ -38,6 +38,7 @@ import {hashToken,secureEqual,hashPassword,verifyPassword,parseWhatsAppExport,bu
 import {permissionsFor,requirePermission,allowed,allowedNewMemberRole,validateMemberPatch} from './team-permissions.mjs';
 import {extractWhatsAppZip} from './zip-import.mjs';
 import {createTrainingAnalysis,processNextAnalysisJob} from './analysis-jobs.mjs';
+import {buildConversationTrainingMarkdown} from './socio-training-import.mjs';
 import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSessionProvisioned,getSessionQr,sessionLifecycle} from './waakg-adapter.mjs';
 import {processNextWaakgScan} from './waakg-history.mjs';
 import {startAutoTraining,autoTrainingStatus,cancelAutoTraining,processNextAutoTraining} from './training-auto.mjs';
@@ -1814,6 +1815,32 @@ async function handle(req,res){
   requirePermission(a,'training.manage');
   const r=await query("SELECT id,status,total_items AS \"totalItems\",processed_items AS \"processedItems\",report_json AS report,created_at AS \"createdAt\",updated_at AS \"updatedAt\" FROM training_jobs WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 12",[a.active_tenant_id]);
   return json(res,200,r.rows);
+ }
+ // Reads the real inbox history and stores it as training samples. Without
+ // this, a company that already talks to customers through the Sócio has no
+ // material to learn from until someone exports the chat by hand.
+ if(method==='POST'&&pathname==='/api/training/import-inbox'){
+  needRole(a,['owner','admin']);
+  const rows=await query(
+   "SELECT v.id,v.customer_name,v.customer_phone FROM conversations v "+
+   "WHERE v.tenant_id=$1 AND EXISTS(SELECT 1 FROM messages m WHERE m.tenant_id=v.tenant_id AND m.conversation_id=v.id) "+
+   "ORDER BY v.last_message_at DESC, v.id LIMIT 120",[a.active_tenant_id]);
+  if(!rows.rowCount)throw fail(422,'Ainda não há conversas com mensagens nesta empresa para importar.');
+  const tenant=await query('SELECT name FROM tenants WHERE id=$1',[a.active_tenant_id]);
+  const phone=await query('SELECT phone FROM channels WHERE tenant_id=$1 ORDER BY created_at LIMIT 1',[a.active_tenant_id]);
+  const conversations=[];
+  for(const row of rows.rows){
+   const msgs=await query("SELECT direction,body FROM messages WHERE tenant_id=$1 AND conversation_id=$2 AND direction IN ('inbound','outbound') ORDER BY created_at,id LIMIT 40",[a.active_tenant_id,row.id]);
+   conversations.push({...row,messages:msgs.rows});
+  }
+  const built=buildConversationTrainingMarkdown({conversations,
+   businessNames:[tenant.rows[0]?.name],businessPhone:phone.rows[0]?.phone});
+  if(built.conversationCount===0)throw fail(422,'Nenhuma conversa com pelo menos duas mensagens de texto para importar.');
+  const importId=id();
+  await query('INSERT INTO imports(id,tenant_id,filename,conversation_count,message_count,sample_md) VALUES($1,$2,$3,$4,$5,$6)',
+   [importId,a.active_tenant_id,'conversas-da-caixa-de-entrada',built.conversationCount,built.messageCount,built.markdown]);
+  await audit(a,'training.inbox.imported',{importId,conversations:built.conversationCount,messages:built.messageCount});
+  return json(res,201,{id:importId,conversationCount:built.conversationCount,messageCount:built.messageCount});
  }
  if(method==='POST'&&pathname==='/api/training/jobs'){
   needRole(a,['owner','admin']);

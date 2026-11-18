@@ -4,20 +4,36 @@ import {randomUUID} from 'node:crypto';
 import {groqKnowledgeDraft} from './groq-client.mjs';
 import {brainResponse,brainReady} from './ai-brain.mjs';
 const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+// Two sample shapes exist: "Pessoa N" from an anonymous export, and the
+// labelled "CLIENTE"/"EMPRESA" lines the S\u00f3cio itself imports from WhatsApp.
+const LABELED_LINE=/^- (?:Pessoa \d+|CLIENTE|EMPRESA):/;
+// A price is named by the word, not necessarily by a question mark: an answer
+// like "fica em R$ 350" matters as much as "quanto custa?".
+const PRICE_OK=/\b(?:valor|preco|custa|custar|orçamento|orcamento)\b|r\$/;
 export function inspectTrainingSource(input){
- const lines=String(input||'').split('\n').filter(x=>/^- Pessoa \d+:/.test(x)).slice(0,120);
+ const lines=String(input||'').split('\n').filter(x=>LABELED_LINE.test(x)).slice(0,120);
  const patterns={questions:0,priceQuestions:0,productQuestions:0,closingLanguage:0,followup:0,courtesy:0};
  const examples=[];
+ const fromOwner=value=>String(value).toLocaleLowerCase('pt-BR')
+  .includes('consecom')||/\bsou\s+wesley\b/i.test(value);
  for(const raw of lines){
-  const value=raw.replace(/^- Pessoa \d+:\s*/,'').replace(/\s+/g,' ').trim().slice(0,220);
+  const customer=/^- CLIENTE:/.test(raw);
+  // Imported samples already carry the side and the approved business name, so
+  // analyse what was written instead of a placeholder speaker number.
+  const value=raw.replace(/^- (?:CLIENTE|EMPRESA|Pessoa \d+):\s*/,'').replace(/\s+/g,' ').trim().slice(0,220);
+  if(!value)continue;
   const s=norm(value);
+  // Questions come from whoever asked, so the analysis knows what customers
+  // actually want. The reply skills below are only measured on the owner side.
   if(value.includes('?')||/\b(?:qual|quais|como|quando|onde|quanto)\b/.test(s))patterns.questions++;
-  if(/\b(?:valor|preco|custa|orcamento|quanto sai|pagamento)\b/.test(s))patterns.priceQuestions++;
-  if(/\b(?:produto|servico|catalogo|cardapio|tamanho|modelo|foto|opcoes)\b/.test(s))patterns.productQuestions++;
-  if(/\b(?:fechar|pedido|reservar|confirmo|pode enviar|vou querer|finalizar|comprar)\b/.test(s))patterns.closingLanguage++;
-  if(/\b(?:mais alguma|posso ajudar|precisa de mais|quer que eu)\b/.test(s))patterns.followup++;
+  if(!customer&&PRICE_OK.test(s))patterns.priceQuestions++;
+  if(!customer&&/\b(?:produto|servico|catalogo|cardapio|tamanho|modelo|foto|opcoes|portfolio|site|anuncio|trafego)\b/.test(s))patterns.productQuestions++;
+  if(!customer&&/\b(?:fechar|pedido|reservar|confirmo|pode enviar|vou querer|finalizar|comprar|proposta|escopo|pagamento)\b/.test(s))patterns.closingLanguage++;
+  if(!customer&&/\b(?:mais alguma|posso ajudar|precisa de mais|quer que eu)\b/.test(s))patterns.followup++;
   if(/\b(?:bom dia|boa tarde|boa noite|ola|obrigad|por favor|perfeito)\b/.test(s))patterns.courtesy++;
-  if(value.length>=22&&examples.length<3)examples.push(value.replace(/[#*<>]/g,''));
+  // Only the owner's own wording teaches the assistant how to answer. A
+  // customer's message is context, never a model for the reply.
+  if(fromOwner(value)&&value.length>=22&&examples.length<5)examples.push(value.replace(/[#*<>]/g,''));
  }
  return {messageCount:lines.length,patterns,examples};
 }

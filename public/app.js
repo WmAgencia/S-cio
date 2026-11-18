@@ -1288,6 +1288,8 @@ async function training(){
    (!auto.brainConfigured?'<p class="form-note">Nenhum cérebro de análise está configurado. O sistema gera somente um Markdown preliminar por regras.</p>':
     '<p class="form-note">Síntese inteligente habilitada com '+e(auto.brainProvider==='deepseek'?'DeepSeek V4.1 Flash':'Groq (fallback)')+'. O conhecimento continua como rascunho até sua aprovação.</p>')+
    (!featureAvailable('whatsapp')?'<p class="form-note">O WhatsApp está desabilitado para esta empresa. O administrador Consecom pode habilitá-lo em Empresas.</p>':!connected.length?'<button type="button" class="btn soft" id="trainConnectWhatsApp">+ Conectar WhatsApp</button>':'')+
+   (canManage?'<div class="socio-train-inbox"><p class="form-note">Já tem conversas no WhatsApp do Sócio? Importe o histórico da caixa de entrada (nomes, telefones, e-mails e links ficam ocultos) e o treinamento usa essas conversas como base.</p>'+
+    '<button type="button" class="btn soft" id="importInboxTraining">Importar conversas do Sócio</button></div>':'')+
   '</section>'+
   (draft?'<section class="card card-pad socio-train-result"><div class="socio-clean-head"><h2>Markdown gerado · versão '+e(draft.version)+'</h2>'+
     '<span class="badge yellow">Aguardando aprovação</span></div>'+
@@ -1309,6 +1311,17 @@ async function training(){
   const btn=$('#startAutoTraining');if(btn)btn.disabled=true;
   await api('/api/training/auto','POST',{});
   toast('Treinamento iniciado. O conhecimento será preparado para sua revisão.');
+  await training();
+ }));
+ $('#importInboxTraining')?.addEventListener('click',()=>action(async()=>{
+  const btn=$('#importInboxTraining');
+  if(btn){btn.disabled=true;btn.textContent='Importando…';}
+  try{
+   const result=await api('/api/training/import-inbox','POST',{});
+   toast(e(result.conversationCount)+' conversas importadas ('+e(result.messageCount)+' mensagens). Agora treine para gerar o conhecimento.');
+  }finally{
+   if(btn){btn.disabled=false;btn.textContent='Importar conversas do Sócio';}
+  }
   await training();
  }));
  $('#trainConnectWhatsApp')?.addEventListener('click',()=>window.SocioUX.openQr({
