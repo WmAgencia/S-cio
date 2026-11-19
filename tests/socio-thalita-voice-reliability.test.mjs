@@ -15,7 +15,7 @@ const transcription=(text,segments)=>transcribeSocioTraining(Buffer.alloc(1500,1
   assert.equal(opt.body.get('language'),'pt');
   assert.equal(opt.body.get('temperature'),'0');
   assert.equal(opt.body.get('timestamp_granularities[]'),'segment');
-  assert.match(opt.body.get('prompt'),/anúncios/i);
+  assert.match(opt.body.get('prompt'),/anúncios|atendimento/i);
   return {ok:true,json:async()=>({text,segments})};
  }});
 test('Whisper rejects silence metadata and repeated ambient-noise hallucinations',async()=>{

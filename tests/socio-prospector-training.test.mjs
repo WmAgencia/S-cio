@@ -40,31 +40,26 @@ test('starts same Prospector chat/voice guided questions for each tenant separat
  assert.equal(x.mode,'voice');assert.match(x.question,/empresa/i);
  await startSocioInterview(db,b,'text');
  const answer=await advanceSocioInterview(db,a,'Empresa A');
- assert.equal(answer.step,'audience');
+ assert.equal(answer.step,'services');
  assert.equal((await getSocioInterview(db,b)).step,'company');
  assert(!JSON.stringify(await getSocioInterview(db,b)).includes('Empresa A'));
  assert.equal((await resetSocioInterview(db,a)).knowledgePreserved,true);
  assert.equal(await getSocioInterview(db,a),null);
  assert.equal((await getSocioInterview(db,b)).mode,'text');
 });
-test('service-adaptive interview creates Markdown DRAFT and never activates agent or sends WhatsApp',async()=>{
+test('guided interview creates Markdown DRAFT and never activates agent or sends WhatsApp',async()=>{
  const db=fakeDb(),tenant=randomUUID();
  await startSocioInterview(db,tenant,'text');
- const sample={
- company:'Aquarela Studio',audience:'Pequenas empresas',services:'sites, design gráfico',
- service_detail:'Site profissional em até 5 dias',service_price:'R$ 500',
- region:'Sorocaba e Brasil',process:'Revisão antes da entrega',qualify:'Qual o objetivo?',
- style:'Clara e próxima',objections:'Mostrar portfólio e pedir aprovação',
- social_proof:'https://exemplo.com.br',handoff:'Quando solicitar orçamento',
- restrictions:'Nunca dar descontos',notification:'depois',closing_mode:'1',approach:'3'
- };
+ // Twelve blocks, each answered by tapping the option the screen offers.
+ const answers=['Aquarela Studio — design e sites','sites, design gráfico',
+  'Site com até 5 páginas, entrega em 5 dias','R$ 500',
+  'Logo e identidade visual','R$ 300',
+  '1','2','1','https://exemplo.com.br','1,3','Nunca dar descontos','1','pix,card','1','2'];
  let state;
  for(let i=0;i<40;i++){
   state=await getSocioInterview(db,tenant);
   if(state.completed)break;
-  let response=sample[state.step];
-  if(state.step==='service_detail'&&state.messages.some(x=>x.body==='R$ 500'))response='Design e prazo conforme briefing';
-  if(state.step==='service_price'&&state.messages.some(x=>x.body==='R$ 500'))response='A partir de R$ 300';
+  const response=answers.shift();
   assert(response,'Unexpected step: '+state.step);
   const next=await advanceSocioInterview(db,tenant,response);
   if(next.completed)break;
@@ -74,13 +69,49 @@ test('service-adaptive interview creates Markdown DRAFT and never activates agen
  assert.equal(after.progress,100);
  assert.equal(db.versions.length,1);
  assert.equal(db.versions[0].status,'draft');
- assert.match(db.versions[0].markdown,/Aquarela Studio/);
- assert.match(db.versions[0].markdown,/site/i);
- assert.match(db.versions[0].markdown,/design/i);
- assert.match(db.versions[0].markdown,/Revisão do responsável|Somente contatos|Primeira resposta|primeira resposta/i);
- assert.equal(db.jobs[0].report.source,'prospector_interview');
+ const manual=db.versions[0].markdown;
+ assert.match(manual,/Aquarela Studio/);
+ assert.match(manual,/sites/);
+ assert.match(manual,/design/i);
+ assert.match(manual,/R\$ 500/);
+ assert.match(manual,/PIX, Cartão/);
+ assert.match(manual,/Pede orçamento ou valor fechado/);
+ assert.match(manual,/Vou chamar a equipe/);
+ assert.match(manual,/Vou confirmar isso com a equipe/);
+ assert.equal(db.jobs[0].report.source,'guided_interview');
  assert(!db.queries.some(q=>/UPDATE agents|INSERT INTO messages|UPDATE campaigns|DELETE FROM training_versions/i.test(q.sql)));
  await assert.rejects(advanceSocioInterview(db,tenant,'outro comando'),{status:409});
+});
+
+test('each choice block offers tappable options and accepts a free word',async()=>{
+ const db=fakeDb(),tenant=randomUUID();
+ await startSocioInterview(db,tenant,'text');
+ await advanceSocioInterview(db,tenant,'Aquarela Studio');
+ await advanceSocioInterview(db,tenant,'sites');
+ await advanceSocioInterview(db,tenant,'Site em 5 dias');
+ const price=await advanceSocioInterview(db,tenant,'R$ 500');
+ assert.equal(price.step,'process');
+ assert(price.choices.length>=3,'o passo de contratação mostra opções');
+ assert(price.choices.every(x=>x.id&&x.label));
+ // A free description at a choice step is refused, with the reason.
+ await assert.rejects(advanceSocioInterview(db,tenant,'mediria'),{status:422});
+ const style=await advanceSocioInterview(db,tenant,'1');
+ assert.equal(style.step,'style');
+ assert(style.choices.length>=3);
+ const objections=await advanceSocioInterview(db,tenant,'2');
+ assert.equal(objections.step,'objections');
+ const proof=await advanceSocioInterview(db,tenant,'3');
+ assert.equal(proof.step,'proof');
+ const handoff=await advanceSocioInterview(db,tenant,'https://exemplo.com.br');
+ assert.equal(handoff.step,'handoff');
+ assert.equal(handoff.multiple,true,'o passo de encaminhamento é múltipla escolha');
+ assert(handoff.choices.length>=4);
+ const restrictions=await advanceSocioInterview(db,tenant,'1,3,4');
+ assert.equal(restrictions.step,'restrictions');
+ // An answer outside the offered options is refused with a clear message.
+ const closing=await advanceSocioInterview(db,tenant,'Não prometer desconto');
+ assert.equal(closing.step,'closing');
+ await assert.rejects(advanceSocioInterview(db,tenant,'nao sei'),{status:422});
 });
 test('voice transcription validates size, auth configuration, type and reports literal text without persistence',async()=>{
  const bytes=Buffer.alloc(100,65);

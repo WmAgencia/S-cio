@@ -147,6 +147,17 @@ body .ps-interview-shell{color:#2a2140;margin-bottom:18px}
 .ps-choices button{display:grid;grid-template-columns:29px 1fr;gap:3px 9px;text-align:left;background:#fff;border:1px solid #e9e3f7;border-radius:12px;padding:12px;cursor:pointer}
 .ps-choices button:hover{background:#f7f2ff;border-color:#b5a0f6}.ps-choices span{grid-row:span 2;display:grid;place-items:center;width:27px;height:27px;border-radius:9px;background:#eee8ff;color:#633adc;font-weight:750}
 .ps-choices strong{color:#382656;font-size:12px}.ps-choices small{font-size:11px;color:#82738f}
+/* Guided training: one decision per screen. The chosen option is unmistakable,
+ and the multi-select confirmation only appears once something is marked. */
+.ps-choices.is-multiple{grid-template-columns:1fr}
+.ps-choices .ps-choices-hint{grid-column:1/-1;margin:0 0 2px;font-size:11px;color:#7d6d94}
+.ps-choices button[aria-pressed="true"]{background:#efe7ff;border-color:#6d43e8;box-shadow:inset 0 0 0 1px #6d43e8}
+.ps-choices button[aria-pressed="true"] span{background:#6d43e8;color:#fff}
+.ps-choices-confirm{grid-column:1/-1;justify-self:end;margin-top:2px}
+.ps-composer label{font-size:11px;font-weight:750;color:#6b5a86;letter-spacing:.02em}
+.ps-hint,.ps-example{margin:0;font-size:11px;line-height:1.55;color:#7a6a92}
+.ps-example{display:flex;gap:7px;align-items:baseline;background:#f7f3ff;border:1px dashed #ded2f6;border-radius:9px;padding:7px 10px}
+.ps-example span{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6f46dd}
 .ps-composer{padding:19px 23px;background:white;display:flex;flex-direction:column;gap:9px}.ps-composer textarea{width:100%;min-height:72px!important;resize:vertical}
 .ps-composer-actions{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center}
 .ps-composer-hint,.ps-voice-status{font-size:11px;color:#9489a0}

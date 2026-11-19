@@ -40,6 +40,9 @@ export function buildAiInstructions({name,tenantName,tone,instructions,knowledge
    ['Fichas oficiais dos produtos citados (fatos exatos; nunca contradiga preço, estoque, variações ou descrição):\n'+
     productKnowledge.join('\n\n---\n\n').slice(0,7000)]:[]),
   ...(simulation?['Este atendimento é SOMENTE um laboratório. Nunca envie mensagens ou execute operações reais; não afirme que executou.']:[]),
+  // The owner chose, at training time, to be told when the AI does not know.
+  // Saying so plainly beats guessing a number or a deadline.
+  'Se a resposta não estiver no manual aprovado, no catálogo ou nas fichas de produto, diga com naturalidade que vai confirmar com a equipe e retornar; nunca improvise preço, prazo, desconto ou condição.',
   'Responda em português brasileiro, no máximo 700 caracteres, sem cabeçalho nem Markdown extenso.'
  ].join('\n');
 }

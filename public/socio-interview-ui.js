@@ -3,7 +3,7 @@
 (()=>{
  const escape=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const node=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=String(txt);return e;};
- let root=null,host=null,api=null,toast=null,csrf='',user=null,state=null,versions=[],busy=false,recorder=null,stream=null,recordChunks=[],recordTimer=null,transcriptText='',speaking=false,liveVoice=null,voiceState='off',finishSpeech=null,speechAbort=null,speechPlayer=null,speechUrl=null;
+ let pendingChoices=[],root=null,host=null,api=null,toast=null,csrf='',user=null,state=null,versions=[],busy=false,recorder=null,stream=null,recordChunks=[],recordTimer=null,transcriptText='',speaking=false,liveVoice=null,voiceState='off',finishSpeech=null,speechAbort=null,speechPlayer=null,speechUrl=null;
  const canEdit=()=>user?.platformOwner||(user?.permissions||[]).includes('training.manage');
  // Thalita is rendered by our own authenticated Edge TTS route, not by a browser-dependent voice.
  // Explicit playback cancellation allows users to interrupt her mid-sentence.
@@ -127,22 +127,37 @@
  function conversation(i){
   const progress=Math.max(0,Math.min(100,Number(i.progress)||0));
   const choices=Array.isArray(i.choices)?i.choices:[];
+  const multiple=Boolean(i.multiple);
+  // The counter is what makes a twelve-block interview feel short: the owner
+  // always knows where they are and how much is left.
+  const order=Math.max(1,Math.min(12,parseInt(String(i.stepLabel||'').replace(/\D+(\d+) de 12.*/,'$1'),10)||1));
+  const inline=[
+   i.hint?'<p class="ps-hint">'+escape(i.hint)+'</p>':'',
+   i.example?'<p class="ps-example"><span>Exemplo</span> '+escape(i.example)+'</p>':''
+  ].join('');
+  const placeholder=i.placeholder||(i.step==='approach_custom'?'Digite a primeira resposta do seu jeito…':i.hint?'Responda do seu jeito…':'Escreva sua resposta ou use o microfone…');
+  const composerLabel=choices.length?(multiple?'Complete ou comente (opcional)':'Nada se encaixa? Escreva do seu jeito'):'Sua resposta';
   return '<section class="ps-chat-card" aria-label="Conversa de treinamento">'+
-   '<header class="ps-chat-header"><div class="ps-face">✳</div><div><strong>Sócio · Treinamento</strong><small>'+(i.mode==='voice'?'Thalita · voz e chat':'Conversa por texto')+'</small></div>'+
+   '<header class="ps-chat-header"><div class="ps-face">✳</div><div><strong>Sócio · Treinamento</strong><small>'+(i.mode==='voice'?'Thalita · voz e chat':'Passo '+order+' de 12')+'</small></div>'+
    '<span class="ps-progress-number">'+progress+'%</span>'+
    button('Recomeçar','data-ps-reset aria-label="Reiniciar entrevista"','btn sm soft')+'</header>'+
-   '<div class="ps-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+progress+'" aria-label="Progresso da entrevista"><div style="width:'+progress+'%"></div></div>'+
-   '<div class="ps-feed" role="log" aria-live="polite" aria-label="Histórico do treinamento">'+(i.messages||[]).map(m=>
+   '<div class="ps-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+progress+'" aria-label="Progresso do treinamento"><div style="width:'+progress+'%"></div></div>'+
+   '<div class="ps-feed" role="log" aria-live="polite" aria-label="Histórico do treinamento">'+(i.messages||[]).slice(-6).map(m=>
      '<div class="ps-line '+(m.role==='user'?'mine':'assistant')+'">'+(m.role==='assistant'?'<span class="ps-small-avatar">✳</span>':'')+
      '<div class="ps-bubble"><small>'+(m.role==='assistant'?'Sócio':'Você')+'</small><p>'+escape(m.body)+'</p></div></div>').join('')+
    '</div>'+
-   (i.completed?'<div class="ps-concluded" role="status">Entrevista concluída. Revise o manual abaixo antes de aprovar.</div>':
-   (choices.length?'<div class="ps-choices" role="group" aria-label="Escolha o estilo de primeira resposta">'+choices.map((x,n)=>
-    '<button type="button" data-ps-choice="'+escape(x.id)+'" '+(busy?'disabled':'')+'><span>'+(n+1)+'</span><strong>'+escape(x.label)+'</strong><small>'+escape(x.description)+'</small></button>').join('')+'</div>':'')+
-   '<form id="psInterviewForm" class="ps-composer"><label for="psInterviewAnswer" class="ps-sr-only">Sua resposta</label>'+
-   '<textarea id="psInterviewAnswer" name="text" rows="2" maxlength="850" required '+(busy?'disabled':'')+
-   ' placeholder="'+(i.step==='approach_custom'?'Digite a primeira resposta do seu jeito…':'Escreva sua resposta ou use o microfone…')+'">'+escape(transcriptText)+'</textarea>'+
-   '<div class="ps-composer-actions">'+(i.mode==='voice'?button(liveVoice?'Desligar voz':'Conversar por voz','data-ps-record','btn soft'):'<span class="ps-composer-hint">Responda naturalmente.</span>')+
+   (i.completed?'<div class="ps-concluded" role="status">Treinamento concluído. Revise o manual abaixo e clique em Aprovar para a IA usar.</div>':
+   (choices.length?'<div class="ps-choices'+(multiple?' is-multiple':'')+'" role="group" aria-label="Opções de resposta">'+
+     (multiple?'<p class="ps-choices-hint">Marque quantas quiser e confirme.</p>':'')+
+     choices.map((x,n)=>
+      '<button type="button" data-ps-choice="'+escape(x.id)+'" aria-pressed="false" '+(busy?'disabled':'')+'>'+
+      '<span>'+(multiple?'✓':(n+1))+'</span><strong>'+escape(x.label)+'</strong>'+(x.description?'<small>'+escape(x.description)+'</small>':'')+'</button>').join('')+
+     (multiple?'<button type="button" class="btn primary ps-choices-confirm" data-ps-confirm '+(!pendingChoices.length||busy?'disabled':'')+'>Confirmar escolhas →</button>':'')+
+     '</div>':'')+
+   '<form id="psInterviewForm" class="ps-composer"><label for="psInterviewAnswer">'+escape(composerLabel)+'</label>'+inline+
+   '<textarea id="psInterviewAnswer" name="text" rows="2" maxlength="850" '+(busy?'disabled':'')+
+   ' placeholder="'+escape(placeholder)+'">'+escape(transcriptText)+'</textarea>'+
+   '<div class="ps-composer-actions">'+(i.mode==='voice'?button(liveVoice?'Desligar voz':'Falar pelo microfone','data-ps-record','btn soft'):'<span class="ps-composer-hint">'+(choices.length?'Toque numa opção acima ou escreva livremente.':'Responda com poucas palavras; depois eu organizo.')+'</span>')+
    '<button type="submit" class="btn primary" '+(busy?'disabled':'')+'>'+(busy?'Enviando…':'Enviar resposta →')+'</button></div>'+
    '<div id="psVoiceStatus" role="status" class="ps-voice-status">'+(i.mode==='voice'?escape(voiceStatusText()):'Sua resposta fica privada no espaço da empresa.')+'</div></form>')+
    '</section>';
@@ -176,12 +191,27 @@
    '<p class="ps-training-privacy">Método de vendas compartilhado; serviços, valores, conversas e manual sempre separados por empresa. Treinar não envia WhatsApp nem cria cobranças.</p>';
   host.querySelectorAll('[data-ps-start]').forEach(b=>b.addEventListener('click',()=>run(async()=>{
    const result=await api('/api/training/interview/start','POST',{mode:b.dataset.psStart});
-   state=result;transcriptText='';paint();if(result.interview.mode==='voice'){try{await beginLiveVoice();await say(result.interview.question);}catch(error){toast('Microfone indisponível: '+String(error.message||''),true);}}
+   state=result;transcriptText='';pendingChoices=[];paint();if(result.interview.mode==='voice'){try{await beginLiveVoice();await say(result.interview.question);}catch(error){toast('Microfone indisponível: '+String(error.message||''),true);}}
   })));
   host.querySelector('#psInterviewForm')?.addEventListener('submit',ev=>{
    ev.preventDefault();const text=host.querySelector('#psInterviewAnswer')?.value||'';void submit(text);
   });
-  host.querySelectorAll('[data-ps-choice]').forEach(b=>b.addEventListener('click',()=>submit(b.dataset.psChoice)));
+  // A single-choice step records the tap and moves on. A multiple-choice step
+  // only marks the option; "Confirmar escolhas" sends them together, so the
+  // owner can pick three situations of handoff without three round trips.
+  const multiple=Boolean(state?.interview?.multiple)&&!(state?.interview?.completed);
+  if(!multiple)pendingChoices=[];
+  host.querySelectorAll('[data-ps-choice]').forEach(b=>b.addEventListener('click',()=>{
+   if(!multiple)return submit(b.dataset.psChoice);
+   const id=b.dataset.psChoice;
+   const at=pendingChoices.indexOf(id);
+   if(at>=0)pendingChoices.splice(at,1);else pendingChoices.push(id);
+   b.setAttribute('aria-pressed',at>=0?'false':'true');
+   b.classList.toggle('is-picked',at<0);
+   const confirm=host.querySelector('[data-ps-confirm]');
+   if(confirm)confirm.disabled=!pendingChoices.length||busy;
+  }));
+  host.querySelector('[data-ps-confirm]')?.addEventListener('click',()=>submit(pendingChoices.join(',')));
   host.querySelector('[data-ps-reset]')?.addEventListener('click',()=>run(async()=>{
    if(!window.confirm('Recomeçar esta conversa? Seu manual aprovado será preservado.'))return;
    stopVoice();await api('/api/training/interview/reset','POST',{});
@@ -250,7 +280,7 @@
   if(!text){toast('Informe sua resposta.',true);return;}
   await run(async()=>{
    const result=await api('/api/training/interview/turn','POST',{text});
-   state=result;transcriptText='';await refresh();
+   state=result;transcriptText='';pendingChoices=[];await refresh();
    if(result.interview.completed)stopVoice();else await say(result.interview.question);
   });
  }
