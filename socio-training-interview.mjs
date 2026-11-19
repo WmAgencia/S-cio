@@ -153,10 +153,7 @@ const progress=s=>{
 
 export const questionFor=s=>{
  const p=prompts[s.step];
- // Options are declared on the prompt itself, so a step can never ask a
- // question and forget to offer the taps that answer it.
  if(!p)return '';
- const declared=Array.isArray(p.options)?p.options:[];
  if(s.step==='services'&&s.subPhase==='price'){
   const name=s.data.services[s.index]?.name||'esse serviço';
   return 'Qual o valor de '+name+'? '+manualService(s.data,s.index).placeholder+' (Se preferir não informar, diga "orçamento".)';
@@ -175,16 +172,23 @@ export const choicesFor=s=>{
  return optionsFor(s.step);
 };
 
+// An interview saved before the twelve-block version carries step names that no
+// longer exist ("audience", "service_price"). Rather than leave the owner stuck
+// on a blank question, it restarts cleanly; the approved manual is untouched.
+const LEGACY_STEPS=new Set(['audience','qualify','notification','closing_mode','payment_methods','service_price']);
+
 const output=s=>s?{
+ legacy:LEGACY_STEPS.has(s.step)||undefined,
  mode:s.mode,phase:s.phase,step:s.step,subPhase:s.subPhase||null,
  question:s.phase==='active'?questionFor(s):'',
- hint:s.phase==='active'?(prompts[s.step]?.hint||''):'',
- example:s.phase==='active'?(prompts[s.step]?.example||''):'',
- placeholder:s.phase==='active'?(s.step==='services'&&s.subPhase==='price'?manualService(s.data||{services:[{}]},s.index||0).placeholder:''):'',
+ hint:s.phase==='active'?(s.step==='services'?(s.subPhase==='price'?'Pode ser uma faixa ("a partir de…") ou "orçamento".':'Descreva em uma frase: o que inclui e em quanto tempo entrega.'):prompts[s.step]?.hint||''):'',
+ example:s.phase==='active'?(s.step==='services'?(s.subPhase==='price'?manualService(s.data||{services:[{}]},s.index||0).placeholder:'Ex.: site com até 5 páginas, pronto em 7 dias'):prompts[s.step]?.example||''):'',
+ placeholder:s.phase==='active'?(s.step==='services'&&s.subPhase==='price'?'Ex.: R$ 350 ou a partir de R$ 350':''):'',
+ stepIndex:s.step==='services'?1:Math.max(0,STEPS.indexOf(s.step)),
+ stepLabel:s.step==='services'?(s.subPhase==='price'?'Serviço '+(s.index+1)+' de '+Math.max(1,s.data?.services?.length||1)+' · preço':'Serviço '+(s.index+1)+' de '+Math.max(1,s.data?.services?.length||1)+' · descrição e prazo'):'Passo '+Math.max(1,STEPS.indexOf(s.step)+1)+' de '+STEPS.length,
  choices:choicesFor(s),
  multiple:s.step==='handoff'||s.step==='payment',
  messages:s.messages,progress:progress(s),completed:s.phase==='review',
- stepLabel:'Passo '+Math.max(1,STEPS.indexOf(s.step)+1)+' de '+STEPS.length,
  draftVersionId:s.draftVersionId||null,
  serviceCount:s.data?.services?.length||0,serviceIndex:(s.index||0)+1
 }:null;

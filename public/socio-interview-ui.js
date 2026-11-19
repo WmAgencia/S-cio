@@ -117,12 +117,12 @@
  };
  const button=(text,attr='',className='btn soft')=>'<button type="button" class="'+className+'" '+attr+'>'+escape(text)+'</button>';
  const welcome=()=>'<div class="ps-interview-welcome"><div class="ps-avatar">✳</div>'+
-  '<span class="ps-kicker">TREINAMENTO GUIADO · ESTILO PROSPECTOR</span>'+
+  '<span class="ps-kicker">TREINAMENTO GUIADO · 12 PASSOS</span>'+
   '<h2>Vamos treinar o seu Sócio.</h2>'+
-  '<p>Responda às perguntas sobre sua empresa. Uma conversa simples que vira um manual de atendimento para você revisar.</p>'+
+  '<p>Doze perguntas curtas, quase todas para tocar. Em cerca de 10 minutos sai um manual com serviços, preços, tom de voz e as regras de quando chamar você.</p>'+
   '<div class="ps-mode-grid">'+
    '<button type="button" data-ps-start="voice" class="ps-mode"><span aria-hidden="true" class="ps-mode-icon">◉</span><strong>Conversar por voz com Thalita</strong><small>Ouça a voz neural Thalita e responda com o microfone. Você pode escrever também.</small><b>Começar por voz</b></button>'+
-   '<button type="button" data-ps-start="text" class="ps-mode"><span aria-hidden="true" class="ps-mode-icon">✎</span><strong>Conversar pelo chat</strong><small>Uma pergunta por vez, sem formulários longos. Revise tudo antes de ativar.</small><b>Começar por texto</b></button>'+
+   '<button type="button" data-ps-start="text" class="ps-mode"><span aria-hidden="true" class="ps-mode-icon">✎</span><strong>Conversar pelo chat</strong><small>Doze passos, um por vez, com opções prontas e dicas. Você revisa antes de ativar.</small><b>Começar por texto</b></button>'+
   '</div><small>O atendimento atual da empresa não muda até que você aprove o novo treinamento.</small></div>';
  function conversation(i){
   const progress=Math.max(0,Math.min(100,Number(i.progress)||0));
@@ -130,7 +130,7 @@
   const multiple=Boolean(i.multiple);
   // The counter is what makes a twelve-block interview feel short: the owner
   // always knows where they are and how much is left.
-  const order=Math.max(1,Math.min(12,parseInt(String(i.stepLabel||'').replace(/\D+(\d+) de 12.*/,'$1'),10)||1));
+  const heading=i.stepLabel||'Passo 1 de 12';
   const inline=[
    i.hint?'<p class="ps-hint">'+escape(i.hint)+'</p>':'',
    i.example?'<p class="ps-example"><span>Exemplo</span> '+escape(i.example)+'</p>':''
@@ -138,7 +138,7 @@
   const placeholder=i.placeholder||(i.step==='approach_custom'?'Digite a primeira resposta do seu jeito…':i.hint?'Responda do seu jeito…':'Escreva sua resposta ou use o microfone…');
   const composerLabel=choices.length?(multiple?'Complete ou comente (opcional)':'Nada se encaixa? Escreva do seu jeito'):'Sua resposta';
   return '<section class="ps-chat-card" aria-label="Conversa de treinamento">'+
-   '<header class="ps-chat-header"><div class="ps-face">✳</div><div><strong>Sócio · Treinamento</strong><small>'+(i.mode==='voice'?'Thalita · voz e chat':'Passo '+order+' de 12')+'</small></div>'+
+   '<header class="ps-chat-header"><div class="ps-face">✳</div><div><strong>Sócio · Treinamento</strong><small>'+(i.mode==='voice'?'Thalita · voz e chat':escape(heading))+'</small></div>'+
    '<span class="ps-progress-number">'+progress+'%</span>'+
    button('Recomeçar','data-ps-reset aria-label="Reiniciar entrevista"','btn sm soft')+'</header>'+
    '<div class="ps-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+progress+'" aria-label="Progresso do treinamento"><div style="width:'+progress+'%"></div></div>'+
@@ -184,8 +184,21 @@
  };
  function paint(){
   if(!host)return;
+  // An interview started in the previous version has no questions left to show;
+  // offer a clean restart instead of an empty chat.
+  if(state?.interview?.legacy&&state.interview.phase==='active'){
+   host.innerHTML='<div class="ps-interview-welcome"><div class="ps-avatar">✳</div>'+
+    '<h2>Vamos começar o novo treinamento.</h2>'+
+    '<p>O treinamento ficou mais curto: doze perguntas com opções prontas. A entrevista anterior tinha outro formato e não pode continuar.</p>'+
+    '<button type="button" class="btn primary" data-ps-restart>Começar os 12 passos</button></div>';
+   host.querySelector('[data-ps-restart]')?.addEventListener('click',()=>run(async()=>{
+    await api('/api/training/interview/reset','POST',{});
+    state=null;await refresh();
+   }));
+   return;
+  }
   const i=state?.interview,approved=versions.find(x=>x.status==='approved');
-  host.innerHTML='<header class="ps-heading"><div><span class="ps-kicker">INTELIGÊNCIA ARTIFICIAL</span><h1>Treinamento da IA</h1><p>O mesmo processo guiado do Prospector, adaptado ao atendimento do Sócio.</p></div>'+
+  host.innerHTML='<header class="ps-heading"><div><span class="ps-kicker">INTELIGÊNCIA ARTIFICIAL</span><h1>Treinamento da IA</h1><p>Perguntas curtas com opções prontas. O manual só entra em uso depois que você aprovar.</p></div>'+
     '<span class="ps-pill '+(approved?'approved':'')+'">'+(approved?'Manual aprovado':'Preparação')+'</span></header>'+
    '<div class="ps-training-content">'+(i?conversation(i):welcome())+review()+'</div>'+
    '<p class="ps-training-privacy">Método de vendas compartilhado; serviços, valores, conversas e manual sempre separados por empresa. Treinar não envia WhatsApp nem cria cobranças.</p>';
