@@ -64,7 +64,7 @@ test('Two real HTTP tenants isolate WhatsApp, products/media, training, Meta dec
  const raw=async(path,method='GET',payload,auth)=>{
   const res=await fetch(base+path,{
    method,headers:{'Content-Type':'application/json',
-    ...(auth?{Cookie:auth.cookie,'X-CSRF-Token':auth.csrf}:{})},
+    ...(auth?{Cookie:auth.cookie,'X-CSRF-Token':auth.csrf,...(auth.expectedTenant?{'X-Socio-Tenant':auth.expectedTenant}:{})}:{})},
    ...(payload===undefined?{}:{body:JSON.stringify(payload)})
   });
   const body=await res.json().catch(()=>null);
@@ -186,6 +186,13 @@ test('Two real HTTP tenants isolate WhatsApp, products/media, training, Meta dec
  await assertTenant(master,ta,'A',identifiers.a,identifiers.b);
  assert.equal((await raw('/api/admin/switch','POST',{tenantId:tb},master)).status,200);
  await assertTenant(master,tb,'B',identifiers.b,identifiers.a);
+ // A second browser tab still showing A must not read or write B accidentally.
+ const staleMaster={...master,expectedTenant:ta};
+ assert.equal((await raw('/api/products','GET',undefined,staleMaster)).status,409);
+ assert.equal((await raw('/api/conversations/'+identifiers.b.conversation,'PATCH',{status:'resolved'},staleMaster)).status,409);
+ assert.equal((await raw('/api/admin/switch','POST',{tenantId:ta},staleMaster)).status,409);
+ assert.equal((await raw('/api/me','GET',undefined,staleMaster)).body.tenant.id,tb);
+ assert.equal((await raw('/api/products','GET',undefined,{...master,expectedTenant:tb})).status,200);
  // Neither switch changes the ordinary owner's session.
  assert.equal((await raw('/api/me','GET',undefined,ownerA)).body.tenant.id,ta);
  assert.equal((await raw('/api/me','GET',undefined,ownerB)).body.tenant.id,tb);

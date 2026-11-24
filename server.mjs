@@ -199,24 +199,17 @@ async function body(req,limit=900000){
 // CSRF guard for browser mutations, with the proxy-aware host list living in
 // its own module so the rule itself can be tested without a database.
 const sameOrigin=createOriginGuard(process.env);
-// Every authenticated request resolves its session, and a screen issues six to
-// eight requests at once. A 20-second cache removes that repeated join without
-// weakening anything: logout, role changes and tenant pauses clear it first.
-const sessionCache=new Map();
-const SESSION_TTL_MS=20000;
-const clearSessionCache=()=>sessionCache.clear();
+// Authorization is always read from PostgreSQL. Never cache tenant, role,
+// revocation or feature state in process memory: a switch or permission change
+// must be visible immediately, including across replicas.
 async function sessionFor(req){
  const match=String(req.headers.cookie||'').match(/(?:^|;\s*)socio_session=([^;]+)/);
  if(!match)return null;
  let token;try{token=decodeURIComponent(match[1]);}catch{return null;}
  if(!token||token.length>256)return null;
- const key=hashToken(token),now=Date.now(),hit=sessionCache.get(key);
- if(hit&&hit.at>now)return hit.value;
+ const key=hashToken(token);
  const result=await query("SELECT s.token_hash,s.csrf,s.active_tenant_id,u.id AS user_id,u.name,u.email,u.phone,u.role,u.platform_owner,u.tenant_id,t.name AS tenant_name,t.plan,t.status AS tenant_status,t.features FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=s.active_tenant_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true AND (u.platform_owner=true OR u.tenant_id=s.active_tenant_id)",[key]);
- const value=result.rows[0]||null;
- if(sessionCache.size>2000)sessionCache.clear();
- sessionCache.set(key,{value,at:now+SESSION_TTL_MS});
- return value;
+ return result.rows[0]||null;
 }
 async function createSession(userId,tenantId,res){
  const token=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');
@@ -477,6 +470,12 @@ async function handle(req,res){
  }
  const a=await sessionFor(req);
  if(!a)throw fail(401,'Entre na sua conta para continuar.');
+ // A stale browser tab must not accidentally act in the newly selected tenant.
+ // The header is a consistency check, never a source of authorization.
+ const expectedTenant=req.headers['x-socio-tenant'];
+ if(expectedTenant!==undefined&&expectedTenant!==a.active_tenant_id&&
+    !['/api/me','/api/logout'].includes(pathname))
+  throw fail(409,'A empresa ativa mudou. Atualize a página antes de continuar.');
  // Keep account/session recovery and platform administration available while
  // preventing a paused company from continuing its normal operations.
  if(a.tenant_status==='paused'&&!['/api/me','/api/logout','/api/me/phone','/api/me/password'].includes(pathname)&&
@@ -1073,7 +1072,7 @@ async function handle(req,res){
    await c.query('UPDATE users SET password_hash=$2 WHERE id=$1',[a.user_id,encrypted]);
    // Every session is revoked, including the one used for this request: if the
    // cookie had been stolen, the thief shares this token and must lose it too.
-   await c.query('DELETE FROM sessions WHERE user_id=$1',[a.user_id]);clearSessionCache();
+   await c.query('DELETE FROM sessions WHERE user_id=$1',[a.user_id]);
    const token=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');
    await c.query("INSERT INTO sessions(token_hash,user_id,active_tenant_id,csrf,expires_at) "+
     "VALUES($1,$2,$3,$4,now()+interval '7 days')",
@@ -1087,7 +1086,7 @@ async function handle(req,res){
   }catch(e){await c.query('ROLLBACK').catch(()=>{});throw e;}finally{c.release();}
  }
  if(method==='POST'&&pathname==='/api/logout'){
-  await query('DELETE FROM sessions WHERE token_hash=$1',[a.token_hash]);clearSessionCache();
+  await query('DELETE FROM sessions WHERE token_hash=$1',[a.token_hash]);
   res.setHeader('Set-Cookie',sessionCookie('',true));
   return json(res,200,{ok:true});
  }
@@ -2111,7 +2110,6 @@ async function handle(req,res){
     'UPDATE users SET role=$3,active=$4 WHERE tenant_id=$1 AND id=$2 RETURNING id,name,email,phone,role,active',
     [a.active_tenant_id,teamMember[1],nextRole,nextActive]);
    if(!nextActive)await c.query('DELETE FROM sessions WHERE user_id=$1',[teamMember[1]]);
-   clearSessionCache();
    await c.query('INSERT INTO audit(id,tenant_id,actor_id,action,metadata) VALUES($1,$2,$3,$4,$5)',
     [id(),a.active_tenant_id,a.user_id,'team.member_updated',
       JSON.stringify({userId:teamMember[1],before:{role:target.rows[0].role,active:target.rows[0].active},
@@ -2209,7 +2207,6 @@ async function handle(req,res){
   const name=data.name.trim(),plan=data.plan;
   const result=await query('UPDATE tenants SET name=$2,plan=$3 WHERE id=$1 RETURNING id,name,plan,status',
    [editMasterTenant[1],name,plan]);
-  clearSessionCache();
   await audit(a,'platform.tenant_profile_updated',{
    targetTenantId:editMasterTenant[1],before:{name:target.rows[0].name,plan:target.rows[0].plan},
    after:{name,plan},billingChanged:false});
@@ -2222,7 +2219,6 @@ async function handle(req,res){
   const features=validateTenantFeatures(data.features);
   const updated=await query("UPDATE tenants SET features=$2 WHERE id=$1 RETURNING id,features",
    [tenantFeaturesRoute[1],JSON.stringify(features)]);
-  clearSessionCache();
   if(!updated.rowCount)throw fail(404,'Empresa não encontrada.');
   await audit(a,'platform.tenant_features.updated',{targetTenantId:tenantFeaturesRoute[1],features});
   return json(res,200,updated.rows[0]);
