@@ -4,8 +4,8 @@ import {randomUUID} from 'node:crypto';
 import {Pool} from 'pg';
 import {createTestDatabase} from './helpers/test-database.mjs';
 import {processLiveInboxSync} from '../inbox-live-sync.mjs';
-import {processNextAiReply} from '../ai-replies.mjs';
-import {deliverToConversation} from '../socio-outbound.mjs';
+import {processNextAiReply,recoverInterruptedAiReplies} from '../ai-replies.mjs';
+import {deliverToConversation,recoverInterruptedOutbox} from '../socio-outbound.mjs';
 
 const env={
  SOCIO_OUTBOUND_ENABLED:'true',SOCIO_AUTOREPLY_ENABLED:'true',
@@ -124,6 +124,21 @@ test('WA-AKG mocked read -> tenant-owned inbox -> AI transient failure -> one co
  assert.equal(providerCalls,1);
  assert.equal((await pool.query("SELECT count(*)::int AS n FROM message_outbox WHERE tenant_id=$1 AND conversation_id=$2",
  [tenant,chat])).rows[0].n,1);
+ // Recovery never contacts the gateway. Seed a stale unclaimed send, a possibly
+ // sent record, a confirmed record and a generation with no delivery started.
+ const staleInbound=randomUUID(),staleAttempt=randomUUID(),stalePending=randomUUID(),staleProcessing=randomUUID();
+ await pool.query("INSERT INTO messages(id,tenant_id,conversation_id,direction,body) VALUES($1,$2,$3,'inbound','Interrupted generation')",[staleInbound,tenant,chat]);
+ await pool.query("INSERT INTO ai_reply_attempts(id,tenant_id,conversation_id,inbound_message_id,status,created_at) VALUES($1,$2,$3,$4,'generating',now()-interval '16 minutes')",[staleAttempt,tenant,chat,staleInbound]);
+ for(const [id,status] of [[stalePending,'pending'],[staleProcessing,'processing']])
+  await pool.query("INSERT INTO message_outbox(id,tenant_id,conversation_id,client_request_id,mode,body,status,updated_at) VALUES($1,$2,$3,$4,'human','Interrupted send',$5,now()-interval '16 minutes')",[id,tenant,chat,randomUUID(),status]);
+ assert.deepEqual(await recoverInterruptedOutbox(pool),{cancelled:1,uncertain:1});
+ assert.deepEqual(await recoverInterruptedOutbox(pool),{cancelled:0,uncertain:0});
+ assert.equal((await pool.query("SELECT status FROM message_outbox WHERE id=$1",[stalePending])).rows[0].status,'cancelled');
+ assert.equal((await pool.query("SELECT status FROM message_outbox WHERE id=$1",[staleProcessing])).rows[0].status,'uncertain');
+ assert.deepEqual(await recoverInterruptedAiReplies(pool),{recovered:1});
+ assert.deepEqual((await pool.query("SELECT status,reason FROM ai_reply_attempts WHERE id=$1",[staleAttempt])).rows[0],{status:'failed',reason:'RETRYABLE_GENERATION_1'});
+ assert.deepEqual(await recoverInterruptedAiReplies(pool),{recovered:0});
+ assert.equal(providerCalls,1);
  const sessionCheck=await pool.query("SELECT count(*)::int AS n FROM messages WHERE tenant_id=$1 AND conversation_id=$2 AND direction='outbound'",
  [tenant,chat]);assert.equal(sessionCheck.rows[0].n,1);
 });

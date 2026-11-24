@@ -47,6 +47,22 @@ export function buildAiInstructions({name,tenantName,tone,instructions,knowledge
  ].join('\n');
 }
 
+// Durable recovery: only a generation that never entered delivery may retry.
+// Reconcile confirmed receipts; any possible delivery remains non-retryable.
+export async function recoverInterruptedAiReplies(pool){
+ const result=await pool.query(
+  "WITH stale AS (SELECT ar.id,ar.reason,o.status AS outbox_status FROM ai_reply_attempts ar "+
+  "LEFT JOIN message_outbox o ON o.tenant_id=ar.tenant_id AND o.client_request_id=ar.id "+
+  "WHERE ar.status='generating' AND ar.created_at<now()-interval '15 minutes' "+
+  "ORDER BY ar.created_at,ar.id LIMIT 100 FOR UPDATE OF ar SKIP LOCKED) "+
+  "UPDATE ai_reply_attempts ar SET status=CASE WHEN stale.outbox_status='sent' THEN 'sent' ELSE 'failed' END,"+
+  "reason=CASE WHEN stale.outbox_status='sent' THEN NULL "+
+  "WHEN stale.outbox_status IS NOT NULL OR stale.reason='DELIVERY_STARTED' THEN 'SEND_UNCONFIRMED' "+
+  "WHEN stale.reason='RETRYING_GENERATION_2' THEN 'GENERATION_FAILED_FINAL' ELSE 'RETRYABLE_GENERATION_1' END,"+
+  "finished_at=now() FROM stale WHERE ar.id=stale.id RETURNING ar.status,ar.reason");
+ return {recovered:result.rowCount};
+}
+
 export async function processNextAiReply(pool,{env=process.env,respond=groqResponse,deliver=deliverToConversation}={}){
  if(!canAutoReply(env)||!groqReady(env))return {processed:false,reason:'AI_DISABLED'};
  // Only the LAST inbound message in an explicitly activated conversation.
@@ -94,7 +110,7 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
  const created=await pool.query(
   "INSERT INTO ai_reply_attempts(id,tenant_id,conversation_id,inbound_message_id,status) "+
   "VALUES($1,$2,$3,$4,'generating') ON CONFLICT(tenant_id,inbound_message_id) "+
-  "DO UPDATE SET status='generating',reason='RETRYING_GENERATION_2',finished_at=NULL "+
+  "DO UPDATE SET status='generating',reason='RETRYING_GENERATION_2',finished_at=NULL,created_at=now() "+
   "WHERE ai_reply_attempts.status='failed' AND ai_reply_attempts.reason='RETRYABLE_GENERATION_1' "+
   "AND ai_reply_attempts.finished_at<now()-interval '5 minutes' RETURNING id,reason",
   [attemptId,m.tenant_id,m.conversation_id,m.inbound_id]);
@@ -102,10 +118,11 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
  const claimedId=created.rows[0].id;
  const retrying=created.rows[0].reason==='RETRYING_GENERATION_2';
  const retryFailureReason=retrying?'GENERATION_FAILED_FINAL':'RETRYABLE_GENERATION_1';
+ let stage=created.rows[0].reason??null;
  const finish=async(status,reason=null)=>pool.query(
   "UPDATE ai_reply_attempts SET status=$2,reason=$3,finished_at=now() "+
-  "WHERE id=$1 AND status='generating'",
-  [claimedId,status,reason]);
+  "WHERE id=$1 AND status='generating' AND reason IS NOT DISTINCT FROM $4::text",
+  [claimedId,status,reason,stage]);
  let sendAttempted=false;
  try{
   const [history,products]=await Promise.all([
@@ -157,6 +174,13 @@ export async function processNextAiReply(pool,{env=process.env,respond=groqRespo
   }
   // Exactly one outbound attempt. deliverToConversation rechecks tenant,
   // connected number and the current AI ownership before network send.
+  // Fence delivery before invoking an external service. A recovered old
+  // generation cannot send or finish a newer generation's attempt.
+  const deliveryClaim=await pool.query(
+   "UPDATE ai_reply_attempts SET reason='DELIVERY_STARTED' WHERE id=$1 AND status='generating' "+
+   "AND reason IS NOT DISTINCT FROM $2::text RETURNING id",[claimedId,stage]);
+  if(!deliveryClaim.rowCount)return {processed:true,sent:false,reason:'CLAIM_LOST'};
+  stage='DELIVERY_STARTED';
   sendAttempted=true;
   const sent=await deliver(pool,{tenantId:m.tenant_id,conversationId:m.conversation_id,
    mode:'ai',text:message,clientRequestId:claimedId,replyToId:m.inbound_id,env});
