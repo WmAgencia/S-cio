@@ -206,6 +206,21 @@ export async function deliverToConversation(pool,{tenantId,conversationId,userId
  }
 }
 
+// Recover abandoned records without ever transmitting a WhatsApp message.
+// A pending record has not been claimed, so cancelling it is safe. A processing
+// record may have reached the gateway: classify it as uncertain, never replay.
+export async function recoverInterruptedOutbox(pool){
+ const result=await pool.query(
+  "WITH stale AS (SELECT id,tenant_id FROM message_outbox "+
+  "WHERE status IN ('pending','processing') AND updated_at<now()-interval '15 minutes' "+
+  "ORDER BY updated_at,id LIMIT 100 FOR UPDATE SKIP LOCKED) "+
+  "UPDATE message_outbox o SET status=CASE WHEN o.status='pending' THEN 'cancelled' ELSE 'uncertain' END,"+
+  "error_code=CASE WHEN o.status='pending' THEN 'CLAIM_INTERRUPTED' ELSE 'SEND_UNCONFIRMED' END,updated_at=now() "+
+  "FROM stale WHERE o.id=stale.id AND o.tenant_id=stale.tenant_id RETURNING o.status");
+ return {cancelled:result.rows.filter(r=>r.status==='cancelled').length,
+  uncertain:result.rows.filter(r=>r.status==='uncertain').length};
+}
+
 export async function reconcileConfirmedOutbox(pool){
  const client=await pool.connect();
  try{
