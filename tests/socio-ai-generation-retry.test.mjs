@@ -13,7 +13,7 @@ const conversationId='22222222-2222-4222-8222-222222222222';
 const inboundId='33333333-3333-4333-8333-333333333333';
 const attemptId='44444444-4444-4444-8444-444444444444';
 
-function fixture({retrying=false}={}){
+function fixture({retrying=false,lostClaim=false}={}){
  const queries=[],updates=[];
  const db={query:async(sql,args=[])=>{
   queries.push({sql,args});
@@ -26,7 +26,7 @@ function fixture({retrying=false}={}){
    return {rowCount:1,rows:[{id:attemptId,reason:retrying?'RETRYING_GENERATION_2':null}]};
   if(sql.includes('SELECT direction,body FROM messages'))return {rows:[{direction:'inbound',body:'Qual é o horário de atendimento?'}]};
   if(sql.includes('FROM products WHERE'))return {rows:[]};
-  if(sql.startsWith('UPDATE ai_reply_attempts')){updates.push({sql,args});return {rowCount:1,rows:[]};}
+  if(sql.startsWith('UPDATE ai_reply_attempts')){updates.push({sql,args});return {rowCount:lostClaim&&sql.includes("SET reason='DELIVERY_STARTED'")?0:1,rows:[]};}
   throw Error('Unexpected SQL: '+sql);
  }};
  return {db,queries,updates};
@@ -74,4 +74,13 @@ test('a campaign-only agent never answers an organic conversation',async()=>{
  assert.match(webhook,/WHERE conversation_ui_state\.handling_mode='human'/);
  assert.match(await readFile(new URL('../schema.sql',import.meta.url),'utf8'),
   /ADD COLUMN IF NOT EXISTS campaign_leads_only boolean NOT NULL DEFAULT false/);
+});
+
+
+test('AI generation that lost its durable claim never calls the delivery gateway',async()=>{
+ const {db}=fixture({lostClaim:true});
+ let sends=0;
+ const result=await processNextAiReply(db,{env,respond:async()=>({reply:'Nossa equipe vai confirmar o horário.'}),deliver:async()=>{sends++;return {sent:true};}});
+ assert.equal(result.reason,'CLAIM_LOST');
+ assert.equal(sends,0);
 });
