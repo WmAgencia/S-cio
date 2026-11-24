@@ -85,13 +85,21 @@ let toastTimer,trainingTimer,waQrTimer;
 let activeInbox=null;
 let navigationRequest=0,renderedNavigation=0,navigationRepairTimer=null;
 const apiReadCache=new Map();
+let apiContextEpoch=0;
+function resetApiContext(){
+ apiContextEpoch++;apiReadCache.clear();state.dashboard=null;state.currentConversation=null;
+ globalThis.SocioWorkspaceUI?.invalidateRender();globalThis.SocioWorkspaceUI?.clearCache();
+ globalThis.SocioMasterDashboard?.invalidate();
+}
 
 function toast(message,error=false){
  const el=$('#toast');el.textContent=message;el.className='toast'+(error?' error':'');
  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.add('hidden'),5000);
 }
 async function requestApi(path,method='GET',body,headers={},options={}){
- const opts={method,credentials:'same-origin',headers:{'Accept':'application/json',...headers}};
+ const epoch=apiContextEpoch;
+ const opts={method,credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json',...headers}};
+ if(state.me?.tenant?.id)opts.headers['X-Socio-Tenant']=state.me.tenant.id;
  if(options?.signal)opts.signal=options.signal;
  // A stalled GET must not keep a dashboard in "Carregando" forever.
  const controller=method==='GET'&&!opts.signal&&typeof AbortController==='function'?new AbortController():null;
@@ -104,7 +112,8 @@ async function requestApi(path,method='GET',body,headers={},options={}){
  catch(error){if(controller?.signal.aborted)throw new Error('Tempo limite da consulta atingido. Tente novamente.');throw error;}
  finally{if(timeout)clearTimeout(timeout);}
  const data=await resp.json().catch(()=>({error:'Erro de conexão.'}));
- if(!resp.ok){if(resp.status===401&&state.me){state.me=null;boot();}throw new Error(data.error||'Falha ao acessar o servidor.');}
+ if(epoch!==apiContextEpoch)throw new Error('Contexto da empresa alterado. Atualize a página.');
+ if(!resp.ok){if(resp.status===401&&state.me){resetApiContext();state.me=null;state.csrf='';boot();}throw new Error(data.error||'Falha ao acessar o servidor.');}
  return data;
 }
 
@@ -112,17 +121,22 @@ async function requestApi(path,method='GET',body,headers={},options={}){
 // GET. This removes duplicate round trips without keeping operational numbers
 // stale: mutations invalidate everything and normal reads expire after 8s.
 function api(path,method='GET',body,headers={},options={}){
- const cacheable=method==='GET'&&!options?.signal;
+ const changesContext=method!=='GET'&&['/api/admin/switch','/api/login','/api/setup','/api/logout'].includes(path);
+ if(changesContext)resetApiContext();
+ const cacheable=method==='GET'&&!options?.signal&&path!=='/api/me'&&path!=='/api/bootstrap';
  if(!cacheable){
-  if(method!=='GET')apiReadCache.clear();
-  return requestApi(path,method,body,headers,options);
+  if(method==='GET')return requestApi(path,method,body,headers,options);
+  apiReadCache.clear();
+  return requestApi(path,method,body,headers,options).finally(()=>apiReadCache.clear());
  }
- const now=Date.now(),hit=apiReadCache.get(path);
+ const key=JSON.stringify([apiContextEpoch,state.me?.user?.id||'',state.me?.tenant?.id||'',path,headers]);
+ const now=Date.now(),hit=apiReadCache.get(key);
  if(hit&&now-hit.at<8000)return hit.value;
+ const entry={at:now,value:null};
  const pending=requestApi(path,method,body,headers,options).then(data=>{
-  apiReadCache.set(path,{at:Date.now(),value:Promise.resolve(data)});return data;
- },error=>{apiReadCache.delete(path);throw error;});
- apiReadCache.set(path,{at:now,value:pending});
+  if(apiReadCache.get(key)===entry){entry.at=Date.now();entry.value=Promise.resolve(data);}return data;
+ },error=>{if(apiReadCache.get(key)===entry)apiReadCache.delete(key);throw error;});
+ entry.value=pending;apiReadCache.set(key,entry);
  return pending;
 }
 
@@ -1941,7 +1955,10 @@ async function switchWorkspace(mode){
   const homeTenantId=state.me.user.homeTenantId;
   if(nextMode==='master'&&state.me.tenant.id!==homeTenantId){
    await api('/api/admin/switch','POST',{tenantId:homeTenantId});
-   state.me=await api('/api/me');state.csrf=state.me.csrf;
+   // A tenant change is a hard UI boundary: discard all module-local state,
+   // listeners, outstanding renders and caches with a fresh document.
+   location.assign(workspaceUrl('master','masterOverview'));
+   return;
   }
   state.workspace=nextMode;
   view.classList.remove('socio-workspace-enter');
