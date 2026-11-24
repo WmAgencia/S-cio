@@ -51,12 +51,12 @@ import {normalizeTaxId,validCpf,taxIdType as taxIdTypeOf,claimTrial,trialEndFrom
 import {handleInboxApi} from './inbox-api.mjs';
 import {processLiveInboxSync} from './inbox-live-sync.mjs';
 import {auditLiveWhatsAppBindings,diagnoseTenantWhatsApp} from './socio-wa-live-diagnostics.mjs';
-import {processNextAiReply,buildAiInstructions} from './ai-replies.mjs';
+import {processNextAiReply,buildAiInstructions,recoverInterruptedAiReplies} from './ai-replies.mjs';
 import {normalizeLabHistory,buildLabInput,polishCustomerReply,reviewReplyStyle} from './socio-intelligence.mjs';
 import {analyzeSocioContinuity} from './socio-prospector-continuity.mjs';
 import {knowledgeV3Enabled,loadTenantApprovedKnowledge,retrieveApprovedKnowledge} from './socio-knowledge-retrieval.mjs';
 import {readConversationMemory,clearConversationMemory,purgeExpiredConversationMemories} from './socio-conversation-memory.mjs';
-import {reconcileConfirmedOutbox,outboundEnabled} from './socio-outbound.mjs';
+import {reconcileConfirmedOutbox,outboundEnabled,recoverInterruptedOutbox} from './socio-outbound.mjs';
 import {readOwnerChannel,updateOwnerChannelSettings,retryOwnerGroup,provisionOwnerGroups,pollOwnerGroups,processOwnerCommands,runOwnerTrafficAutopilot,notifySaleQuestion} from './socio-owner-channel.mjs';
 import {detectSaleCandidate,recordSaleCandidate,listSales,createManualSale,
  confirmSale,rejectSale} from './socio-sales.mjs';
@@ -2606,7 +2606,7 @@ saleEventWorker.unref();
  const aiReplyWorker=setInterval(async()=>{
   if(replyBusy||workersBlocked()||!replyBackoff.canRun())return;
   replyBusy=true;
-  try{await reconcileConfirmedOutbox(pool);await processNextAiReply(pool);replyBackoff.recovered();}
+  try{await recoverInterruptedOutbox(pool);await reconcileConfirmedOutbox(pool);await recoverInterruptedAiReplies(pool);await processNextAiReply(pool);replyBackoff.recovered();}
   catch(error){
    const pause=replyBackoff.failed();
    console.warn('[socio-ai-reply]',JSON.stringify({code:String(error?.code||'REPLY_ERROR').slice(0,40),
