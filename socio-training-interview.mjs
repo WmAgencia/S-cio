@@ -400,36 +400,84 @@ export async function advanceSocioInterview(pool,tenant,text){
  finally{c.release();}
 }
 
-export async function transcribeSocioTraining(bytes,mime,{env=process.env,request=fetch,prompt=null,maxChars=850}={}){
- const accepted=new Set(['audio/webm','audio/ogg','audio/mp4','audio/mpeg','audio/wav']);
- if(!accepted.has(mime)||!Buffer.isBuffer(bytes)||bytes.length<80||bytes.length>3*1024*1024)
-  throw err(422,'Áudio inválido ou muito grande (máximo 3 MB).');
- if(!env.GROQ_API_KEY||env.GROQ_API_KEY.length<20)throw err(503,'Transcrição de voz ainda não está configurada.');
- const extensions={'audio/webm':'webm','audio/ogg':'ogg','audio/mp4':'m4a','audio/mpeg':'mp3','audio/wav':'wav'};
- const data=new FormData();data.set('model','whisper-large-v3-turbo');data.set('language','pt');
- data.set('response_format','verbose_json');data.set('timestamp_granularities[]','segment');data.set('temperature','0');
- // Both vocabularies are needed: the training answers (services, prices) and the
- // owner's spoken questions about ads, which Thalita answers from the same box.
- data.set('prompt',String(prompt||env.SOCIO_STT_PROMPT||
-  'Conversa em português do Brasil sobre atendimento e anúncios: serviço, preço, prazo, orçamento, proposta, desconto, pagamento, agendamento, catálogo, campanha, público, orçamento diário em reais, WhatsApp.').slice(0,600));
- data.set('file',new Blob([bytes],{type:mime}),'treinamento.'+extensions[mime]);
- let r;
- try{r=await request('https://api.groq.com/openai/v1/audio/transcriptions',{
-  method:'POST',headers:{Authorization:'Bearer '+env.GROQ_API_KEY},body:data,signal:AbortSignal.timeout(20000)
- });}catch{throw err(503,'Transcrição indisponível. Você pode continuar digitando.');}
- if(!r.ok)throw err(503,'O serviço de transcrição não respondeu.');
- let json;try{json=await r.json();}catch{throw err(503,'Transcrição inválida.');}
+const STT_MODEL='whisper-large-v3-turbo';
+// The turbo model is fast and usually right; when its own confidence metadata
+// says the audio was not understood, the accurate model gets one attempt. This
+// is the difference between "não entendi" and the sentence the owner said.
+const STT_ACCURATE='whisper-large-v3';
+
+function evaluateTranscript(json,{maxChars=850}={}){
  const text=clean(json?.text,Number.isSafeInteger(maxChars)&&maxChars>0?maxChars:850);
  const plain=text.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase()
   .replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
  const shortAnswer=/^(?:r\$\s*)?\d{1,3}(?:[.,]\d{1,2})?$/i.test(text.trim());
  if((text.length<2&&!shortAnswer)||/^(?:e ai\s*){1,10}$/.test(plain)||/^(?:oi\s*){2,8}$/.test(plain))
-  throw err(422,'Não identifiquei uma solicitação clara. Pode continuar falando.');
+  return {ok:false,reason:'empty'};
  const segments=Array.isArray(json?.segments)?json.segments.filter(x=>x&&typeof x==='object'):[];
  if(segments.length&&segments.every(x=>{
   const probability=Number(x.no_speech_prob),logprob=Number(x.avg_logprob),ratio=Number(x.compression_ratio);
   return (Number.isFinite(probability)&&probability>=0.7&&Number.isFinite(logprob)&&logprob<=-0.55)||
    (Number.isFinite(ratio)&&ratio>2.4&&Number.isFinite(logprob)&&logprob<-0.5);
- }))throw err(422,'Não detectei fala suficientemente clara. Tente novamente.');
- return {text,model:'whisper-large-v3-turbo',approved:false};
+ }))return {ok:false,reason:'unclear'};
+ return {ok:true,text};
+}
+
+function sttForm(bytes,mime,prompt,model){
+ const extensions={'audio/webm':'webm','audio/ogg':'ogg','audio/mp4':'m4a','audio/mpeg':'mp3','audio/wav':'wav'};
+ const data=new FormData();data.set('model',model);data.set('language','pt');
+ data.set('response_format','verbose_json');data.set('timestamp_granularities[]','segment');data.set('temperature','0');
+ // Both vocabularies are needed: the training answers (services, prices) and the
+ // owner's spoken questions about ads, which Thalita answers from the same box.
+ data.set('prompt',String(prompt||process.env.SOCIO_STT_PROMPT||
+  'Conversa em português do Brasil sobre atendimento e anúncios: serviço, preço, prazo, orçamento, proposta, desconto, pagamento, agendamento, catálogo, campanha, público, orçamento diário em reais, WhatsApp.').slice(0,600));
+ data.set('file',new Blob([bytes],{type:mime}),'treinamento.'+extensions[mime]);
+ return data;
+}
+
+export async function transcribeSocioTraining(bytes,mime,{env=process.env,request=fetch,prompt=null,maxChars=850,
+ model=STT_MODEL,accurateModel=STT_ACCURATE}={}){
+ const accepted=new Set(['audio/webm','audio/ogg','audio/mp4','audio/mpeg','audio/wav']);
+ if(!accepted.has(mime)||!Buffer.isBuffer(bytes)||bytes.length<80||bytes.length>3*1024*1024)
+  throw err(422,'Áudio inválido ou muito grande (máximo 3 MB).');
+ if(!env.GROQ_API_KEY||env.GROQ_API_KEY.length<20)throw err(503,'Transcrição de voz ainda não está configurada.');
+ const attempt=async(name,timeoutMs)=>{
+  let r;
+  try{r=await request('https://api.groq.com/openai/v1/audio/transcriptions',{
+   method:'POST',headers:{Authorization:'Bearer '+env.GROQ_API_KEY},
+   body:sttForm(bytes,mime,prompt,name),signal:AbortSignal.timeout(timeoutMs)
+  });}catch{return {transport:true};}
+  if(!r.ok)return {status:r.status};
+  let json;try{json=await r.json();}catch{return {status:'invalid'};}
+  return {json};
+ };
+ const first=await attempt(model,15000);
+ if(first.json){
+  const checked=evaluateTranscript(first.json,{maxChars});
+  if(checked.ok)return {text:checked.text,model,approved:false};
+  if(checked.reason==='unclear'||checked.reason==='empty'){
+   const second=accurateModel!==model?await attempt(accurateModel,20000):null;
+   if(second?.json){
+    const again=evaluateTranscript(second.json,{maxChars});
+    if(again.ok)return {text:again.text,model:accurateModel,rewritten:true,approved:false};
+   }
+   throw err(422,checked.reason==='empty'?
+    'Não identifiquei uma solicitação clara. Pode continuar falando.':
+    'Não detectei fala suficientemente clara. Tente novamente.');
+  }
+ }
+ // The fast call failed for a reason that is not confidence: let the accurate
+ // model have the audio before answering with an error.
+ const fallback=accurateModel!==model?await attempt(accurateModel,20000):null;
+ if(fallback?.json){
+  const checked=evaluateTranscript(fallback.json,{maxChars});
+  if(checked.ok)return {text:checked.text,model:accurateModel,rewritten:true,approved:false};
+  throw err(422,checked.reason==='empty'?
+   'Não identifiquei uma solicitação clara. Pode continuar falando.':
+   'Não detectei fala suficientemente clara. Tente novamente.');
+ }
+ const status=first.status||fallback?.status;
+ if(status===401||status===403)throw err(503,'A credencial do serviço de voz foi recusada.');
+ if(status===429)throw err(503,'Limite do serviço de voz atingido. Tente novamente em instantes.');
+ if(status==='invalid')throw err(503,'Transcrição inválida.');
+ throw err(503,'Transcrição indisponível. Você pode continuar digitando.');
 }

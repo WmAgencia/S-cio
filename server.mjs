@@ -43,6 +43,7 @@ import {gatewayConfigured,gatewayRead,getSessionStatus,validSessionId,ensureSess
 import {processNextWaakgScan} from './waakg-history.mjs';
 import {startAutoTraining,autoTrainingStatus,cancelAutoTraining,processNextAutoTraining} from './training-auto.mjs';
 import {getSocioInterview,startSocioInterview,advanceSocioInterview,resetSocioInterview,transcribeSocioTraining} from './socio-training-interview.mjs';
+import {createVoiceVocabulary} from './socio-voice-context.mjs';
 import {synthesizeCachedThalitaVoice,prewarmThalitaAcknowledgements,SOCIO_TRAINING_VOICE} from './socio-training-tts.mjs';
 import {groqReady,groqResponse,groqModel} from './groq-client.mjs';
 import {brainResponse,brainReady,brainProvider,brainModel} from './ai-brain.mjs';
@@ -123,6 +124,10 @@ pool.on('error',error=>{
  console.error('[socio-db] idle connection failed',String(error?.code||error?.message||'error').slice(0,80));
 });
 const query=(sql,values=[])=>pool.query(sql,values);
+// Speech recognition is told the tenant's own vocabulary (company, catalog and
+// campaign names) plus the question just asked, so a spoken answer is decoded
+// against the business it belongs to instead of generic Portuguese.
+const voiceVocabulary=createVoiceVocabulary(pool,{readAds:(p,a,kind,input)=>readAdsTool(p,a,kind,input)});
 // The product document is derived data: it is always rebuilt from committed
 // rows, so a failure here never rolls back the product change itself.
 const refreshProductKnowledge=async(tenantId,productId)=>{
@@ -1195,7 +1200,12 @@ async function handle(req,res){
   if(Number(req.headers['content-length']||0)>3*1024*1024)throw fail(413,'Máximo de 3 MB por áudio.');
   let total=0;const chunks=[];
   for await(const chunk of req){total+=chunk.length;if(total>3*1024*1024)throw fail(413,'Máximo de 3 MB por áudio.');chunks.push(chunk);}
-  return json(res,200,await transcribeSocioTraining(Buffer.concat(chunks),mime));
+  // The client sends the question it just asked, so a short spoken answer
+  // ("seis", "sim", "Sorocaba") is decoded with the right expectation.
+  const asked=String(new URL(req.url,'http://local').searchParams.get('asked')||'')
+   .replace(/[<>\r\n]/g,' ').slice(0,160);
+  const prompt=await voiceVocabulary(a,{asked});
+  return json(res,200,await transcribeSocioTraining(Buffer.concat(chunks),mime,{prompt}));
  }
  if(method==='GET'&&pathname==='/api/dashboard/executive'){
   return json(res,200,await getExecutiveMetrics(pool,a));
@@ -1773,7 +1783,12 @@ async function handle(req,res){
   if(Number(req.headers['content-length']||0)>3*1024*1024)throw fail(413,'O áudio deve ter até 3 MB.');
   let length=0;const chunks=[];
   for await(const chunk of req){length+=chunk.length;if(length>3*1024*1024)throw fail(413,'O áudio deve ter até 3 MB.');chunks.push(chunk);}
-  return json(res,200,await transcribeSocioTraining(Buffer.concat(chunks),mime));
+  // The current interview question is the best hint for the answer that follows
+  // it: it names the service, the field and whether a price is expected.
+  let asked='';
+  try{asked=(await getSocioInterview(pool,a.active_tenant_id))?.question||'';}catch{}
+  const prompt=await voiceVocabulary(a,{asked});
+  return json(res,200,await transcribeSocioTraining(Buffer.concat(chunks),mime,{prompt}));
  }
  // Thalita replaces the browser's unpredictable system voice for the guided interview.
  // Access is authenticated, tenant-scoped, CSRF guarded, rate limited; no audio is stored.

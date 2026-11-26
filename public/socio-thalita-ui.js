@@ -6,7 +6,7 @@
   playbackContext=null,playbackSource=null,abort=null,finalize=null,turnRunId=null,voiceRequested=false,
   voiceEpoch=0,transcriptionAbort=null,queryEpoch=0,startingVoice=false,
   activeQueryAbort=null,responseDisplayTimer=null,recentHistory=[],semanticFlow=null,lastShortVoice=null,
-  navigate=null,orb=null;
+  lastAsked='',lastAskedAt=0,navigate=null,orb=null;
  const get=sel=>instance?.querySelector(sel);
  // Audio output is unlocked by the explicit microphone click using a shared
  // Web Audio context. A new Audio().play() after asynchronous STT/LLM/TTS often
@@ -73,9 +73,13 @@
    if(abort===controller){finishVoice();if(!failed)setStatus(session?'Microfone ativo. Pode falar.':'Voz desligada');}
   }
  }
- const meaningfulVoiceText=text=>{
+ // A short answer ("sim", "seis", "Sorocaba") is only meaningless when nothing
+ // was asked. After a direct question it is the answer, so the filter that
+ // protects against silence hallucinations must not swallow it.
+ const meaningfulVoiceText=(text,{expectShort=false}={})=>{
   const normalized=String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[!?.,]/g,'').trim();
-  // STT hallucinations produced repeatedly by silence/ambient noise.
+  if(!normalized)return false;
+  if(expectShort)return normalized.length>=1&&!/^(?:e ai\s*)+$|^(?:hum|aham)$/.test(normalized);
   return normalized.length>=3&&
    !/^(?:e ai\s*)+$|^(?:oi|ola|hum|aham|ta|ok|obrigado|e|ai|sim|nao|com voce|vem com voce)$/.test(normalized);
  };
@@ -88,6 +92,12 @@
   const name=document.createElement('small');name.textContent=role==='user'?'Você':'Thalita';
   const content=document.createElement('p');content.textContent=String(text||'').slice(0,4200);
   el.append(name,content);feed.append(el);feed.scrollTop=feed.scrollHeight;
+  // Thalita's last sentence is the expectation for the next spoken answer and
+  // doubles as a decoding hint for the recogniser.
+  if(role!=='user'&&content.textContent.trim()){
+   lastAsked=content.textContent.trim();
+   lastAskedAt=Date.now();
+  }
  }
  async function run(text,{voiceToken=null}={}){
   const message=String(text||'').trim();
@@ -201,17 +211,22 @@
      if(signal?.aborted)controller.abort();
      else signal?.addEventListener('abort',()=>controller.abort(),{once:true});
      try{
-      const resp=await fetch('/api/thalita/transcribe',{method:'POST',credentials:'same-origin',
+      const asked=lastAsked&&Date.now()-lastAskedAt<180000?encodeURIComponent(lastAsked.slice(-160)):'';
+      const resp=await fetch('/api/thalita/transcribe'+(asked?'?asked='+asked:''),{method:'POST',credentials:'same-origin',
        headers:{'Content-Type':blob.type.split(';')[0],'X-CSRF-Token':csrf},
        body:blob,signal:controller.signal});
       const data=await resp.json();
       if(controller.signal.aborted||epoch!==voiceEpoch||!voiceRequested||session!==newSession)return;
       if(!resp.ok)throw Error(data.error||'Transcrição indisponível');
-      if(!meaningfulVoiceText(data.text)){setStatus('Não identifiquei uma solicitação clara. Pode continuar falando.');return;}
+      const expectShort=Boolean(lastAsked&&Date.now()-lastAskedAt<180000&&/\?\s*$/.test(lastAsked));
+      if(!meaningfulVoiceText(data.text,{expectShort})){
+       setStatus('Não identifiquei uma solicitação clara. Pode continuar falando.');return;
+      }
       const spoken=String(data.text).trim();
       const compact=spoken.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[!?.\s]+/g,' ').trim();
-      // Ambient hallucinations often recur within a few seconds.
-      if(compact.length<24&&lastShortVoice?.text===compact&&Date.now()-lastShortVoice.at<10000){
+      // Ambient hallucinations often recur within a few seconds. After a direct
+      // question, a repeated short answer is the owner insisting, not noise.
+      if(!expectShort&&compact.length<24&&lastShortVoice?.text===compact&&Date.now()-lastShortVoice.at<10000){
        setStatus('Estou ouvindo. Pode continuar.');return;
       }
       if(compact.length<24)lastShortVoice={text:compact,at:Date.now()};

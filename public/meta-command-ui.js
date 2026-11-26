@@ -6,7 +6,7 @@
   section.append(el('h2','Comandos do Sócio para Meta Ads'),
    el('p','Peça resultados ou prepare alterações na conta '+account.account_id+'. Ações que geram gastos só ocorrem depois da sua confirmação.'));
   const field=el('textarea');field.rows=3;field.maxLength=1000;
-  field.placeholder='Ex.: quais Pixels existem na conta?; crie um Pixel chamado Loja Consecom; mostre os resultados dos últimos 7 dias; pause a campanha ID 123456.';
+  field.placeholder='Ex.: quais Pixels existem na conta?; crie um Pixel chamado Loja Consecom; mostre os resultados dos últimos 7 dias; pause a campanha TEL | VENDAS CBO (nome ou ID).';
   field.setAttribute('aria-label','Comando para a Meta Ads');section.append(field);
   const preview=el('button','Analisar comando');preview.className='btn primary';preview.type='button';section.append(preview);
   const status=el('p');status.setAttribute('role','status');section.append(status);

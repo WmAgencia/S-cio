@@ -163,20 +163,37 @@ export async function speakToSocioSkill(pool,a,request={},opts={}){
   const id=await insertCommandRun(pool,a,account.id,{kind:'create_pixel',originConversationId:opts.originConversationId});
   return {runId:id,status:'collecting',message:'Qual nome você quer dar ao Pixel? Pode responder só com o nome.'};
  }
- if(command.intent==='plan'&&command.missing?.length===0){
+ if(command.intent==='plan'){
   const data=await (opts.preview||previewMetaCommand)(pool,a,raw,opts);
-  if(!data.plan)throw fail(503,'A Meta não confirmou a prévia.');
-  const accountId=data.plan.summary?.account?.id;
-  if(!/^act_\d{4,20}$/.test(accountId||''))throw fail(503,'Conta Meta não confirmada na prévia.');
-  const id=await insertCommandRun(pool,a,accountId,{kind:command.kind,planId:data.plan.id,
-   originConversationId:opts.originConversationId});
-  return {runId:id,status:'ready',message:summaryOf(data.plan,command.kind)+
-   " Responda 'pode criar' para autorizar a operação na Meta. Ações de ativação ou orçamento podem gerar gastos."};
- }
- if(command.intent==='plan'&&command.missing?.length)
+  if(data.plan){
+   const accountId=data.plan.summary?.account?.id;
+   if(!/^act_\d{4,20}$/.test(accountId||''))throw fail(503,'Conta Meta não confirmada na prévia.');
+   const id=await insertCommandRun(pool,a,accountId,{kind:command.kind,planId:data.plan.id,
+    originConversationId:opts.originConversationId});
+   return {runId:id,status:'ready',message:summaryOf(data.plan,command.kind)+
+    " Responda 'pode criar' para autorizar a operação na Meta. Ações de ativação ou orçamento podem gerar gastos."};
+  }
+  // The owner named the campaign instead of its ID: say exactly which names
+  // matched, so the next sentence can be the full name or the ID.
+  if(data.resolution?.status==='ambiguous'){
+   const list=data.resolution.candidates.map(x=>'“'+String(x.name||'').slice(0,80)+'” (ID '+x.id+')').join('; ');
+   return {runId:null,status:'needs_details',candidates:data.resolution.candidates,
+    message:'Encontrei mais de uma campanha parecida com “'+String(data.resolution.name||'').slice(0,60)+
+     '”: '+list+'. Diga o nome completo ou o ID de uma delas.'};
+  }
+  if(data.resolution?.status==='none'){
+   const asked=data.resolution.count?'Esta conta tem '+data.resolution.count+' campanha(s).':'';
+   return {runId:null,status:'needs_details',
+    message:(data.resolution.name?
+     'Não encontrei uma campanha com “'+String(data.resolution.name||'').slice(0,60)+'” na conta selecionada. ':
+     'Para preparar a alteração, preciso do nome ou do ID da campanha. ')+
+     asked+' Peça “quais campanhas existem” para ouvir os nomes exatos.'};
+  }
+  const missing=Array.isArray(data.command?.missing)?data.command.missing:[];
   return {runId:null,status:'collecting',
-   message:'Para preparar a alteração, preciso de '+command.missing.join(' e ')+
-    '. Reenvie a frase completa com o ID do item e o valor, se houver.'};
+   message:'Para preparar a alteração, preciso de '+missing.join(' e ')+
+    '. Reenvie a frase completa com o nome ou o ID do item e o valor, se houver.'};
+ }
  if(command.kind==='create_pixel')throw fail(422,'Para criar um Pixel, diga o nome desejado.');
  if(/(capi|conversions api|convers[oõ]es? do site|rastrear compras|rastrear whatsapp)/.test(clean(raw)))
   return {runId:null,status:'completed',message:'Para rastrear compras no site preciso integrar o domínio e o checkout, obter autorização do dataset e validar Purchase por webhook. Para WhatsApp, uso WA-AKG e não instalo Pixel na conversa.'};

@@ -15,6 +15,7 @@ import {isMetaAdsIntent,isMetaOverviewIntent,metaPeriodForQuery,formatFriendlyMe
 import {wantsCampaignOrder} from './socio-campaign-brief.mjs';
 import {isConfirmation} from './socio-ad-skills.mjs';
 import {readGoogleAdsCampaigns} from './socio-google-ads.mjs';
+import {normalizeSpokenIntent} from './socio-voice-context.mjs';
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const pending=new Map();
 const normalize=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -119,11 +120,15 @@ async function askThalitaCore(pool,a,body={},opts={}){
  const history=Array.isArray(body.history)?body.history.filter(turn=>
   turn&&['user','assistant'].includes(turn.role)&&typeof turn.text==='string'&&turn.text.trim()
  ).slice(-6).map(turn=>({role:turn.role,text:turn.text.trim().slice(0,350)})):[];
- const lower=normalize(message);
+ // Speech recognition writes "meta adis", "whats app", "cê pê cê". Intent is
+ // decided on the normalised reading; the original wording still reaches the
+ // model and the screen.
+ const heard=normalizeSpokenIntent(message);
+ const lower=normalize(heard);
  const metaIntent=isMetaAdsIntent(lower)&&!/\bgoogle\s*ads\b/.test(lower);
  // A full brief that includes "desempenho/resultado" is still an order to build
  // the campaign. It must never fall through to an existing-campaign report.
- const campaignOrder=wantsCampaignOrder(message);
+ const campaignOrder=wantsCampaignOrder(heard);
  // A running campaign conversation keeps the next short answer ("6", "Sorocaba",
  // "pode criar") inside that conversation instead of starting a generic chat.
  // The owner confirms by voice: "ok, pode criar", "beleza pode subir" and a bare
@@ -216,7 +221,7 @@ async function askThalitaCore(pool,a,body={},opts={}){
    data:{channelCount:channels.rows.length,connectedInDatabase:connected.length,
     openConversations:Number(conversations.rows[0]?.n||0)}};
  }
- if(metaIntent||wantsCampaign(message)||campaignFollowUp||campaignOrder){
+ if(metaIntent||wantsCampaign(heard)||campaignFollowUp||campaignOrder){
   if(!features.meta_ads)return {status:'feature_disabled',executed:false,
    message:'Meta Ads está desativado para esta empresa. Sugestão: ative o módulo antes de consultar campanhas.'};
   // MetaEdge is a common speech-to-text rendering of "Meta Ads".
