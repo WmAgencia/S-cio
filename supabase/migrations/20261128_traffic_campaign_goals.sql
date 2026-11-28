@@ -10,11 +10,11 @@ CREATE TABLE IF NOT EXISTS traffic_campaign_goals (
 );
 ALTER TABLE traffic_campaign_goals ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON traffic_campaign_goals FROM PUBLIC;
-DO $ BEGIN
+DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='anon') THEN
   EXECUTE 'REVOKE ALL ON traffic_campaign_goals FROM anon';
  END IF;
  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN
   EXECUTE 'REVOKE ALL ON traffic_campaign_goals FROM authenticated';
  END IF;
-END $;
+END $$;
