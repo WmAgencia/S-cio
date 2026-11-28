@@ -48,6 +48,56 @@
     button('Atualizar contas',load);
     await load();
     if(data.selectedAccount){
+     const goals=document.createElement('section');goals.className='card card-pad';root.append(goals);
+     goals.innerHTML='<h2>Metas por campanha</h2><p>Registre a verba diária e o custo desejado por resultado para a conta selecionada.</p>'+
+      '<button class="btn soft" type="button" data-load-goals>Carregar campanhas</button><p data-goal-status role="status"></p>'+
+      '<form class="form-stack" hidden><label>Campanha<select name="campaignId" required></select></label>'+
+      '<label>Resultado<select name="objective"><option value="qualified">Conversa qualificada</option><option value="sales">Venda confirmada</option></select></label>'+
+      '<label>Orçamento diário<input name="dailyBudget" type="number" min="0.01" step="0.01" required></label>'+
+      '<label>Custo desejado por resultado<input name="targetCost" type="number" min="0.01" step="0.01" required></label>'+
+      '<button class="btn primary" type="submit">Salvar meta</button></form><ul data-saved-goals></ul>';
+     const goalForm=goals.querySelector('form'),goalStatus=goals.querySelector('[data-goal-status]'),loadGoals=goals.querySelector('[data-load-goals]');
+     let goalData;
+     function fillGoal(){
+      const saved=goalData?.goals.find(x=>x.campaign_id===goalForm.elements.campaignId.value);
+      goalForm.elements.objective.value=saved?.objective||'qualified';
+      goalForm.elements.dailyBudget.value=saved?.daily_budget||'';
+      goalForm.elements.targetCost.value=saved?.target_cost||'';
+     }
+     function showGoals(result){
+      goalData=result;
+      const campaignSelect=goalForm.elements.campaignId,previous=campaignSelect.value;
+      campaignSelect.replaceChildren(...result.campaigns.map(x=>new Option(x.name||x.id,x.id)));
+      if(result.campaigns.some(x=>x.id===previous))campaignSelect.value=previous;
+      goalForm.hidden=!canManage||!result.campaigns.length;
+      fillGoal();
+      const history=goals.querySelector('[data-saved-goals]');
+      history.replaceChildren();
+      for(const goal of result.goals){
+       const name=result.campaigns.find(x=>x.id===goal.campaign_id)?.name||goal.campaign_id;
+       const li=document.createElement('li');
+       li.textContent=name+' · '+goal.daily_budget+' '+(result.currency||'')+' por dia · meta '+goal.target_cost+' por '+(goal.objective==='sales'?'venda':'conversa qualificada');
+       history.append(li);
+      }
+     }
+     loadGoals.addEventListener('click',async()=>{
+      loadGoals.disabled=true;
+      try{const result=await api('/api/marketing/traffic/goals');showGoals(result);goalStatus.textContent=result.campaigns.length?'': 'A Meta não retornou campanhas.';}
+      catch(error){goalStatus.textContent=error.message;}
+      finally{loadGoals.disabled=false;}
+     });
+     goalForm.elements.campaignId.addEventListener('change',fillGoal);
+     goalForm.addEventListener('submit',async event=>{
+      event.preventDefault();const submit=event.submitter;if(!submit)return;submit.disabled=true;
+      const fields=goalForm.elements;
+      try{
+       showGoals(await api('/api/marketing/traffic/goals','POST',{campaignId:fields.campaignId.value,objective:fields.objective.value,
+        dailyBudget:Number(fields.dailyBudget.value),targetCost:Number(fields.targetCost.value)}));
+       goalStatus.textContent='Meta salva para esta campanha.';
+      }catch(error){goalStatus.textContent=error.message;}
+      finally{submit.disabled=false;}
+     });
+
      const report=document.createElement('section');report.className='card card-pad';root.append(report);
      const heading=document.createElement('h2');heading.textContent='Testar minha integração Meta';report.append(heading);
      const description=document.createElement('p');

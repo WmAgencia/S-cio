@@ -1391,3 +1391,14 @@ END $$;
 -- campaign (click-to-WhatsApp referral), never the organic ones. Off by default:
 -- without it the AI waits for a human to hand each conversation over.
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS campaign_leads_only boolean NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS traffic_campaign_goals (
+ tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ account_id text NOT NULL,
+ campaign_id text NOT NULL,
+ objective text NOT NULL,
+ daily_budget numeric(12,2) NOT NULL CHECK(daily_budget>0),
+ target_cost numeric(12,2) NOT NULL CHECK(target_cost>0),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(tenant_id,account_id,campaign_id)
+);

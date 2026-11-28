@@ -1,3 +1,4 @@
+import {campaignGoals} from './traffic-campaign-goals.mjs';
 import {readAdsTool,readSelectedAdMedia,uploadAdImage,uploadAdVideo,waitForAdVideoReady,prepareAdsPlan,executeAdsPlan,adsToolHistory,inspectOfficialCampaign} from './meta-ads-tools.mjs';
 import {listTenantVideoChannels,findLastOutgoingVideo,importLastOutgoingVideo} from './socio-whatsapp-meta-video.mjs';
 import {runVideoPilotOnce} from './socio-whatsapp-meta-video-pilot.mjs';
@@ -643,6 +644,10 @@ async function handle(req,res){
   await audit(a,'marketing.owner_channel.retry',{created:Boolean(result.created),
    reason:String(result.reason||(result.created?'created':'skipped')).slice(0,40)});
   return json(res,200,result);
+ }
+ if(pathname==='/api/marketing/traffic/goals'&&['GET','POST'].includes(method)){
+  const input=method==='POST'?(await body(req,2000)).data:null;
+  return json(res,200,await campaignGoals(pool,a,input));
  }
  if(pathname==='/api/marketing/traffic'&&method==='GET'){
   requirePermission(a,'marketing.read');
